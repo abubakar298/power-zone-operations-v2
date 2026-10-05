@@ -21,7 +21,10 @@ before(async () => {
 });
 after(async () => { await db?.close(); });
 beforeEach(async () => {
-  await db.pool.query('TRUNCATE auth_sessions, auth_rate_limits, audit_log, users');
+  await db.pool.query('DELETE FROM auth_sessions');
+  await db.pool.query('DELETE FROM auth_rate_limits');
+  await db.pool.query('DELETE FROM audit_log');
+  await db.pool.query('DELETE FROM users');
   await db.pool.query('UPDATE admin_bootstrap SET completed_at = NULL');
 });
 function post(path: string, body: object) { return request(app).post(path).set('Origin', origin).send(body); }
@@ -125,7 +128,7 @@ test('migrations are repeatable without changing an existing password or display
   await Promise.all([migrate(db.pool), migrate(db.pool)]);
   const after = (await db.pool.query('SELECT display_name,password_hash FROM users')).rows[0];
   assert.equal(after.password_hash,before); assert.equal(after.display_name,'Manually edited');
-  assert.equal((await db.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'1');
+  assert.equal((await db.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'4');
 });
 
 test('production cookies use the host prefix and Secure', async () => {

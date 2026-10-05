@@ -8,6 +8,8 @@ import { AuthService } from './auth/service.js';
 import { authHttp } from './auth/http.js';
 import { dashboardRoutes } from './dashboard/routes.js';
 import { HttpError } from './http/errors.js';
+import { MastersRepository } from './masters/repository.js';
+import { mastersHttp } from './masters/http.js';
 
 export function createApp(pool: Pool, config: Config, webDirectory?: string) {
   const app = express();
@@ -32,6 +34,7 @@ export function createApp(pool: Pool, config: Config, webDirectory?: string) {
   const auth = authHttp(new AuthService(new AuthRepository(pool), config), config);
   app.use('/api/auth', auth.router);
   app.use('/api/dashboard', dashboardRoutes(auth.requireSession));
+  app.use('/api/masters', mastersHttp(new MastersRepository(pool),auth.requireSession));
   app.use('/api', (_req, res) => { res.status(404).json({ message: 'Endpoint not found.' }); });
   if (webDirectory) {
     app.use(express.static(webDirectory, { index: false, maxAge: '1h' }));
