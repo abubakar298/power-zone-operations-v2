@@ -21,6 +21,9 @@ test('setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Welcome, Abu Bakar Siddique.'})).toBeVisible();
   await expect(page.getByRole('heading',{name:'You’re ready to get started.'})).toBeVisible();
+  await page.getByRole('button',{name:'My account',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'My account',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Dashboard',exact:true}).click();
   await page.reload();
   await expect(page.getByRole('heading',{name:'Welcome, Abu Bakar Siddique.'})).toBeVisible();
   const cookieBefore = (await context.cookies()).find(c=>c.name==='pz_session')?.value;
@@ -49,6 +52,12 @@ test('setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(page.getByRole('heading',{name:'You’re ready to get started.'})).toBeVisible();
   await page.screenshot({path:'test-results/dashboard-mobile.png',fullPage:true});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.getByRole('button',{name:'Toggle navigation'}).click();
+  await page.getByRole('button',{name:'My account',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'My account',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Abu Bakar Siddique Admin'}).click();
+  await expect(page.locator('#account-menu')).toBeVisible();
+  await page.getByRole('button',{name:'Abu Bakar Siddique Admin'}).click();
   expect(errors).toEqual([]);
   await page.getByRole('button',{name:'Sign out'}).click();
   await expect(page.getByRole('heading',{name:'Welcome back.'})).toBeVisible();

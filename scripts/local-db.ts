@@ -1,6 +1,7 @@
 import EmbeddedPostgres from 'embedded-postgres';
 import { resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 
 // Development only. Production always uses the configured external PostgreSQL service.
 await mkdir('.local', {recursive: true});
@@ -10,7 +11,7 @@ const pg = new EmbeddedPostgres({
   initdbFlags: ['--locale=C', '--encoding=UTF8', '-c', 'shared_memory_type=mmap', '-c', 'dynamic_shared_memory_type=mmap'],
   postgresFlags: ['-h', '127.0.0.1'], onLog: () => {}, onError: message => console.error(message),
 });
-await pg.initialise();
+if (!existsSync(resolve('.local/postgres/PG_VERSION'))) await pg.initialise();
 await pg.start();
 const client = pg.getPgClient();
 await client.connect();
