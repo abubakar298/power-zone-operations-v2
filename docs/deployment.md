@@ -66,7 +66,7 @@ The free plan does not support a pre-deploy command, so migrations run before se
 node dist/server/db/migrate-cli.js && node dist/server/main.js
 ```
 
-Verified live: health returns 200, first-admin setup status returns 200, and the anonymous dashboard API returns 401. Administrator creation and authenticated live acceptance remain pending the owner entering their credentials. Automated native PostgreSQL and Chromium authentication tests pass in GitHub Actions.
+Live acceptance passed on 5 October 2026: the owner created the administrator and signed in; the dashboard and account page loaded; refreshing preserved authentication; a completed redeploy preserved the same session; signing out returned to login; signing in again succeeded. Health returns 200, setup status reports setup closed, and the anonymous dashboard API returns 401. Automated native PostgreSQL and Chromium authentication tests also pass in GitHub Actions. Milestone 1 is complete; operational persistence remains subject to the free database expiry below.
 
 The owner explicitly authorized deletion of V1's hosted web service and database to release the free database slot. Both were deleted; the V1 GitHub repository was retained.
 
