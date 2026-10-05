@@ -1,13 +1,13 @@
-name: Milestone 1 verification
+name: Power Zone verification
 on:
   push:
-    branches: [main, 'milestone-1/**']
+    branches: [main, 'milestone-1/**', 'milestone-2/**']
   pull_request:
 permissions:
   contents: read
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
