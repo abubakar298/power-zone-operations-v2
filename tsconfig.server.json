@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": false, "rootDir": "server", "outDir": "dist/server", "sourceMap": true },
+  "include": ["server"], "exclude": ["web", "tests", "scripts"]
+}
