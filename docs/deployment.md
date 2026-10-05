@@ -44,4 +44,30 @@ Configure the health check as `/api/health`; it checks database schema access an
 
 Use a dedicated test environment for automation. Do not run the destructive test cleanup against an existing application database. Browser/API fixture tests own disposable databases and ignore production `DATABASE_URL`.
 
-No cloud resources have been provisioned by these instructions. Live deployment must be verified separately before Milestone 1 is locked for production.
+## Current V2 deployment
+
+Deployed on 5 October 2026 in Abu Bakar's workspace. Both resources use free plans in Singapore:
+
+- Application: https://power-zone-operations-v2.onrender.com
+- Web service: `srv-db1uma17lnhs73cuhfjg`
+- PostgreSQL 18: `dpg-db1uldbncjis73b1a5s0-a` (`power-zone-v2-db`)
+- Source branch: `milestone-1/auth-shell`
+- Health check: `/api/health`
+
+Render's native Node runtime has a read-only system directory. Its configured build command is:
+
+```
+corepack pnpm install --frozen-lockfile --prod=false && corepack pnpm build && corepack pnpm prune --prod
+```
+
+The free plan does not support a pre-deploy command, so migrations run before server startup:
+
+```
+node dist/server/db/migrate-cli.js && node dist/server/main.js
+```
+
+Verified live: health returns 200, first-admin setup status returns 200, and the anonymous dashboard API returns 401. Administrator creation and authenticated live acceptance remain pending the owner entering their credentials. Automated native PostgreSQL and Chromium authentication tests pass in GitHub Actions.
+
+The owner explicitly authorized deletion of V1's hosted web service and database to release the free database slot. Both were deleted; the V1 GitHub repository was retained.
+
+Free web services sleep after inactivity. This free database expires on **4 November 2026**; arrange an upgrade or export before expiry. No paid resources were provisioned. Credentials and setup keys are excluded from this repository.
