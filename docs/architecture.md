@@ -8,7 +8,7 @@ React calls the same-origin JSON API. Express enforces request origin, content t
 
 ## Authentication
 
-- Initial setup requires the deployment's unpredictable setup secret and creates one Admin in a transaction that locks the singleton bootstrap row. Concurrent setup requests cannot produce two first administrators. No reset endpoint exists.
+- Initial setup requires the deployment's unpredictable setup secret and creates one Admin in a transaction that locks the singleton bootstrap row. Concurrent setup requests cannot produce two first administrators. No bootstrap-reset endpoint exists.
 - Passwords use Node's asynchronous scrypt with N=131072, r=8, p=1, a random salt and constant-time verification. Setup requires 12–128 characters. Unknown emails perform the same derivation and return the same error as incorrect passwords.
 - Login creates a random 256-bit opaque session token. Only its SHA-256 digest is persisted. Cookies are HttpOnly and SameSite=Strict; production uses Secure and the `__Host-` prefix. No token or user session is stored in browser local storage.
 - Sessions have a 12-hour absolute expiry. Every authenticated request joins the session to the current active user. Disabling a user invalidates access immediately. Database failure does not grant access.
@@ -34,3 +34,7 @@ Detailed technical specifications belong in BOQ costing and store issuance. Quot
 ## UI
 
 The owner supplied a dashboard reference during implementation. The shell adopts its light background, outlined rounded panels, sidebar, restrained purple accents and dark primary account action. Data comes from the authenticated API; there are no fabricated project counts or charts. Upcoming modules are static roadmap information, not interactive unfinished routes. Dashboard and My account are working shell views. Navigation collapses into a mobile menu. Errors and loading states are visible and accessible.
+
+## Subsequent milestones
+
+Account lifecycle and immutable survey/BOQ R0 persistence now extend this foundation through separate service/repository/HTTP modules. See milestone-accounts.md and milestone-3-survey-boq.md for current behavior and validation.

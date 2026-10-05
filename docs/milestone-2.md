@@ -11,3 +11,5 @@ The owner's technical screenshot supplies 24 catalogue records; these remain sep
 No costing engine is implemented in this milestone. The stored reference rates/rules/mappings will be consumed by the later tested BOQ engine. Commercial pricing/tax logic remains governed by the handover and is not activated here.
 
 Employee onboarding work is deferred in local work/deferred-onboarding and excluded from this branch and deployment. Planned sender is abubakar@powerzone.com.pk; email provider configuration is still needed when onboarding resumes.
+
+Deployment checkpoint (6 October 2026): Render commit 9e8f851 was live and all imported counts verified in the authenticated UI. Owner specification changes were appended as 40 live edits. Native PostgreSQL master/auth suite passed 20 tests and browser smoke passed. GitHub-hosted jobs failed to acquire a runner; GitHub CI is not represented as passed.

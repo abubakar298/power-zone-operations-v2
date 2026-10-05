@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tsx watch server/main.ts",
     "dev:web": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build && tsc -p tsconfig.server.json",
+    "build": "tsc --noEmit && vite build && node scripts/ocr-assets.mjs && tsc -p tsconfig.server.json",
     "start": "node dist/server/main.js",
     "migrate": "tsx server/db/migrate-cli.ts",
     "migrate:production": "node dist/server/db/migrate-cli.js",
@@ -19,12 +19,17 @@
     "db:local": "tsx scripts/local-db.ts"
   },
   "dependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
     "cookie": "^1.0.2",
+    "decimal.js": "^10.6.0",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
+    "pdfjs-dist": "^5.7.284",
     "pg": "^8.16.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "tesseract.js": "^6.0.1",
+    "tesseract.js-core": "^6.1.2",
     "zod": "^4.1.5"
   },
   "devDependencies": {
@@ -39,6 +44,7 @@
     "@types/supertest": "^6.0.3",
     "@vitejs/plugin-react": "^5.0.2",
     "embedded-postgres": "^17.6.0-beta.15",
+    "prettier": "^3.9.9",
     "supertest": "^7.1.4",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",

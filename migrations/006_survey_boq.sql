@@ -1,0 +1,9 @@
+CREATE TABLE survey_drafts(id uuid PRIMARY KEY,owner_id uuid NOT NULL REFERENCES users(id),inputs jsonb NOT NULL,version integer NOT NULL DEFAULT 1,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE survey_uploads(id uuid PRIMARY KEY,owner_id uuid NOT NULL REFERENCES users(id),filename text NOT NULL,mime text NOT NULL,size integer NOT NULL CHECK(size>0 AND size<=8388608),sha256 text NOT NULL,content bytea NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE boqs(id uuid PRIMARY KEY,draft_id uuid UNIQUE NOT NULL REFERENCES survey_drafts(id),site_id integer NOT NULL REFERENCES sites(id),customer_id integer NOT NULL REFERENCES customers(id),sequence integer NOT NULL CHECK(sequence>0),created_by uuid NOT NULL REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(customer_id,site_id,sequence));
+CREATE TABLE boq_revisions(id uuid PRIMARY KEY,boq_id uuid NOT NULL REFERENCES boqs(id),revision integer NOT NULL CHECK(revision>=0),number text NOT NULL UNIQUE,snapshot jsonb NOT NULL,created_by uuid NOT NULL REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(boq_id,revision));
+CREATE TABLE boq_uploads(revision_id uuid NOT NULL REFERENCES boq_revisions(id),upload_id uuid NOT NULL REFERENCES survey_uploads(id),PRIMARY KEY(revision_id,upload_id));
+CREATE TRIGGER immutable_boq BEFORE UPDATE OR DELETE ON boqs FOR EACH ROW EXECUTE FUNCTION prevent_master_version_mutation();
+CREATE TRIGGER immutable_boq_revision BEFORE UPDATE OR DELETE ON boq_revisions FOR EACH ROW EXECUTE FUNCTION prevent_master_version_mutation();
+CREATE TRIGGER immutable_boq_upload BEFORE UPDATE OR DELETE ON boq_uploads FOR EACH ROW EXECUTE FUNCTION prevent_master_version_mutation();
+CREATE TRIGGER immutable_survey_upload BEFORE UPDATE OR DELETE ON survey_uploads FOR EACH ROW EXECUTE FUNCTION prevent_master_version_mutation();

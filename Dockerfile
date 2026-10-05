@@ -6,6 +6,7 @@ RUN pnpm install --frozen-lockfile
 COPY tsconfig*.json vite.config.ts ./
 COPY server ./server
 COPY web ./web
+COPY scripts ./scripts
 RUN pnpm build
 RUN pnpm prune --prod
 
@@ -18,4 +19,4 @@ COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node migrations ./migrations
 USER node
 EXPOSE 3000
-CMD ["node", "dist/server/main.js"]
+CMD ["sh", "-c", "node dist/server/db/migrate-cli.js && exec node dist/server/main.js"]

@@ -128,7 +128,7 @@ test('migrations are repeatable without changing an existing password or display
   await Promise.all([migrate(db.pool), migrate(db.pool)]);
   const after = (await db.pool.query('SELECT display_name,password_hash FROM users')).rows[0];
   assert.equal(after.password_hash,before); assert.equal(after.display_name,'Manually edited');
-  assert.equal((await db.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'4');
+  assert.equal(Number((await db.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count), (await (await import('node:fs/promises')).readdir('migrations')).filter(f=>f.endsWith('.sql')).length);
 });
 
 test('production cookies use the host prefix and Secure', async () => {

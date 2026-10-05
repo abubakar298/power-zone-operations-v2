@@ -1,0 +1,6 @@
+# Employee account lifecycle
+Invitations are administrator initiated, require current-password confirmation, expire after 48 hours, and verify the recipient's mailbox before creating the selected role. There is no open registration. Recovery uses verified, active accounts only, a one-hour single-use link and identical public responses for known/unknown email addresses. Tokens are hashed in PostgreSQL; delivery payloads are encrypted. Access changes revoke sessions and outstanding links, and the final active administrator cannot be removed. All account actions are audited.
+
+Email sending stays disabled until EMAIL_FROM, RESEND_API_KEY and EMAIL_TOKEN_ENCRYPTION_KEY are configured. Sender intended: abubakar@powerzone.com.pk. Domain verification and provider authorization remain owner tasks. No production invitation was sent. Existing administrator login stays available; the administrator can verify the mailbox after email activation.
+
+Validation: native PostgreSQL account acceptance/reuse, expired links, role restrictions, encrypted outbox, reset revocation, disabled-user rejection, final-admin protection, disabled email sending, and existing authentication/master regressions: 24 passing tests. Email delivery adapter uses provider idempotency keys; activation documentation: https://resend.com/docs/dashboard/emails/idempotency-keys.

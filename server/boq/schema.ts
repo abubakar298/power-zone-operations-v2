@@ -1,0 +1,74 @@
+import { z } from "zod";
+const quantity = z
+  .string()
+  .regex(
+    /^\d{1,8}(\.\d{1,4})?$/,
+    "Enter a non-negative quantity with up to four decimals.",
+  );
+export const surveySchema = z
+  .object({
+    customerId: z.number().int().min(0),
+    siteName: z.string().trim().min(1).max(200),
+    siteCode: z
+      .string()
+      .trim()
+      .min(1)
+      .max(30)
+      .regex(/^[A-Za-z0-9_-]+$/),
+    location: z.string().trim().max(1000),
+    panelQty: z.number().int().min(1).max(1000000),
+    panelWattage: quantity.refine((v) => Number(v) > 0),
+    structure: z.enum(["L1", "L2", "L3", "Elevated"]),
+    dcMetres: quantity,
+    earth25: quantity,
+    earth6: quantity,
+    earth10: quantity,
+    inverter: z.string().min(1).max(30),
+    batteryKwh: z.number().int().min(0).max(120),
+    smartMeter: z.boolean(),
+    genset: z.boolean(),
+    brands: z
+      .object({
+        solar: z.number().int().positive(),
+        inverter: z.number().int().positive(),
+        battery: z.number().int().positive(),
+        cable: z.number().int().positive(),
+        switchgear: z.number().int().positive(),
+      })
+      .strict(),
+    preparedBy: z.string().trim().min(1).max(100),
+    uploadIds: z.array(z.uuid()).max(10).default([]),
+    ocrText: z.string().max(100000).default(""),
+    ocrReviewed: z.boolean().default(false),
+  })
+  .strict();
+export const surveyDraftSchema = surveySchema
+  .partial()
+  .extend({
+    siteName: z.string().trim().max(200).default(""),
+    siteCode: z
+      .string()
+      .trim()
+      .max(30)
+      .regex(/^[A-Za-z0-9_-]*$/)
+      .default(""),
+    panelQty: z.number().int().min(0).max(1000000).optional(),
+    panelWattage: z.union([quantity, z.literal("")]).optional(),
+    preparedBy: z.string().trim().max(100).default(""),
+    brands: surveySchema.shape.brands.partial().default({}),
+    uploadIds: surveySchema.shape.uploadIds,
+    ocrText: surveySchema.shape.ocrText,
+    ocrReviewed: surveySchema.shape.ocrReviewed,
+  })
+  .strict();
+export type SurveyDraft = z.infer<typeof surveyDraftSchema>;
+export type Survey = z.infer<typeof surveySchema>;
+export function recommendSiteCode(name: string) {
+  return (
+    name.match(/\b\d{4,6}\b/)?.[0] ??
+    name
+      .replace(/[^A-Za-z0-9]/g, "")
+      .slice(0, 6)
+      .toUpperCase()
+  );
+}
