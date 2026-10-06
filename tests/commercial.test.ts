@@ -15,6 +15,7 @@ import { buildQuotationPdf } from "../server/commercial/report.js";
 import { hashPassword } from "../server/auth/crypto.js";
 import { Decimal } from "decimal.js";
 import { buildIpoPdf } from "../server/orders/report.js";
+import { fingerprint } from "../server/boq/repository.js";
 let db: Awaited<ReturnType<typeof testDatabase>>,
   app: ReturnType<typeof createApp>,
   cookie: string,
@@ -834,6 +835,35 @@ test("customer PO and IPO preserve accepted selling amounts, discount allocation
   ).body;
   assert.equal(approved.submission_id, submitted.id);
   assert.equal(approved.snapshot.preparedBy, "Employee");
+  const legacySnapshot = { ...ep.snapshot };
+  delete legacySnapshot.peachtree;
+  const legacyId = randomUUID(),
+    legacyKey = randomUUID();
+  const legacyOwner = (
+    await db.pool.query(
+      "SELECT id FROM users WHERE email='commercial-employee@example.test'",
+    )
+  ).rows[0].id;
+  await db.pool.query(
+    "INSERT INTO ipo_submissions(id,input,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6)",
+    [
+      legacyId,
+      submitted.input,
+      legacySnapshot,
+      fingerprint(legacySnapshot),
+      legacyKey,
+      legacyOwner,
+    ],
+  );
+  const legacyApproved = (
+    await op(`/submissions/${legacyId}/approve`, {
+      requestKey: randomUUID(),
+    }).expect(201)
+  ).body;
+  assert.equal(
+    legacyApproved.snapshot.peachtree.phaseTotal,
+    legacyApproved.snapshot.allocation.subtotal,
+  );
   assert.equal(
     (
       await op(`/submissions/${submitted.id}/approve`, {

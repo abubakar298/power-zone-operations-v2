@@ -212,8 +212,41 @@ export class OrdersRepository {
     return transaction(this.pool, async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(742019004)");
       await new CommercialRepository(this.pool).manager(c, actor);
+      const replay = (
+        await c.query(
+          "SELECT * FROM internal_purchase_orders WHERE request_key=$1",
+          [key],
+        )
+      ).rows[0];
+      if (replay) {
+        if (
+          replay.created_by !== actor ||
+          replay.fingerprint !== expected ||
+          fingerprint(replay.snapshot.input) !== fingerprint(input)
+        )
+          throw new HttpError(
+            409,
+            "This request key was already used for another IPO.",
+          );
+        return replay;
+      }
       const preview = await this.preview(owner, input, c);
-      if (preview.fingerprint !== expected)
+      let legacySubmission = false;
+      if (submissionId && preview.fingerprint !== expected) {
+        const old = (
+          await c.query(
+            "SELECT snapshot FROM ipo_submissions WHERE id=$1 AND created_by=$2 AND fingerprint=$3",
+            [submissionId, owner, expected],
+          )
+        ).rows[0];
+        const { peachtree, ...withoutDivision } = preview.snapshot;
+        legacySubmission = Boolean(
+          old &&
+          !old.snapshot.peachtree &&
+          fingerprint(withoutDivision) === expected,
+        );
+      }
+      if (preview.fingerprint !== expected && !legacySubmission)
         throw new HttpError(
           409,
           "Review the current IPO preview before saving.",
