@@ -284,7 +284,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .getByRole("button", { name: "Submit for review", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Approve costing", exact: true })
+    .getByRole("button", { name: "Approve & save", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "BAFL-05850-001-R0", exact: true }),
@@ -309,17 +309,107 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     "Project Costing Detailed Breakup",
   ]);
 
-  await page.getByRole("button", { name: "Create revision draft", exact: true }).click();
-  await page.getByLabel("Revision reason", { exact: true }).fill("Updated cable routing");
+  await page
+    .getByRole("button", { name: "Create revision draft", exact: true })
+    .click();
+  await page
+    .getByLabel("Revision reason", { exact: true })
+    .fill("Updated cable routing");
   await page.getByLabel("6mm² DC cable total (m)", { exact: true }).fill("362");
-  await page.getByRole("button", { name: "Calculate & review BOQ", exact: true }).click();
-  await page.getByRole("button", { name: "Submit for review", exact: true }).click();
-  await page.getByRole("button", { name: "Approve costing", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "BAFL-05850-001-R1", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "BAFL-05850-001-R0 · Initial BOQ", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Calculate & review BOQ", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Submit for review", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Approve & create quotation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Commercial pricing", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Approved BOQ revision")).not.toHaveValue("");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
+  await page
+    .getByRole("button", { name: "BAFL-05850-001-R1", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "BAFL-05850-001-R1", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", {
+      name: "BAFL-05850-001-R0 · Initial BOQ",
+      exact: true,
+    })
+    .click();
   await expect(page.getByText("PKR 6,456,786", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", {name:"Create revision draft",exact:true})).toBeDisabled();
-  await page.screenshot({path:"test-results/boq-review-history.png",fullPage:true});
+  await expect(
+    page.getByRole("button", { name: "Create revision draft", exact: true }),
+  ).toBeDisabled();
+  await page.screenshot({
+    path: "test-results/boq-review-history.png",
+    fullPage: true,
+  });
+
+  await page
+    .getByRole("button", { name: "Create quotation", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Calculate selling price", exact: true })
+    .click();
+  await expect(
+    page.getByText("PKR 8,824,826.93", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Save pricing version", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Prepare quotation", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Save quotation version", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Q-BAFL-05850-001-R0-V1", exact: true }),
+  ).toBeVisible();
+  const quotationDownload = page.waitForEvent("download");
+  await page
+    .getByRole("link", { name: "Download quotation PDF", exact: true })
+    .click();
+  expect((await quotationDownload).suggestedFilename()).toBe(
+    "Q-BAFL-05850-001-R0-V1-quotation.pdf",
+  );
+  await page
+    .getByRole("button", { name: "Create new quotation version", exact: true })
+    .click();
+  await page.getByLabel("Validity", { exact: true }).fill("14 Days");
+  await page
+    .getByRole("button", { name: "Preview quotation", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Save quotation version", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Q-BAFL-05850-001-R0-V2", exact: true }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({
+    path: "test-results/quotation-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page
+    .getByRole("button", { name: "Toggle navigation", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Quotations", exact: true }).click();
+  await page.getByRole("button", { name: /Q-BAFL-05850-001-R0-V1/ }).click();
+  await expect(page.locator(".quote-metadata")).toContainText("7 Days");
 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();

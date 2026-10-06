@@ -1,3 +1,4 @@
+import { Commercial } from "./Commercial.js";
 import { useEffect, useState } from "react";
 import { api, ApiError, type Session, type User } from "../api.js";
 import { Brand } from "../components/Brand.js";
@@ -15,11 +16,12 @@ export function Dashboard({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [pricingRevisionId, setPricingRevisionId] = useState<string>();
   const [verified, setVerified] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false),
     [mobileOpen, setMobileOpen] = useState(false);
   const [view, setView] = useState<
-    "dashboard" | "account" | "masters" | "team" | "boqs"
+    "dashboard" | "account" | "masters" | "team" | "boqs" | "pricing" | "quotes"
   >("dashboard");
   useEffect(() => {
     let cancelled = false;
@@ -76,7 +78,14 @@ export function Dashboard({
     .join("")
     .toUpperCase();
   function navigate(
-    next: "dashboard" | "account" | "masters" | "team" | "boqs",
+    next:
+      | "dashboard"
+      | "account"
+      | "masters"
+      | "team"
+      | "boqs"
+      | "pricing"
+      | "quotes",
   ) {
     setView(next);
     setMobileOpen(false);
@@ -150,14 +159,23 @@ export function Dashboard({
               <Icon name="file" />
               Survey & BOQ
             </button>
-            <div>
+            <button
+              className={view === "pricing" ? "nav-active" : ""}
+              onClick={() => {
+                setPricingRevisionId(undefined);
+                navigate("pricing");
+              }}
+            >
               <Icon name="file" />
-              <span>Commercial pricing</span>
-            </div>
-            <div>
+              Commercial pricing
+            </button>
+            <button
+              className={view === "quotes" ? "nav-active" : ""}
+              onClick={() => navigate("quotes")}
+            >
               <Icon name="file" />
-              <span>Quotations</span>
-            </div>
+              Quotations
+            </button>
           </div>
           <p className="nav-hint">
             Modules become available after
@@ -183,7 +201,11 @@ export function Dashboard({
                     ? "Team access"
                     : view === "boqs"
                       ? "Survey & BOQ"
-                      : "My account"}
+                      : view === "pricing"
+                        ? "Commercial pricing"
+                        : view === "quotes"
+                          ? "Quotations"
+                          : "My account"}
             </strong>
           </span>
           <div className="account">
@@ -229,7 +251,11 @@ export function Dashboard({
                       ? "Team access"
                       : view === "boqs"
                         ? "Survey & BOQ"
-                        : "My account"}
+                        : view === "pricing"
+                          ? "Commercial pricing"
+                          : view === "quotes"
+                            ? "Quotations"
+                            : "My account"}
               </h1>
               <p className="dashboard-intro">
                 {view === "dashboard"
@@ -238,9 +264,13 @@ export function Dashboard({
                     ? "Your customers, sites and approved reference data."
                     : view === "boqs"
                       ? "Turn survey information into a reviewed BOQ and project costing."
-                      : view === "team"
-                        ? "Invite and manage authorised team members."
-                        : "Your identity and access to the Power Zone workspace."}
+                      : view === "pricing"
+                        ? "Set markup and selling price against an approved BOQ."
+                        : view === "quotes"
+                          ? "Prepare and share immutable customer quotation versions."
+                          : view === "team"
+                            ? "Invite and manage authorised team members."
+                            : "Your identity and access to the Power Zone workspace."}
               </p>
             </div>
             <button className="dark-button" onClick={logout} disabled={busy}>
@@ -297,16 +327,33 @@ export function Dashboard({
                 </section>
                 <section className="summary-card">
                   <div className="summary-label">
-                    <span>Next milestone</span>
+                    <span>Latest milestone</span>
                     <Icon name="users" />
                   </div>
-                  <strong>Revision & history</strong>
-                  <p>Changes to saved project records</p>
+                  <strong>Commercial pricing & quotation</strong>
+                  <p>Approved costing to customer proposal</p>
                 </section>
               </div>
             </>
           )}
-          {view === "boqs" && <Boqs session={session} onLogout={onLogout} />}
+          {(view === "pricing" || view === "quotes") && (
+            <Commercial
+              key={view + String(pricingRevisionId)}
+              session={session}
+              initialRevisionId={pricingRevisionId}
+              section={view === "pricing" ? "pricing" : "quotes"}
+            />
+          )}
+          {view === "boqs" && (
+            <Boqs
+              onPricing={(id) => {
+                setPricingRevisionId(id);
+                navigate("pricing");
+              }}
+              session={session}
+              onLogout={onLogout}
+            />
+          )}
           {view === "team" && <Team session={session} onLogout={onLogout} />}
           {view === "masters" && (
             <Masters session={session} onLogout={onLogout} />
@@ -367,7 +414,7 @@ export function Dashboard({
                 </p>
                 <span className="muted-label">
                   {view === "dashboard"
-                    ? "Survey, BOQ & costing · Current milestone"
+                    ? "Commercial pricing & quotation · Current milestone"
                     : "Need help with access? Contact your administrator."}
                 </span>
               </section>
@@ -393,7 +440,7 @@ export function Dashboard({
                     </span>
                     <strong>{name}</strong>
                     <span className="planned-badge">
-                      {i < 3 ? "Ready" : "Planned"}
+                      {i < 5 ? "Ready" : "Planned"}
                     </span>
                   </div>
                 ))}

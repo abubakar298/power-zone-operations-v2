@@ -22,9 +22,11 @@ const quantities = {
 export function Boqs({
   session,
   onLogout,
+  onPricing,
 }: {
   session: Session;
   onLogout: () => void;
+  onPricing?: (id: string) => void;
 }) {
   const [masters, setMasters] = useState<any>(),
     [records, setRecords] = useState<any[]>([]),
@@ -240,7 +242,10 @@ export function Boqs({
       setBusy(false);
     }
   }
-  async function decide(outcome: "Approved" | "Changes requested") {
+  async function decide(
+    outcome: "Approved" | "Changes requested",
+    createQuotation = false,
+  ) {
     if (busy || !currentReview) return;
     setBusy(true);
     setError("");
@@ -254,9 +259,13 @@ export function Boqs({
       );
       await load();
       if (result.saved) {
+        if (createQuotation && onPricing) {
+          onPricing(result.saved.id);
+          return;
+        }
         await openSaved(result.saved.id);
         setNotice(
-          "Approved. The exact reviewed costing is now saved. Margins and quotation will use this approved revision in the next milestone.",
+          "Approved. The exact reviewed costing is now saved. Use Create quotation to set its commercial pricing and prepare a customer quotation.",
         );
       } else {
         await openReview(currentReview.id);
@@ -549,8 +558,17 @@ export function Boqs({
                       disabled={busy}
                       onClick={() => void decide("Approved")}
                     >
-                      Approve costing
+                      Approve &amp; save
                     </button>
+                    {onPricing && (
+                      <button
+                        className="primary"
+                        disabled={busy}
+                        onClick={() => void decide("Approved", true)}
+                      >
+                        Approve &amp; create quotation
+                      </button>
+                    )}
                   </div>
                   <p>
                     Approval preserves this exact costing and issues its BOQ
@@ -604,6 +622,16 @@ export function Boqs({
           </button>
           <section className="detail-panel">
             <h3>Revision / History</h3>
+            {onPricing &&
+              ["Admin", "Management"].includes(session.user.role) && (
+                <button
+                  className="primary"
+                  disabled={busy}
+                  onClick={() => onPricing(saved.id)}
+                >
+                  Create quotation
+                </button>
+              )}
             <p>
               {saved.revision_reason} · Current view: {saved.number}
             </p>

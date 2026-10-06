@@ -1,3 +1,5 @@
+import { CommercialRepository } from "./commercial/repository.js";
+import { commercialHttp } from "./commercial/http.js";
 import { BoqRepository } from "./boq/repository.js";
 import { boqHttp, uploadHttp } from "./boq/http.js";
 import { AccountsRepository } from "./onboarding/repository.js";
@@ -66,6 +68,11 @@ export function createApp(
     express.json({ limit: "128kb" }),
     boqHttp(boqs, auth.requireSession),
   );
+  app.use(
+    "/api/commercial",
+    express.json({ limit: "128kb" }),
+    commercialHttp(new CommercialRepository(pool), auth.requireSession),
+  );
   app.use(express.json({ limit: "8kb" }));
   app.get("/api/health", async (_req, res) => {
     try {
@@ -123,11 +130,9 @@ export function createApp(
         "Request failed",
         err instanceof Error ? err.name : "UnknownError",
       );
-      res
-        .status(503)
-        .json({
-          message: "Service temporarily unavailable. Please try again.",
-        });
+      res.status(503).json({
+        message: "Service temporarily unavailable. Please try again.",
+      });
     }
   };
   app.use(errors);
