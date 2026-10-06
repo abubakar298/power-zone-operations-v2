@@ -475,7 +475,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Save quotation version", exact: true })
     .click();
-  await expect(page.getByText(/Customer revision/)).toBeVisible();
+  await expect(page.getByText(/^Customer revision ·/)).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Quotations", exact: true }).click();
   await page.getByRole("button", { name: /Q-BAFL-05850-001-R2-V1/ }).click();

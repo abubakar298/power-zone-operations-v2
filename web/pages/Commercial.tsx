@@ -471,6 +471,7 @@ export function Commercial({
         csrf: session.csrfToken,
       });
       setSavedQuote(q);
+      setQuoteInput(undefined);
       await load();
       setNotice(
         `${q.number} saved. Earlier quotation versions remain unchanged.`,
