@@ -29,6 +29,44 @@ export function commercialHttp(
     return v.data;
   };
   const id = (value: unknown) => parse(z.uuid(), value);
+  r.get("/revision-requests", async (req, res) =>
+    res.json({
+      requests: await repo.revisionRequests(req.authSession!.user.id),
+    }),
+  );
+  r.post("/revision-requests", async (req, res) => {
+    const v = parse(
+      z
+        .object({
+          sourceQuotationId: z.uuid(),
+          origin: z.enum(["Internal management", "Customer"]),
+          costingChange: z.boolean(),
+          reason: z.string().trim().min(1).max(2000),
+          requestedBy: z.string().trim().min(1).max(200),
+          requestKey: z.uuid(),
+        })
+        .strict(),
+      req.body,
+    );
+    res
+      .status(201)
+      .json(
+        await repo.revisionStart(
+          req.authSession!.user.id,
+          v.sourceQuotationId,
+          v.origin,
+          v.costingChange,
+          v.reason,
+          v.requestedBy,
+          v.requestKey,
+        ),
+      );
+  });
+  r.get("/revision-context/:id", async (req, res) =>
+    res.json(
+      await repo.revisionContext(req.authSession!.user.id, id(req.params.id)),
+    ),
+  );
   r.get("/pricing", async (req, res) =>
     res.json({ pricing: await repo.pricingList(req.authSession!.user.id) }),
   );
@@ -101,9 +139,20 @@ export function commercialHttp(
     res.json({
       pricingId: row.pricing_id,
       ...row.snapshot.input,
-      discount: row.snapshot.footer.find((r: any) => r.label === "Special Discount")?.amount ?? "0",
-      additionalItem: await repo.additionalInput(req.authSession!.user.id, row.id),
-      descriptions: row.snapshot.lines.slice(0, row.snapshot.presentation === "Full Breakup" ? 16 : undefined).map((l: any) => l.description),
+      discount:
+        row.snapshot.footer.find((r: any) => r.label === "Special Discount")
+          ?.amount ?? "0",
+      additionalItem: await repo.additionalInput(
+        req.authSession!.user.id,
+        row.id,
+      ),
+      descriptions: row.snapshot.lines
+        .slice(
+          0,
+          row.snapshot.scopeCount ??
+            (row.snapshot.presentation === "Full Breakup" ? 16 : undefined),
+        )
+        .map((l: any) => l.description),
     });
   });
   r.get("/quotations/:id/quotation.pdf", async (req, res) => {

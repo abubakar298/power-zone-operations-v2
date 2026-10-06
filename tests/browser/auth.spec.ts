@@ -367,15 +367,27 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Prepare quotation", exact: true })
     .click();
-  await expect(page.locator(".quotation-pdf-pages canvas").first()).toBeVisible();
-  const inlineDiscount = page.getByLabel("Quotation discount (PKR)", { exact: true });
+  await expect(
+    page.locator(".quotation-pdf-pages canvas").first(),
+  ).toBeVisible();
+  const inlineDiscount = page.getByLabel("Quotation discount (PKR)", {
+    exact: true,
+  });
   await expect(inlineDiscount).toHaveClass("pdf-inline-discount");
   await inlineDiscount.fill("1000.50");
   await expect(page.locator(".pdf-inline-net")).toHaveText("8,823,826.43");
-  await expect(page.getByText("Net Total: PKR 8,823,826.43", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Save quotation version", exact: true })).toBeDisabled();
-  await page.getByRole("button", { name: "Confirm quotation totals", exact: true }).click();
-  await expect(page.locator(".quotation-pdf-pages canvas").first()).toBeVisible();
+  await expect(
+    page.getByText("Net Total: PKR 8,823,826.43", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Save quotation version", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Confirm quotation totals", exact: true })
+    .click();
+  await expect(
+    page.locator(".quotation-pdf-pages canvas").first(),
+  ).toBeVisible();
   await page
     .getByRole("button", { name: "Save quotation version", exact: true })
     .click();
@@ -392,6 +404,16 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Create new quotation version", exact: true })
     .click();
+  await page
+    .getByLabel("Quotation revision reason")
+    .fill("Management requested commercial validity change");
+  await page.getByLabel("Requires costing change").selectOption("no");
+  await page
+    .getByRole("button", { name: "Start revision", exact: true })
+    .click();
+  await expect(
+    page.locator(".quote-description textarea").first(),
+  ).toHaveAttribute("readonly", "");
   await page.getByLabel("Validity", { exact: true }).fill("14 Days");
   await page
     .getByRole("button", { name: "Preview quotation", exact: true })
@@ -402,28 +424,78 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("heading", { name: "Q-BAFL-05850-001-R0-V2", exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Create new quotation version", exact: true })
+    .click();
+  await page.getByLabel("Revision source").selectOption("Customer");
+  await page
+    .getByLabel("Quotation revision reason")
+    .fill("Customer requested additional equipment");
+  await page.getByLabel("Requires costing change").selectOption("yes");
+  await page
+    .getByRole("button", { name: "Start revision", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Revise survey & BOQ", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Include an additional costing item").check();
+  await page
+    .getByLabel("Additional item description", { exact: true })
+    .fill("Additional equipment");
+  await page
+    .getByLabel("Additional item unit cost (PKR)", { exact: true })
+    .fill("100");
+  await page
+    .getByRole("button", { name: "Calculate & review BOQ", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Submit for review", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Approve & create quotation", exact: true })
+    .click();
   await page.getByLabel("Price presentation").selectOption("Full Breakup");
-  await expect(page.getByLabel("BOS (shared) Markup %", {exact: true})).toBeVisible();
-  await page.getByRole("button", {name: "Calculate selling price", exact: true}).click();
-  await page.getByRole("button", {name: "Save pricing version", exact: true}).click();
-  await page.getByRole("button", {name: "Prepare quotation", exact: true}).click();
-  await expect(page.locator(".quote-description")).toHaveCount(16);
-  await page.getByLabel("Include an additional item").check();
-  await page.getByLabel("Description", {exact: true}).fill("Additional equipment");
-  await page.getByLabel("Cost (PKR)", {exact: true}).fill("100");
-  await page.getByLabel("Markup on cost %", {exact: true}).fill("25");
-  await page.getByLabel("Tax category", {exact: true}).selectOption("18");
-  await page.getByRole("button", {name: "Preview quotation", exact: true}).click();
-  await expect(page.locator(".quotation-pdf-pages canvas")).toHaveCount(1);
-  await expect(page.locator(".quotation-pdf-pages canvas").first()).toBeVisible();
-  await page.getByRole("button", {name: "Save quotation version", exact: true}).click();
+  await page
+    .getByRole("button", { name: "Calculate selling price", exact: true })
+    .click();
+  await page.getByLabel("Additional item markup %", { exact: true }).fill("25");
+  await page
+    .getByRole("button", { name: "Calculate selling price", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Save pricing version", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Prepare quotation", exact: true })
+    .click();
+  await expect(page.locator(".quote-description")).toHaveCount(17);
+  await expect(
+    page.locator(".quotation-pdf-pages canvas").first(),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Save quotation version", exact: true })
+    .click();
+  await expect(page.getByText(/Customer revision/)).toBeVisible();
   await page.reload();
-  await page.getByRole("button", {name: "Quotations", exact: true}).click();
-  await page.getByRole("button", {name: /Q-BAFL-05850-001-R0-V3/}).click();
-  await page.getByRole("button", {name: "Create new quotation version", exact: true}).click();
-  await expect(page.getByLabel("Cost (PKR)", {exact: true})).toHaveValue("100");
-  await expect(page.getByLabel("Markup on cost %", {exact: true})).toHaveValue("25");
-  await page.getByRole("button", {name: "Preview quotation", exact: true}).click();
+  await page.getByRole("button", { name: "Quotations", exact: true }).click();
+  await page.getByRole("button", { name: /Q-BAFL-05850-001-R2-V1/ }).click();
+  await page
+    .getByRole("button", { name: "Create new quotation version", exact: true })
+    .click();
+  await page
+    .getByLabel("Quotation revision reason")
+    .fill("Internal validity change after refresh");
+  await page.getByLabel("Requires costing change").selectOption("no");
+  await page
+    .getByRole("button", { name: "Start revision", exact: true })
+    .click();
+  await expect(page.locator(".quote-description")).toHaveCount(17);
+  await expect(
+    page.locator(".quote-description textarea").last(),
+  ).toHaveAttribute("readonly", "");
+  await page
+    .getByRole("button", { name: "Preview quotation", exact: true })
+    .click();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
     path: "test-results/quotation-desktop.png",
@@ -456,7 +528,9 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .poll(
       async () => {
         try {
-          const restarted = JSON.parse(await readFile(".local/e2e-control.json", "utf8"));
+          const restarted = JSON.parse(
+            await readFile(".local/e2e-control.json", "utf8"),
+          );
           if (restarted.generation <= control.generation) return 0;
           return (await fetch("http://127.0.0.1:3180/api/health")).status;
         } catch {

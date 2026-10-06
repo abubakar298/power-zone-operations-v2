@@ -23,10 +23,12 @@ export function Boqs({
   session,
   onLogout,
   onPricing,
+  initialDraftId,
 }: {
   session: Session;
   onLogout: () => void;
   onPricing?: (id: string) => void;
+  initialDraftId?: string;
 }) {
   const [masters, setMasters] = useState<any>(),
     [records, setRecords] = useState<any[]>([]),
@@ -37,6 +39,10 @@ export function Boqs({
     [reviewComments, setReviewComments] = useState(""),
     [baseRevisionId, setBaseRevisionId] = useState<string>(),
     [revisionReason, setRevisionReason] = useState(""),
+    [revisionOrigin, setRevisionOrigin] = useState("Internal management"),
+    [additionalItem, setAdditionalItem] = useState<any>(),
+    [specifications, setSpecifications] = useState<Record<string, string>>({}),
+    [technicalLines, setTechnicalLines] = useState<any[]>([]),
     [history, setHistory] = useState<any[]>([]),
     [draft, setDraft] = useState<{ id: string; version: number }>(),
     [initial, setInitial] = useState<any>({}),
@@ -74,12 +80,24 @@ export function Boqs({
       setError(e instanceof Error ? e.message : "Unable to complete request.");
   }
   useEffect(() => {
-    void load();
+    void load()
+      .then(async () => {
+        if (initialDraftId) {
+          const d = await api<{ drafts: any[] }>("/boqs/drafts");
+          const row = d.drafts.find((x) => x.id === initialDraftId);
+          if (row) resume(row);
+        }
+      })
+      .catch(fail);
   }, []);
   function fresh() {
     setView("new");
     setBaseRevisionId(undefined);
     setRevisionReason("");
+    setRevisionOrigin("Internal management");
+    setAdditionalItem(undefined);
+    setSpecifications({});
+    setTechnicalLines([]);
     setInitial({});
     setDraft(undefined);
     setUploads([]);
@@ -95,6 +113,10 @@ export function Boqs({
   function resume(d: any) {
     setBaseRevisionId(d.base_revision_id ?? undefined);
     setRevisionReason(d.revision_reason ?? "");
+    setRevisionOrigin(d.revision_origin ?? "Internal management");
+    setAdditionalItem(d.inputs.additionalItem);
+    setSpecifications(d.inputs.specifications ?? {});
+    setTechnicalLines([]);
     setError("");
     setInitial(d.inputs);
     setDraft({ id: d.id, version: d.version });
@@ -144,6 +166,10 @@ export function Boqs({
           .map((k) => [k, Number(f.get(`brand-${k}`))]),
       ),
       preparedBy: f.get("preparedBy"),
+      additionalItem,
+      specifications: Object.keys(specifications).length
+        ? specifications
+        : undefined,
       uploadIds: uploads.map((u) => u.id),
       ocrText,
       ocrReviewed: reviewed,
@@ -158,6 +184,7 @@ export function Boqs({
         inputs,
         baseRevisionId,
         revisionReason,
+        revisionOrigin: baseRevisionId ? revisionOrigin : undefined,
       },
       csrf: session.csrfToken,
     });
@@ -179,6 +206,7 @@ export function Boqs({
       );
       await persist(inputs);
       setPreview(p);
+      setTechnicalLines(p.snapshot.lines);
       setNotice(
         "Review the costing below, then submit it for approval. No new BOQ number has been issued yet.",
       );
@@ -288,6 +316,9 @@ export function Boqs({
       preparedBy: session.user.displayName,
     });
     setInverter(original.snapshot.survey.inverter);
+    setAdditionalItem(original.snapshot.survey.additionalItem);
+    setSpecifications(original.snapshot.survey.specifications ?? {});
+    setTechnicalLines(original.snapshot.lines);
     setUploads(
       original.snapshot.survey.uploadIds.map((id: string, i: number) => ({
         id,
@@ -633,6 +664,7 @@ export function Boqs({
                 </button>
               )}
             <p>
+              {saved.revision_origin ?? "Initial / legacy"} ·{" "}
               {saved.revision_reason} · Current view: {saved.number}
             </p>
             <button
@@ -682,6 +714,16 @@ export function Boqs({
           </p>
           {baseRevisionId && (
             <label className="source-label">
+              Revision source
+              <select
+                disabled={!!draft}
+                aria-label="BOQ revision source"
+                value={revisionOrigin}
+                onChange={(e) => setRevisionOrigin(e.target.value)}
+              >
+                <option>Internal management</option>
+                <option>Customer</option>
+              </select>
               Revision reason
               <textarea
                 aria-label="Revision reason"
@@ -973,6 +1015,119 @@ export function Boqs({
                 </label>
               </div>
             </fieldset>
+            <fieldset disabled={busy}>
+              <legend>
+                Additional scope — included in BOQ costing and approval
+              </legend>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!!additionalItem}
+                  onChange={(e) => {
+                    setAdditionalItem(
+                      e.target.checked
+                        ? {
+                            description: "Additional item",
+                            specification: "",
+                            qty: "1",
+                            unit: "LS",
+                            unitCost: "0",
+                            taxRate: "18",
+                          }
+                        : undefined,
+                    );
+                    setPreview(undefined);
+                  }}
+                />
+                Include an additional costing item
+              </label>
+              {additionalItem && (
+                <div className="survey-grid">
+                  {[
+                    ["description", "Additional item description"],
+                    [
+                      "specification",
+                      "Additional item technical specification",
+                    ],
+                    ["qty", "Additional item quantity"],
+                    ["unit", "Additional item unit"],
+                    ["unitCost", "Additional item unit cost (PKR)"],
+                  ].map(([k, label]) => (
+                    <label key={k}>
+                      {label}
+                      <input
+                        aria-label={label}
+                        value={additionalItem[k]}
+                        required={k !== "specification"}
+                        type={
+                          k === "qty" || k === "unitCost" ? "number" : "text"
+                        }
+                        min={k === "qty" ? "0.0001" : "0"}
+                        step="0.0001"
+                        maxLength={1500}
+                        onChange={(e) => {
+                          setAdditionalItem({
+                            ...additionalItem,
+                            [k]: e.target.value,
+                          });
+                          setPreview(undefined);
+                        }}
+                      />
+                    </label>
+                  ))}
+                  <label>
+                    Additional item tax category
+                    <select
+                      aria-label="Additional item tax category"
+                      value={additionalItem.taxRate}
+                      onChange={(e) => {
+                        setAdditionalItem({
+                          ...additionalItem,
+                          taxRate: e.target.value,
+                        });
+                        setPreview(undefined);
+                      }}
+                    >
+                      <option value="18">Other items — 18%</option>
+                      <option value="10">Solar — 10%</option>
+                      <option value="0">No tax — 0%</option>
+                    </select>
+                  </label>
+                </div>
+              )}
+            </fieldset>
+            {baseRevisionId && technicalLines.length > 0 && (
+              <details className="revision-specifications">
+                <summary>Review / change technical specifications</summary>
+                <fieldset disabled={busy}>
+                  <legend>BOQ revision technical specifications</legend>
+                  <p>
+                    Changes are saved in this BOQ revision and require costing
+                    review.
+                  </p>
+                  {technicalLines
+                    .filter((l) => l.key !== "Additional Item")
+                    .map((l) => (
+                      <label className="source-label" key={l.key}>
+                        {l.description}
+                        <textarea
+                          aria-label={`BOQ specification: ${l.key}`}
+                          value={specifications[l.key] ?? l.specification ?? ""}
+                          maxLength={1500}
+                          onChange={(e) => {
+                            const next = { ...specifications };
+                            if (e.target.value.trim())
+                              next[l.key] = e.target.value;
+                            else delete next[l.key];
+                            setSpecifications(next);
+                            setPreview(undefined);
+                          }}
+                        />
+                      </label>
+                    ))}
+                </fieldset>
+              </details>
+            )}
             <div className="survey-actions">
               <button
                 type="button"

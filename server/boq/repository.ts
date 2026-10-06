@@ -60,6 +60,7 @@ export class BoqRepository {
     inputs: SurveyDraft,
     baseRevisionId?: string,
     reason = "",
+    revisionOrigin?: string,
   ) {
     return transaction(this.pool, async (c) => {
       await this.actor(c, owner);
@@ -111,8 +112,15 @@ export class BoqRepository {
       if (id) {
         const row = (
           await c.query(
-            "UPDATE survey_drafts SET inputs=$1,version=version+1,updated_at=now(),revision_reason=$5 WHERE id=$2 AND owner_id=$3 AND version=$4 AND id NOT IN (SELECT draft_id FROM boq_draft_finalizations) RETURNING id,version",
-            [inputs, id, owner, version, reason],
+            "UPDATE survey_drafts SET inputs=$1,version=version+1,updated_at=now(),revision_reason=$5,revision_origin=COALESCE(revision_origin,$6) WHERE id=$2 AND owner_id=$3 AND version=$4 AND id NOT IN (SELECT draft_id FROM boq_draft_finalizations) RETURNING id,version",
+            [
+              inputs,
+              id,
+              owner,
+              version,
+              reason,
+              base ? (revisionOrigin ?? null) : null,
+            ],
           )
         ).rows[0];
         if (!row)
@@ -124,8 +132,15 @@ export class BoqRepository {
       }
       const next = randomUUID();
       await c.query(
-        "INSERT INTO survey_drafts(id,owner_id,inputs,base_revision_id,revision_reason) VALUES($1,$2,$3,$4,$5)",
-        [next, owner, inputs, base ?? null, reason],
+        "INSERT INTO survey_drafts(id,owner_id,inputs,base_revision_id,revision_reason,revision_origin) VALUES($1,$2,$3,$4,$5,$6)",
+        [
+          next,
+          owner,
+          inputs,
+          base ?? null,
+          reason,
+          base ? (revisionOrigin ?? null) : null,
+        ],
       );
       return { id: next, version: 1 };
     });
@@ -226,7 +241,7 @@ export class BoqRepository {
     }
     const saved = (
       await c.query(
-        "INSERT INTO boq_revisions(id,boq_id,revision,number,snapshot,created_by,revision_reason) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+        "INSERT INTO boq_revisions(id,boq_id,revision,number,snapshot,created_by,revision_reason,revision_origin) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
         [
           randomUUID(),
           boq,
@@ -235,6 +250,7 @@ export class BoqRepository {
           snapshot,
           actor,
           d.base_revision_id ? d.revision_reason : "Initial BOQ",
+          d.revision_origin,
         ],
       )
     ).rows[0];

@@ -217,6 +217,37 @@ export function calculate(s: Survey, m: Masters) {
       undefined,
       "Installation Cost",
     );
+  if (s.additionalItem) {
+    const a = s.additionalItem;
+    lines.push({
+      key: "Additional Item",
+      description: a.description,
+      specification: a.specification || null,
+      specVersion: null,
+      brand: "",
+      brandAlternatives: [],
+      qty: a.qty,
+      unit: a.unit,
+      rate: a.unitCost,
+      rateVersion: 0,
+      rateStatus: "Active",
+      total: new Decimal(a.qty).mul(a.unitCost).toString(),
+      phase: "EPC",
+      epc: "Installation Cost",
+    });
+  }
+  for (const [key, specification] of Object.entries(s.specifications ?? {})) {
+    if (!m.rates.some((r) => r.key === key) && key !== "Additional Item")
+      throw new HttpError(
+        400,
+        "Choose an existing BOQ item for a technical specification override.",
+      );
+    const l = lines.find((x) => x.key === key);
+    if (l) {
+      l.specification = specification;
+      l.specVersion = null;
+    }
+  }
   const total = lines.reduce((a, l) => a.add(l.total), new Decimal(0));
   const summary = ["Solar Panels", "Structure", "BESS", "EPC"].map((phase) => {
     const cost = lines

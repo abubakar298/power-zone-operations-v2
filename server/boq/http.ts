@@ -29,6 +29,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         inputs: surveyDraftSchema,
         baseRevisionId: z.uuid().optional(),
         revisionReason: z.string().trim().max(2000).default(""),
+        revisionOrigin: z.enum(["Internal management", "Customer"]).optional(),
       })
       .strict()
       .safeParse(req.body);
@@ -45,6 +46,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         v.data.inputs,
         v.data.baseRevisionId,
         v.data.revisionReason,
+        v.data.revisionOrigin,
       ),
     );
   });

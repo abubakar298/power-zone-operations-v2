@@ -7,6 +7,7 @@ const amount = z
   .regex(/^\d{1,12}(\.\d{1,2})?$/, "Enter an amount with up to two decimals.");
 export const pricingSchema = z.object({
   boqRevisionId: z.uuid(),
+  revisionRequestId: z.uuid().optional(),
   presentation: z.enum(["No Breakup", "Basic Breakup", "Full Breakup"]),
   taxMode: z.enum(["Tax Included", "Show Sales Tax Separately"]),
   markups: z.object({
@@ -21,18 +22,23 @@ export const pricingSchema = z.object({
   discount: amount.optional(),
   preparedBy: z.string().trim().min(1).max(100),
   remarks: z.string().trim().max(2000).default(""),
+  additionalMarkup: percent.optional(),
+  additionalTaxRate: z.enum(["0", "10", "18"]).optional(),
 });
 export type PricingInput = z.infer<typeof pricingSchema>;
 export const quotationSchema = z.object({
+  revisionRequestId: z.uuid().optional(),
   pricingId: z.uuid(),
   discount: amount.optional(),
   quotedDate: z.iso.date(),
-  additionalItem: z.object({
-    description: z.string().trim().min(1).max(1500),
-    cost: amount,
-    markup: percent,
-    taxRate: z.enum(["0", "10", "18"]),
-  }).optional(),
+  additionalItem: z
+    .object({
+      description: z.string().trim().min(1).max(1500),
+      cost: amount,
+      markup: percent,
+      taxRate: z.enum(["0", "10", "18"]),
+    })
+    .optional(),
   validity: z.string().trim().min(1).max(100),
   proposedBy: z.string().trim().min(1).max(100),
   descriptions: z.array(z.string().trim().min(1).max(1500)).max(40).optional(),

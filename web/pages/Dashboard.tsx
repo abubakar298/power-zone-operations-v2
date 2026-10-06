@@ -17,6 +17,8 @@ export function Dashboard({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [pricingRevisionId, setPricingRevisionId] = useState<string>();
+  const [revisionDraftId, setRevisionDraftId] = useState<string>();
+  const [pricingRequestId, setPricingRequestId] = useState<string>();
   const [verified, setVerified] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false),
     [mobileOpen, setMobileOpen] = useState(false);
@@ -338,15 +340,27 @@ export function Dashboard({
           )}
           {(view === "pricing" || view === "quotes") && (
             <Commercial
-              key={view + String(pricingRevisionId)}
+              key={view + String(pricingRevisionId) + String(pricingRequestId)}
               session={session}
               initialRevisionId={pricingRevisionId}
+              initialRequestId={pricingRequestId}
+              onRevisionPricing={(id, requestId) => {
+                setPricingRevisionId(id);
+                setPricingRequestId(requestId);
+                navigate("pricing");
+              }}
               section={view === "pricing" ? "pricing" : "quotes"}
+              onRevisionDraft={(id) => {
+                setRevisionDraftId(id);
+                navigate("boqs");
+              }}
             />
           )}
           {view === "boqs" && (
             <Boqs
+              initialDraftId={revisionDraftId}
               onPricing={(id) => {
+                setPricingRequestId(undefined);
                 setPricingRevisionId(id);
                 navigate("pricing");
               }}

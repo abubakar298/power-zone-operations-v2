@@ -3,10 +3,187 @@ import type { Pool, PoolClient } from "pg";
 import { transaction } from "../db/transaction.js";
 import { HttpError } from "../http/errors.js";
 import { fingerprint } from "../boq/repository.js";
-import { price, quote } from "./engine.js";
+import { price, quote, quotationLines } from "./engine.js";
 import type { PricingInput, QuotationInput } from "./schema.js";
 export class CommercialRepository {
   constructor(private pool: Pool) {}
+  async revisionRequests(actor: string) {
+    return (
+      await this.pool.query(
+        "SELECT q.*,v.number AS source_number,v.pricing_id AS source_pricing_id,v.boq_revision_id AS source_boq_id,f.revision_id AS approved_revision_id,l.quotation_id AS completed_quotation_id FROM quotation_revision_requests q JOIN quotation_versions v ON v.id=q.source_quotation_id LEFT JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id LEFT JOIN quotation_revision_links l ON l.request_id=q.id WHERE q.created_by=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role IN('Admin','Management')) ORDER BY q.created_at DESC LIMIT 200",
+        [actor],
+      )
+    ).rows;
+  }
+  async revisionStart(
+    actor: string,
+    sourceId: string,
+    origin: string,
+    costingChange: boolean,
+    reason: string,
+    requestedBy: string,
+    key: string,
+  ) {
+    return transaction(this.pool, async (c) => {
+      await c.query("SELECT pg_advisory_xact_lock(742019003)");
+      const user = (
+        await c.query(
+          "SELECT active,role,display_name FROM users WHERE id=$1 FOR SHARE",
+          [actor],
+        )
+      ).rows[0];
+      if (!user?.active) throw new HttpError(401, "Your access has ended.");
+      if (!costingChange) await this.manager(c, actor);
+      const previous = (
+        await c.query(
+          "SELECT * FROM quotation_revision_requests WHERE request_key=$1",
+          [key],
+        )
+      ).rows[0];
+      if (previous) {
+        if (
+          previous.created_by !== actor ||
+          previous.source_quotation_id !== sourceId ||
+          previous.origin !== origin ||
+          previous.costing_change !== costingChange ||
+          previous.reason !== reason ||
+          previous.requested_by !== requestedBy
+        )
+          throw new HttpError(
+            409,
+            "This request key was already used for another revision.",
+          );
+        return previous;
+      }
+      const source = (
+        await c.query("SELECT * FROM quotation_versions WHERE id=$1", [
+          sourceId,
+        ])
+      ).rows[0];
+      if (!source) throw new HttpError(404, "Quotation not found.");
+      let draftId: string | null = null;
+      if (costingChange) {
+        const latest = (
+          await c.query(
+            "SELECT r.* FROM boq_revisions r WHERE r.boq_id=(SELECT boq_id FROM boq_revisions WHERE id=$1) ORDER BY r.revision DESC LIMIT 1",
+            [source.boq_revision_id],
+          )
+        ).rows[0];
+        draftId = randomUUID();
+        const survey = {
+          ...latest.snapshot.survey,
+          preparedBy: user.display_name,
+        };
+        const extra = (
+          await c.query(
+            "SELECT input FROM quotation_additional_inputs WHERE quotation_id=$1",
+            [sourceId],
+          )
+        ).rows[0]?.input;
+        if (extra && !survey.additionalItem)
+          survey.additionalItem = {
+            description: extra.description,
+            specification: "",
+            qty: "1",
+            unit: "LS",
+            unitCost: extra.cost,
+            taxRate: extra.taxRate,
+          };
+        await c.query(
+          "INSERT INTO survey_drafts(id,owner_id,inputs,base_revision_id,revision_reason,revision_origin) VALUES($1,$2,$3,$4,$5,$6)",
+          [draftId, actor, survey, latest.id, reason, origin],
+        );
+      }
+      const request = (
+        await c.query(
+          "INSERT INTO quotation_revision_requests(id,source_quotation_id,origin,costing_change,reason,requested_by,created_by,draft_id,request_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
+          [
+            randomUUID(),
+            sourceId,
+            origin,
+            costingChange,
+            reason,
+            requestedBy,
+            actor,
+            draftId,
+            key,
+          ],
+        )
+      ).rows[0];
+      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
+        actor,
+        `quotation.revision.${request.id}.${costingChange ? "costing" : "commercial"}.requested`,
+      ]);
+      return request;
+    });
+  }
+  async revisionContext(actor: string, boqId: string) {
+    await this.manager(this.pool, actor);
+    const row = (
+      await this.pool.query(
+        "SELECT q.*,p.snapshot->'input' AS pricing_input FROM quotation_revision_requests q JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id JOIN quotation_versions v ON v.id=q.source_quotation_id JOIN commercial_pricing_versions p ON p.id=v.pricing_id WHERE f.revision_id=$1",
+        [boqId],
+      )
+    ).rows[0];
+    if (row) {
+      const extra = (
+        await this.pool.query(
+          "SELECT input FROM quotation_additional_inputs WHERE quotation_id=$1",
+          [row.source_quotation_id],
+        )
+      ).rows[0]?.input;
+      if (extra) row.pricing_input.additionalMarkup = extra.markup;
+    }
+    return row ?? null;
+  }
+  async revisionValidate(
+    c: Pool | PoolClient,
+    requestId: string,
+    boqId: string,
+  ) {
+    const request = (
+      await c.query(
+        "SELECT q.*,v.snapshot AS source_snapshot,v.number AS source_number,v.boq_revision_id AS source_boq_id FROM quotation_revision_requests q JOIN quotation_versions v ON v.id=q.source_quotation_id WHERE q.id=$1",
+        [requestId],
+      )
+    ).rows[0];
+    if (!request) throw new HttpError(404, "Revision request not found.");
+    if (request.costing_change) {
+      const approved = (
+        await c.query(
+          "SELECT revision_id FROM boq_draft_finalizations WHERE draft_id=$1",
+          [request.draft_id],
+        )
+      ).rows[0];
+      if (!approved || approved.revision_id !== boqId)
+        throw new HttpError(
+          409,
+          "Approve the requested BOQ revision before preparing its revised quotation.",
+        );
+    } else if (boqId !== request.source_boq_id)
+      throw new HttpError(
+        409,
+        "A commercial revision must retain its original BOQ costing.",
+      );
+    return request;
+  }
+  async requireCostingContext(
+    c: Pool | PoolClient,
+    boqId: string,
+    requestId?: string,
+  ) {
+    const row = (
+      await c.query(
+        "SELECT q.id FROM quotation_revision_requests q JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id WHERE f.revision_id=$1",
+        [boqId],
+      )
+    ).rows[0];
+    if (row && !requestId)
+      throw new HttpError(
+        409,
+        "Use the revision request linked to this approved costing.",
+      );
+  }
   async manager(c: Pool | PoolClient, id: string) {
     const user = (
       await c.query(
@@ -30,6 +207,17 @@ export class CommercialRepository {
   }
   async pricingPreview(actor: string, input: PricingInput) {
     await this.manager(this.pool, actor);
+    await this.requireCostingContext(
+      this.pool,
+      input.boqRevisionId,
+      input.revisionRequestId,
+    );
+    if (input.revisionRequestId)
+      await this.revisionValidate(
+        this.pool,
+        input.revisionRequestId,
+        input.boqRevisionId,
+      );
     const b = await this.boq(this.pool, input.boqRevisionId),
       snapshot = price(b.snapshot, b.number, input);
     return { snapshot, fingerprint: fingerprint(snapshot) };
@@ -65,6 +253,17 @@ export class CommercialRepository {
     return transaction(this.pool, async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(742019003)");
       await this.manager(c, actor);
+      await this.requireCostingContext(
+        c,
+        input.boqRevisionId,
+        input.revisionRequestId,
+      );
+      if (input.revisionRequestId)
+        await this.revisionValidate(
+          c,
+          input.revisionRequestId,
+          input.boqRevisionId,
+        );
       const b = await this.boq(c, input.boqRevisionId),
         snapshot = price(b.snapshot, b.number, input),
         fp = fingerprint(snapshot);
@@ -118,16 +317,114 @@ export class CommercialRepository {
     actor: string,
     input: QuotationInput,
     c: Pool | PoolClient = this.pool,
+    allowExisting = false,
   ) {
     const p = await this.pricingGet(actor, input.pricingId, c),
       b = await this.boq(c, p.boq_revision_id),
-      customer = (await c.query("SELECT contact_person,phone FROM customers WHERE id=$1", [p.snapshot.customer.id])).rows[0],
-      wording = (await c.query("SELECT description FROM quotation_description_defaults WHERE key='bms'")).rows[0]?.description,
+      customer = (
+        await c.query(
+          "SELECT contact_person,phone FROM customers WHERE id=$1",
+          [p.snapshot.customer.id],
+        )
+      ).rows[0],
+      wording = (
+        await c.query(
+          "SELECT description FROM quotation_description_defaults WHERE key='bms'",
+        )
+      ).rows[0]?.description,
       snapshot = quote(p.snapshot, b.snapshot, input, wording);
-    snapshot.customer = { ...snapshot.customer, contactPerson: customer?.contact_person ?? "", phone: customer?.phone ?? "" };
+    await this.requireCostingContext(c, b.id, input.revisionRequestId);
+    if (
+      !input.revisionRequestId &&
+      !allowExisting &&
+      (
+        await c.query(
+          "SELECT 1 FROM quotation_versions WHERE boq_revision_id=$1 LIMIT 1",
+          [b.id],
+        )
+      ).rowCount
+    )
+      throw new HttpError(
+        409,
+        "Choose whether the requested revision needs costing changes before preparing another quotation.",
+      );
+    if (input.revisionRequestId) {
+      const revision = await this.revisionValidate(
+        c,
+        input.revisionRequestId,
+        b.id,
+      );
+      if (!revision.costing_change) {
+        const old = revision.source_snapshot;
+        const oldCanonical = quotationLines(
+          b.snapshot,
+          wording,
+          old.presentation === "Full Breakup",
+        );
+        const expected = quotationLines(
+          b.snapshot,
+          wording,
+          snapshot.presentation === "Full Breakup",
+        );
+        expected.forEach((l) => {
+          const index = oldCanonical.findIndex(
+            (x) => x.description === l.description,
+          );
+          if (index >= 0) l.description = old.lines[index].description;
+        });
+        if (!input.descriptions)
+          snapshot.lines
+            .slice(0, snapshot.scopeCount)
+            .forEach((l, i) => (l.description = expected[i].description));
+        if (
+          JSON.stringify(
+            snapshot.lines
+              .slice(0, snapshot.scopeCount)
+              .map((l) => l.description),
+          ) !== JSON.stringify(expected.map((l) => l.description))
+        )
+          throw new HttpError(
+            409,
+            "Technical description changes require a BOQ revision first.",
+          );
+        const oldExtra = (
+          await c.query(
+            "SELECT input FROM quotation_additional_inputs WHERE quotation_id=$1",
+            [revision.source_quotation_id],
+          )
+        ).rows[0]?.input;
+        if (
+          !!input.additionalItem !== !!oldExtra ||
+          (oldExtra &&
+            (input.additionalItem!.cost !== oldExtra.cost ||
+              input.additionalItem!.description !== oldExtra.description))
+        )
+          throw new HttpError(
+            409,
+            "Additional-item costing changes require a BOQ revision first.",
+          );
+      }
+      Object.assign(snapshot, {
+        revision: {
+          requestId: revision.id,
+          origin: revision.origin,
+          reason: revision.reason,
+          requestedBy: revision.requested_by,
+          sourceQuotation: revision.source_number,
+          costingChanged: revision.costing_change,
+        },
+      });
+    }
+    snapshot.customer = {
+      ...snapshot.customer,
+      contactPerson: customer?.contact_person ?? "",
+      phone: customer?.phone ?? "",
+    };
     return {
       snapshot,
-      fingerprint: input.additionalItem ? fingerprint({ snapshot, additionalItem: input.additionalItem }) : fingerprint(snapshot),
+      fingerprint: input.additionalItem
+        ? fingerprint({ snapshot, additionalItem: input.additionalItem })
+        : fingerprint(snapshot),
       boqRevisionId: b.id,
     };
   }
@@ -139,7 +436,12 @@ export class CommercialRepository {
   ) {
     return transaction(this.pool, async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(742019003)");
-      const preview = await this.quotationPreview(actor, input, c);
+      const replay = (
+        await c.query("SELECT 1 FROM quotation_versions WHERE request_key=$1", [
+          key,
+        ])
+      ).rowCount;
+      const preview = await this.quotationPreview(actor, input, c, !!replay);
       if (preview.fingerprint !== expected)
         throw new HttpError(409, "Preview this quotation before saving.");
       const old = (
@@ -159,6 +461,19 @@ export class CommercialRepository {
           );
         return old;
       }
+      if (
+        input.revisionRequestId &&
+        (
+          await c.query(
+            "SELECT 1 FROM quotation_revision_links WHERE request_id=$1",
+            [input.revisionRequestId],
+          )
+        ).rowCount
+      )
+        throw new HttpError(
+          409,
+          "This revision request has already produced a quotation. Start a new revision request.",
+        );
       const version = Number(
           (
             await c.query(
@@ -184,8 +499,20 @@ export class CommercialRepository {
           ],
         )
       ).rows[0];
-      if (input.additionalItem) await c.query("INSERT INTO quotation_additional_inputs(quotation_id,input) VALUES($1,$2)", [row.id, input.additionalItem]);
-      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [actor, `quotation.${number}.saved`]);
+      if (input.additionalItem)
+        await c.query(
+          "INSERT INTO quotation_additional_inputs(quotation_id,input) VALUES($1,$2)",
+          [row.id, input.additionalItem],
+        );
+      if (input.revisionRequestId)
+        await c.query(
+          "INSERT INTO quotation_revision_links(quotation_id,request_id) VALUES($1,$2)",
+          [row.id, input.revisionRequestId],
+        );
+      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
+        actor,
+        `quotation.${number}.saved`,
+      ]);
       return row;
     });
   }
@@ -207,6 +534,11 @@ export class CommercialRepository {
   }
   async additionalInput(actor: string, id: string) {
     await this.manager(this.pool, actor);
-    return (await this.pool.query("SELECT input FROM quotation_additional_inputs WHERE quotation_id=$1", [id])).rows[0]?.input;
+    return (
+      await this.pool.query(
+        "SELECT input FROM quotation_additional_inputs WHERE quotation_id=$1",
+        [id],
+      )
+    ).rows[0]?.input;
   }
 }

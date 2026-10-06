@@ -31,14 +31,34 @@ const defaults = (name: string, id = ""): PricingInput => ({
   preparedBy: name,
   remarks: "",
 });
-export function QuotationView({ snapshot: s, number, pdfUrl, discount, onDiscount, draftInput, csrf }: {
-  snapshot: QuotationSnapshot; number?: string; pdfUrl?: string; discount?: string;
-  onDiscount?: (value: string) => void; draftInput?: QuotationInput; csrf?: string;
+export function QuotationView({
+  snapshot: s,
+  number,
+  pdfUrl,
+  discount,
+  onDiscount,
+  draftInput,
+  csrf,
+}: {
+  snapshot: QuotationSnapshot;
+  number?: string;
+  pdfUrl?: string;
+  discount?: string;
+  onDiscount?: (value: string) => void;
+  draftInput?: QuotationInput;
+  csrf?: string;
 }) {
   const pages = useRef<HTMLDivElement>(null);
   const [pdfError, setPdfError] = useState("");
-  const [discountAnchor, setDiscountAnchor] = useState<{host: HTMLDivElement; top: number; height: number; netTop: number}>();
-  const serialized = draftInput ? JSON.stringify({ ...draftInput, discount: s.input.discount }) : "";
+  const [discountAnchor, setDiscountAnchor] = useState<{
+    host: HTMLDivElement;
+    top: number;
+    height: number;
+    netTop: number;
+  }>();
+  const serialized = draftInput
+    ? JSON.stringify({ ...draftInput, discount: s.input.discount })
+    : "";
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
@@ -46,63 +66,172 @@ export function QuotationView({ snapshot: s, number, pdfUrl, discount, onDiscoun
     async function render() {
       setPdfError("");
       try {
-        const response = await fetch(pdfUrl ?? "/api/commercial/quotations/preview.pdf", {
-          method: pdfUrl ? "GET" : "POST", credentials: "same-origin", cache: "no-store", signal: controller.signal,
-          ...(pdfUrl ? {} : { headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf ?? "" }, body: serialized }),
-        });
-        if (!response.ok) throw new Error((await response.json()).message ?? "Unable to load quotation PDF.");
+        const response = await fetch(
+          pdfUrl ?? "/api/commercial/quotations/preview.pdf",
+          {
+            method: pdfUrl ? "GET" : "POST",
+            credentials: "same-origin",
+            cache: "no-store",
+            signal: controller.signal,
+            ...(pdfUrl
+              ? {}
+              : {
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRF-Token": csrf ?? "",
+                  },
+                  body: serialized,
+                }),
+          },
+        );
+        if (!response.ok)
+          throw new Error(
+            (await response.json()).message ?? "Unable to load quotation PDF.",
+          );
         const data = await response.arrayBuffer();
         const pdf = await import("pdfjs-dist");
         pdf.GlobalWorkerOptions.workerSrc = pdfWorker;
         task = pdf.getDocument({ data });
         const document = await task.promise;
         const canvases: HTMLDivElement[] = [];
-        let anchor: {host: HTMLDivElement; top: number; height: number; netTop: number} | undefined;
+        let anchor:
+          | {
+              host: HTMLDivElement;
+              top: number;
+              height: number;
+              netTop: number;
+            }
+          | undefined;
         for (let i = 1; i <= document.numPages; i++) {
           if (cancelled) return;
-          const page = await document.getPage(i), viewport = page.getViewport({ scale: 1.5 });
+          const page = await document.getPage(i),
+            viewport = page.getViewport({ scale: 1.5 });
           const canvas = window.document.createElement("canvas");
-          canvas.width = viewport.width; canvas.height = viewport.height;
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
           canvas.setAttribute("aria-label", `Quotation PDF page ${i}`);
-          await page.render({ canvasContext: canvas.getContext("2d")!, canvas, viewport }).promise;
+          await page.render({
+            canvasContext: canvas.getContext("2d")!,
+            canvas,
+            viewport,
+          }).promise;
           const host = window.document.createElement("div");
-          host.className = "quotation-pdf-page"; host.append(canvas);
+          host.className = "quotation-pdf-page";
+          host.append(canvas);
           const content = await page.getTextContent();
-          const label = content.items.find((item: any) => item.str === "Special Discount") as any;
+          const label = content.items.find(
+            (item: any) => item.str === "Special Discount",
+          ) as any;
           if (label) {
-            const baseline = viewport.convertToViewportPoint(0, label.transform[5])[1];
+            const baseline = viewport.convertToViewportPoint(
+              0,
+              label.transform[5],
+            )[1];
             const height = Math.max(label.height * viewport.scale, 10);
-            const net = content.items.find((item: any) => item.str === "Net Total") as any;
-            anchor = { host, netTop: net ? (viewport.convertToViewportPoint(0, net.transform[5])[1] - height) / viewport.height * 100 : 0, top: (baseline - height) / viewport.height * 100, height: (height + 3) / viewport.height * 100 };
+            const net = content.items.find(
+              (item: any) => item.str === "Net Total",
+            ) as any;
+            anchor = {
+              host,
+              netTop: net
+                ? ((viewport.convertToViewportPoint(0, net.transform[5])[1] -
+                    height) /
+                    viewport.height) *
+                  100
+                : 0,
+              top: ((baseline - height) / viewport.height) * 100,
+              height: ((height + 3) / viewport.height) * 100,
+            };
           }
           canvases.push(host);
         }
-        if (!cancelled) { pages.current?.replaceChildren(...canvases); setDiscountAnchor(anchor); }
-      } catch (e) { if (!cancelled) setPdfError(e instanceof Error ? e.message : "Unable to load PDF."); }
+        if (!cancelled) {
+          pages.current?.replaceChildren(...canvases);
+          setDiscountAnchor(anchor);
+        }
+      } catch (e) {
+        if (!cancelled)
+          setPdfError(e instanceof Error ? e.message : "Unable to load PDF.");
+      }
     }
     void render();
-    return () => { cancelled = true; controller.abort(); void task?.destroy(); };
+    return () => {
+      cancelled = true;
+      controller.abort();
+      void task?.destroy();
+    };
   }, [pdfUrl, serialized, csrf]);
-  return <section className="boq-costing quotation-preview">
-    <div className="panel-heading"><h2>{number ?? "Quotation preview"}</h2>
-      {pdfUrl && <a className="dark-button" href={pdfUrl} download>Download quotation PDF</a>}
-    </div>
-    {pdfError && <p role="alert">{pdfError}</p>}
-    <div className="quote-metadata sr-only">Validity {s.input.validity}</div>
-    <div className="quotation-pdf-pages" ref={pages} aria-label="Quotation PDF preview" />
-    {onDiscount && discountAnchor && createPortal(<input className="pdf-inline-discount" aria-label="Quotation discount (PKR)" type="number" min="0" step="0.01" style={{top: `${discountAnchor.top}%`, height: `${discountAnchor.height}%`}} value={discount ?? s.input.discount} onChange={(e) => onDiscount(e.target.value)} />, discountAnchor.host)}
-    {onDiscount && discountAnchor && createPortal(<strong className="pdf-inline-net" style={{top: `${discountAnchor.netTop}%`, height: `${discountAnchor.height}%`}}>{money(s.footer.at(-1)!.amount)}</strong>, discountAnchor.host)}
-    {onDiscount && <span className="sr-only">Net Total: PKR {money(s.footer.at(-1)!.amount)}</span>}
-  </section>;
+  return (
+    <section className="boq-costing quotation-preview">
+      <div className="panel-heading">
+        <h2>{number ?? "Quotation preview"}</h2>
+        {pdfUrl && (
+          <a className="dark-button" href={pdfUrl} download>
+            Download quotation PDF
+          </a>
+        )}
+      </div>
+      {pdfError && <p role="alert">{pdfError}</p>}
+      <div className="quote-metadata sr-only">Validity {s.input.validity}</div>
+      <div
+        className="quotation-pdf-pages"
+        ref={pages}
+        aria-label="Quotation PDF preview"
+      />
+      {onDiscount &&
+        discountAnchor &&
+        createPortal(
+          <input
+            className="pdf-inline-discount"
+            aria-label="Quotation discount (PKR)"
+            type="number"
+            min="0"
+            step="0.01"
+            style={{
+              top: `${discountAnchor.top}%`,
+              height: `${discountAnchor.height}%`,
+            }}
+            value={discount ?? s.input.discount}
+            onChange={(e) => onDiscount(e.target.value)}
+          />,
+          discountAnchor.host,
+        )}
+      {onDiscount &&
+        discountAnchor &&
+        createPortal(
+          <strong
+            className="pdf-inline-net"
+            style={{
+              top: `${discountAnchor.netTop}%`,
+              height: `${discountAnchor.height}%`,
+            }}
+          >
+            {money(s.footer.at(-1)!.amount)}
+          </strong>,
+          discountAnchor.host,
+        )}
+      {onDiscount && (
+        <span className="sr-only">
+          Net Total: PKR {money(s.footer.at(-1)!.amount)}
+        </span>
+      )}
+    </section>
+  );
 }
 export function Commercial({
   session,
   initialRevisionId,
   section = "pricing",
+  onRevisionDraft,
+  onRevisionPricing,
+  initialRequestId,
 }: {
   session: Session;
   initialRevisionId?: string;
   section?: "pricing" | "quotes";
+  onRevisionDraft?: (id: string) => void;
+  onRevisionPricing?: (id: string, requestId: string) => void;
+  initialRequestId?: string;
 }) {
   const manager = ["Admin", "Management"].includes(session.user.role);
   const [boqs, setBoqs] = useState<any[]>([]),
@@ -126,6 +255,18 @@ export function Commercial({
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [key, setKey] = useState(crypto.randomUUID());
+  const [revisionDialog, setRevisionDialog] = useState(false),
+    [revisionInfo, setRevisionInfo] = useState<any>(),
+    [revisionOrigin, setRevisionOrigin] = useState("Internal management"),
+    [revisionReason, setRevisionReason] = useState(""),
+    [revisionRequester, setRevisionRequester] = useState(
+      session.user.displayName,
+    ),
+    [costingChoice, setCostingChoice] = useState("");
+  const [revisionLoading, setRevisionLoading] = useState(
+    !!(manager && initialRevisionId),
+  );
+  const [revisionRequests, setRevisionRequests] = useState<any[]>([]);
   async function load() {
     const [b, q] = await Promise.all([
       api<{ boqs: any[] }>("/boqs"),
@@ -133,11 +274,51 @@ export function Commercial({
     ]);
     setBoqs(b.boqs);
     setQuotes(q.quotations);
+    setRevisionRequests(
+      (await api<{ requests: any[] }>("/commercial/revision-requests"))
+        .requests,
+    );
     if (manager)
       setPrices((await api<{ pricing: any[] }>("/commercial/pricing")).pricing);
   }
   useEffect(() => {
     void load().catch(fail);
+    if (manager && initialRevisionId)
+      void (async () => {
+        if (initialRequestId) {
+          const rs = await api<{ requests: any[] }>(
+            "/commercial/revision-requests",
+          );
+          const r = rs.requests.find((x) => x.id === initialRequestId);
+          if (!r) throw new Error("Revision request not found.");
+          const source = await api<any>(
+            `/commercial/pricing/${r.source_pricing_id}`,
+          );
+          setRevisionInfo(r);
+          setInput({
+            ...source.snapshot.input,
+            boqRevisionId: initialRevisionId,
+            revisionRequestId: r.id,
+          });
+          setNotice(
+            `${r.origin}: ${r.reason}. Review commercial pricing for this revision.`,
+          );
+        } else {
+          const r = await api<any>(
+            `/commercial/revision-context/${initialRevisionId}`,
+          );
+          if (r) {
+            setRevisionInfo(r);
+            setInput({
+              ...r.pricing_input,
+              boqRevisionId: initialRevisionId,
+              revisionRequestId: r.id,
+            });
+          }
+        }
+      })()
+        .catch(fail)
+        .finally(() => setRevisionLoading(false));
   }, []);
   function fail(e: unknown) {
     setError(
@@ -212,6 +393,7 @@ export function Commercial({
     await action(async () => {
       const data: QuotationInput = copy ?? {
         pricingId: savedPrice.id,
+        revisionRequestId: savedPrice.snapshot.input.revisionRequestId,
         quotedDate: new Intl.DateTimeFormat("en-CA", {
           timeZone: "Asia/Karachi",
           year: "numeric",
@@ -224,8 +406,25 @@ export function Commercial({
       if (copy) {
         const source = await api<any>(`/commercial/pricing/${data.pricingId}`);
         setSavedPrice(source);
-        setInput(source.snapshot.input);
-        setPreview({ snapshot: source.snapshot, fingerprint: source.fingerprint });
+        setInput({
+          ...source.snapshot.input,
+          revisionRequestId: copy.revisionRequestId,
+        });
+        setPreview({
+          snapshot: source.snapshot,
+          fingerprint: source.fingerprint,
+        });
+      }
+      if (
+        !copy &&
+        data.revisionRequestId &&
+        revisionInfo &&
+        !revisionInfo.costing_change
+      ) {
+        const prior = await api<QuotationInput>(
+          `/commercial/quotations/${revisionInfo.source_quotation_id}/copy`,
+        );
+        data.additionalItem = prior.additionalItem;
       }
       const result = await api<{
         snapshot: QuotationSnapshot;
@@ -237,7 +436,9 @@ export function Commercial({
       setQuoteInput({
         ...data,
         discount: result.snapshot.input.discount,
-        descriptions: result.snapshot.lines.slice(0, result.snapshot.presentation === "Full Breakup" ? 16 : undefined).map((l) => l.description),
+        descriptions: result.snapshot.lines
+          .slice(0, result.snapshot.scopeCount)
+          .map((l) => l.description),
       });
       setQuotePreview(result);
       setSavedQuote(undefined);
@@ -294,17 +495,35 @@ export function Commercial({
     setQuoteInput({ ...quoteInput, discount: value });
     setKey(crypto.randomUUID());
     const footer = quotePreview.snapshot.footer;
-    const oldDiscount = footer.find((r) => r.label === "Special Discount")!.amount;
+    const oldDiscount = footer.find(
+      (r) => r.label === "Special Discount",
+    )!.amount;
     const oldNet = footer.find((r) => r.label === "Net Total")!.amount;
     const total = new Decimal(oldDiscount).add(oldNet);
-    const valid = /^\d{1,12}(\.\d{1,2})?$/.test(value) && new Decimal(value).lte(total);
+    const valid =
+      /^\d{1,12}(\.\d{1,2})?$/.test(value) && new Decimal(value).lte(total);
     setQuotePreview({
       fingerprint: "",
-      snapshot: { ...quotePreview.snapshot, footer: valid ? footer.map((r) => ({
-        ...r, amount: r.label === "Special Discount" ? new Decimal(value).toFixed(2) : r.label === "Net Total" ? total.minus(value).toFixed(2) : r.amount,
-      })) : footer },
+      snapshot: {
+        ...quotePreview.snapshot,
+        footer: valid
+          ? footer.map((r) => ({
+              ...r,
+              amount:
+                r.label === "Special Discount"
+                  ? new Decimal(value).toFixed(2)
+                  : r.label === "Net Total"
+                    ? total.minus(value).toFixed(2)
+                    : r.amount,
+            }))
+          : footer,
+      },
     });
-    setNotice(valid ? "Net total updated. Confirm quotation totals before saving." : "Enter a nonnegative discount up to the quotation total, with at most two decimals.");
+    setNotice(
+      valid
+        ? "Net total updated. Confirm quotation totals before saving."
+        : "Enter a nonnegative discount up to the quotation total, with at most two decimals.",
+    );
   }
   const p = preview?.snapshot;
   return (
@@ -332,7 +551,7 @@ export function Commercial({
               void pricingPreview();
             }}
           >
-            <fieldset>
+            <fieldset disabled={busy || revisionLoading}>
               <legend>Approved BOQ & commercial settings</legend>
               <div className="survey-grid">
                 <label>
@@ -362,8 +581,7 @@ export function Commercial({
                           .value as PricingInput["presentation"],
                         markups: {
                           ...input.markups,
-                          bess:
-                            e.target.value !== "No Breakup" ? "33" : "15",
+                          bess: e.target.value !== "No Breakup" ? "33" : "15",
                         },
                       })
                     }
@@ -397,7 +615,12 @@ export function Commercial({
                       ["structure", "Structure"],
                       ["bess", "BESS"],
                       ["earthing", "Earthing Bores"],
-                      ["balance", input.presentation === "Full Breakup" ? "BOS (shared)" : "Balance / Everything Else"],
+                      [
+                        "balance",
+                        input.presentation === "Full Breakup"
+                          ? "BOS (shared)"
+                          : "Balance / Everything Else",
+                      ],
                     ]
                 ).map(([k, label]) => (
                   <label key={k}>
@@ -418,6 +641,46 @@ export function Commercial({
                     />
                   </label>
                 ))}
+                {(input.additionalMarkup !== undefined ||
+                  p?.rows.some((r) => r.key === "additional")) && (
+                  <label>
+                    Additional item markup %
+                    <input
+                      aria-label="Additional item markup %"
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={input.additionalMarkup ?? input.markups.balance}
+                      onChange={(e) =>
+                        update({ additionalMarkup: e.target.value })
+                      }
+                    />
+                  </label>
+                )}
+                {(input.additionalMarkup !== undefined ||
+                  p?.rows.some((r) => r.key === "additional")) && (
+                  <label>
+                    Additional scope tax category
+                    <select
+                      aria-label="Additional scope tax category"
+                      value={
+                        input.additionalTaxRate ??
+                        p?.rows.find((r) => r.key === "additional")?.taxRate ??
+                        "18"
+                      }
+                      onChange={(e) =>
+                        update({
+                          additionalTaxRate: e.target.value as
+                            "0" | "10" | "18",
+                        })
+                      }
+                    >
+                      <option value="18">Other items — 18%</option>
+                      <option value="10">Solar — 10%</option>
+                      <option value="0">No tax — 0%</option>
+                    </select>
+                  </label>
+                )}
                 <label>
                   Prepared by
                   <input
@@ -546,86 +809,221 @@ export function Commercial({
         </p>
       )}
       {quoteInput && manager && (
-        <form
-          className="survey-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void calculateQuote();
-          }}
-        >
-          <fieldset>
-            <legend>Customer quotation details</legend>
-            <div className="survey-grid">
-              <label>
-                Quoted date
-                <input
-                  type="date"
-                  required
-                  value={quoteInput.quotedDate}
-                  onChange={(e) => quoteChange({ quotedDate: e.target.value })}
-                />
-              </label>
-              <label>
-                Validity
-                <input
-                  required
-                  maxLength={100}
-                  value={quoteInput.validity}
-                  onChange={(e) => quoteChange({ validity: e.target.value })}
-                />
-              </label>
-              <label>
-                Proposed by
-                <input
-                  required
-                  maxLength={100}
-                  value={quoteInput.proposedBy}
-                  onChange={(e) => quoteChange({ proposedBy: e.target.value })}
-                />
-              </label>
-            </div>
-            <h3>Customer-facing descriptions</h3>
-            <p>
-              These use the quotation reference wording. Detailed BOQ
-              specifications are not copied here.
-            </p>
-            {quoteInput.descriptions?.map((d, i) => (
-              <label className="source-label quote-description" key={i}>
-                Row {i + 1}
-                <textarea
-                  required
-                  maxLength={1500}
-                  value={d}
-                  onChange={(e) =>
-                    quoteChange({
-                      descriptions: quoteInput.descriptions!.map((v, j) =>
-                        j === i ? e.target.value : v,
-                      ),
-                    })
-                  }
-                />
-              </label>
-            ))}
-            {savedPrice?.snapshot.input.presentation === "Full Breakup" && <fieldset>
-              <legend>Optional additional item — row 17</legend>
-              <label><input type="checkbox" checked={!!quoteInput.additionalItem} onChange={e => quoteChange({additionalItem: e.target.checked ? {description: "Additional item", cost: "0", markup: "0", taxRate: "18"} : undefined})} />Include an additional item</label>
-              {quoteInput.additionalItem && <div className="form-grid">
-                <label>Description<input required maxLength={1500} value={quoteInput.additionalItem.description} onChange={e => quoteChange({additionalItem: {...quoteInput.additionalItem!, description: e.target.value}})} /></label>
-                <label>Cost (PKR)<input required type="number" min="0" step="0.01" value={quoteInput.additionalItem.cost} onChange={e => quoteChange({additionalItem: {...quoteInput.additionalItem!, cost: e.target.value}})} /></label>
-                <label>Markup on cost %<input required type="number" min="0" step="0.0001" value={quoteInput.additionalItem.markup} onChange={e => quoteChange({additionalItem: {...quoteInput.additionalItem!, markup: e.target.value}})} /></label>
-                <label>Tax category<select aria-label="Tax category" value={quoteInput.additionalItem.taxRate} onChange={e => quoteChange({additionalItem: {...quoteInput.additionalItem!, taxRate: e.target.value as "0" | "10" | "18"}})}><option value="18">Other items — 18%</option><option value="10">Solar — 10%</option><option value="0">No tax — 0%</option></select></label>
-              </div>}
-            </fieldset>}
-          </fieldset>
-          <button className="primary" disabled={busy}>
-            Preview quotation
-          </button>
-        </form>
+        <>
+          <p>
+            {revisionInfo &&
+              `${revisionInfo.origin} revision: ${revisionInfo.reason}`}
+          </p>
+          {revisionInfo && !revisionInfo.costing_change && (
+            <button
+              onClick={() =>
+                onRevisionPricing?.(
+                  savedPrice.snapshot.input.boqRevisionId,
+                  revisionInfo.id,
+                )
+              }
+            >
+              Edit revision margins / tax
+            </button>
+          )}
+          <form
+            className="survey-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void calculateQuote();
+            }}
+          >
+            <fieldset>
+              <legend>Customer quotation details</legend>
+              <div className="survey-grid">
+                <label>
+                  Quoted date
+                  <input
+                    type="date"
+                    required
+                    value={quoteInput.quotedDate}
+                    onChange={(e) =>
+                      quoteChange({ quotedDate: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  Validity
+                  <input
+                    required
+                    maxLength={100}
+                    value={quoteInput.validity}
+                    onChange={(e) => quoteChange({ validity: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Proposed by
+                  <input
+                    required
+                    maxLength={100}
+                    value={quoteInput.proposedBy}
+                    onChange={(e) =>
+                      quoteChange({ proposedBy: e.target.value })
+                    }
+                  />
+                </label>
+              </div>
+              <h3>Customer-facing descriptions</h3>
+              <p>
+                These use the quotation reference wording. Detailed BOQ
+                specifications are not copied here.
+              </p>
+              {quoteInput.descriptions?.map((d, i) => (
+                <label className="source-label quote-description" key={i}>
+                  Row {i + 1}
+                  <textarea
+                    readOnly={!!revisionInfo && !revisionInfo.costing_change}
+                    required
+                    maxLength={1500}
+                    value={d}
+                    onChange={(e) =>
+                      quoteChange({
+                        descriptions: quoteInput.descriptions!.map((v, j) =>
+                          j === i ? e.target.value : v,
+                        ),
+                      })
+                    }
+                  />
+                </label>
+              ))}
+              {savedPrice?.snapshot.input.presentation === "Full Breakup" &&
+                !savedPrice.snapshot.rows.some(
+                  (r: any) => r.key === "additional",
+                ) &&
+                (!revisionInfo ||
+                  (!revisionInfo.costing_change &&
+                    quoteInput.additionalItem)) && (
+                  <fieldset>
+                    <legend>Optional additional item — row 17</legend>
+                    <label>
+                      <input
+                        type="checkbox"
+                        disabled={!!revisionInfo}
+                        checked={!!quoteInput.additionalItem}
+                        onChange={(e) =>
+                          quoteChange({
+                            additionalItem: e.target.checked
+                              ? {
+                                  description: "Additional item",
+                                  cost: "0",
+                                  markup: "0",
+                                  taxRate: "18",
+                                }
+                              : undefined,
+                          })
+                        }
+                      />
+                      Include an additional item
+                    </label>
+                    {quoteInput.additionalItem && (
+                      <div className="form-grid">
+                        <label>
+                          Description
+                          <input
+                            readOnly={!!revisionInfo}
+                            required
+                            maxLength={1500}
+                            value={quoteInput.additionalItem.description}
+                            onChange={(e) =>
+                              quoteChange({
+                                additionalItem: {
+                                  ...quoteInput.additionalItem!,
+                                  description: e.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Cost (PKR)
+                          <input
+                            readOnly={!!revisionInfo}
+                            required
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={quoteInput.additionalItem.cost}
+                            onChange={(e) =>
+                              quoteChange({
+                                additionalItem: {
+                                  ...quoteInput.additionalItem!,
+                                  cost: e.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Markup on cost %
+                          <input
+                            required
+                            type="number"
+                            min="0"
+                            step="0.0001"
+                            value={quoteInput.additionalItem.markup}
+                            onChange={(e) =>
+                              quoteChange({
+                                additionalItem: {
+                                  ...quoteInput.additionalItem!,
+                                  markup: e.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Tax category
+                          <select
+                            aria-label="Tax category"
+                            value={quoteInput.additionalItem.taxRate}
+                            onChange={(e) =>
+                              quoteChange({
+                                additionalItem: {
+                                  ...quoteInput.additionalItem!,
+                                  taxRate: e.target.value as "0" | "10" | "18",
+                                },
+                              })
+                            }
+                          >
+                            <option value="18">Other items — 18%</option>
+                            <option value="10">Solar — 10%</option>
+                            <option value="0">No tax — 0%</option>
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </fieldset>
+                )}
+            </fieldset>
+            <button className="primary" disabled={busy}>
+              Preview quotation
+            </button>
+          </form>
+        </>
       )}
       {quotePreview && !savedQuote && (
         <>
-          <QuotationView snapshot={quotePreview.snapshot} discount={quoteInput?.discount} onDiscount={manager ? changeQuotationDiscount : undefined} draftInput={quoteInput} csrf={session.csrfToken} />
-          {!quotePreview.fingerprint && <button className="primary" disabled={busy} onClick={() => void calculateQuote()}>Confirm quotation totals</button>}
+          <QuotationView
+            snapshot={quotePreview.snapshot}
+            discount={quoteInput?.discount}
+            onDiscount={manager ? changeQuotationDiscount : undefined}
+            draftInput={quoteInput}
+            csrf={session.csrfToken}
+          />
+          {!quotePreview.fingerprint && (
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => void calculateQuote()}
+            >
+              Confirm quotation totals
+            </button>
+          )}
           <button
             className="primary"
             disabled={busy || !quotePreview.fingerprint}
@@ -642,24 +1040,160 @@ export function Commercial({
             number={savedQuote.number}
             pdfUrl={`/api/commercial/quotations/${savedQuote.id}/quotation.pdf`}
           />
-          {manager && (
+          {savedQuote.snapshot.revision && (
+            <p>
+              {savedQuote.snapshot.revision.origin} revision ·{" "}
+              {savedQuote.snapshot.revision.reason} · Previous quotation:{" "}
+              {savedQuote.snapshot.revision.sourceQuotation} · Costing:{" "}
+              {savedQuote.snapshot.boqNumber}
+            </p>
+          )}
+          {
             <button
               disabled={busy}
-              onClick={() =>
-                void action(async () => {
-                  const copy = await api<QuotationInput>(
-                    `/commercial/quotations/${savedQuote.id}/copy`,
-                  );
-                  await prepareQuote(copy);
-                })
-              }
+              onClick={() => {
+                setRevisionDialog(true);
+                setRevisionReason("");
+                setCostingChoice("");
+              }}
             >
               Create new quotation version
             </button>
+          }
+          {revisionDialog && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void action(async () => {
+                  const r = await api<any>("/commercial/revision-requests", {
+                    body: {
+                      sourceQuotationId: savedQuote.id,
+                      origin: revisionOrigin,
+                      costingChange: costingChoice === "yes",
+                      reason: revisionReason,
+                      requestedBy: revisionRequester,
+                      requestKey: crypto.randomUUID(),
+                    },
+                    csrf: session.csrfToken,
+                  });
+                  setRevisionInfo(r);
+                  setRevisionDialog(false);
+                  if (r.draft_id) {
+                    onRevisionDraft?.(r.draft_id);
+                    return;
+                  }
+                  const copy = await api<QuotationInput>(
+                    `/commercial/quotations/${savedQuote.id}/copy`,
+                  );
+                  await prepareQuote({ ...copy, revisionRequestId: r.id });
+                });
+              }}
+              className="detail-panel revision-request-form"
+            >
+              <h3>Revision request</h3>
+              <label>
+                Requested by
+                <select
+                  aria-label="Revision source"
+                  value={revisionOrigin}
+                  onChange={(e) => setRevisionOrigin(e.target.value)}
+                >
+                  <option>Internal management</option>
+                  <option>Customer</option>
+                </select>
+              </label>
+              <label>
+                Requester name
+                <input
+                  required
+                  value={revisionRequester}
+                  onChange={(e) => setRevisionRequester(e.target.value)}
+                />
+              </label>
+              <label>
+                Reason
+                <textarea
+                  aria-label="Quotation revision reason"
+                  required
+                  maxLength={2000}
+                  value={revisionReason}
+                  onChange={(e) => setRevisionReason(e.target.value)}
+                />
+              </label>
+              <label>
+                Does this require costing or technical scope changes?
+                <select
+                  aria-label="Requires costing change"
+                  required
+                  value={costingChoice}
+                  onChange={(e) => setCostingChoice(e.target.value)}
+                >
+                  <option value="">Choose revision route</option>
+                  {manager && (
+                    <option value="no">
+                      No — margins, tax, discount or commercial details only
+                    </option>
+                  )}
+                  <option value="yes">
+                    Yes — quantities, technical specifications or additional
+                    scope
+                  </option>
+                </select>
+              </label>
+              <p>
+                Commercial revisions retain the original costing. Costing
+                changes require a revised BOQ and approval before a new
+                quotation can be saved.
+              </p>
+              <button className="primary" disabled={busy}>
+                Start revision
+              </button>
+            </form>
           )}
         </>
       )}
       <section className="detail-panel">
+        <h3>Revision requests</h3>
+        {revisionRequests.length ? (
+          revisionRequests.map((r) => (
+            <div key={r.id}>
+              <p>
+                {r.origin} · {r.source_number} · {r.reason} ·{" "}
+                {r.completed_quotation_id
+                  ? "Completed"
+                  : r.costing_change
+                    ? r.approved_revision_id
+                      ? "Costing approved"
+                      : "BOQ revision awaiting preparation / approval"
+                    : "Commercial revision pending"}
+              </p>
+              {!r.completed_quotation_id && (
+                <button
+                  disabled={
+                    busy ||
+                    (r.costing_change && !r.approved_revision_id
+                      ? r.created_by !== session.user.id
+                      : !manager)
+                  }
+                  onClick={() => {
+                    if (r.costing_change && !r.approved_revision_id) {
+                      onRevisionDraft?.(r.draft_id);
+                    } else if (manager) {
+                      onRevisionPricing?.(
+                        r.approved_revision_id ?? r.source_boq_id,
+                        r.id,
+                      );
+                    }
+                  }}
+                >
+                  Resume revision
+                </button>
+              )}
+            </div>
+          ))
+        ) : (
+          <p>No revision requests yet.</p>
+        )}
         <h3>Quotation history</h3>
         {quotes.length ? (
           quotes.map((q) => (

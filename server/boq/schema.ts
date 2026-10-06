@@ -37,6 +37,20 @@ export const surveySchema = z
       })
       .strict(),
     preparedBy: z.string().trim().min(1).max(100),
+    specifications: z
+      .record(z.string().min(1).max(200), z.string().trim().min(1).max(1500))
+      .optional(),
+    additionalItem: z
+      .object({
+        description: z.string().trim().min(1).max(1500),
+        specification: z.string().trim().max(1500).default(""),
+        qty: quantity.refine((v) => Number(v) > 0),
+        unit: z.string().trim().min(1).max(20),
+        unitCost: quantity,
+        taxRate: z.enum(["0", "10", "18"]),
+      })
+      .strict()
+      .optional(),
     uploadIds: z.array(z.uuid()).max(10).default([]),
     ocrText: z.string().max(100000).default(""),
     ocrReviewed: z.boolean().default(false),
