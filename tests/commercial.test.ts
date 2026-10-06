@@ -172,10 +172,16 @@ test("locked commercial case reconciles, markup is on cost, and discount follows
     ...inputs(),
     discount: "324826.93",
   });
-  assert.equal(discounted.netTotal, "8500000.00");
+  assert.equal(discounted.netTotal, p.total, "Legacy pricing discount must not affect pricing");
+  const quotationInput = {
+    pricingId: randomUUID(), quotedDate: "2026-10-06", validity: "7 Days",
+    proposedBy: "Abu Bakar", discount: "324826.93",
+  };
+  const q = quote(p, boq.snapshot, quotationInput);
+  assert.equal(q.footer.at(-1)!.amount, "8500000.00");
   assert.throws(
     () =>
-      price(boq.snapshot, boq.number, { ...inputs(), discount: "999999999" }),
+      quote(p, boq.snapshot, { ...quotationInput, discount: "999999999" }),
     /discount/,
   );
 });

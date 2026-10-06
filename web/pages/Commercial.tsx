@@ -485,12 +485,8 @@ export function Commercial({
                   <span>Sales tax (internal)</span>
                   <strong>PKR {money(p.tax)}</strong>
                 </p>
-                <p>
-                  <span>Special Discount</span>
-                  <strong>PKR {money(p.total)}</strong>
-                </p>
                 <p className="net-total">
-                  <span>Net quoted price</span>
+                  <span>Selling price including tax</span>
                   <strong>PKR {money(p.total)}</strong>
                 </p>
               </div>

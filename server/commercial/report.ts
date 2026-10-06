@@ -29,7 +29,7 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
 
   pdf.setTextColor(40, 40, 45);
   pdf.setFontSize(12);
-  pdf.text("DRAFT QUOTATION - NOT SAVED", margin, 37);
+  pdf.text(number ? "QUOTATION" : "DRAFT QUOTATION - NOT SAVED", margin, 37);
   pdf.setFontSize(9);
   pdf.text("POWER ZONE ENGINEERING & SERVICES (PVT) LIMITED", margin, 42);
   autoTable(pdf, {
