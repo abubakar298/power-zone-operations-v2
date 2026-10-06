@@ -13,7 +13,7 @@ const money = (v: string) =>
     maximumFractionDigits: 2,
   }).format(Number(v));
 export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
-  const pdf = new jsPDF({ unit: "mm", format: "a4" }),
+  const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true }),
     margin = 14;
   pdf.setProperties({
     title: number ?? "Quotation preview",

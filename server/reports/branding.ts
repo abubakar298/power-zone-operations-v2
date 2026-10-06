@@ -3,7 +3,7 @@ import { logo, footer } from "./brand-assets.js";
 
 export const reportBottomMargin = 32;
 export function drawReportLogo(pdf: jsPDF) {
-  pdf.addImage(logo, "PNG", 14, 9, 38, 38 * 2384 / 3786, "power-zone-logo");
+  pdf.addImage(logo, "PNG", 14, 9, 38, 38 * 2384 / 3786, "power-zone-logo", "FAST");
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(8);
   pdf.setTextColor(90, 90, 100);
@@ -18,6 +18,6 @@ export function drawReportFooter(pdf: jsPDF, reference: string) {
     pdf.setTextColor(110, 110, 120);
     pdf.text(reference, 14, 269);
     pdf.text(`Page ${page} of ${pages}`, 196, 269, { align: "right" });
-    pdf.addImage(footer, "PNG", 10, 275, 190, 190 * 218 / 2054, "power-zone-footer");
+    pdf.addImage(footer, "PNG", 10, 275, 190, 190 * 218 / 2054, "power-zone-footer", "FAST");
   }
 }

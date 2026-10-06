@@ -20,7 +20,7 @@ export function buildCostingPdf(
   number?: string,
   createdAt?: string,
 ) {
-  const pdf = new jsPDF({ unit: "mm", format: "a4" });
+  const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
   const width = pdf.internal.pageSize.getWidth(),
     margin = 14;
   const title = number || "Costing preview";
