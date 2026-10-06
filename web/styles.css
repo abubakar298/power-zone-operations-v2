@@ -55,3 +55,17 @@
 .ipo-customer-summary h3 { margin-top: 0; }
 .ipo-customer-summary summary { cursor: pointer; font-weight: 600; color: #4447a7; }
 .ipo-customer-summary fieldset { margin-top: 14px; }
+
+.director-portal > .detail-panel { margin-bottom: 22px; }
+.director-portal > .detail-panel p { font-size: 13px; line-height: 1.7; color: #746b85; }
+.director-portal > .detail-panel .survey-actions { justify-content: flex-start; gap: 10px; }
+.director-portal > .detail-panel label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-weight: 600; margin: 18px 0; max-width: 520px; }
+.director-portal > .detail-panel select { border: 1px solid #dfddea; background: white; border-radius: 9px; padding: 12px; font: inherit; color: #393446; }
+.director-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; margin: 20px 0; }
+.director-summary > div { border: 1px solid #e6e3f0; border-radius: 12px; padding: 18px; background: #faf9fe; }
+.director-summary h4 { font-size: 12px; color: #746b85; margin: 0 0 14px; }
+.director-summary strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.director-portal > .detail-panel .order-table td { vertical-align: top; font-size: 12px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.director-portal > .detail-panel .order-table th { font-size: 11px; background: #faf9fe; }
+.director-portal .order-table { min-width: 720px; }
+@media(max-width:850px) { .director-summary { grid-template-columns: 1fr; } }

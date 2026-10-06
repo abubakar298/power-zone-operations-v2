@@ -304,14 +304,18 @@ export function Dashboard({
                           : view === "quotes"
                             ? "Quotations"
                             : view === "operations"
-                              ? "Send approved site requirements to Operations after IPO creation."
+                              ? "Operations delivery portal"
                               : view === "orders"
                                 ? "Customer PO & IPO"
                                 : "My account"}
               </h1>
               <p className="dashboard-intro">
                 {view === "dashboard"
-                  ? "Pending coordination work and recent completed activity."
+                  ? session.user.role === "Operations"
+                    ? "Plan delivery and issue received BOQs to Store."
+                    : ["Admin", "Management"].includes(session.user.role)
+                      ? "Review approvals and track customer/site budgets."
+                      : "Pending coordination work and recent completed activity."
                   : view === "masters"
                     ? "Your customers, sites and approved reference data."
                     : view === "boqs"

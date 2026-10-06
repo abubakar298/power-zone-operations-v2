@@ -1148,13 +1148,11 @@ test("Coordinator records external approval with screenshots and receives its qu
     .getByLabel("Instructions for quotation")
     .fill("Approved costing and these quotation settings.");
   const screenshot = await page.screenshot();
-  await page
-    .getByLabel("Approval screenshots")
-    .setInputFiles({
-      name: "sample-approval.png",
-      mimeType: "image/png",
-      buffer: screenshot,
-    });
+  await page.getByLabel("Approval screenshots").setInputFiles({
+    name: "sample-approval.png",
+    mimeType: "image/png",
+    buffer: screenshot,
+  });
   await expect(
     page.getByText("sample-approval.png", { exact: true }),
   ).toBeVisible();
@@ -1169,6 +1167,18 @@ test("Coordinator records external approval with screenshots and receives its qu
   await expect(page.getByRole("status")).toContainText(
     "External costing approval recorded",
   );
+  await page
+    .getByRole("button", { name: "Create revision draft", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Revise general BOQ", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("87.075 m", { exact: true })).toHaveCount(2);
+  await expect(page.getByLabel("6mm² DC cable total (m)")).toHaveCount(0);
+  await page.getByRole("button", { name: "Back to BOQs", exact: true }).click();
+  await page
+    .getByRole("button", { name: "DEMO-CHATBROWSER-001-R0", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Create quotation", exact: true })
     .click();

@@ -410,7 +410,11 @@ export function Boqs({
   }
   function reviseSaved() {
     const original = saved;
-    fresh();
+    fresh(original.snapshot.survey.sourceMode ?? "Survey");
+    setPvInput({
+      qty: original.snapshot.survey.panelQty,
+      wattage: original.snapshot.survey.panelWattage,
+    });
     setBaseRevisionId(original.id);
     setInitial({
       ...original.snapshot.survey,
@@ -913,7 +917,13 @@ export function Boqs({
         <>
           <div className="panel-heading">
             <h2>
-              {baseRevisionId ? "Revise survey & BOQ" : "New survey & BOQ"}
+              {sourceMode === "General quotation"
+                ? baseRevisionId
+                  ? "Revise general BOQ"
+                  : "New general BOQ"
+                : baseRevisionId
+                  ? "Revise survey & BOQ"
+                  : "New survey & BOQ"}
             </h2>
             <button onClick={() => setView("list")} disabled={busy}>
               Back to BOQs
@@ -1433,7 +1443,9 @@ export function Boqs({
                     .finally(() => setBusy(false));
                 }}
               >
-                Save survey draft
+                {sourceMode === "General quotation"
+                  ? "Save general BOQ draft"
+                  : "Save survey draft"}
               </button>
               <button className="primary" disabled={busy} type="submit">
                 {busy ? "Processing…" : "Calculate & review BOQ"}

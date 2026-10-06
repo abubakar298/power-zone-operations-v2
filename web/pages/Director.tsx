@@ -41,7 +41,7 @@ export function Director({
   }, [customer]);
   const proposal = data?.proposals.find((p: any) => p.id === selected);
   return (
-    <>
+    <div className="director-portal">
       <section className="detail-panel">
         <div className="panel-heading">
           <div>
@@ -56,7 +56,7 @@ export function Director({
           {["Approvals", "Customer & site budgets", "Job closing"].map((t) => (
             <button
               key={t}
-              className={tab === t ? "primary" : ""}
+              className={tab === t ? "primary" : "workflow-button"}
               onClick={() => setTab(t)}
             >
               {t}
@@ -102,7 +102,7 @@ export function Director({
             <p>Loading budgets…</p>
           ) : (
             <>
-              <div className="survey-grid">
+              <div className="summary-grid director-summary">
                 <div>
                   <h4>Budgeted cost</h4>
                   <strong>PKR {money(data.totals.budgetedCost)}</strong>
@@ -126,7 +126,7 @@ export function Director({
                 {data.recordLimit} proposals.
               </p>
               <div className="table-scroll">
-                <table>
+                <table className="order-table">
                   <thead>
                     <tr>
                       <th>Customer / site</th>
@@ -156,7 +156,10 @@ export function Director({
                         <td>{money(p.sellingRevenue)}</td>
                         <td>{money(p.budgetedProfit)}</td>
                         <td>
-                          <button onClick={() => setSelected(p.id)}>
+                          <button
+                            className="workflow-button"
+                            onClick={() => setSelected(p.id)}
+                          >
                             View site budget
                           </button>
                         </td>
@@ -176,7 +179,7 @@ export function Director({
                     {money(proposal.customerPayable)}
                   </p>
                   <div className="table-scroll">
-                    <table>
+                    <table className="order-table">
                       <thead>
                         <tr>
                           <th>PT phase</th>
@@ -230,6 +233,6 @@ export function Director({
           )}
         </section>
       )}
-    </>
+    </div>
   );
 }
