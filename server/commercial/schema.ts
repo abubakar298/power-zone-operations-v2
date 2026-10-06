@@ -17,7 +17,8 @@ export const pricingSchema = z.object({
     balance: percent,
     rest: percent,
   }),
-  discount: amount,
+  // Accepted for compatibility with older drafts; pricing never applies it.
+  discount: amount.optional(),
   preparedBy: z.string().trim().min(1).max(100),
   remarks: z.string().trim().max(2000).default(""),
 });

@@ -29,7 +29,7 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
 
   pdf.setTextColor(40, 40, 45);
   pdf.setFontSize(12);
-  pdf.text(number ?? "DRAFT QUOTATION - NOT SAVED", margin, 37);
+  pdf.text("DRAFT QUOTATION - NOT SAVED", margin, 37);
   pdf.setFontSize(9);
   pdf.text("POWER ZONE ENGINEERING & SERVICES (PVT) LIMITED", margin, 42);
   autoTable(pdf, {
@@ -43,7 +43,7 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
       [text(`Contact person: ${s.customer.contactPerson ?? ""}`), text(`Proposed by: ${s.input.proposedBy}`)],
       [text(`Contact number: ${s.customer.phone ?? ""}`), text(`Validity: ${s.input.validity}`)],
       [text(`Site: ${s.siteName} (${s.siteCode})`), text(`Solution ID: ${s.solutionId}`)],
-      [text(`BOQ: ${s.boqNumber}`), ""],
+      [text(`BOQ: ${s.boqNumber}`), text(`Quotation No.: ${number ?? "DRAFT"}`)],
     ],
   });
   let y = (pdf as any).lastAutoTable.finalY + 4;

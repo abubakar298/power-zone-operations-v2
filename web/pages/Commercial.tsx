@@ -28,7 +28,6 @@ const defaults = (name: string, id = ""): PricingInput => ({
     balance: "25",
     rest: "20",
   },
-  discount: "0",
   preparedBy: name,
   remarks: "",
 });
@@ -412,17 +411,6 @@ export function Commercial({
                   </label>
                 ))}
                 <label>
-                  Special Discount (PKR)
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    required
-                    value={input.discount}
-                    onChange={(e) => update({ discount: e.target.value })}
-                  />
-                </label>
-                <label>
                   Prepared by
                   <input
                     value={input.preparedBy}
@@ -499,11 +487,11 @@ export function Commercial({
                 </p>
                 <p>
                   <span>Special Discount</span>
-                  <strong>PKR {money(p.discount)}</strong>
+                  <strong>PKR {money(p.total)}</strong>
                 </p>
                 <p className="net-total">
                   <span>Net quoted price</span>
-                  <strong>PKR {money(p.netTotal)}</strong>
+                  <strong>PKR {money(p.total)}</strong>
                 </p>
               </div>
               {!savedPrice ? (

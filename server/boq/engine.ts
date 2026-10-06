@@ -257,7 +257,7 @@ export function calculate(s: Survey, m: Masters) {
         .div(config.quantity)
         .toString(),
       bessId: `${new Decimal(config.total_kw)}-${s.batteryKwh}`,
-      solutionId: `${pv.div(1000)}-${new Decimal(config.total_kw)}-${s.batteryKwh}`,
+      solutionId: `${pv.div(1000).toDecimalPlaces(1, Decimal.ROUND_HALF_UP)}-${new Decimal(config.total_kw)}-${s.batteryKwh}`,
     },
     lines,
     summary,

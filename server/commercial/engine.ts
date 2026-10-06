@@ -69,12 +69,7 @@ export function price(
     otherTax = money(rows.slice(1).reduce((a, r) => a.add(r.tax), D("0"))),
     tax = money(D(solarTax).add(otherTax)),
     total = money(D(subtotal).add(tax)),
-    discount = money(D(input.discount));
-  if (D(discount).gt(total))
-    throw new HttpError(
-      400,
-      "Special discount cannot exceed the quoted total.",
-    );
+    discount = "0.00";
   return {
     engineVersion: 1,
     input,
