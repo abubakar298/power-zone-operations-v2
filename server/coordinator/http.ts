@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { equalSecrets } from "../auth/crypto.js";
 import { Router, type RequestHandler } from "express";
 import { HttpError } from "../http/errors.js";
 import { CoordinatorRepository } from "./repository.js";
@@ -17,6 +19,38 @@ export function coordinatorHttp(
     )
       throw new HttpError(403, "Team overview requires management access.");
     res.json(await repo.overview(req.authSession!.user.id, scope === "team"));
+  });
+  r.post("/events", async (req, res) => {
+    if (
+      !equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken)
+    )
+      throw new HttpError(403, "Refresh and try again.");
+    const v = z
+      .object({
+        quotationId: z.uuid(),
+        kind: z.enum([
+          "Submitted",
+          "Approved",
+          "Changes requested",
+          "PO received",
+        ]),
+        notes: z.string().trim().max(2000).default(""),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!v.success) throw new HttpError(400, "Check the document and action.");
+    if (v.data.kind === "Changes requested" && !v.data.notes)
+      throw new HttpError(400, "Enter revision feedback.");
+    res
+      .status(201)
+      .json(
+        await repo.event(
+          req.authSession!.user.id,
+          v.data.quotationId,
+          v.data.kind,
+          v.data.notes,
+        ),
+      );
   });
   return r;
 }

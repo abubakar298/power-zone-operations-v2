@@ -230,6 +230,8 @@ export function Commercial({
   onRevisionDraft,
   onRevisionPricing,
   initialRequestId,
+  initialQuotationId,
+  initialPricingId,
 }: {
   session: Session;
   initialRevisionId?: string;
@@ -237,6 +239,8 @@ export function Commercial({
   onRevisionDraft?: (id: string) => void;
   onRevisionPricing?: (id: string, requestId: string) => void;
   initialRequestId?: string;
+  initialQuotationId?: string;
+  initialPricingId?: string;
 }) {
   const manager = ["Admin", "Management", "Coordinator"].includes(
     session.user.role,
@@ -271,7 +275,12 @@ export function Commercial({
     ),
     [costingChoice, setCostingChoice] = useState("");
   const [revisionLoading, setRevisionLoading] = useState(
-    !!(manager && initialRevisionId),
+    !!(
+      manager &&
+      initialRevisionId &&
+      !initialQuotationId &&
+      !initialPricingId
+    ),
   );
   const [revisionRequests, setRevisionRequests] = useState<any[]>([]);
   async function load() {
@@ -290,7 +299,14 @@ export function Commercial({
   }
   useEffect(() => {
     void load().catch(fail);
-    if (manager && initialRevisionId)
+    if (initialQuotationId) void openQuote(initialQuotationId);
+    if (initialPricingId) void selectPrice(initialPricingId);
+    if (
+      manager &&
+      initialRevisionId &&
+      !initialQuotationId &&
+      !initialPricingId
+    )
       void (async () => {
         if (initialRequestId) {
           const rs = await api<{ requests: any[] }>(

@@ -35,9 +35,13 @@ const money = (v: string) =>
 export function Orders({
   session,
   onOperations,
+  initialQuotationId,
+  initialSubmissionId,
 }: {
   session: Session;
   onOperations?: (id: string) => void;
+  initialQuotationId?: string;
+  initialSubmissionId?: string;
 }) {
   const [quotes, setQuotes] = useState<any[]>([]),
     [orders, setOrders] = useState<any[]>([]),
@@ -54,7 +58,7 @@ export function Orders({
   const [key, setKey] = useState(() => crypto.randomUUID()),
     [submissions, setSubmissions] = useState<any[]>([]),
     [review, setReview] = useState<any>();
-  const manager = session.user.role !== "Employee";
+  const manager = ["Admin", "Management"].includes(session.user.role);
   async function load() {
     const [q, o, s] = await Promise.all([
       api<any>("/commercial/quotations"),
@@ -64,9 +68,13 @@ export function Orders({
     setQuotes(q.quotations);
     setOrders(o.orders);
     setSubmissions(s.submissions);
+    if (initialSubmissionId)
+      setReview(s.submissions.find((v: any) => v.id === initialSubmissionId));
   }
   useEffect(() => {
     void load().catch((e) => setError(e.message));
+    if (initialQuotationId)
+      void choose(initialQuotationId).catch((e) => setError(e.message));
   }, []);
   async function act(action: () => Promise<void>) {
     setBusy(true);

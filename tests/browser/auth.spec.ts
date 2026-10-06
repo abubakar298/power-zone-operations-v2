@@ -743,6 +743,32 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("button", { name: "Team access", exact: true }),
   ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Work stages" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
+  await page.getByRole("button", { name: "New BOQ", exact: true }).click();
+  await page
+    .getByLabel("New site name", { exact: true })
+    .fill("SAMPLE bucket training");
+  await page
+    .getByRole("button", { name: "Save survey draft", exact: true })
+    .click();
+  await expect(
+    page.getByText("Survey draft saved", { exact: false }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await page.getByRole("button", { name: /Survey preparation/ }).click();
+  await expect(
+    page.getByRole("row", { name: /SAMPLE bucket training/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Open workflow", exact: true })
+    .click();
+  await expect(page.getByLabel("New site name", { exact: true })).toHaveValue(
+    "SAMPLE bucket training",
+  );
+  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   await page.screenshot({
     path: "test-results/atif-dashboard-desktop.png",
     fullPage: true,

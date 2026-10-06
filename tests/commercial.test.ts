@@ -1439,3 +1439,90 @@ test("admin can create a separate Coordinator login without email delivery, with
     1,
   );
 });
+
+test("coordination buckets record quotation review and PO receipt with immutable clocks and management-only decisions", async () => {
+  const { CoordinatorRepository } =
+    await import("../server/coordinator/repository.js");
+  const repo = new CoordinatorRepository(db.pool);
+  const q = (
+    await db.pool.query(
+      "SELECT * FROM quotation_versions WHERE created_by=$1 ORDER BY created_at DESC LIMIT 1",
+      [adminId],
+    )
+  ).rows[0];
+  assert.ok(q);
+  const send = (kind: string, notes = "") =>
+    request(app)
+      .post("/api/coordinator/events")
+      .set("Origin", origin)
+      .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrf)
+      .send({ quotationId: q.id, kind, notes });
+  await send("Approved").expect(409);
+  const first = (await send("Submitted").expect(201)).body;
+  assert.equal((await send("Submitted").expect(201)).body.id, first.id);
+  await request(app)
+    .post("/api/coordinator/events")
+    .set("Origin", origin)
+    .set("Cookie", employeeCookie)
+    .set("X-CSRF-Token", employeeCsrf)
+    .send({ quotationId: q.id, kind: "Approved" })
+    .expect(403);
+  await send("Approved").expect(201);
+  await send("PO received", "SAMPLE-PO-RECEIPT").expect(201);
+  const events = await db.pool.query(
+    "SELECT * FROM coordination_events WHERE quotation_id=$1 ORDER BY created_at",
+    [q.id],
+  );
+  assert.equal(events.rows.length, 3);
+  await assert.rejects(
+    db.pool.query(
+      "UPDATE coordination_events SET notes='changed' WHERE quotation_id=$1",
+      [q.id],
+    ),
+    /immutable/i,
+  );
+  await request(app)
+    .post("/api/coordinator/events")
+    .set("Cookie", cookie)
+    .send({ quotationId: q.id, kind: "Submitted" })
+    .expect(403);
+  const overview = await repo.overview(adminId, true);
+  assert.ok(overview.tasks.every((t: any) => t.stage && t.responsibility));
+  assert.equal(overview.performance.preparation.target, 15);
+  assert.equal(overview.performance.targets.quotationApproval, 20);
+});
+
+test("survey aging starts at receipt, excludes management waiting and never resets on draft edits", async () => {
+  const { CoordinatorRepository } =
+    await import("../server/coordinator/repository.js");
+  const id = randomUUID(),
+    review = randomUUID();
+  await db.pool.query(
+    "INSERT INTO survey_drafts(id,owner_id,inputs,created_at,updated_at) VALUES($1,$2,$3,now()-interval '60 minutes',now())",
+    [id, adminId, { siteName: "SAMPLE-aging" }],
+  );
+  await db.pool.query(
+    "INSERT INTO boq_review_submissions(id,draft_id,draft_version,snapshot,fingerprint,submitted_by,created_at) VALUES($1,$2,1,'{}','aging-test',$3,now()-interval '45 minutes')",
+    [review, id, adminId],
+  );
+  const repo = new CoordinatorRepository(db.pool);
+  const view = await repo.overview(adminId, false);
+  const task = view.tasks.find((t: any) => t.draft_id === id);
+  assert.equal(task.stage, "Costing review");
+  assert.equal(task.responsibility, "Management");
+  assert.ok(task.preparation_minutes >= 15 && task.preparation_minutes < 15.1);
+  assert.ok(Date.now() - new Date(task.started_at).getTime() > 44 * 60000);
+  await db.pool.query(
+    "INSERT INTO boq_review_decisions(submission_id,outcome,comments,reviewed_by) VALUES($1,'Changes requested','Please revise',$2)",
+    [review, adminId],
+  );
+  const changed = (await repo.overview(adminId, false)).tasks.find(
+    (t: any) => t.draft_id === id,
+  );
+  assert.equal(changed.stage, "Survey preparation");
+  assert.ok(Date.now() - new Date(changed.started_at).getTime() < 10000);
+  assert.ok(
+    changed.preparation_minutes >= 15 && changed.preparation_minutes < 15.1,
+  );
+});

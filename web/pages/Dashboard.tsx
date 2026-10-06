@@ -85,6 +85,7 @@ export function Dashboard({
       setBusy(false);
     }
   }
+  const [bucketTask, setBucketTask] = useState<any>();
   const initials = session.user.displayName
     .split(/\s+/)
     .slice(0, 2)
@@ -102,7 +103,9 @@ export function Dashboard({
       | "quotes"
       | "operations"
       | "orders",
+    task?: any,
   ) {
+    setBucketTask(task);
     setView(next);
     setMobileOpen(false);
     setMenuOpen(false);
@@ -337,7 +340,7 @@ export function Dashboard({
                 setPricingRevisionId(task.boq_revision_id ?? undefined);
                 setPricingRequestId(task.request_id ?? undefined);
                 setOperationsIpoId(task.ipo_id ?? undefined);
-                navigate(task.target);
+                navigate(task.target, task);
               }}
             />
           )}
@@ -347,6 +350,14 @@ export function Dashboard({
               session={session}
               initialRevisionId={pricingRevisionId}
               initialRequestId={pricingRequestId}
+              initialQuotationId={
+                bucketTask?.kind === "Sale confirmation"
+                  ? bucketTask.id
+                  : undefined
+              }
+              initialPricingId={
+                bucketTask?.kind === "Quotation" ? bucketTask.id : undefined
+              }
               onRevisionPricing={(id, requestId) => {
                 setPricingRevisionId(id);
                 setPricingRequestId(requestId);
@@ -374,6 +385,14 @@ export function Dashboard({
           {view === "orders" && (
             <Orders
               session={session}
+              initialSubmissionId={
+                bucketTask?.kind === "IPO evidence" ? bucketTask.id : undefined
+              }
+              initialQuotationId={
+                bucketTask?.kind === "Sale confirmation"
+                  ? bucketTask.id
+                  : undefined
+              }
               onOperations={(id) => {
                 setOperationsIpoId(id);
                 navigate("operations");
