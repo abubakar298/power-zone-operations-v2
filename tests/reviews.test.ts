@@ -214,6 +214,7 @@ test("only reviewers can decide; submitted drafts lock; source access and change
   );
   r0 = approvals[0].body.saved;
   assert.equal(r0.id, approvals[1].body.saved.id);
+  assert.equal((await get(manager, `/reviews/${s.id}`)).body.revision_id, null);
   assert.equal(r0.snapshot.total, "6456786");
   await post(employee, "/drafts", {
     id: d.id,

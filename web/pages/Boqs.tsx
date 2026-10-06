@@ -559,7 +559,13 @@ export function Boqs({
                 </div>
               )}
             {currentReview.status === "Changes requested" &&
-              currentReview.owner_id === session.user.id && (
+              currentReview.owner_id === session.user.id &&
+              drafts.some(
+                (d) =>
+                  d.id === currentReview.draft_id &&
+                  d.review_id === currentReview.id &&
+                  d.review_status === "Changes requested",
+              ) && (
                 <button
                   disabled={busy}
                   onClick={() => {

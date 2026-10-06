@@ -23,7 +23,7 @@ export class ReviewRepository {
   async list(actor: string) {
     return (
       await this.pool.query(
-        `SELECT s.id,s.draft_id,s.draft_version,s.created_at,s.snapshot->'customer'->>'name' AS customer,s.snapshot->'survey'->>'siteName' AS site,s.snapshot->>'total' AS total,u.display_name AS submitted_by_name,COALESCE(v.outcome,'Awaiting review') AS status,v.comments,v.created_at AS reviewed_at,s.base_revision_id,s.revision_reason,f.revision_id FROM boq_review_submissions s JOIN survey_drafts d ON d.id=s.draft_id JOIN users u ON u.id=s.submitted_by LEFT JOIN boq_review_decisions v ON v.submission_id=s.id LEFT JOIN boq_draft_finalizations f ON f.draft_id=s.draft_id WHERE d.owner_id=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role IN('Admin','Management')) ORDER BY s.created_at DESC LIMIT 200`,
+        `SELECT s.id,s.draft_id,s.draft_version,s.created_at,s.snapshot->'customer'->>'name' AS customer,s.snapshot->'survey'->>'siteName' AS site,s.snapshot->>'total' AS total,u.display_name AS submitted_by_name,COALESCE(v.outcome,'Awaiting review') AS status,v.comments,v.created_at AS reviewed_at,s.base_revision_id,s.revision_reason,f.revision_id FROM boq_review_submissions s JOIN survey_drafts d ON d.id=s.draft_id JOIN users u ON u.id=s.submitted_by LEFT JOIN boq_review_decisions v ON v.submission_id=s.id LEFT JOIN boq_draft_finalizations f ON f.draft_id=s.draft_id AND v.outcome='Approved' WHERE d.owner_id=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role IN('Admin','Management')) ORDER BY s.created_at DESC LIMIT 200`,
         [actor],
       )
     ).rows;
@@ -31,7 +31,7 @@ export class ReviewRepository {
   async get(actor: string, id: string) {
     const row = (
       await this.pool.query(
-        `SELECT s.*,d.owner_id,u.display_name AS submitted_by_name,COALESCE(v.outcome,'Awaiting review') AS status,v.comments,v.created_at AS reviewed_at,r.display_name AS reviewed_by_name,f.revision_id FROM boq_review_submissions s JOIN survey_drafts d ON d.id=s.draft_id JOIN users u ON u.id=s.submitted_by LEFT JOIN boq_review_decisions v ON v.submission_id=s.id LEFT JOIN users r ON r.id=v.reviewed_by LEFT JOIN boq_draft_finalizations f ON f.draft_id=s.draft_id WHERE s.id=$2 AND (d.owner_id=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role IN('Admin','Management')))`,
+        `SELECT s.*,d.owner_id,u.display_name AS submitted_by_name,COALESCE(v.outcome,'Awaiting review') AS status,v.comments,v.created_at AS reviewed_at,r.display_name AS reviewed_by_name,f.revision_id FROM boq_review_submissions s JOIN survey_drafts d ON d.id=s.draft_id JOIN users u ON u.id=s.submitted_by LEFT JOIN boq_review_decisions v ON v.submission_id=s.id LEFT JOIN users r ON r.id=v.reviewed_by LEFT JOIN boq_draft_finalizations f ON f.draft_id=s.draft_id AND v.outcome='Approved' WHERE s.id=$2 AND (d.owner_id=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role IN('Admin','Management')))`,
         [actor, id],
       )
     ).rows[0];
