@@ -12,6 +12,25 @@ import type { OrderInput } from "./schema.js";
 
 export class OrdersRepository {
   constructor(private pool: Pool) {}
+  async defaults(quotationId: string) {
+    const row = (
+      await this.pool.query(
+        `SELECT c.*, q.snapshot->'input'->>'proposedBy' AS proposed_by FROM quotation_versions q JOIN boq_revisions b ON b.id=q.boq_revision_id JOIN boqs o ON o.id=b.boq_id JOIN customers c ON c.id=o.customer_id WHERE q.id=$1`,
+        [quotationId],
+      )
+    ).rows[0];
+    if (!row) throw new HttpError(404, "Quotation customer not found.");
+    return {
+      customerName: row.name,
+      contactPerson: row.contact_person || row.name,
+      phone: row.phone,
+      email: row.email,
+      billingAddress: row.address,
+      paymentContact: row.contact_person || row.name,
+      paymentPhone: row.phone,
+      salesPerson: row.proposed_by ?? "",
+    };
+  }
   async preview(
     actor: string,
     input: OrderInput,

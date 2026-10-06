@@ -1,5 +1,21 @@
 import { useEffect, useState, useRef } from "react";
 import { api, type Session } from "../api.js";
+type DeliveryDetails = {
+  deliveryAddress: string;
+  siteContact: string;
+  sitePhone: string;
+  deliveryDate: string;
+  deliveryTime: string;
+  instructions: string;
+};
+const deliveryFields: [keyof DeliveryDetails, string][] = [
+  ["deliveryAddress", "Delivery address"],
+  ["siteContact", "Contact person on site"],
+  ["sitePhone", "Site contact number"],
+  ["deliveryDate", "Delivery date"],
+  ["deliveryTime", "Delivery time"],
+  ["instructions", "Delivery instructions"],
+];
 export function Operations({
   session,
   initialIpoId,
@@ -16,6 +32,88 @@ export function Operations({
     [selected, setSelected] = useState<any>(),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [workspace, setWorkspace] = useState<"handoff" | "received">("handoff");
+  const [plan, setPlan] = useState<any>();
+  const [details, setDetails] = useState<DeliveryDetails>({
+    deliveryAddress: "",
+    siteContact: "",
+    sitePhone: "",
+    deliveryDate: "",
+    deliveryTime: "",
+    instructions: "",
+  });
+  const [planReady, setPlanReady] = useState(false);
+  const [planLoading, setPlanLoading] = useState(false),
+    [message, setMessage] = useState("");
+  const planRequest = useRef<{ signature: string; key: string } | undefined>(
+    undefined,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    setPlan(undefined);
+    setPlanReady(false);
+    setError("");
+    setMessage("");
+    if (!selected || workspace !== "received") return;
+    setPlanLoading(true);
+    void api<any>(`/operations/${selected.id}/delivery-plan`)
+      .then((r) => {
+        if (cancelled) return;
+        setPlan(r.plan);
+        setPlanReady(true);
+        setDetails(
+          r.plan?.details ?? {
+            deliveryAddress: selected.snapshot.deliveryAddress || "",
+            siteContact: selected.snapshot.siteContact || "",
+            sitePhone: selected.snapshot.sitePhone || "",
+            deliveryDate: "",
+            deliveryTime: "",
+            instructions: "",
+          },
+        );
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setPlanLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.id, workspace]);
+  async function savePlan() {
+    if (!planReady || busy) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const signature = JSON.stringify({
+        id: selected.id,
+        version: plan?.version ?? 0,
+        details,
+      });
+      if (signature !== planRequest.current?.signature)
+        planRequest.current = { signature, key: crypto.randomUUID() };
+      const row = await api<any>(`/operations/${selected.id}/delivery-plan`, {
+        body: {
+          version: plan?.version ?? 0,
+          details,
+          requestKey: planRequest.current!.key,
+        },
+        csrf: session.csrfToken,
+      });
+      setPlan(row);
+      planRequest.current = undefined;
+      setMessage("Delivery details saved by Operations.");
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Unable to save delivery details.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
   const request = useRef<{ signature: string; key: string } | undefined>(
     undefined,
   );
@@ -74,7 +172,41 @@ export function Operations({
   }
   return (
     <section className="detail-panel operations-panel">
-      <h2>BOQ issuance to Operations</h2>
+      <div
+        className="master-tabs"
+        role="tablist"
+        aria-label="Operations workspaces"
+      >
+        <button
+          role="tab"
+          aria-selected={workspace === "handoff"}
+          className={workspace === "handoff" ? "selected" : ""}
+          disabled={busy}
+          onClick={() => {
+            setWorkspace("handoff");
+            setSelected(undefined);
+          }}
+        >
+          Coordinator handoff
+        </button>
+        <button
+          role="tab"
+          aria-selected={workspace === "received"}
+          className={workspace === "received" ? "selected" : ""}
+          disabled={busy}
+          onClick={() => {
+            setWorkspace("received");
+            setSelected(undefined);
+          }}
+        >
+          Operations · Received BOQs
+        </button>
+      </div>
+      <h2>
+        {workspace === "handoff"
+          ? "BOQ issuance to Operations"
+          : "Operations · Received BOQs"}
+      </h2>
       <p>
         Send the approved site requirements after IPO creation. Operations will
         arrange delivery and the Store handoff.
@@ -84,88 +216,95 @@ export function Operations({
           {error}
         </p>
       )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send();
-        }}
-        className="operations-form"
-      >
-        <label>
-          Saved IPO
-          <select
-            required
-            value={ipoId}
-            onChange={(e) => setIpoId(e.target.value)}
+      {workspace === "handoff" && (
+        <>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void send();
+            }}
+            className="operations-form"
           >
-            <option value="">Select an IPO awaiting Operations issuance</option>
-            {pending.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.number} · {o.customer} · {o.quotation_number}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Instructions to Operations
-          <textarea
-            value={notes}
-            maxLength={2000}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-        </label>
-        <button
-          className="dark-button"
-          disabled={busy || !ipoId || !source || sourceLoading}
-        >
-          {busy ? "Sending…" : "Send BOQ to Operations"}
-        </button>
-      </form>
-      {source && (
-        <section>
-          <h3>Requirements to send</h3>
-          <p>
-            {source.customer.name} · {source.siteName} / {source.siteCode} ·{" "}
-            {source.boqNumber}
-          </p>
-          <p>
-            Delivery address: {source.deliveryAddress || "Need to enter"} · Site
-            contact: {source.siteContact} {source.sitePhone}
-          </p>
-          <p>
-            {source.items.length} required BOQ lines from the approved revision.
-          </p>
-          <div className="order-table-scroll">
-            <table className="order-table">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Specification</th>
-                  <th>Brand</th>
-                  <th>Qty</th>
-                  <th>Unit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {source.items.map((l: any, i: number) => (
-                  <tr key={i}>
-                    <td>{l.description}</td>
-                    <td>{l.specification || "Need to enter"}</td>
-                    <td>
-                      {l.brand === "Any of the Above"
-                        ? l.brandAlternatives?.join(" / ")
-                        : l.brand}
-                    </td>
-                    <td>{l.qty}</td>
-                    <td>{l.unit}</td>
-                  </tr>
+            <label>
+              Saved IPO
+              <select
+                required
+                value={ipoId}
+                onChange={(e) => setIpoId(e.target.value)}
+              >
+                <option value="">
+                  Select an IPO awaiting Operations issuance
+                </option>
+                {pending.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.number} · {o.customer} · {o.quotation_number}
+                  </option>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              </select>
+            </label>
+            <label>
+              Instructions to Operations
+              <textarea
+                value={notes}
+                maxLength={2000}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </label>
+            <button
+              className="dark-button"
+              disabled={busy || !ipoId || !source || sourceLoading}
+            >
+              {busy ? "Sending…" : "Send BOQ to Operations"}
+            </button>
+          </form>
+          {source && (
+            <section>
+              <h3>Requirements to send</h3>
+              <p>
+                {source.customer.name} · {source.siteName} / {source.siteCode} ·{" "}
+                {source.boqNumber}
+              </p>
+              <p>
+                {source.items.length} required BOQ lines from the approved
+                revision.
+              </p>
+              <div className="order-table-scroll">
+                <table className="order-table">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Specification</th>
+                      <th>Brand</th>
+                      <th>Qty</th>
+                      <th>Unit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {source.items.map((l: any, i: number) => (
+                      <tr key={i}>
+                        <td>{l.description}</td>
+                        <td>{l.specification || "Need to enter"}</td>
+                        <td>
+                          {l.brand === "Any of the Above"
+                            ? l.brandAlternatives?.join(" / ")
+                            : l.brand}
+                        </td>
+                        <td>{l.qty}</td>
+                        <td>{l.unit}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+        </>
       )}
-      <h3>Issued requirements</h3>
+      <h3>
+        {workspace === "handoff"
+          ? "Issued requirements"
+          : "Received site requirements"}
+      </h3>
       {rows.length === 0 ? (
         <p>No BOQs issued to Operations yet.</p>
       ) : (
@@ -198,6 +337,7 @@ export function Operations({
                   <td>
                     <button
                       className="workflow-button"
+                      disabled={busy}
                       onClick={() => setSelected(r)}
                     >
                       View
@@ -223,14 +363,77 @@ export function Operations({
             {selected.snapshot.customer.name} · {selected.snapshot.siteName} ·{" "}
             {selected.snapshot.ipoNumber}
           </p>
-          <p>
-            Delivery address:{" "}
-            {selected.snapshot.deliveryAddress || "Need to enter"}
-          </p>
-          <p>
-            Site contact: {selected.snapshot.siteContact}{" "}
-            {selected.snapshot.sitePhone}
-          </p>
+          {workspace === "received" && (
+            <section className="ipo-customer-summary">
+              <h3>Delivery planning · Operations</h3>
+              <p>
+                Collect these details after BOQ receipt. The original BOQ and
+                IPO stay unchanged.
+              </p>
+              {message && (
+                <p role="status" className="success">
+                  {message}
+                </p>
+              )}
+              {planLoading ? (
+                <p role="status">Loading delivery details…</p>
+              ) : !planReady ? (
+                <p>
+                  Unable to load delivery details. Reopen this BOQ to try again.
+                </p>
+              ) : (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void savePlan();
+                  }}
+                >
+                  <fieldset
+                    className="order-fields"
+                    disabled={busy || planLoading}
+                  >
+                    {deliveryFields.map(([key, label]) => (
+                      <label key={key}>
+                        {label}
+                        <input
+                          type={
+                            key === "deliveryDate"
+                              ? "date"
+                              : key === "deliveryTime"
+                                ? "time"
+                                : "text"
+                          }
+                          required={
+                            !["deliveryTime", "instructions"].includes(key)
+                          }
+                          maxLength={
+                            key === "deliveryAddress"
+                              ? 1000
+                              : key === "instructions"
+                                ? 2000
+                                : 300
+                          }
+                          value={details[key]}
+                          onChange={(e) =>
+                            setDetails((v) => ({ ...v, [key]: e.target.value }))
+                          }
+                        />
+                      </label>
+                    ))}
+                  </fieldset>
+                  <button className="dark-button" disabled={busy}>
+                    Save delivery details
+                  </button>
+                  {plan && (
+                    <p>
+                      Saved version {plan.version} ·{" "}
+                      {new Date(plan.created_at).toLocaleString("en-PK")}
+                    </p>
+                  )}
+                </form>
+              )}
+            </section>
+          )}
           <p>{selected.snapshot.notes}</p>
           <div className="order-table-scroll">
             <table className="order-table">

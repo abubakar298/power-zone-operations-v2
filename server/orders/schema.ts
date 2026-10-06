@@ -3,6 +3,7 @@ const optional = z.string().trim().max(300).default("");
 export const orderSchema = z
   .object({
     quotationId: z.uuid(),
+    entryVersion: z.literal(2).optional(),
     evidenceType: z.enum([
       "Customer PO",
       "Written approval",
@@ -36,6 +37,28 @@ export const orderSchema = z
   })
   .strict()
   .superRefine((v, c) => {
+    if (
+      v.entryVersion === 2 &&
+      (v.deliveryAddress ||
+        v.siteContact ||
+        v.sitePhone ||
+        v.deliveryDate ||
+        v.deliveryTime)
+    )
+      c.addIssue({
+        code: "custom",
+        message:
+          "Delivery details must be entered by Operations after BOQ receipt.",
+      });
+    if (
+      v.entryVersion === 2 &&
+      (v.customerNtn || v.customerStrn) &&
+      (v.evidenceType !== "Customer PO" || !v.documentId)
+    )
+      c.addIssue({
+        code: "custom",
+        message: "NTN and STRN are only recorded from an uploaded customer PO.",
+      });
     if (v.evidenceType === "Customer PO" && !v.poNumber)
       c.addIssue({
         code: "custom",

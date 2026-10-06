@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import { transaction } from "../db/transaction.js";
 import { HttpError } from "../http/errors.js";
 import { fingerprint } from "../boq/repository.js";
-import type { IssuanceInput } from "./schema.js";
+import type { IssuanceInput, DeliveryPlanInput } from "./schema.js";
 export class OperationsRepository {
   constructor(private pool: Pool) {}
   async list() {
@@ -22,6 +22,83 @@ export class OperationsRepository {
     ).rows[0];
     if (!r) throw new HttpError(404, "Operations issuance not found.");
     return r;
+  }
+  async deliveryPlan(issuanceId: string) {
+    await this.get(issuanceId);
+    return (
+      (
+        await this.pool.query(
+          "SELECT * FROM operations_delivery_plans WHERE issuance_id=$1 ORDER BY version DESC LIMIT 1",
+          [issuanceId],
+        )
+      ).rows[0] ?? null
+    );
+  }
+  async planDelivery(
+    actor: string,
+    issuanceId: string,
+    input: DeliveryPlanInput,
+  ) {
+    return transaction(this.pool, async (c) => {
+      const u = (await c.query("SELECT active FROM users WHERE id=$1", [actor]))
+        .rows[0];
+      if (!u?.active) throw new HttpError(401, "Your access has ended.");
+      const issuance = (
+        await c.query(
+          "SELECT id FROM operations_boq_issuances WHERE id=$1 FOR UPDATE",
+          [issuanceId],
+        )
+      ).rows[0];
+      if (!issuance) throw new HttpError(404, "Received BOQ not found.");
+      const replay = (
+        await c.query(
+          "SELECT * FROM operations_delivery_plans WHERE request_key=$1",
+          [input.requestKey],
+        )
+      ).rows[0];
+      if (replay) {
+        if (
+          replay.created_by !== actor ||
+          replay.issuance_id !== issuanceId ||
+          replay.version !== input.version + 1 ||
+          fingerprint(replay.details) !== fingerprint(input.details)
+        )
+          throw new HttpError(
+            409,
+            "Request key already used for another delivery plan.",
+          );
+        return replay;
+      }
+      const version = (
+        await c.query(
+          "SELECT COALESCE(max(version),0)::integer AS version FROM operations_delivery_plans WHERE issuance_id=$1",
+          [issuanceId],
+        )
+      ).rows[0].version;
+      if (version !== input.version)
+        throw new HttpError(
+          409,
+          "Delivery details changed. Reopen the received BOQ before saving.",
+        );
+      const row = (
+        await c.query(
+          "INSERT INTO operations_delivery_plans(id,issuance_id,version,details,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
+          [
+            randomUUID(),
+            issuanceId,
+            version + 1,
+            input.details,
+            input.requestKey,
+            actor,
+          ],
+        )
+      ).rows[0];
+      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
+        actor,
+        `operations.delivery.plan:${issuanceId}:v${row.version}`,
+      ]);
+      return row;
+    });
   }
   async source(ipoId: string, c: Pool | PoolClient = this.pool) {
     const ipo = (

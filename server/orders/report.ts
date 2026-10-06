@@ -33,48 +33,97 @@ export function buildIpoPdf(s: any, number?: string) {
   pdf.text("POWER ZONE ENGINEERING & SERVICES (PVT) LIMITED", 14, 42);
   const i = s.input;
   const view = ipoPresentation(s);
-  const entries = [
-    [
-      "IPO reference",
-      number ?? "DRAFT",
-      "Quotation reference",
-      s.quotationNumber,
-    ],
-    ["Company to invoice", i.invoiceCompany, "Customer PO", i.poNumber],
-    ["Sale confirmation", i.evidenceType, "Evidence details", i.evidenceNotes],
-    ["Customer", s.customer.name, "BOQ", s.boqNumber],
-    [
-      "Sales person",
-      i.salesPerson,
-      "Checked by",
-      s.checkedBy ?? "Pending review",
-    ],
-    ["NTN", i.customerNtn, "STRN", i.customerStrn],
-    [
-      "Contact / designation",
-      `${i.contactPerson} / ${i.designation}`,
-      "Phone / email",
-      `${i.phone} / ${i.email}`,
-    ],
-    [
-      "Billing address",
-      i.billingAddress,
-      "Delivery address",
-      i.deliveryAddress,
-    ],
-    [
-      "Site contact",
-      `${i.siteContact} / ${i.sitePhone}`,
-      "Payment contact",
-      `${i.paymentContact} / ${i.paymentPhone}`,
-    ],
-    [
-      "Order date",
-      i.orderDate,
-      "Delivery date / time",
-      `${i.deliveryDate} / ${i.deliveryTime}`,
-    ],
-  ];
+  const entries =
+    i.entryVersion === 2
+      ? [
+          [
+            "IPO reference",
+            number ?? "DRAFT",
+            "Quotation reference",
+            s.quotationNumber,
+          ],
+          [
+            "Company to invoice",
+            i.invoiceCompany,
+            "Customer / BOQ",
+            `${s.customer.name} / ${s.boqNumber}`,
+          ],
+          [
+            "Sale confirmation",
+            i.evidenceType,
+            "Customer PO",
+            i.poNumber || "N/A",
+          ],
+          ["Order date", i.orderDate, "Sales person", i.salesPerson],
+          [
+            "Customer contact",
+            `${i.contactPerson || s.customer.name} / ${i.phone || "N/A"}`,
+            "Email",
+            i.email || "N/A",
+          ],
+          [
+            "Billing address",
+            i.billingAddress || "N/A",
+            "Payment contact",
+            `${i.paymentContact || s.customer.name} / ${i.paymentPhone || "N/A"}`,
+          ],
+          ...(i.evidenceType === "Customer PO" && s.document
+            ? [["NTN", i.customerNtn || "N/A", "STRN", i.customerStrn || "N/A"]]
+            : []),
+          [
+            "Evidence details",
+            i.evidenceNotes,
+            "Checked by",
+            s.checkedBy ?? "Pending review",
+          ],
+        ]
+      : [
+          [
+            "IPO reference",
+            number ?? "DRAFT",
+            "Quotation reference",
+            s.quotationNumber,
+          ],
+          ["Company to invoice", i.invoiceCompany, "Customer PO", i.poNumber],
+          [
+            "Sale confirmation",
+            i.evidenceType,
+            "Evidence details",
+            i.evidenceNotes,
+          ],
+          ["Customer", s.customer.name, "BOQ", s.boqNumber],
+          [
+            "Sales person",
+            i.salesPerson,
+            "Checked by",
+            s.checkedBy ?? "Pending review",
+          ],
+          ["NTN", i.customerNtn, "STRN", i.customerStrn],
+          [
+            "Contact / designation",
+            `${i.contactPerson} / ${i.designation}`,
+            "Phone / email",
+            `${i.phone} / ${i.email}`,
+          ],
+          [
+            "Billing address",
+            i.billingAddress,
+            "Delivery address",
+            i.deliveryAddress,
+          ],
+          [
+            "Site contact",
+            `${i.siteContact} / ${i.sitePhone}`,
+            "Payment contact",
+            `${i.paymentContact} / ${i.paymentPhone}`,
+          ],
+          [
+            "Order date",
+            i.orderDate,
+            "Delivery date / time",
+            `${i.deliveryDate} / ${i.deliveryTime}`,
+          ],
+        ];
   autoTable(pdf, {
     startY: 46,
     theme: "grid",

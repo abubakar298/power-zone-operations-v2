@@ -2,7 +2,7 @@ import { Router, type RequestHandler } from "express";
 import { z } from "zod";
 import { equalSecrets } from "../auth/crypto.js";
 import { HttpError } from "../http/errors.js";
-import { issuanceSchema } from "./schema.js";
+import { issuanceSchema, deliveryPlanSchema } from "./schema.js";
 import { OperationsRepository } from "./repository.js";
 import { buildOperationsPdf } from "./report.js";
 export function operationsHttp(
@@ -33,6 +33,22 @@ export function operationsHttp(
   r.get("/sources/:id", async (req, res) =>
     res.json({ snapshot: await repo.source(id(req.params.id)) }),
   );
+  r.get("/:id/delivery-plan", async (req, res) =>
+    res.json({ plan: await repo.deliveryPlan(id(req.params.id)) }),
+  );
+  r.post("/:id/delivery-plan", async (req, res) => {
+    const p = deliveryPlanSchema.safeParse(req.body);
+    if (!p.success) throw new HttpError(400, p.error.issues[0].message);
+    res
+      .status(201)
+      .json(
+        await repo.planDelivery(
+          req.authSession!.user.id,
+          id(req.params.id),
+          p.data,
+        ),
+      );
+  });
   r.get("/:id/report.pdf", async (req, res) => {
     const row = await repo.get(id(req.params.id));
     res

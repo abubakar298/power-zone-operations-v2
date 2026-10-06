@@ -1,7 +1,10 @@
 import { ipoPresentation } from "../../server/orders/presentation.js";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api, type Session } from "../api.js";
 import { orderSchema, type OrderInput } from "../../server/orders/schema.js";
+
+import { extractText } from "../ocr.js";
+import { poSuggestions } from "../../server/orders/po-extraction.js";
 
 const fields: [keyof OrderInput, string][] = [
   ["poNumber", "Customer PO reference"],
@@ -15,15 +18,10 @@ const fields: [keyof OrderInput, string][] = [
   ["phone", "Customer contact number"],
   ["email", "Customer email"],
   ["billingAddress", "Billing address"],
-  ["deliveryAddress", "Delivery address"],
-  ["siteContact", "Contact person on site"],
-  ["sitePhone", "Site contact number"],
   ["paymentContact", "Person responsible for payment"],
   ["paymentPhone", "Payment contact number"],
-  ["deliveryDate", "Delivery date / instructions"],
-  ["deliveryTime", "Delivery time"],
   ["paymentMode", "Payment mode"],
-  ["salesSource", "Sales summary / source of contact"],
+  ["salesSource", "Sales source"],
   ["remarks", "Remarks"],
   ["evidenceNotes", "Approval evidence / verbal confirmation details"],
 ];
@@ -47,7 +45,7 @@ export function Orders({
     [orders, setOrders] = useState<any[]>([]),
     [input, setInput] = useState<Partial<OrderInput>>({
       orderDate: new Date().toLocaleDateString("en-CA"),
-      salesPerson: session.user.displayName,
+      entryVersion: 2,
     }),
     [accepted, setAccepted] = useState(false),
     [preview, setPreview] = useState<any>(),
@@ -58,6 +56,9 @@ export function Orders({
   const [key, setKey] = useState(() => crypto.randomUUID()),
     [submissions, setSubmissions] = useState<any[]>([]),
     [review, setReview] = useState<any>();
+  const [customerName, setCustomerName] = useState("");
+  const [extraction, setExtraction] = useState("");
+  const selection = useRef(0);
   const manager = ["Admin", "Management"].includes(session.user.role);
   async function load() {
     const [q, o, s] = await Promise.all([
@@ -97,22 +98,79 @@ export function Orders({
     setKey(crypto.randomUUID());
   }
   async function choose(id: string) {
-    change("quotationId", id);
+    const token = ++selection.current;
+    setInput({
+      quotationId: id,
+      entryVersion: 2,
+      orderDate: new Date().toLocaleDateString("en-CA"),
+    });
     setAccepted(false);
     setDocument(undefined);
-    setInput((v) => ({ ...v, documentId: undefined }));
+    setExtraction("");
+    setCustomerName("");
+    setPreview(undefined);
+    setSaved(undefined);
+    setReview(undefined);
+    setKey(crypto.randomUUID());
     if (!id) return;
-    const q = await api<any>(`/commercial/quotations/${id}`);
-    const c = q.snapshot.customer;
-    setInput((v) => ({
-      ...v,
-      quotationId: id,
-      contactPerson: c.contactPerson ?? "",
-      phone: c.phone ?? "",
-      email: c.email ?? "",
-      billingAddress: c.address ?? "",
-      deliveryAddress: q.snapshot.siteName ?? "",
-    }));
+    const defaults = await api<any>(`/orders/quotation-defaults/${id}`);
+    if (token !== selection.current) return;
+    setCustomerName(defaults.customerName);
+    const { customerName: _name, ...values } = defaults;
+    setInput((v) => ({ ...v, ...values }));
+  }
+  const customerFields = [
+    "contactPerson",
+    "designation",
+    "phone",
+    "email",
+    "billingAddress",
+  ];
+  function renderField([field, label]: [keyof OrderInput, string]) {
+    if (
+      ["poNumber", "customerNtn", "customerStrn"].includes(field) &&
+      input.evidenceType !== "Customer PO"
+    )
+      return null;
+    if (["customerNtn", "customerStrn"].includes(field) && !document)
+      return null;
+    return (
+      <label key={field}>
+        {label}
+        <input
+          type={
+            field === "orderDate"
+              ? "date"
+              : field === "email"
+                ? "email"
+                : "text"
+          }
+          required={
+            [
+              "orderDate",
+              "invoiceCompany",
+              "salesPerson",
+              "evidenceNotes",
+            ].includes(field) ||
+            (field === "poNumber" && input.evidenceType === "Customer PO")
+          }
+          maxLength={
+            field === "remarks" || field === "evidenceNotes"
+              ? 2000
+              : field.endsWith("Address")
+                ? 1000
+                : field === "salesPerson" || field === "poNumber"
+                  ? 100
+                  : field === "invoiceCompany"
+                    ? 200
+                    : 300
+          }
+          placeholder={field === "email" ? "N/A" : undefined}
+          value={String(input[field] ?? "")}
+          onChange={(e) => change(field, e.target.value)}
+        />
+      </label>
+    );
   }
   const snapshot = saved?.snapshot ?? review?.snapshot ?? preview?.snapshot;
   const view = snapshot ? ipoPresentation(snapshot) : undefined;
@@ -165,7 +223,19 @@ export function Orders({
               <select
                 required
                 value={input.evidenceType ?? ""}
-                onChange={(e) => change("evidenceType", e.target.value)}
+                onChange={(e) => {
+                  change("evidenceType", e.target.value);
+                  setInput((v) => ({
+                    ...v,
+                    customerNtn: "",
+                    customerStrn: "",
+                    poNumber: "",
+                    orderDate:
+                      e.target.value === "Customer PO"
+                        ? ""
+                        : new Date().toLocaleDateString("en-CA"),
+                  }));
+                }}
               >
                 <option value="">Select evidence type</option>
                 {[
@@ -178,41 +248,41 @@ export function Orders({
                 ))}
               </select>
             </label>
-            {fields.map(([field, label]) => (
-              <label key={field}>
-                {label}
-                <input
-                  type={
-                    field === "orderDate"
-                      ? "date"
-                      : field === "email"
-                        ? "email"
-                        : "text"
-                  }
-                  required={
-                    [
-                      "orderDate",
-                      "invoiceCompany",
-                      "salesPerson",
-                      "evidenceNotes",
-                    ].includes(field) ||
-                    (field === "poNumber" &&
-                      input.evidenceType === "Customer PO")
-                  }
-                  maxLength={
-                    field === "remarks" || field === "evidenceNotes"
-                      ? 2000
-                      : field.endsWith("Address")
-                        ? 1000
-                        : 300
-                  }
-                  value={String(input[field] ?? "")}
-                  onChange={(e) => change(field, e.target.value)}
-                />
-              </label>
-            ))}
+            {fields
+              .filter(([field]) => !customerFields.includes(field))
+              .map(renderField)}
+          </fieldset>
+          {customerName && (
+            <section
+              className="ipo-customer-summary"
+              aria-label="Customer details"
+            >
+              <h3>{customerName}</h3>
+              <p>
+                {input.contactPerson || customerName} · {input.phone || "N/A"} ·{" "}
+                {input.email || "N/A"}
+              </p>
+              <p>Billing address: {input.billingAddress || "Need to enter"}</p>
+              <details>
+                <summary>Edit customer & billing details</summary>
+                <fieldset className="order-fields" disabled={busy}>
+                  {fields
+                    .filter(([field]) => customerFields.includes(field))
+                    .map(renderField)}
+                </fieldset>
+              </details>
+            </section>
+          )}
+          <p className="form-note">
+            Operations collects delivery address, site contact and delivery
+            schedule after receiving the BOQ.
+          </p>
+          <fieldset disabled={busy} className="order-fields">
             <label>
-              Customer PO document (PDF, PNG or JPEG; up to 8 MB)
+              {input.evidenceType === "Customer PO"
+                ? "Customer PO document"
+                : "Sale approval attachment"}{" "}
+              (PDF, PNG or JPEG; up to 8 MB)
               <input
                 type="file"
                 accept="application/pdf,image/png,image/jpeg"
@@ -240,10 +310,27 @@ export function Orders({
                     });
                     setDocument(d);
                     change("documentId", d.id);
+                    if (input.evidenceType === "Customer PO") {
+                      try {
+                        const result = await extractText(file, setExtraction);
+                        const suggestions = poSuggestions(result.text);
+                        setInput((v) => ({ ...v, ...suggestions }));
+                        setExtraction(
+                          Object.keys(suggestions).length
+                            ? "PO suggestions filled. Check PO reference, order date, NTN/STRN and billing address against the document before submitting."
+                            : "No unambiguous labelled PO fields found. Review the document and enter its date, reference and billing details manually.",
+                        );
+                      } catch {
+                        setExtraction(
+                          "Document uploaded. Automatic extraction unavailable; enter the PO details manually.",
+                        );
+                      }
+                    }
                   });
                 }}
               />
               {document && <small>Uploaded: {document.filename}</small>}
+              {extraction && <small role="status">{extraction}</small>}
             </label>
           </fieldset>
           <label className="checkbox-label">

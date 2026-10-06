@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { jsPDF } from "jspdf";
 import { readFile } from "node:fs/promises";
 
 test("setup, invalid login, dashboard, reload, process restart, logout, relogin, mobile", async ({
@@ -530,7 +531,49 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
       .filter({ hasText: "Q-BAFL-05850-001-R0-V1" })
       .getAttribute("value"))!,
   );
+  await expect(page.getByLabel("Sale confirmation type")).toHaveValue("");
+  await expect(
+    page.getByLabel("Sales person", { exact: true }),
+  ).not.toHaveValue("");
+  await expect(
+    page.getByLabel("Delivery address", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Customer NTN", { exact: true })).toHaveCount(0);
   await page.getByLabel("Sale confirmation type").selectOption("Customer PO");
+  const poFile = new jsPDF();
+  poFile.text(
+    [
+      "PO Number: BROWSER-PO-001",
+      "PO Date: 2026-10-06",
+      "NTN: 1234567-8",
+      "STRN: 00123456",
+      "Billing address: 4 Test Billing Road",
+    ],
+    14,
+    20,
+  );
+  await page
+    .getByLabel("Customer PO document", { exact: false })
+    .setInputFiles({
+      name: "test-po.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from(poFile.output("arraybuffer")),
+    });
+  await expect(
+    page.getByText("PO suggestions filled.", { exact: false }),
+  ).toBeVisible({ timeout: 30000 });
+  await expect(page.getByLabel("Order date", { exact: true })).toHaveValue(
+    "2026-10-06",
+  );
+  await expect(page.getByLabel("Customer NTN", { exact: true })).toHaveValue(
+    "1234567-8",
+  );
+  await page
+    .getByText("Edit customer & billing details", { exact: true })
+    .click();
+  await expect(page.getByLabel("Billing address", { exact: true })).toHaveValue(
+    "4 Test Billing Road",
+  );
   await page
     .getByLabel("Customer PO reference", { exact: true })
     .fill("BROWSER-PO-001");
@@ -598,6 +641,41 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("cell", { name: "OPS-BOQ-000001", exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("tab", { name: "Operations · Received BOQs", exact: true })
+    .click();
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page
+    .getByLabel("Delivery address", { exact: true })
+    .fill("4 Operations Delivery Road");
+  await page
+    .getByLabel("Contact person on site", { exact: true })
+    .fill("Test site supervisor");
+  await page
+    .getByLabel("Site contact number", { exact: true })
+    .fill("03001234567");
+  await page.getByLabel("Delivery date", { exact: true }).fill("2026-10-08");
+  await page.getByLabel("Delivery time", { exact: true }).fill("10:30");
+  await page
+    .getByRole("button", { name: "Save delivery details", exact: true })
+    .click();
+  await expect(
+    page.getByText("Delivery details saved by Operations.", { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "BOQ to Operations", exact: true })
+    .click();
+  await page
+    .getByRole("tab", { name: "Operations · Received BOQs", exact: true })
+    .click();
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await expect(
+    page.getByLabel("Delivery address", { exact: true }),
+  ).toHaveValue("4 Operations Delivery Road");
+  await expect(page.getByLabel("Delivery time", { exact: true })).toHaveValue(
+    "10:30",
+  );
   await page.screenshot({
     path: "test-results/operations-desktop.png",
     fullPage: true,

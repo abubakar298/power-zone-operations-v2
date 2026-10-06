@@ -50,3 +50,8 @@
 .stage-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:16px 0 26px}.stage-card{display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:18px;border:1px solid #e1dfed;border-radius:14px;background:white;color:#292735;cursor:pointer;min-height:135px}.stage-card span{font-size:13px;font-weight:600}.stage-card strong{font-size:30px;margin:12px 0}.stage-card small{color:#79758c}.stage-card.selected{background:#f0edff;border-color:#7964ff}.task-overdue{background:#fff7ef}.task-overdue strong{color:#a34116}.bucket-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.bucket-actions button{padding:8px;border:1px solid #dcd9e9;border-radius:8px;background:white;color:#393446;cursor:pointer}@media(max-width:1000px){.stage-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:600px){.stage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 .approval-filter{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px}.sample-badge{display:inline-block;color:#655b7b;background:#f0edff;border-radius:4px;padding:3px 6px;margin-top:5px}
+
+.ipo-customer-summary { background: #f8f9fd; border: 1px solid #e3e5f0; border-radius: 12px; padding: 16px 20px; margin: 16px 0; }
+.ipo-customer-summary h3 { margin-top: 0; }
+.ipo-customer-summary summary { cursor: pointer; font-weight: 600; color: #4447a7; }
+.ipo-customer-summary fieldset { margin-top: 14px; }
