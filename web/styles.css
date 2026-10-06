@@ -33,3 +33,14 @@
 
 .quotation-pdf-page{position:relative;container-type:inline-size}.pdf-inline-discount,.pdf-inline-net{position:absolute;right:6.67%;width:22%;box-sizing:border-box;text-align:right;font-family:Arial,sans-serif;font-size:1.344cqw;line-height:1;padding:0 0.7%;margin:0;border:0;border-radius:0;background:#fff;color:#28282d}.pdf-inline-discount{outline:1px dashed #aaa;appearance:textfield}.pdf-inline-discount::-webkit-inner-spin-button,.pdf-inline-discount::-webkit-outer-spin-button{appearance:none;margin:0}.pdf-inline-discount:focus{outline:1px solid #6b56de}.pdf-inline-net{background:#efecf9;display:flex;align-items:center;justify-content:flex-end;font-weight:normal}
 .revision-specifications summary{cursor:pointer;padding:16px;border:1px solid #dedeee;border-radius:10px;background:#faf8fd;font-weight:600}.revision-specifications label{margin:14px 0}.revision-specifications textarea{min-height:65px;font-family:inherit}.revision-request-form{display:grid;gap:16px}.revision-request-form label{display:grid;gap:8px}.revision-request-form input,.revision-request-form select,.revision-request-form textarea{width:100%;padding:12px;border:1px solid #dcdde6;border-radius:9px;font:inherit}.revision-request-form textarea{min-height:90px}.quote-description textarea[readonly]{background:#f7f7fa;color:#62616c}
+.orders-module { display: grid; gap: 20px; }
+.order-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; border: 0; padding: 0; margin: 18px 0; }
+.order-fields label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; }
+.order-fields input,.order-fields select { width: 100%; min-width: 0; padding: 10px; border: 1px solid #dddde6; border-radius: 8px; background: white; }
+.order-table-scroll { overflow-x: auto; margin: 16px 0; }
+.order-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.order-table th,.order-table td { padding: 9px; border: 1px solid #e3e3ec; text-align: right; }
+.order-table th:first-child,.order-table td:first-child { text-align: left; min-width: 180px; }
+.order-table th { background: #f7f7fb; }
+.orders-module details { margin-top: 16px; }
+@media(max-width:650px) { .order-fields { grid-template-columns: 1fr; } }

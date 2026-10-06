@@ -14,6 +14,7 @@ import { pricingSchema, quotationSchema } from "../server/commercial/schema.js";
 import { buildQuotationPdf } from "../server/commercial/report.js";
 import { hashPassword } from "../server/auth/crypto.js";
 import { Decimal } from "decimal.js";
+import { buildIpoPdf } from "../server/orders/report.js";
 let db: Awaited<ReturnType<typeof testDatabase>>,
   app: ReturnType<typeof createApp>,
   cookie: string,
@@ -634,6 +635,201 @@ test("Full Breakup additional cost, markup and tax reconcile and stay internal a
   );
 });
 
+test("customer PO and IPO preserve accepted selling amounts, discount allocation and immutable records", async () => {
+  const input = {
+    quotationId: issued.id,
+    poNumber: "TEST-PO-001",
+    orderDate: "2026-10-06",
+    invoiceCompany: "PZES (Pvt) Ltd.",
+    salesPerson: "Abu Bakar",
+    customerAccepted: true,
+    evidenceType: "Customer PO",
+    evidenceNotes: "Customer PO received and checked against accepted quote.",
+  };
+  const op = (path: string, body: object, employee = false) =>
+    request(app)
+      .post("/api/orders" + path)
+      .set("Origin", origin)
+      .set("Cookie", employee ? employeeCookie : cookie)
+      .set("X-CSRF-Token", employee ? employeeCsrf : csrf)
+      .send(body);
+  await request(app).get("/api/orders").expect(401);
+  await request(app)
+    .post("/api/orders/preview")
+    .set("Origin", origin)
+    .set("Cookie", cookie)
+    .send(input)
+    .expect(403);
+  await op("/preview", { ...input, customerAccepted: false }).expect(400);
+  const file = await op("/documents", {
+    filename: "customer-po.pdf",
+    mime: "application/pdf",
+    base64: Buffer.from("%PDF-1.4\nIsolated test document").toString("base64"),
+  }).expect(201);
+  await op("/documents", {
+    filename: "bad.pdf",
+    mime: "application/pdf",
+    base64: Buffer.from("invalid").toString("base64"),
+  }).expect(400);
+  await op("/preview", { ...input, documentId: file.body.id }, true).expect(
+    403,
+  );
+  const body = { ...input, documentId: file.body.id };
+  const p = (await op("/preview", body).expect(200)).body;
+  const discounted = (await db.pool.query("SELECT * FROM quotation_versions WHERE (snapshot->'input'->>'discount')::numeric>0 ORDER BY created_at DESC LIMIT 1")).rows[0];
+  assert.ok(discounted);
+  const dp=(await op("/preview",{...body,quotationId:discounted.id}).expect(200)).body;
+  assert.equal(dp.snapshot.allocation.total,discounted.snapshot.footer.at(-1).amount);
+  assert.ok(new Decimal(dp.snapshot.allocation.originalDiscount).gt(0));
+  assert.equal(dp.snapshot.allocation.lines[0].allocatedDiscount,"0.00");
+  assert.equal(dp.snapshot.allocation.lines.reduce((v:Decimal,l:any)=>v.add(l.allocatedDiscount),new Decimal(0)).toFixed(2),discounted.snapshot.input.discount);
+  assert.equal(
+    p.snapshot.allocation.total,
+    issued.snapshot.footer.at(-1).amount,
+  );
+  assert.equal(p.snapshot.allocation.lines[0].allocatedDiscount, "0.00");
+  await op(
+    "",
+    { input: body, fingerprint: p.fingerprint, requestKey: randomUUID() },
+    true,
+  ).expect(403);
+  await op("", {
+    input: body,
+    fingerprint: "a".repeat(64),
+    requestKey: randomUUID(),
+  }).expect(409);
+  const key = randomUUID();
+  const saved = (
+    await op("", {
+      input: body,
+      fingerprint: p.fingerprint,
+      requestKey: key,
+    }).expect(201)
+  ).body;
+  assert.equal(
+    (
+      await op("", {
+        input: body,
+        fingerprint: p.fingerprint,
+        requestKey: key,
+      }).expect(201)
+    ).body.id,
+    saved.id,
+  );
+  await op("", {
+    input: body,
+    fingerprint: p.fingerprint,
+    requestKey: randomUUID(),
+  }).expect(409);
+  const changed = (
+    await op("/preview", { ...body, paymentMode: "Bank" }).expect(200)
+  ).body;
+  await op("", {
+    input: { ...body, paymentMode: "Bank" },
+    fingerprint: changed.fingerprint,
+    requestKey: key,
+  }).expect(409);
+  assert.equal(saved.snapshot.checkedBy, "Commercial Admin");
+  await assert.rejects(
+    db.pool.query(
+      "UPDATE internal_purchase_orders SET number='bad' WHERE id=$1",
+      [saved.id],
+    ),
+    /immutable/i,
+  );
+  await assert.rejects(
+    db.pool.query("DELETE FROM customer_purchase_orders WHERE id=$1", [
+      saved.customer_po_id,
+    ]),
+    /immutable/i,
+  );
+  const loaded = await request(app)
+    .get(`/api/orders/${saved.id}`)
+    .set("Cookie", employeeCookie)
+    .expect(200);
+  assert.deepEqual(loaded.body.snapshot, saved.snapshot);
+  await request(app)
+    .get(`/api/orders/documents/${file.body.id}`)
+    .set("Cookie", employeeCookie)
+    .expect(200);
+  const pdf = buildIpoPdf(saved.snapshot, saved.number);
+  assert.ok(pdf.length > 5000);
+  await mkdir(".local/verification", { recursive: true });
+  await writeFile(".local/verification/ipo-reference.pdf", pdf);
+  assert.deepEqual(
+    (await get(`/quotations/${issued.id}`)).body.snapshot,
+    issued.snapshot,
+  );
+  const evidence = {
+    ...input,
+    poNumber: "",
+    evidenceType: "WhatsApp approval",
+    evidenceNotes:
+      "Customer confirmed the exact quote by WhatsApp on 6 October.",
+  };
+  const ep = (await op("/preview", evidence, true).expect(200)).body;
+  const submissionKey = randomUUID();
+  const submitted = (
+    await op(
+      "/submissions",
+      {
+        input: evidence,
+        fingerprint: ep.fingerprint,
+        requestKey: submissionKey,
+      },
+      true,
+    ).expect(201)
+  ).body;
+  assert.equal(
+    (
+      await op(
+        "/submissions",
+        {
+          input: evidence,
+          fingerprint: ep.fingerprint,
+          requestKey: submissionKey,
+        },
+        true,
+      ).expect(201)
+    ).body.id,
+    submitted.id,
+  );
+  await op(
+    `/submissions/${submitted.id}/approve`,
+    { requestKey: randomUUID() },
+    true,
+  ).expect(403);
+  const approvalKey = randomUUID();
+  const approved = (
+    await op(`/submissions/${submitted.id}/approve`, {
+      requestKey: approvalKey,
+    }).expect(201)
+  ).body;
+  assert.equal(approved.submission_id, submitted.id);
+  assert.equal(approved.snapshot.preparedBy, "Employee");
+  assert.equal(
+    (
+      await op(`/submissions/${submitted.id}/approve`, {
+        requestKey: approvalKey,
+      }).expect(201)
+    ).body.id,
+    approved.id,
+  );
+  await op(`/submissions/${submitted.id}/approve`, {
+    requestKey: randomUUID(),
+  }).expect(409);
+  await assert.rejects(
+    db.pool.query("UPDATE ipo_submissions SET input='{}' WHERE id=$1", [
+      submitted.id,
+    ]),
+    /immutable/i,
+  );
+  await op("/preview", {
+    ...evidence,
+    quotationId: undefined,
+    directItems: [],
+  }).expect(400);
+});
 test("revision routing requires approved separate costing and preserves origin, scope and historical links", async () => {
   const base = {
     sourceQuotationId: issued.id,

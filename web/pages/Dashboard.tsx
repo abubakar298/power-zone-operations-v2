@@ -1,4 +1,5 @@
 import { Commercial } from "./Commercial.js";
+import { Orders } from "./Orders.js";
 import { useEffect, useState } from "react";
 import { api, ApiError, type Session, type User } from "../api.js";
 import { Brand } from "../components/Brand.js";
@@ -23,7 +24,14 @@ export function Dashboard({
   const [menuOpen, setMenuOpen] = useState(false),
     [mobileOpen, setMobileOpen] = useState(false);
   const [view, setView] = useState<
-    "dashboard" | "account" | "masters" | "team" | "boqs" | "pricing" | "quotes"
+    | "dashboard"
+    | "account"
+    | "masters"
+    | "team"
+    | "boqs"
+    | "pricing"
+    | "quotes"
+    | "orders"
   >("dashboard");
   useEffect(() => {
     let cancelled = false;
@@ -87,7 +95,8 @@ export function Dashboard({
       | "team"
       | "boqs"
       | "pricing"
-      | "quotes",
+      | "quotes"
+      | "orders",
   ) {
     setView(next);
     setMobileOpen(false);
@@ -178,6 +187,13 @@ export function Dashboard({
               <Icon name="file" />
               Quotations
             </button>
+            <button
+              className={view === "orders" ? "nav-active" : ""}
+              onClick={() => navigate("orders")}
+            >
+              <Icon name="file" />
+              Customer PO & IPO
+            </button>
           </div>
           <p className="nav-hint">
             Modules become available after
@@ -207,7 +223,9 @@ export function Dashboard({
                         ? "Commercial pricing"
                         : view === "quotes"
                           ? "Quotations"
-                          : "My account"}
+                          : view === "orders"
+                            ? "Customer PO & IPO"
+                            : "My account"}
             </strong>
           </span>
           <div className="account">
@@ -257,7 +275,9 @@ export function Dashboard({
                           ? "Commercial pricing"
                           : view === "quotes"
                             ? "Quotations"
-                            : "My account"}
+                            : view === "orders"
+                              ? "Customer PO & IPO"
+                              : "My account"}
               </h1>
               <p className="dashboard-intro">
                 {view === "dashboard"
@@ -272,7 +292,9 @@ export function Dashboard({
                           ? "Prepare and share immutable customer quotation versions."
                           : view === "team"
                             ? "Invite and manage authorised team members."
-                            : "Your identity and access to the Power Zone workspace."}
+                            : view === "orders"
+                              ? "Turn an accepted quotation and customer PO into an internal purchase order."
+                              : "Your identity and access to the Power Zone workspace."}
               </p>
             </div>
             <button className="dark-button" onClick={logout} disabled={busy}>
@@ -368,6 +390,7 @@ export function Dashboard({
               onLogout={onLogout}
             />
           )}
+          {view === "orders" && <Orders session={session} />}
           {view === "team" && <Team session={session} onLogout={onLogout} />}
           {view === "masters" && (
             <Masters session={session} onLogout={onLogout} />

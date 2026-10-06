@@ -1,5 +1,7 @@
 import { CommercialRepository } from "./commercial/repository.js";
 import { commercialHttp } from "./commercial/http.js";
+import { OrdersRepository } from "./orders/repository.js";
+import { ordersHttp } from "./orders/http.js";
 import { BoqRepository } from "./boq/repository.js";
 import { boqHttp, uploadHttp } from "./boq/http.js";
 import { AccountsRepository } from "./onboarding/repository.js";
@@ -72,6 +74,12 @@ export function createApp(
     "/api/commercial",
     express.json({ limit: "128kb" }),
     commercialHttp(new CommercialRepository(pool), auth.requireSession),
+  );
+  app.use(
+    "/api/orders",
+    auth.requireSession,
+    express.json({ limit: "12mb" }),
+    ordersHttp(new OrdersRepository(pool), auth.requireSession),
   );
   app.use(express.json({ limit: "8kb" }));
   app.get("/api/health", async (_req, res) => {
