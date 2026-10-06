@@ -233,7 +233,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(page.getByText("PKR 6,456,786", { exact: true })).toBeVisible();
   const pdfDownload = page.waitForEvent("download");
   await page
-    .getByRole("button", { name: "Download costing PDF", exact: true })
+    .getByRole("link", { name: "Download costing PDF", exact: true })
     .click();
   const report = await pdfDownload;
   expect(report.suggestedFilename()).toBe("PREVIEW-05850-costing.pdf");
@@ -269,12 +269,14 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(page.getByText("PKR 6,456,786", { exact: true })).toBeVisible();
   const savedPdfDownload = page.waitForEvent("download");
   await page
-    .getByRole("button", { name: "Download costing PDF", exact: true })
+    .getByRole("link", { name: "Download costing PDF", exact: true })
     .click();
   const savedReport = await savedPdfDownload;
   expect(savedReport.suggestedFilename()).toBe("BAFL-05850-001-R0-costing.pdf");
   const savedPdfPath = await savedReport.path();
-  expect((await readFile(savedPdfPath!)).subarray(0, 5).toString()).toBe("%PDF-");
+  expect((await readFile(savedPdfPath!)).subarray(0, 5).toString()).toBe(
+    "%PDF-",
+  );
   const savedReportHeadings = await page
     .locator(".boq-costing h3")
     .allTextContents();

@@ -356,6 +356,7 @@ export function Boqs({
             Back to BOQs
           </button>
           <BoqCosting
+            pdfUrl={`/api/boqs/${saved.id}/costing.pdf`}
             snapshot={saved.snapshot}
             number={saved.number}
             createdAt={saved.created_at}
@@ -674,7 +675,10 @@ export function Boqs({
           </form>
           {preview && (
             <>
-              <BoqCosting snapshot={preview.snapshot} />
+              <BoqCosting
+                snapshot={preview.snapshot}
+                pdfUrl={`/api/boqs/drafts/${draft?.id}/costing.pdf?fingerprint=${preview.fingerprint}`}
+              />
               <div className="save-boq-panel">
                 <p>
                   Save the reviewed survey as a new site and an immutable R0

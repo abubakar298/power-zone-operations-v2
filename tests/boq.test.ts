@@ -322,3 +322,41 @@ test("incomplete drafts can be saved but never become a BOQ until complete", asy
     .expect(200);
   assert(list.body.drafts.some((row: { id: string }) => row.id === d.id));
 });
+
+test("costing PDF exports require authentication, owned drafts and an unchanged reviewed preview", async () => {
+  const inputs = { ...survey, siteName: "PDF sample", siteCode: "PDF001" };
+  const d = (await post("/drafts", { version: 0, inputs }).expect(200)).body;
+  const preview = (await post("/preview", inputs).expect(200)).body;
+  const url = `/api/boqs/drafts/${d.id}/costing.pdf?fingerprint=${preview.fingerprint}`;
+  await request(app).get(url).expect(401);
+  const pdf = await request(app)
+    .get(url)
+    .set("Cookie", cookie)
+    .expect(200)
+    .expect("Content-Type", /application\/pdf/);
+  assert.match(
+    pdf.headers["content-disposition"],
+    /PREVIEW-PDF001-costing.pdf/,
+  );
+  assert.equal(pdf.body.subarray(0, 5).toString(), "%PDF-");
+  assert.equal(pdf.headers["cache-control"], "private, no-store");
+  await request(app)
+    .get(url.replace(d.id, "00000000-0000-4000-8000-000000000001"))
+    .set("Cookie", cookie)
+    .expect(404);
+  await post("/drafts", {
+    id: d.id,
+    version: d.version,
+    inputs: { ...inputs, panelQty: inputs.panelQty + 1 },
+  }).expect(200);
+  await request(app).get(url).set("Cookie", cookie).expect(409);
+  const record = (await request(app).get("/api/boqs").set("Cookie", cookie))
+    .body.boqs[0];
+  await request(app).get(`/api/boqs/${record.id}/costing.pdf`).expect(401);
+  const saved = await request(app)
+    .get(`/api/boqs/${record.id}/costing.pdf`)
+    .set("Cookie", cookie)
+    .expect(200);
+  assert.equal(saved.body.subarray(0, 5).toString(), "%PDF-");
+  assert(saved.headers["content-disposition"].includes(record.number));
+});

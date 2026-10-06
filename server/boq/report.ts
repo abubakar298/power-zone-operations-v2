@@ -1,4 +1,4 @@
-import type { BoqSnapshot } from "../server/boq/engine.js";
+import type { BoqSnapshot } from "./engine.js";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 
@@ -179,16 +179,4 @@ export function buildCostingPdf(
     });
   }
   return pdf;
-}
-export async function downloadCostingPdf(
-  s: BoqSnapshot,
-  number?: string,
-  createdAt?: string,
-) {
-  const filename =
-    `${number || "PREVIEW-" + s.survey.siteCode}-costing.pdf`.replace(
-      /[^a-zA-Z0-9._-]/g,
-      "-",
-    );
-  buildCostingPdf(s, number, createdAt).save(filename);
 }

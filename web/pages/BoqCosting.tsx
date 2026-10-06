@@ -8,27 +8,20 @@ export function BoqCosting({
   snapshot: s,
   number,
   createdAt,
+  pdfUrl,
 }: {
   snapshot: BoqSnapshot;
   number?: string;
   createdAt?: string;
+  pdfUrl: string;
 }) {
   return (
     <section className="boq-costing">
       <div className="panel-heading">
         <h2>{number ?? "Costing preview"}</h2>
-        {
-          <button
-            className="dark-button"
-            onClick={() => {
-              void import("../costing-pdf.js").then(({ downloadCostingPdf }) =>
-                downloadCostingPdf(s, number, createdAt),
-              );
-            }}
-          >
-            Download costing PDF
-          </button>
-        }
+        <a className="dark-button" href={pdfUrl} download>
+          Download costing PDF
+        </a>
       </div>
       <p>
         {s.customer.name} · {s.survey.siteName} · Site code {s.survey.siteCode}{" "}

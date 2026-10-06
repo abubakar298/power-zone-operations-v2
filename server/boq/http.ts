@@ -1,3 +1,4 @@
+import { buildCostingPdf } from "./report.js";
 import { Router, type RequestHandler } from "express";
 import { z } from "zod";
 import { equalSecrets } from "../auth/crypto.js";
@@ -70,6 +71,66 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
           v.data.draftId,
           v.data.version,
           v.data.fingerprint,
+        ),
+      );
+  });
+  r.get("/drafts/:id/costing.pdf", async (req, res) => {
+    const id = z.uuid().safeParse(req.params.id);
+    const expected = z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .safeParse(req.query.fingerprint);
+    if (!id.success || !expected.success)
+      throw new HttpError(
+        400,
+        "Calculate and review the costing before exporting.",
+      );
+    const inputs = surveySchema.safeParse(
+      await repo.draftForReport(req.authSession!.user.id, id.data),
+    );
+    if (!inputs.success)
+      throw new HttpError(400, "Complete the survey before exporting.");
+    const { snapshot, fingerprint: currentFingerprint } = await repo.preview(
+      inputs.data,
+    );
+    if (currentFingerprint !== expected.data)
+      throw new HttpError(
+        409,
+        "The costing changed. Calculate and review it again before exporting.",
+      );
+    const filename = `PREVIEW-${snapshot.survey.siteCode}-costing.pdf`.replace(
+      /[^a-zA-Z0-9._-]/g,
+      "-",
+    );
+    res
+      .set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "private, no-store",
+      })
+      .send(Buffer.from(buildCostingPdf(snapshot).output("arraybuffer")));
+  });
+  r.get("/:id/costing.pdf", async (req, res) => {
+    if (!z.uuid().safeParse(req.params.id).success)
+      throw new HttpError(400, "Invalid BOQ.");
+    const record = await repo.get(String(req.params.id));
+    const filename = `${record.number}-costing.pdf`.replace(
+      /[^a-zA-Z0-9._-]/g,
+      "-",
+    );
+    res
+      .set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "private, no-store",
+      })
+      .send(
+        Buffer.from(
+          buildCostingPdf(
+            record.snapshot,
+            record.number,
+            record.created_at,
+          ).output("arraybuffer"),
         ),
       );
   });

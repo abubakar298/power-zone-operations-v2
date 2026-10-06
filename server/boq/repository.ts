@@ -30,6 +30,16 @@ export class BoqRepository {
       )
     ).rows;
   }
+  async draftForReport(owner: string, id: string) {
+    const row = (
+      await this.pool.query(
+        "SELECT inputs FROM survey_drafts WHERE id=$1 AND owner_id=$2 AND id NOT IN (SELECT draft_id FROM boqs)",
+        [id, owner],
+      )
+    ).rows[0];
+    if (!row) throw new HttpError(404, "Survey draft not found.");
+    return row.inputs;
+  }
   async draft(
     owner: string,
     id: string | undefined,
