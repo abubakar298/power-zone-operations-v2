@@ -86,10 +86,10 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
     },
     headStyles: { fillColor: [65, 54, 104] },
     columnStyles: {
-      0: { cellWidth: 10 },
-      1: { cellWidth: amounts ? 121 : 143 },
+      0: { cellWidth: 7, halign: "center" },
+      1: { cellWidth: amounts ? 129 : 151 },
       2: { cellWidth: 14 },
-      3: { cellWidth: 15, halign: "right" },
+      3: { cellWidth: 10, halign: "center" },
       ...(amounts ? { 4: { cellWidth: 22, halign: "right", valign: "middle" } } : {}),
     },
     rowPageBreak: "avoid",
