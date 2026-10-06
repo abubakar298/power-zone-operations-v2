@@ -1,3 +1,11 @@
+## Confirmed presentation and PT rule (6 October 2026)
+
+This rule supersedes fixed solar allocation and pooled-margin redistribution below. New Peachtree snapshots are version 2 and use the original accepted item prices after approved discount allocation. PT retains six phases: Solar, Structure, Inverter, Batteries, BMS, EPC. Separate GST uses before-tax values; tax-inclusive uses gross values. Presentation never changes payable or entered markup. Legacy pricing editors use effective saved row markups so a presentation-only revision preserves pricing.
+
+IPO follows its accepted quotation: No Breakup has a combined price; Basic Breakup has category prices; Full Breakup has individual prices. Tax-inclusive IPO amounts include tax and expose no GST columns/breakdown; displayed tax is zero while internal historical tax data is retained. All reports reconcile exactly to the accepted net payable. Existing saved snapshots remain immutable.
+
+Validation: 47 PostgreSQL-backed tests, TypeScript/build and browser flow passed; six sample IPO/PT pairs visually checked on A4.
+
 # Milestone 7: quotation-based sale confirmation and IPO
 
 Reference: owner-supplied `07-Internal Purchase Order (IPO).xlsx`, and subsequent owner instructions. The workbook's sample names, references, dates and blanket GST/PST headings are not production business rules.

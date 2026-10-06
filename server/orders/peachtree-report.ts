@@ -54,18 +54,23 @@ export function buildPeachtreePdf(
     startY: (pdf as any).lastAutoTable.finalY + 6,
     theme: "plain",
     styles: { fontSize: 9, cellPadding: 2 },
-    body: [
-      ["IPO total before tax", money(d.ipoBeforeTax)],
-      ["IPO tax (separate reconciliation)", money(d.ipoTax)],
-      ["IPO payable", money(d.ipoPayable)],
-    ],
+    body:
+      d.version >= 2 && d.taxMode === "Tax Included"
+        ? [["IPO payable", money(d.ipoPayable)]]
+        : [
+            ["IPO total before tax", money(d.ipoBeforeTax)],
+            ["IPO tax (separate reconciliation)", money(d.ipoTax)],
+            ["IPO payable", money(d.ipoPayable)],
+          ],
   });
   const policy =
-    d.presentation === "No Breakup"
-      ? "Solar is allocated at cost x 1.10, or cost x 1.21 for the tax-inclusive phase division. The remaining value is allocated across other phases in proportion to approved phase costs."
-      : d.presentation === "Basic Breakup"
-        ? `BESS and Balance/EPC selling values are pooled and redistributed using their combined effective before-tax markup (${d.effectivePooledMarkup}%). Separately priced Solar, Structure and Earthing retain their net accepted values.`
-        : "Phase entries retain the accepted item selling values after discount allocation.";
+    d.version >= 2
+      ? "Phase entries retain the original accepted quotation selling values and margins after allocating the approved discount to eligible 18% items. Solar remains unchanged; no margin redistribution is applied."
+      : d.presentation === "No Breakup"
+        ? "Solar is allocated at cost x 1.10, or cost x 1.21 for the tax-inclusive phase division. The remaining value is allocated across other phases in proportion to approved phase costs."
+        : d.presentation === "Basic Breakup"
+          ? `BESS and Balance/EPC selling values are pooled and redistributed using their combined effective before-tax markup (${d.effectivePooledMarkup}%). Separately priced Solar, Structure and Earthing retain their net accepted values.`
+          : "Phase entries retain the accepted item selling values after discount allocation.";
   pdf.setFontSize(8);
   pdf.text(
     pdf.splitTextToSize(

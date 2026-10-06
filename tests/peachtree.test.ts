@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { Decimal } from "decimal.js";
 import { allocateDiscount } from "../server/orders/allocation.js";
 import { peachtreeDivision } from "../server/orders/peachtree.js";
+import { ipoPresentation } from "../server/orders/presentation.js";
 const source = [
   { group: "solar", beforeTax: "110", taxRate: "10" },
   { group: "structure", beforeTax: "120", taxRate: "18" },
@@ -10,37 +11,7 @@ const source = [
   { group: "earthing", beforeTax: "60", taxRate: "18" },
   { group: "balance", beforeTax: "375", taxRate: "18" },
 ].map((l, i) => ({ ...l, description: `Item ${i}`, qty: "1", unit: "LS" }));
-const boq: any = {
-  inverterConfig: { sku: "INV" },
-  lines: [
-    { key: "Solar PV Modules", total: "100" },
-    { key: "Structure - Elevated", total: "100" },
-    { key: "INV", total: "100" },
-    { key: "BAT-HV-05 KW WO BMS", total: "100" },
-    { key: "CH-BMS-HV", total: "100" },
-    { key: "Earthing Bore", total: "50" },
-    { key: "Labour", total: "300" },
-  ],
-};
-const pricing = (presentation: string, taxMode: string): any => ({
-  input: { presentation, taxMode },
-  rows: [{ key: "balance", cost: "300" }],
-});
-test("Basic Breakup pools 33% BESS and 25% Balance into a 29% cost markup", () => {
-  const a = allocateDiscount(source, "1064", "11", "171.72", "0", "1246.72");
-  const d = peachtreeDivision(
-    a,
-    boq,
-    pricing("Basic Breakup", "Show Sales Tax Separately"),
-  );
-  assert.equal(d.effectivePooledMarkup, "29.000000");
-  assert.deepEqual(
-    d.phases.map((p) => p.amount),
-    ["110.00", "120.00", "129.00", "129.00", "129.00", "447.00"],
-  );
-  assert.equal(d.phaseTotal, "1064.00");
-});
-test("Full Breakup retains exact net item values and all formats reconcile after discount", () => {
+test("all IPO formats retain accepted prices and discounted payable with matching quotation grouping", () => {
   for (const discount of ["0", "0.01", "118"]) {
     const a = allocateDiscount(
       source,
@@ -50,44 +21,38 @@ test("Full Breakup retains exact net item values and all formats reconcile after
       discount,
       new Decimal("1246.72").minus(discount).toFixed(2),
     );
-    for (const presentation of [
-      "No Breakup",
-      "Basic Breakup",
-      "Full Breakup",
-    ]) {
-      for (const mode of ["Tax Included", "Show Sales Tax Separately"]) {
-        const d = peachtreeDivision(a, boq, pricing(presentation, mode));
+    for (const presentation of ["No Breakup", "Basic Breakup", "Full Breakup"])
+      for (const taxMode of ["Tax Included", "Show Sales Tax Separately"]) {
+        const p: any = { input: { presentation, taxMode } };
+        const d = peachtreeDivision(a, {} as any, p);
+        const included = taxMode === "Tax Included";
+        assert.equal(d.phaseTotal, included ? a.total : a.subtotal);
         assert.equal(
-          d.phaseTotal,
-          mode === "Tax Included" ? a.total : a.subtotal,
+          d.phases[2].amount,
+          included ? a.lines[2].total : a.lines[2].beforeTax,
+        );
+        const v = ipoPresentation({ allocation: a, peachtree: d });
+        assert.equal(
+          v.rows.length,
+          presentation === "No Breakup"
+            ? 1
+            : presentation === "Basic Breakup"
+              ? 5
+              : 7,
         );
         assert.equal(
-          d.phases.reduce((v, p) => v.add(p.amount), new Decimal(0)).toFixed(2),
-          d.phaseTotal,
+          v.rows.reduce((t, r) => t.add(r.total), new Decimal(0)).toFixed(2),
+          a.total,
         );
-        if (presentation === "Full Breakup")
-          assert.equal(
-            d.phases[2].amount,
-            mode === "Tax Included" ? a.lines[2].total : a.lines[2].beforeTax,
-          );
-        if (presentation === "No Breakup")
-          assert.equal(
-            d.phases[0].amount,
-            mode === "Tax Included" ? "121.00" : "110.00",
-          );
+        assert.equal(
+          v.rows.reduce((t, r) => t.add(r.amount), new Decimal(0)).toFixed(2),
+          v.amount,
+        );
+        if (included) {
+          assert.equal(v.tax, "0.00");
+          assert.ok(v.rows.every((r) => r.tax === "0.00" && r.taxRate === "0"));
+        }
+        assert.equal(a.lines[0].allocatedDiscount, "0.00");
       }
-    }
   }
-});
-test("No Breakup rejects a payable value smaller than the fixed solar allocation", () => {
-  const a = allocateDiscount(source, "1064", "11", "171.72", "0", "1246.72");
-  assert.throws(
-    () =>
-      peachtreeDivision(
-        { ...a, total: "100.00" },
-        boq,
-        pricing("No Breakup", "Tax Included"),
-      ),
-    /cannot be allocated/,
-  );
 });

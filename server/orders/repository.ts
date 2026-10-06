@@ -242,8 +242,8 @@ export class OrdersRepository {
         const { peachtree, ...withoutDivision } = preview.snapshot;
         legacySubmission = Boolean(
           old &&
-          !old.snapshot.peachtree &&
-          fingerprint(withoutDivision) === expected,
+          fingerprint(withoutDivision) ===
+            fingerprint((({ peachtree, ...core }) => core)(old.snapshot)),
         );
       }
       if (preview.fingerprint !== expected && !legacySubmission)

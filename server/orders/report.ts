@@ -1,3 +1,4 @@
+import { ipoPresentation } from "./presentation.js";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import {
@@ -31,6 +32,7 @@ export function buildIpoPdf(s: any, number?: string) {
   pdf.setFontSize(8);
   pdf.text("POWER ZONE ENGINEERING & SERVICES (PVT) LIMITED", 14, 42);
   const i = s.input;
+  const view = ipoPresentation(s);
   const entries = [
     [
       "IPO reference",
@@ -93,39 +95,51 @@ export function buildIpoPdf(s: any, number?: string) {
     styles: { fontSize: 7, cellPadding: 1.3 },
     headStyles: { fillColor: [61, 63, 146], fontSize: 7 },
     head: [
-      [
-        "Description",
-        "Qty",
-        "Unit",
-        "Net rate",
-        "Amount",
-        "Tax %",
-        "Tax",
-        "Total",
-      ],
+      view.included
+        ? ["Description", "Qty", "Unit", "Rate", "Amount"]
+        : [
+            "Description",
+            "Qty",
+            "Unit",
+            "Net rate",
+            "Amount",
+            "Tax %",
+            "Tax",
+            "Total",
+          ],
     ],
-    columnStyles: {
-      0: { cellWidth: 66 },
-      1: { halign: "center", cellWidth: 10 },
-      2: { halign: "center", cellWidth: 10 },
-      3: { halign: "right" },
-      4: { halign: "right" },
-      5: { halign: "center", cellWidth: 9 },
-      6: { halign: "right" },
-      7: { halign: "right" },
-    },
-    body: s.allocation.lines
-      .filter((l: any) => Number(l.qty) > 0 || Number(l.total) > 0)
-      .map((l: any) => [
-        clean(l.description),
-        l.qty,
-        l.unit,
-        Number(l.rate).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 6 }),
-        money(l.beforeTax),
-        l.taxRate,
-        money(l.tax),
-        money(l.total),
-      ]),
+    columnStyles: view.included
+      ? {
+          0: { cellWidth: 100 },
+          1: { halign: "center", cellWidth: 10 },
+          2: { halign: "center", cellWidth: 10 },
+          3: { halign: "right" },
+          4: { halign: "right" },
+        }
+      : {
+          0: { cellWidth: 66 },
+          1: { halign: "center", cellWidth: 10 },
+          2: { halign: "center", cellWidth: 10 },
+          3: { halign: "right" },
+          4: { halign: "right" },
+          5: { halign: "center", cellWidth: 9 },
+          6: { halign: "right" },
+          7: { halign: "right" },
+        },
+    body: view.rows.map((l) =>
+      view.included
+        ? [clean(l.description), l.qty, l.unit, money(l.rate), money(l.amount)]
+        : [
+            clean(l.description),
+            l.qty,
+            l.unit,
+            money(l.rate),
+            money(l.amount),
+            l.taxRate,
+            money(l.tax),
+            money(l.total),
+          ],
+    ),
   });
   autoTable(pdf, {
     startY: (pdf as any).lastAutoTable.finalY + 3,
@@ -133,8 +147,12 @@ export function buildIpoPdf(s: any, number?: string) {
     margin: { left: 14, right: 14, bottom: reportBottomMargin },
     styles: { fontSize: 8, cellPadding: 1.2 },
     body: [
-      ["Grand total before tax", money(s.allocation.subtotal)],
-      ["Total tax", money(s.allocation.tax)],
+      ...(!view.included
+        ? [
+            ["Grand total before tax", money(view.amount)],
+            ["Total tax", money(view.tax)],
+          ]
+        : []),
       ["GRAND TOTAL (PKR)", money(s.allocation.total)],
       ...(i.paymentMode ? [["Payment mode", clean(i.paymentMode)]] : []),
       ...(i.salesSource ? [["Sales source", clean(i.salesSource)]] : []),

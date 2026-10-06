@@ -51,10 +51,7 @@ export function price(
       ["balance", "Balance / Everything Else", balance],
     ] as const
   ).map(([key, name, base]) => {
-    const markup =
-      input.presentation === "No Breakup" && key !== "bess"
-        ? input.markups.rest
-        : input.markups[key];
+    const markup = input.markups[key];
     const selling = base.mul(D(markup).div(100).add(1)),
       rate = key === "solar" ? "10" : "18";
     return {
@@ -109,7 +106,7 @@ export function price(
     total = money(D(subtotal).add(tax)),
     discount = "0.00";
   return {
-    engineVersion: 1,
+    engineVersion: 2,
     input,
     boqNumber,
     customer: boq.customer,

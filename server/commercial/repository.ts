@@ -121,7 +121,7 @@ export class CommercialRepository {
     await this.manager(this.pool, actor);
     const row = (
       await this.pool.query(
-        "SELECT q.*,p.snapshot->'input' AS pricing_input FROM quotation_revision_requests q JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id JOIN quotation_versions v ON v.id=q.source_quotation_id JOIN commercial_pricing_versions p ON p.id=v.pricing_id WHERE f.revision_id=$1",
+        "SELECT q.*,p.snapshot->'input' AS pricing_input,p.snapshot->'rows' AS pricing_rows FROM quotation_revision_requests q JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id JOIN quotation_versions v ON v.id=q.source_quotation_id JOIN commercial_pricing_versions p ON p.id=v.pricing_id WHERE f.revision_id=$1",
         [boqId],
       )
     ).rows[0];
@@ -132,6 +132,9 @@ export class CommercialRepository {
           [row.source_quotation_id],
         )
       ).rows[0]?.input;
+      for (const r of row.pricing_rows)
+        if (r.key !== "additional") row.pricing_input.markups[r.key] = r.markup;
+      delete row.pricing_rows;
       if (extra) row.pricing_input.additionalMarkup = extra.markup;
     }
     return row ?? null;

@@ -33,11 +33,11 @@ const inputs = () =>
     presentation: "No Breakup",
     taxMode: "Show Sales Tax Separately",
     markups: {
-      solar: "5",
-      structure: "7",
+      solar: "20",
+      structure: "20",
       bess: "15",
-      earthing: "5",
-      balance: "25",
+      earthing: "20",
+      balance: "20",
       rest: "20",
     },
     discount: "0",
@@ -380,7 +380,10 @@ test("saved quotation versions retain pricing, customer descriptions and PDF aft
   await db.pool.query(
     "INSERT INTO rate_versions(key,version,rate,status) VALUES('Solar PV Modules',2,100,'Active')",
   );
-  const changed = { ...inputs(), markups: { ...inputs().markups, rest: "25" } };
+  const changed = {
+    ...inputs(),
+    markups: { ...inputs().markups, balance: "25" },
+  };
   const p2 = (await post("/pricing/preview", changed)).body,
     pr2 = (
       await post("/pricing", {
@@ -1076,4 +1079,37 @@ test("revision routing requires approved separate costing and preserves origin, 
     ),
     /immutable/i,
   );
+});
+
+test("presentation-only pricing changes preserve original margins and payable across six variants", () => {
+  const basis = inputs();
+  const original = price(boq.snapshot, boq.number, basis);
+  for (const presentation of [
+    "No Breakup",
+    "Basic Breakup",
+    "Full Breakup",
+  ] as const)
+    for (const taxMode of [
+      "Tax Included",
+      "Show Sales Tax Separately",
+    ] as const) {
+      const p = price(boq.snapshot, boq.number, {
+        ...basis,
+        presentation,
+        taxMode,
+      });
+      assert.equal(p.total, original.total);
+      assert.deepEqual(p.rows, original.rows);
+      const q = quote(p, boq.snapshot, {
+        pricingId: randomUUID(),
+        quotedDate: "2026-10-06",
+        validity: "7 Days",
+        proposedBy: "Atif Hameed",
+        discount: "11800",
+      });
+      assert.equal(
+        q.footer.at(-1)!.amount,
+        new Decimal(original.total).minus("11800").toFixed(2),
+      );
+    }
 });

@@ -21,16 +21,21 @@ const defaults = (name: string, id = ""): PricingInput => ({
   presentation: "No Breakup",
   taxMode: "Show Sales Tax Separately",
   markups: {
-    solar: "5",
-    structure: "7",
+    solar: "20",
+    structure: "20",
     bess: "15",
-    earthing: "5",
-    balance: "25",
+    earthing: "20",
+    balance: "20",
     rest: "20",
   },
   preparedBy: name,
   remarks: "",
 });
+function editablePricing(p: PricingSnapshot): PricingInput {
+  const markups = { ...p.input.markups };
+  for (const r of p.rows) if (r.key !== "additional") markups[r.key] = r.markup;
+  return { ...p.input, markups };
+}
 export function QuotationView({
   snapshot: s,
   number,
@@ -296,7 +301,7 @@ export function Commercial({
           );
           setRevisionInfo(r);
           setInput({
-            ...source.snapshot.input,
+            ...editablePricing(source.snapshot),
             boqRevisionId: initialRevisionId,
             revisionRequestId: r.id,
           });
@@ -378,7 +383,7 @@ export function Commercial({
     await action(async () => {
       const p = await api<any>(`/commercial/pricing/${id}`);
       setSavedPrice(p);
-      setInput(p.snapshot.input);
+      setInput(editablePricing(p.snapshot));
       setPreview({ snapshot: p.snapshot, fingerprint: p.fingerprint });
       setSavedQuote(undefined);
       setQuoteInput(undefined);
@@ -407,7 +412,7 @@ export function Commercial({
         const source = await api<any>(`/commercial/pricing/${data.pricingId}`);
         setSavedPrice(source);
         setInput({
-          ...source.snapshot.input,
+          ...editablePricing(source.snapshot),
           revisionRequestId: copy.revisionRequestId,
         });
         setPreview({
@@ -580,10 +585,6 @@ export function Commercial({
                       update({
                         presentation: e.target
                           .value as PricingInput["presentation"],
-                        markups: {
-                          ...input.markups,
-                          bess: e.target.value !== "No Breakup" ? "33" : "15",
-                        },
                       })
                     }
                   >
@@ -606,24 +607,13 @@ export function Commercial({
                     <option>Show Sales Tax Separately</option>
                   </select>
                 </label>
-                {(input.presentation === "No Breakup"
-                  ? [
-                      ["bess", "BESS"],
-                      ["rest", "Everything Else"],
-                    ]
-                  : [
-                      ["solar", "Solar"],
-                      ["structure", "Structure"],
-                      ["bess", "BESS"],
-                      ["earthing", "Earthing Bores"],
-                      [
-                        "balance",
-                        input.presentation === "Full Breakup"
-                          ? "BOS (shared)"
-                          : "Balance / Everything Else",
-                      ],
-                    ]
-                ).map(([k, label]) => (
+                {[
+                  ["solar", "Solar"],
+                  ["structure", "Structure"],
+                  ["bess", "BESS"],
+                  ["earthing", "Earthing Bores"],
+                  ["balance", "BOS (shared)"],
+                ].map(([k, label]) => (
                   <label key={k}>
                     {label} Markup %
                     <input

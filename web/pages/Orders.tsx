@@ -1,3 +1,4 @@
+import { ipoPresentation } from "../../server/orders/presentation.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
 import { orderSchema, type OrderInput } from "../../server/orders/schema.js";
@@ -100,6 +101,7 @@ export function Orders({ session }: { session: Session }) {
     }));
   }
   const snapshot = saved?.snapshot ?? review?.snapshot ?? preview?.snapshot;
+  const view = snapshot ? ipoPresentation(snapshot) : undefined;
   return (
     <div className="orders-module">
       {error && (
@@ -276,43 +278,52 @@ export function Orders({ session }: { session: Session }) {
             <table className="order-table">
               <thead>
                 <tr>
-                  {[
-                    "Description",
-                    "Qty",
-                    "Unit",
-                    "Net rate",
-                    "Amount",
-                    "Tax %",
-                    "Tax",
-                    "Total",
-                  ].map((h) => (
+                  {(view!.included
+                    ? ["Description", "Qty", "Unit", "Rate", "Amount"]
+                    : [
+                        "Description",
+                        "Qty",
+                        "Unit",
+                        "Net rate",
+                        "Amount",
+                        "Tax %",
+                        "Tax",
+                        "Total",
+                      ]
+                  ).map((h) => (
                     <th key={h}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {snapshot.allocation.lines
-                  .filter((l: any) => Number(l.qty) > 0 || Number(l.total) > 0)
-                  .map((l: any, i: number) => (
-                    <tr key={i}>
-                      <td>{l.description}</td>
-                      <td>{l.qty}</td>
-                      <td>{l.unit}</td>
-                      <td>{money(l.rate)}</td>
-                      <td>{money(l.beforeTax)}</td>
-                      <td>{l.taxRate}%</td>
-                      <td>{money(l.tax)}</td>
-                      <td>{money(l.total)}</td>
-                    </tr>
-                  ))}
+                {view!.rows.map((l: any, i: number) => (
+                  <tr key={i}>
+                    <td style={{ whiteSpace: "pre-line" }}>{l.description}</td>
+                    <td>{l.qty}</td>
+                    <td>{l.unit}</td>
+                    <td>{money(l.rate)}</td>
+                    <td>{money(l.amount)}</td>
+                    {!view!.included && (
+                      <>
+                        <td>{l.taxRate}%</td>
+                        <td>{money(l.tax)}</td>
+                        <td>{money(l.total)}</td>
+                      </>
+                    )}
+                  </tr>
+                ))}
               </tbody>
               <tfoot>
                 <tr>
                   <th colSpan={4}>Grand total</th>
-                  <td>{money(snapshot.allocation.subtotal)}</td>
-                  <td></td>
-                  <td>{money(snapshot.allocation.tax)}</td>
-                  <td>{money(snapshot.allocation.total)}</td>
+                  <td>{money(view!.amount)}</td>
+                  {!view!.included && (
+                    <>
+                      <td></td>
+                      <td>{money(view!.tax)}</td>
+                      <td>{money(view!.total)}</td>
+                    </>
+                  )}
                 </tr>
               </tfoot>
             </table>
@@ -466,7 +477,9 @@ export function Orders({ session }: { session: Session }) {
                 <tbody>
                   {snapshot.allocation.lines.map((l: any, i: number) => (
                     <tr key={i}>
-                      <td>{l.description}</td>
+                      <td style={{ whiteSpace: "pre-line" }}>
+                        {l.description}
+                      </td>
                       <td>{money(l.originalBeforeTax)}</td>
                       <td>{money(l.allocatedDiscount)}</td>
                       <td>{money(l.beforeTaxReduction)}</td>
