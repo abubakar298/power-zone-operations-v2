@@ -236,6 +236,7 @@ test("all presentations reconcile without duplicated BESS/EPC amounts or interna
           taxMode === "Tax Included" ? p.total : p.subtotal,
         );
       } else assert(q.lines.every((l) => !l.amount));
+      assert(q.lines.some((l) => l.description.includes("IP65 Battery Control and Safety Unit for High Voltage Batteries")));
       const pdf = buildQuotationPdf(q);
       assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
       assert(pdf.length < 2_000_000, "Branded PDFs must remain practical to preview and share");
@@ -373,4 +374,11 @@ test("quotation discount overrides pricing without changing the saved pricing or
   await post("/quotations/preview", { ...input, discount: "999999999999" }).expect(400);
   await post("/quotations/preview", { ...input, discount: "-1" }).expect(400);
   await post("/quotations", { ...input, discount: "2000", fingerprint: preview.fingerprint, requestKey: randomUUID() }).expect(409);
+});
+
+test("BMS wording is persisted as an approved master revision and quotation default", async () => {
+  const master = (await db.pool.query("SELECT specification,status FROM item_spec_versions WHERE key='CH-BMS-HV' ORDER BY version DESC LIMIT 1")).rows[0];
+  assert.equal(master.specification, "IP65 Battery Control and Safety Unit for High Voltage Batteries");
+  assert.equal(master.status, "Approved");
+  assert.equal((await db.pool.query("SELECT description FROM quotation_description_defaults WHERE key='bms'")).rows[0].description, master.specification);
 });

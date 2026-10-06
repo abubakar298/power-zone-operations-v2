@@ -16,3 +16,5 @@ No customer approval, PO, IPO, inventory, invoice, email-provider activation or 
 
 
 Owner-requested quotation refinements: the preview renders the generated PDF pages, with supplied Power Zone logo/contact footer and top-right Confidential label. Quoted date, proposed by and validity align left; contact person/phone are read from customer master and frozen per quotation (blank when absent). Discount may be overridden on a new quotation without altering its pricing version; net total updates in preview and server validation/fingerprint confirmation is required before save. BESS and Balance amount cells span their scope rows without combined labels.
+
+BMS wording is persisted by migration 009 as an appended approved specification and quotation description default. New quotation scope adds the selected battery brand to the IP65 Battery Control and Safety Unit wording. Discount editing overlays the actual PDF Special Discount amount; its Net Total row recalculates locally with Decimal and server confirmation is required before saving. Saved PDFs remain generated from the immutable server snapshot.

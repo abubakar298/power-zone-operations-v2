@@ -122,7 +122,8 @@ export class CommercialRepository {
     const p = await this.pricingGet(actor, input.pricingId, c),
       b = await this.boq(c, p.boq_revision_id),
       customer = (await c.query("SELECT contact_person,phone FROM customers WHERE id=$1", [p.snapshot.customer.id])).rows[0],
-      snapshot = quote(p.snapshot, b.snapshot, input);
+      wording = (await c.query("SELECT description FROM quotation_description_defaults WHERE key='bms'")).rows[0]?.description,
+      snapshot = quote(p.snapshot, b.snapshot, input, wording);
     snapshot.customer = { ...snapshot.customer, contactPerson: customer?.contact_person ?? "", phone: customer?.phone ?? "" };
     return {
       snapshot,

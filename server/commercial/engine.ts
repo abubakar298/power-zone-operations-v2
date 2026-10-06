@@ -104,7 +104,7 @@ export interface QuoteLine {
   amount?: string;
   span?: number;
 }
-export function quotationLines(s: BoqSnapshot): QuoteLine[] {
+export function quotationLines(s: BoqSnapshot, bmsDescription = "IP65 Battery Control and Safety Unit for High Voltage Batteries"): QuoteLine[] {
   const brand = (field: string) => {
     const b = s.selectedBrands[field];
     return b.name === "Any of the Above" ? b.alternatives.join(" / ") : b.name;
@@ -145,7 +145,7 @@ export function quotationLines(s: BoqSnapshot): QuoteLine[] {
     );
   if (D(s.engineering.bms).gt(0))
     add(
-      `${brand("battery")} Battery Control Unit for High Voltage Batteries`,
+      `${brand("battery")} ${bmsDescription}`,
       "No.",
       s.engineering.bms,
       "bess",
@@ -199,12 +199,13 @@ export function quote(
   p: PricingSnapshot,
   boq: BoqSnapshot,
   input: QuotationInput,
+  bmsDescription?: string,
 ) {
   const discount = money(D(input.discount ?? p.discount));
   if (D(discount).gt(p.total))
     throw new HttpError(400, "Special discount cannot exceed the quoted total.");
   const netTotal = money(D(p.total).minus(discount));
-  const lines = quotationLines(boq);
+  const lines = quotationLines(boq, bmsDescription);
   if (input.descriptions && input.descriptions.length !== lines.length)
     throw new HttpError(400, "Provide one description for each quotation row.");
   lines.forEach((l, i) => {

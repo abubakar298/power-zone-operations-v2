@@ -368,7 +368,10 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .getByRole("button", { name: "Prepare quotation", exact: true })
     .click();
   await expect(page.locator(".quotation-pdf-pages canvas").first()).toBeVisible();
-  await page.getByLabel("Quotation discount (PKR)", { exact: true }).fill("1000.50");
+  const inlineDiscount = page.getByLabel("Quotation discount (PKR)", { exact: true });
+  await expect(inlineDiscount).toHaveClass("pdf-inline-discount");
+  await inlineDiscount.fill("1000.50");
+  await expect(page.locator(".pdf-inline-net")).toHaveText("8,823,826.43");
   await expect(page.getByText("Net Total: PKR 8,823,826.43", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save quotation version", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Confirm quotation totals", exact: true }).click();

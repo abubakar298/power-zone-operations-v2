@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { Decimal } from "decimal.js";
 import { useEffect, useRef, useState } from "react";
@@ -37,7 +38,8 @@ export function QuotationView({ snapshot: s, number, pdfUrl, discount, onDiscoun
 }) {
   const pages = useRef<HTMLDivElement>(null);
   const [pdfError, setPdfError] = useState("");
-  const serialized = draftInput ? JSON.stringify(draftInput) : "";
+  const [discountAnchor, setDiscountAnchor] = useState<{host: HTMLDivElement; top: number; height: number; netTop: number}>();
+  const serialized = draftInput ? JSON.stringify({ ...draftInput, discount: s.input.discount }) : "";
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
@@ -55,7 +57,8 @@ export function QuotationView({ snapshot: s, number, pdfUrl, discount, onDiscoun
         pdf.GlobalWorkerOptions.workerSrc = pdfWorker;
         task = pdf.getDocument({ data });
         const document = await task.promise;
-        const canvases: HTMLCanvasElement[] = [];
+        const canvases: HTMLDivElement[] = [];
+        let anchor: {host: HTMLDivElement; top: number; height: number; netTop: number} | undefined;
         for (let i = 1; i <= document.numPages; i++) {
           if (cancelled) return;
           const page = await document.getPage(i), viewport = page.getViewport({ scale: 1.5 });
@@ -63,9 +66,19 @@ export function QuotationView({ snapshot: s, number, pdfUrl, discount, onDiscoun
           canvas.width = viewport.width; canvas.height = viewport.height;
           canvas.setAttribute("aria-label", `Quotation PDF page ${i}`);
           await page.render({ canvasContext: canvas.getContext("2d")!, canvas, viewport }).promise;
-          canvases.push(canvas);
+          const host = window.document.createElement("div");
+          host.className = "quotation-pdf-page"; host.append(canvas);
+          const content = await page.getTextContent();
+          const label = content.items.find((item: any) => item.str === "Special Discount") as any;
+          if (label) {
+            const baseline = viewport.convertToViewportPoint(0, label.transform[5])[1];
+            const height = Math.max(label.height * viewport.scale, 10);
+            const net = content.items.find((item: any) => item.str === "Net Total") as any;
+            anchor = { host, netTop: net ? (viewport.convertToViewportPoint(0, net.transform[5])[1] - height) / viewport.height * 100 : 0, top: (baseline - height) / viewport.height * 100, height: (height + 3) / viewport.height * 100 };
+          }
+          canvases.push(host);
         }
-        if (!cancelled) pages.current?.replaceChildren(...canvases);
+        if (!cancelled) { pages.current?.replaceChildren(...canvases); setDiscountAnchor(anchor); }
       } catch (e) { if (!cancelled) setPdfError(e instanceof Error ? e.message : "Unable to load PDF."); }
     }
     void render();
@@ -75,13 +88,12 @@ export function QuotationView({ snapshot: s, number, pdfUrl, discount, onDiscoun
     <div className="panel-heading"><h2>{number ?? "Quotation preview"}</h2>
       {pdfUrl && <a className="dark-button" href={pdfUrl} download>Download quotation PDF</a>}
     </div>
-    {onDiscount && <div className="quotation-preview-controls">
-      <label>Quotation discount (PKR)<input aria-label="Quotation discount (PKR)" type="number" min="0" step="0.01" value={discount ?? s.input.discount} onChange={(e) => onDiscount(e.target.value)} /></label>
-      <strong>Net Total: PKR {money(s.footer.at(-1)!.amount)}</strong>
-    </div>}
     {pdfError && <p role="alert">{pdfError}</p>}
     <div className="quote-metadata sr-only">Validity {s.input.validity}</div>
     <div className="quotation-pdf-pages" ref={pages} aria-label="Quotation PDF preview" />
+    {onDiscount && discountAnchor && createPortal(<input className="pdf-inline-discount" aria-label="Quotation discount (PKR)" type="number" min="0" step="0.01" style={{top: `${discountAnchor.top}%`, height: `${discountAnchor.height}%`}} value={discount ?? s.input.discount} onChange={(e) => onDiscount(e.target.value)} />, discountAnchor.host)}
+    {onDiscount && discountAnchor && createPortal(<strong className="pdf-inline-net" style={{top: `${discountAnchor.netTop}%`, height: `${discountAnchor.height}%`}}>{money(s.footer.at(-1)!.amount)}</strong>, discountAnchor.host)}
+    {onDiscount && <span className="sr-only">Net Total: PKR {money(s.footer.at(-1)!.amount)}</span>}
   </section>;
 }
 export function Commercial({
