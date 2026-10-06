@@ -49,7 +49,7 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
   let y = (pdf as any).lastAutoTable.finalY + 4;
   pdf.text(text(s.subject), margin, y);
   y += 5;
-  const amounts = s.presentation === "Basic Breakup";
+  const amounts = s.presentation !== "No Breakup";
   const body = s.lines.map((r, i) => {
     const cells: any[] = [
       String(i + 1),

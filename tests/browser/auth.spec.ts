@@ -402,6 +402,25 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("heading", { name: "Q-BAFL-05850-001-R0-V2", exact: true }),
   ).toBeVisible();
+  await page.getByLabel("Price presentation").selectOption("Full Breakup");
+  await expect(page.getByLabel("BOS (shared) Markup %", {exact: true})).toBeVisible();
+  await page.getByRole("button", {name: "Calculate selling price", exact: true}).click();
+  await page.getByRole("button", {name: "Save pricing version", exact: true}).click();
+  await page.getByRole("button", {name: "Prepare quotation", exact: true}).click();
+  await expect(page.locator(".quote-description")).toHaveCount(16);
+  await page.getByLabel("Include an additional item").check();
+  await page.getByLabel("Description", {exact: true}).fill("Additional equipment");
+  await page.getByLabel("Cost (PKR)", {exact: true}).fill("100");
+  await page.getByLabel("Markup on cost %", {exact: true}).fill("25");
+  await page.getByLabel("Tax category", {exact: true}).selectOption("18");
+  await page.getByRole("button", {name: "Preview quotation", exact: true}).click();
+  await expect(page.locator(".quotation-pdf-pages canvas")).toHaveCount(1);
+  await expect(page.locator(".quotation-pdf-pages canvas").first()).toBeVisible();
+  await page.getByRole("button", {name: "Save quotation version", exact: true}).click();
+  await page.getByRole("button", {name: "Create new quotation version", exact: true}).click();
+  await expect(page.getByLabel("Cost (PKR)", {exact: true})).toHaveValue("100");
+  await expect(page.getByLabel("Markup on cost %", {exact: true})).toHaveValue("25");
+  await page.getByRole("button", {name: "Preview quotation", exact: true}).click();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
     path: "test-results/quotation-desktop.png",

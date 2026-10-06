@@ -99,7 +99,7 @@ export interface QuoteLine {
   amount?: string;
   span?: number;
 }
-export function quotationLines(s: BoqSnapshot, bmsDescription = "IP65 Battery Control and Safety Unit for High Voltage Batteries"): QuoteLine[] {
+export function quotationLines(s: BoqSnapshot, bmsDescription = "IP65 Battery Control and Safety Unit for High Voltage Batteries", full = false): QuoteLine[] {
   const brand = (field: string) => {
     const b = s.selectedBrands[field];
     return b.name === "Any of the Above" ? b.alternatives.join(" / ") : b.name;
@@ -131,14 +131,14 @@ export function quotationLines(s: BoqSnapshot, bmsDescription = "IP65 Battery Co
     String(s.inverterConfig.quantity),
     "bess",
   );
-  if (D(s.engineering.batteryModules).gt(0))
+  if (full || D(s.engineering.batteryModules).gt(0))
     add(
       `${brand("battery")} 5 kWh IP65 High Voltage Lithium Ion ESS Battery Module with 5-Years Replacement Warranty`,
       "No.",
       s.engineering.batteryModules,
       "bess",
     );
-  if (D(s.engineering.bms).gt(0))
+  if (full || D(s.engineering.bms).gt(0))
     add(
       `${brand("battery")} ${bmsDescription}`,
       "No.",
@@ -157,7 +157,7 @@ export function quotationLines(s: BoqSnapshot, bmsDescription = "IP65 Battery Co
     ["6mm² Earthing Cable", s.survey.earth6],
     ["10mm² Earthing Cable", s.survey.earth10],
   ])
-    if (D(quantity).gt(0))
+    if (full || D(quantity).gt(0))
       add(`${key} — ${brand("cable")}`, "m", quantity, "balance");
   const ac = ["16mm² 4C AC Cable", "25mm² 4C AC Cable"]
     .filter((k) => line(k))
@@ -196,11 +196,20 @@ export function quote(
   input: QuotationInput,
   bmsDescription?: string,
 ) {
+  const full = p.input.presentation === "Full Breakup";
+  const extra = input.additionalItem;
+  if (extra && !full) throw new HttpError(400, "Additional items require Full Breakup.");
+  const extraPrice = D(extra?.cost ?? "0").mul(D(extra?.markup ?? "0").div(100).add(1));
+  const extraTax = D(extra?.taxRate ?? "0").div(100).mul(extraPrice);
+  const subtotal = money(D(p.subtotal).add(extraPrice));
+  const solarTax = money(D(p.solarTax).add(extra?.taxRate === "10" ? extraTax : 0));
+  const otherTax = money(D(p.otherTax).add(extra?.taxRate === "18" ? extraTax : 0));
+  const total = money(D(subtotal).add(solarTax).add(otherTax));
   const discount = money(D(input.discount ?? p.discount));
-  if (D(discount).gt(p.total))
+  if (D(discount).gt(total))
     throw new HttpError(400, "Special discount cannot exceed the quoted total.");
-  const netTotal = money(D(p.total).minus(discount));
-  const lines = quotationLines(boq, bmsDescription);
+  const netTotal = money(D(total).minus(discount));
+  const lines = quotationLines(boq, bmsDescription, full);
   if (input.descriptions && input.descriptions.length !== lines.length)
     throw new HttpError(400, "Provide one description for each quotation row.");
   lines.forEach((l, i) => {
@@ -216,11 +225,11 @@ export function quote(
     );
   const footer =
     p.input.taxMode === "Tax Included"
-      ? [{ label: "Total", amount: p.total }]
+      ? [{ label: "Total", amount: total }]
       : [
-          { label: "Subtotal Before Tax", amount: p.subtotal },
-          { label: "SOLAR PANEL SALES TAX @10%", amount: p.solarTax },
-          { label: "SALES TAX ON OTHER ITEMS @18%", amount: p.otherTax },
+          { label: "Subtotal Before Tax", amount: subtotal },
+          { label: "SOLAR PANEL SALES TAX @10%", amount: solarTax },
+          { label: "SALES TAX ON OTHER ITEMS @18%", amount: otherTax },
         ];
   footer.push(
     { label: "Special Discount", amount: discount },
@@ -252,6 +261,36 @@ export function quote(
         ),
       );
   }
+  if (full) {
+    // Each source cost belongs to exactly one customer row. Protection stays combined.
+    const keys = [
+      ["Solar PV Modules"], [`Structure - ${boq.survey.structure}`],
+      [boq.inverterConfig.sku], ["BAT-HV-05 KW WO BMS"], ["CH-BMS-HV"],
+      ["Earthing Bore"], ["6mm² DC Cable Red", "6mm² DC Cable Black"],
+      ["2.5mm² Earthing Cable"], ["6mm² Earthing Cable"], ["10mm² Earthing Cable"],
+      ["16mm² 4C AC Cable", "25mm² 4C AC Cable"],
+      ["DC Breaker", "DC SPD", "DC Fuse with Holder"],
+      ["63A 4P MCB", "100A 4P MCCB", "100A Rotary Changeover with Box", "AC SPD", "AC & DC Boxes"],
+      ["Misc. Accessories", "Extra Smart Meter", "Genset Synchronisation with Battery SOC"],
+      ["Labour"], ["Delivery"],
+    ];
+    const covered = new Set(keys.flat());
+    if (boq.lines.some(l => !covered.has(l.key)))
+      throw new HttpError(422, "A costing item has no Full Breakup row mapping.");
+    lines.forEach((l, i) => {
+      const category = p.rows.find(r => r.key === l.group)!;
+      const base = boq.lines.filter(x => keys[i].includes(x.key)).reduce((a, x) => a.add(x.total), D("0"));
+      const selling = base.mul(D(category.markup).div(100).add(1));
+      l.amount = money(p.input.taxMode === "Tax Included" ? selling.mul(D(category.taxRate).div(100).add(1)) : selling);
+      l.span = 1;
+    });
+    // Carry rounding cents on the last nonzero BOS row so printed rows reconcile.
+    const adjustment = lines.findLast(l => l.group === "balance" && D(l.amount!).gt(0)) ?? lines.at(-1)!;
+    adjustment.amount = money(D(adjustment.amount!).add(D(p.input.taxMode === "Tax Included" ? p.total : p.subtotal).minus(lines.reduce((a,l) => a.add(l.amount!), D("0")))));
+    if (extra) lines.push({description: extra.description, unit: "LS", qty: "1", group: "balance", span: 1, amount: money(p.input.taxMode === "Tax Included" ? extraPrice.add(money(extraTax)) : extraPrice)});
+  }
+  if (p.input.taxMode === "Tax Included" && extra && /\bGST\b|sales tax|tax included/i.test(extra.description))
+    throw new HttpError(400, "Remove tax wording from the additional item description.");
   // Customer snapshot contains selling amounts only; never serialize internal pricing or BOQ specifications.
   return {
     engineVersion: 1,

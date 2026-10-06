@@ -231,7 +231,7 @@ export function Commercial({
       setQuoteInput({
         ...data,
         discount: result.snapshot.input.discount,
-        descriptions: result.snapshot.lines.map((l) => l.description),
+        descriptions: result.snapshot.lines.slice(0, result.snapshot.presentation === "Full Breakup" ? 16 : undefined).map((l) => l.description),
       });
       setQuotePreview(result);
       setSavedQuote(undefined);
@@ -348,6 +348,7 @@ export function Commercial({
                 <label>
                   Price presentation
                   <select
+                    aria-label="Price presentation"
                     value={input.presentation}
                     onChange={(e) =>
                       update({
@@ -356,13 +357,14 @@ export function Commercial({
                         markups: {
                           ...input.markups,
                           bess:
-                            e.target.value === "Basic Breakup" ? "33" : "15",
+                            e.target.value !== "No Breakup" ? "33" : "15",
                         },
                       })
                     }
                   >
                     <option>No Breakup</option>
                     <option>Basic Breakup</option>
+                    <option>Full Breakup</option>
                   </select>
                 </label>
                 <label>
@@ -389,7 +391,7 @@ export function Commercial({
                       ["structure", "Structure"],
                       ["bess", "BESS"],
                       ["earthing", "Earthing Bores"],
-                      ["balance", "Balance / Everything Else"],
+                      ["balance", input.presentation === "Full Breakup" ? "BOS (shared)" : "Balance / Everything Else"],
                     ]
                 ).map(([k, label]) => (
                   <label key={k}>
@@ -598,6 +600,16 @@ export function Commercial({
                 />
               </label>
             ))}
+            {savedPrice?.snapshot.input.presentation === "Full Breakup" && <fieldset>
+              <legend>Optional additional item — row 17</legend>
+              <label><input type="checkbox" checked={!!quoteInput.additionalItem} onChange={e => quoteChange({additionalItem: e.target.checked ? {description: "Additional item", cost: "0", markup: "0", taxRate: "18"} : undefined})} />Include an additional item</label>
+              {quoteInput.additionalItem && <div className="form-grid">
+                <label>Description<input required maxLength={1500} value={quoteInput.additionalItem.description} onChange={e => quoteChange({additionalItem: {...quoteInput.additionalItem!, description: e.target.value}})} /></label>
+                <label>Cost (PKR)<input required type="number" min="0" step="0.01" value={quoteInput.additionalItem.cost} onChange={e => quoteChange({additionalItem: {...quoteInput.additionalItem!, cost: e.target.value}})} /></label>
+                <label>Markup on cost %<input required type="number" min="0" step="0.0001" value={quoteInput.additionalItem.markup} onChange={e => quoteChange({additionalItem: {...quoteInput.additionalItem!, markup: e.target.value}})} /></label>
+                <label>Tax category<select aria-label="Tax category" value={quoteInput.additionalItem.taxRate} onChange={e => quoteChange({additionalItem: {...quoteInput.additionalItem!, taxRate: e.target.value as "0" | "10" | "18"}})}><option value="18">Other items — 18%</option><option value="10">Solar — 10%</option><option value="0">No tax — 0%</option></select></label>
+              </div>}
+            </fieldset>}
           </fieldset>
           <button className="primary" disabled={busy}>
             Preview quotation

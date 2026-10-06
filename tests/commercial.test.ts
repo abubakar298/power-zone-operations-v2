@@ -186,7 +186,7 @@ test("locked commercial case reconciles, markup is on cost, and discount follows
   );
 });
 test("all presentations reconcile without duplicated BESS/EPC amounts or internal quotation leaks", async () => {
-  for (const presentation of ["No Breakup", "Basic Breakup"] as const)
+  for (const presentation of ["No Breakup", "Basic Breakup", "Full Breakup"] as const)
     for (const taxMode of [
       "Tax Included",
       "Show Sales Tax Separately",
@@ -241,6 +241,12 @@ test("all presentations reconcile without duplicated BESS/EPC amounts or interna
           amounts.reduce((a, l) => a.add(l.amount!), new Decimal(0)).toFixed(2),
           taxMode === "Tax Included" ? p.total : p.subtotal,
         );
+      } else if (presentation === "Full Breakup") {
+        assert.equal(q.lines.length, 16);
+        assert(q.lines.every(l => l.amount !== undefined && l.span === 1));
+        assert.equal(q.lines.reduce((a,l) => a.add(l.amount!), new Decimal(0)).toFixed(2), taxMode === "Tax Included" ? p.total : p.subtotal);
+        assert.equal(q.lines.filter(l => l.description.startsWith("DC Protection")).length, 1);
+        assert.equal(q.lines.filter(l => l.description.startsWith("AC Protection")).length, 1);
       } else assert(q.lines.every((l) => !l.amount));
       assert(q.lines.some((l) => l.description.includes("IP65 Battery Control and Safety Unit for High Voltage Batteries")));
       const pdf = buildQuotationPdf(q);
@@ -387,4 +393,38 @@ test("BMS wording is persisted as an approved master revision and quotation defa
   assert.equal(master.specification, "IP65 Battery Control and Safety Unit for High Voltage Batteries");
   assert.equal(master.status, "Approved");
   assert.equal((await db.pool.query("SELECT description FROM quotation_description_defaults WHERE key='bms'")).rows[0].description, master.specification);
+});
+
+test("Full Breakup additional cost, markup and tax reconcile and stay internal across versions", async () => {
+  const pricingInput = {...inputs(), presentation: "Full Breakup" as const};
+  const pp = (await post("/pricing/preview", pricingInput).expect(200)).body;
+  const saved = (await post("/pricing", {...pricingInput, fingerprint: pp.fingerprint, requestKey: randomUUID()}).expect(201)).body;
+  for (const taxMode of ["Tax Included", "Show Sales Tax Separately"] as const) {
+    const p = price(boq.snapshot, boq.number, {...pricingInput, taxMode});
+    for (const taxRate of ["0", "10", "18"] as const) {
+      const input = quotationSchema.parse({pricingId: saved.id, quotedDate: "2026-10-06", validity: "7 Days", proposedBy: "Abu Bakar", additionalItem: {description: "Additional equipment", cost: "100.00", markup: "25", taxRate}});
+      const q = quote(p, boq.snapshot, input);
+      assert.equal(q.lines.length, 17);
+      const extraTax = new Decimal("125").mul(taxRate).div(100);
+      assert.equal(q.lines[16].amount, taxMode === "Tax Included" ? new Decimal("125").add(extraTax).toFixed(2) : "125.00");
+      assert.equal(q.footer.at(-1)!.amount, new Decimal(p.total).add("125").add(extraTax).toFixed(2));
+      assert.equal(q.lines.reduce((a,l) => a.add(l.amount!), new Decimal(0)).toFixed(2), taxMode === "Tax Included" ? q.footer[0].amount : q.footer[0].amount);
+      assert(!JSON.stringify(q).includes('"cost"'));
+      assert(!JSON.stringify(q).includes('"markup"'));
+      const pdf = buildQuotationPdf(q);
+      assert.equal((pdf.toString("latin1").match(/\/Type \/Page\b/g) ?? []).length, 1);
+      await writeFile(`.local/quotation-qa/Full-Breakup-extra-${taxMode === "Tax Included" ? "included" : "separate"}-${taxRate}.pdf`, pdf);
+    }
+  }
+  const input = quotationSchema.parse({pricingId: saved.id, quotedDate: "2026-10-06", validity: "7 Days", proposedBy: "Abu Bakar", additionalItem: {description: "Additional equipment", cost: "100.00", markup: "25", taxRate: "18"}});
+  const qp = (await post("/quotations/preview", input).expect(200)).body;
+  await post("/quotations", {...input, additionalItem: {...input.additionalItem!, cost: "125", markup: "0"}, fingerprint: qp.fingerprint, requestKey: randomUUID()}).expect(409);
+  const savedQ = (await post("/quotations", {...input, fingerprint: qp.fingerprint, requestKey: randomUUID()}).expect(201)).body;
+  const copy = (await get(`/quotations/${savedQ.id}/copy`).expect(200)).body;
+  assert.deepEqual(copy.additionalItem, input.additionalItem);
+  assert.equal(copy.descriptions.length, 16);
+  assert.equal((await post("/quotations/preview", copy).expect(200)).body.fingerprint, qp.fingerprint);
+  assert(!JSON.stringify((await get(`/quotations/${savedQ.id}`, true).expect(200)).body).includes('"markup"'));
+  await get(`/quotations/${savedQ.id}/copy`, true).expect(403);
+  await assert.rejects(db.pool.query("UPDATE quotation_additional_inputs SET input='{}' WHERE quotation_id=$1", [savedQ.id]), /immutable/i);
 });

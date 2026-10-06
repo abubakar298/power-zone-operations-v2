@@ -102,7 +102,8 @@ export function commercialHttp(
       pricingId: row.pricing_id,
       ...row.snapshot.input,
       discount: row.snapshot.footer.find((r: any) => r.label === "Special Discount")?.amount ?? "0",
-      descriptions: row.snapshot.lines.map((l: any) => l.description),
+      additionalItem: await repo.additionalInput(req.authSession!.user.id, row.id),
+      descriptions: row.snapshot.lines.slice(0, row.snapshot.presentation === "Full Breakup" ? 16 : undefined).map((l: any) => l.description),
     });
   });
   r.get("/quotations/:id/quotation.pdf", async (req, res) => {

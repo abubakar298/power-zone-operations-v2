@@ -127,7 +127,7 @@ export class CommercialRepository {
     snapshot.customer = { ...snapshot.customer, contactPerson: customer?.contact_person ?? "", phone: customer?.phone ?? "" };
     return {
       snapshot,
-      fingerprint: fingerprint(snapshot),
+      fingerprint: input.additionalItem ? fingerprint({ snapshot, additionalItem: input.additionalItem }) : fingerprint(snapshot),
       boqRevisionId: b.id,
     };
   }
@@ -184,10 +184,8 @@ export class CommercialRepository {
           ],
         )
       ).rows[0];
-      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
-        actor,
-        `quotation.${number}.saved`,
-      ]);
+      if (input.additionalItem) await c.query("INSERT INTO quotation_additional_inputs(quotation_id,input) VALUES($1,$2)", [row.id, input.additionalItem]);
+      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [actor, `quotation.${number}.saved`]);
       return row;
     });
   }
@@ -206,5 +204,9 @@ export class CommercialRepository {
     ).rows[0];
     if (!row) throw new HttpError(404, "Quotation not found.");
     return row;
+  }
+  async additionalInput(actor: string, id: string) {
+    await this.manager(this.pool, actor);
+    return (await this.pool.query("SELECT input FROM quotation_additional_inputs WHERE quotation_id=$1", [id])).rows[0]?.input;
   }
 }
