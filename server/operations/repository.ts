@@ -6,6 +6,129 @@ import { fingerprint } from "../boq/repository.js";
 import type { IssuanceInput, DeliveryPlanInput } from "./schema.js";
 export class OperationsRepository {
   constructor(private pool: Pool) {}
+  async portal() {
+    const rows = (
+      await this.pool.query(
+        `SELECT o.*,p.id AS delivery_plan_id,p.version AS delivery_plan_version,p.details AS delivery,s.id AS store_issuance_id,s.number AS store_number,s.created_at AS sent_to_store_at FROM operations_boq_issuances o LEFT JOIN LATERAL(SELECT * FROM operations_delivery_plans WHERE issuance_id=o.id ORDER BY version DESC LIMIT 1)p ON true LEFT JOIN store_boq_issuances s ON s.issuance_id=o.id ORDER BY o.created_at DESC LIMIT 500`,
+      )
+    ).rows;
+    const ipos = (
+      await this.pool.query(
+        `SELECT i.id,i.number,i.created_at,i.snapshot->>'quotationNumber' AS quotation_number,i.snapshot->'customer'->>'name' AS customer,i.snapshot->>'siteName' AS site,o.id AS issuance_id FROM internal_purchase_orders i LEFT JOIN operations_boq_issuances o ON o.ipo_id=i.id ORDER BY i.created_at DESC LIMIT 500`,
+      )
+    ).rows;
+    const demand = (
+      await this.pool.query(
+        `SELECT d.item_key,d.brand,d.specification,d.unit,SUM(d.quantity)::text AS required_quantity,SUM(CASE WHEN s.id IS NULL THEN d.quantity ELSE 0 END)::text AS awaiting_store_quantity,SUM(CASE WHEN s.id IS NOT NULL THEN d.quantity ELSE 0 END)::text AS sent_to_store_quantity,COUNT(DISTINCT d.issuance_id)::integer AS sites FROM operations_stock_demand d LEFT JOIN store_boq_issuances s ON s.issuance_id=d.issuance_id GROUP BY d.item_key,d.brand,d.specification,d.unit ORDER BY d.item_key,d.brand`,
+      )
+    ).rows;
+    return { issuances: rows, ipos, demand };
+  }
+  async sendToStore(
+    actor: string,
+    issuanceId: string,
+    deliveryPlanId: string,
+    requestKey: string,
+  ) {
+    return transaction(this.pool, async (c) => {
+      await c.query("SELECT pg_advisory_xact_lock(742019007)");
+      const u = (
+        await c.query(
+          "SELECT role,active,display_name FROM users WHERE id=$1 FOR SHARE",
+          [actor],
+        )
+      ).rows[0];
+      if (!u?.active) throw new HttpError(401, "Your access has ended.");
+      if (!["Admin", "Management", "Operations"].includes(u.role))
+        throw new HttpError(
+          403,
+          "Operations access required to issue requirements to Store.",
+        );
+      const replay = (
+        await c.query(
+          "SELECT * FROM store_boq_issuances WHERE request_key=$1",
+          [requestKey],
+        )
+      ).rows[0];
+      if (replay) {
+        if (
+          replay.created_by !== actor ||
+          replay.issuance_id !== issuanceId ||
+          replay.delivery_plan_id !== deliveryPlanId
+        )
+          throw new HttpError(
+            409,
+            "Request key already used for another Store issuance.",
+          );
+        return replay;
+      }
+      const issuance = (
+        await c.query(
+          "SELECT * FROM operations_boq_issuances WHERE id=$1 FOR UPDATE",
+          [issuanceId],
+        )
+      ).rows[0];
+      if (!issuance) throw new HttpError(404, "Received BOQ not found.");
+      if (
+        (
+          await c.query(
+            "SELECT 1 FROM store_boq_issuances WHERE issuance_id=$1",
+            [issuanceId],
+          )
+        ).rowCount
+      )
+        throw new HttpError(409, "This BOQ has already been sent to Store.");
+      const plan = (
+        await c.query(
+          "SELECT * FROM operations_delivery_plans WHERE issuance_id=$1 ORDER BY version DESC LIMIT 1",
+          [issuanceId],
+        )
+      ).rows[0];
+      if (!plan || plan.id !== deliveryPlanId)
+        throw new HttpError(
+          409,
+          "Save and review the latest delivery details before issuing to Store.",
+        );
+      const number = `STORE-BOQ-${String((await c.query("SELECT count(*)::integer AS n FROM store_boq_issuances")).rows[0].n + 1).padStart(6, "0")}`;
+      const snapshot = {
+        ...issuance.snapshot,
+        operationsIssuanceNumber: issuance.number,
+        deliveryPlanVersion: plan.version,
+        ...plan.details,
+        notes: plan.details.instructions,
+        issuedBy: u.display_name,
+        destination: "Store",
+      };
+      const row = (
+        await c.query(
+          "INSERT INTO store_boq_issuances(id,issuance_id,delivery_plan_id,number,snapshot,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+          [
+            randomUUID(),
+            issuanceId,
+            plan.id,
+            number,
+            snapshot,
+            requestKey,
+            actor,
+          ],
+        )
+      ).rows[0];
+      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
+        actor,
+        `operations.store.issue:${row.id}:source:${issuanceId}`,
+      ]);
+      return row;
+    });
+  }
+  async storeIssuance(id: string) {
+    const row = (
+      await this.pool.query("SELECT * FROM store_boq_issuances WHERE id=$1", [
+        id,
+      ])
+    ).rows[0];
+    if (!row) throw new HttpError(404, "Store issuance not found.");
+    return row;
+  }
   async list() {
     return (
       await this.pool.query(
@@ -40,9 +163,15 @@ export class OperationsRepository {
     input: DeliveryPlanInput,
   ) {
     return transaction(this.pool, async (c) => {
-      const u = (await c.query("SELECT active FROM users WHERE id=$1", [actor]))
-        .rows[0];
+      const u = (
+        await c.query("SELECT active,role FROM users WHERE id=$1", [actor])
+      ).rows[0];
       if (!u?.active) throw new HttpError(401, "Your access has ended.");
+      if (!["Admin", "Management", "Operations"].includes(u.role))
+        throw new HttpError(
+          403,
+          "Operations access required to plan delivery.",
+        );
       const issuance = (
         await c.query(
           "SELECT id FROM operations_boq_issuances WHERE id=$1 FOR UPDATE",
@@ -50,6 +179,18 @@ export class OperationsRepository {
         )
       ).rows[0];
       if (!issuance) throw new HttpError(404, "Received BOQ not found.");
+      if (
+        (
+          await c.query(
+            "SELECT 1 FROM store_boq_issuances WHERE issuance_id=$1",
+            [issuanceId],
+          )
+        ).rowCount
+      )
+        throw new HttpError(
+          409,
+          "Delivery details are frozen after Store issuance. A controlled revision is required for changes.",
+        );
       const replay = (
         await c.query(
           "SELECT * FROM operations_delivery_plans WHERE request_key=$1",
@@ -165,11 +306,17 @@ export class OperationsRepository {
     return transaction(this.pool, async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(742019005)");
       const u = (
-        await c.query("SELECT display_name,active FROM users WHERE id=$1", [
-          actor,
-        ])
+        await c.query(
+          "SELECT display_name,active,role FROM users WHERE id=$1",
+          [actor],
+        )
       ).rows[0];
       if (!u?.active) throw new HttpError(401, "Your access has ended.");
+      if (u.role === "Operations")
+        throw new HttpError(
+          403,
+          "Coordinator handoff is required before Operations can receive a BOQ.",
+        );
       const replay = (
         await c.query(
           "SELECT * FROM operations_boq_issuances WHERE request_key=$1",
@@ -226,6 +373,19 @@ export class OperationsRepository {
           ],
         )
       ).rows[0];
+      for (const [index, line] of snapshot.items.entries())
+        await c.query(
+          "INSERT INTO operations_stock_demand(issuance_id,line_number,item_key,brand,specification,quantity,unit) VALUES($1,$2,$3,$4,$5,$6,$7)",
+          [
+            row.id,
+            index,
+            line.key,
+            line.brand,
+            line.specification,
+            line.qty,
+            line.unit,
+          ],
+        );
       await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
         actor,
         `operations.boq.issue:${row.id}:ipo:${input.ipoId}`,

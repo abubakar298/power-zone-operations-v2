@@ -676,6 +676,19 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(page.getByLabel("Delivery time", { exact: true })).toHaveValue(
     "10:30",
   );
+  await page
+    .getByRole("button", { name: "Issue BOQ to Store", exact: true })
+    .click();
+  await expect(
+    page.getByRole("link", { name: "Download Store BOQ", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Save delivery details", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: /Stock demand/ }).click();
+  await expect(
+    page.getByRole("columnheader", { name: "Sent to Store", exact: true }),
+  ).toBeVisible();
   await page.screenshot({
     path: "test-results/operations-desktop.png",
     fullPage: true,

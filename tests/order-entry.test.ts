@@ -139,24 +139,27 @@ test("IPO defaults use current customer data and accepted quotation; Operations 
         instructions: "Call before arriving",
       },
     };
-    const plan = await ops.planDelivery(owner, issued.id, input);
+    const plan = await ops.planDelivery(manager, issued.id, input);
     assert.equal(plan.version, 1);
-    assert.equal((await ops.planDelivery(owner, issued.id, input)).id, plan.id);
+    assert.equal(
+      (await ops.planDelivery(manager, issued.id, input)).id,
+      plan.id,
+    );
     await assert.rejects(
-      ops.planDelivery(owner, issued.id, {
+      ops.planDelivery(manager, issued.id, {
         ...input,
         requestKey: randomUUID(),
       }),
       /changed/i,
     );
     await assert.rejects(
-      ops.planDelivery(owner, issued.id, {
+      ops.planDelivery(manager, issued.id, {
         ...input,
         details: { ...input.details, siteContact: "Different" },
       }),
       /already used/i,
     );
-    const next = await ops.planDelivery(owner, issued.id, {
+    const next = await ops.planDelivery(manager, issued.id, {
       ...input,
       version: 1,
       requestKey: randomUUID(),
@@ -193,9 +196,9 @@ test("IPO defaults use current customer data and accepted quotation; Operations 
       ).rows[0].snapshot,
       ipoBefore,
     );
-    await db.pool.query("UPDATE users SET active=false WHERE id=$1", [owner]);
+    await db.pool.query("UPDATE users SET active=false WHERE id=$1", [manager]);
     await assert.rejects(
-      ops.planDelivery(owner, issued.id, {
+      ops.planDelivery(manager, issued.id, {
         ...input,
         version: 2,
         requestKey: randomUUID(),

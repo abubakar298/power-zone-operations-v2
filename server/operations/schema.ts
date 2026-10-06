@@ -27,3 +27,6 @@ export const deliveryPlanSchema = z
   })
   .strict();
 export type DeliveryPlanInput = z.infer<typeof deliveryPlanSchema>;
+export const storeIssuanceSchema = z
+  .object({ deliveryPlanId: z.uuid(), requestKey: z.uuid() })
+  .strict();

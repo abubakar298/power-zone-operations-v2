@@ -38,7 +38,13 @@ export class AccountsService {
       .object({
         email,
         displayName: z.string().trim().min(1).max(100),
-        role: z.enum(["Admin", "Management", "Employee", "Coordinator"]),
+        role: z.enum([
+          "Admin",
+          "Management",
+          "Employee",
+          "Coordinator",
+          "Operations",
+        ]),
         password: z.string().max(128),
         newPassword: z.string().min(12).max(128),
         confirmPassword: z.string().max(128),
@@ -71,7 +77,13 @@ export class AccountsService {
     const v = z
       .object({
         email,
-        role: z.enum(["Admin", "Management", "Employee", "Coordinator"]),
+        role: z.enum([
+          "Admin",
+          "Management",
+          "Employee",
+          "Coordinator",
+          "Operations",
+        ]),
         password: z.string().max(128),
       })
       .strict()
@@ -176,7 +188,13 @@ export class AccountsService {
       .object({
         password: z.string().max(128),
         role: z
-          .enum(["Admin", "Management", "Employee", "Coordinator"])
+          .enum([
+            "Admin",
+            "Management",
+            "Employee",
+            "Coordinator",
+            "Operations",
+          ])
           .optional(),
         active: z.boolean().optional(),
         revokeSessions: z.literal(true).optional(),

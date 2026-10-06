@@ -170,38 +170,42 @@ export function Dashboard({
               <span>Customers & sites</span>
               <small>Ready</small>
             </div>
-            <button
-              className={view === "boqs" ? "nav-active" : ""}
-              aria-current={view === "boqs" ? "page" : undefined}
-              onClick={() => navigate("boqs")}
-            >
-              <Icon name="file" />
-              Survey & BOQ
-            </button>
-            <button
-              className={view === "pricing" ? "nav-active" : ""}
-              onClick={() => {
-                setPricingRevisionId(undefined);
-                navigate("pricing");
-              }}
-            >
-              <Icon name="file" />
-              Commercial pricing
-            </button>
-            <button
-              className={view === "quotes" ? "nav-active" : ""}
-              onClick={() => navigate("quotes")}
-            >
-              <Icon name="file" />
-              Quotations
-            </button>
-            <button
-              className={view === "orders" ? "nav-active" : ""}
-              onClick={() => navigate("orders")}
-            >
-              <Icon name="file" />
-              Customer PO & IPO
-            </button>
+            {session.user.role !== "Operations" && (
+              <>
+                <button
+                  className={view === "boqs" ? "nav-active" : ""}
+                  aria-current={view === "boqs" ? "page" : undefined}
+                  onClick={() => navigate("boqs")}
+                >
+                  <Icon name="file" />
+                  Survey & BOQ
+                </button>
+                <button
+                  className={view === "pricing" ? "nav-active" : ""}
+                  onClick={() => {
+                    setPricingRevisionId(undefined);
+                    navigate("pricing");
+                  }}
+                >
+                  <Icon name="file" />
+                  Commercial pricing
+                </button>
+                <button
+                  className={view === "quotes" ? "nav-active" : ""}
+                  onClick={() => navigate("quotes")}
+                >
+                  <Icon name="file" />
+                  Quotations
+                </button>
+                <button
+                  className={view === "orders" ? "nav-active" : ""}
+                  onClick={() => navigate("orders")}
+                >
+                  <Icon name="file" />
+                  Customer PO & IPO
+                </button>
+              </>
+            )}
             <button
               className={view === "operations" ? "nav-active" : ""}
               onClick={() => {
@@ -331,7 +335,10 @@ export function Dashboard({
               {error}
             </p>
           )}
-          {view === "dashboard" && (
+          {view === "dashboard" && session.user.role === "Operations" && (
+            <Operations session={session} portal />
+          )}
+          {view === "dashboard" && session.user.role !== "Operations" && (
             <Coordinator
               session={session}
               onOpen={(task) => {

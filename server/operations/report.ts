@@ -16,7 +16,13 @@ export function buildOperationsPdf(row: any) {
     pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
   drawReportLogo(pdf);
   pdf.setFontSize(12);
-  pdf.text("BOQ ISSUANCE TO OPERATIONS", 14, 38);
+  pdf.text(
+    s.destination === "Store"
+      ? "BOQ ISSUANCE TO STORE"
+      : "BOQ ISSUANCE TO OPERATIONS",
+    14,
+    38,
+  );
   pdf.setFontSize(8);
   pdf.text("POWER ZONE ENGINEERING & SERVICES (PVT) LIMITED", 14, 44);
   autoTable(pdf, {
@@ -44,6 +50,18 @@ export function buildOperationsPdf(row: any) {
         "Customer PO",
         clean(s.customerPo),
       ],
+      ...(s.destination === "Store"
+        ? [
+            [
+              "Delivery date / time",
+              clean(
+                `${s.deliveryDate} / ${s.deliveryTime || "To be arranged"}`,
+              ),
+              "Operations reference",
+              s.operationsIssuanceNumber,
+            ],
+          ]
+        : []),
       [
         "Issued by",
         clean(s.issuedBy),

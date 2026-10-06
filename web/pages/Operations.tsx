@@ -19,9 +19,11 @@ const deliveryFields: [keyof DeliveryDetails, string][] = [
 export function Operations({
   session,
   initialIpoId,
+  portal = false,
 }: {
   session: Session;
   initialIpoId?: string;
+  portal?: boolean;
 }) {
   const [orders, setOrders] = useState<any[]>([]),
     [rows, setRows] = useState<any[]>([]),
@@ -32,7 +34,12 @@ export function Operations({
     [selected, setSelected] = useState<any>(),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const [workspace, setWorkspace] = useState<"handoff" | "received">("handoff");
+  const [workspace, setWorkspace] = useState<"handoff" | "received">(
+    portal || session.user.role === "Operations" ? "received" : "handoff",
+  );
+  const [portalData, setPortalData] = useState<any>();
+  const [bucket, setBucket] = useState("Received BOQs");
+  const storeKey = useRef<string | undefined>(undefined);
   const [plan, setPlan] = useState<any>();
   const [details, setDetails] = useState<DeliveryDetails>({
     deliveryAddress: "",
@@ -120,10 +127,14 @@ export function Operations({
   async function load() {
     const [o, r] = await Promise.all([
       api<any>("/orders"),
-      api<any>("/operations"),
+      api<any>("/operations/portal"),
     ]);
     setOrders(o.orders);
     setRows(r.issuances);
+    setPortalData(r);
+    setSelected((v: any) =>
+      v ? (r.issuances.find((row: any) => row.id === v.id) ?? v) : v,
+    );
   }
   useEffect(() => {
     void load().catch((e) => setError(e.message));
@@ -170,25 +181,185 @@ export function Operations({
       setBusy(false);
     }
   }
+  const isOperations = ["Admin", "Management", "Operations"].includes(
+    session.user.role,
+  );
+  const bucketRows = rows.filter((r) =>
+    bucket === "Delivery planning"
+      ? !r.delivery_plan_id && !r.store_issuance_id
+      : bucket === "Ready for Store"
+        ? r.delivery_plan_id && !r.store_issuance_id
+        : bucket === "Sent to Store"
+          ? r.store_issuance_id
+          : true,
+  );
+  async function sendStore() {
+    if (!selected || !plan || busy) return;
+    setBusy(true);
+    setError("");
+    storeKey.current ??= crypto.randomUUID();
+    try {
+      await api(`/operations/${selected.id}/send-to-store`, {
+        body: { deliveryPlanId: plan.id, requestKey: storeKey.current },
+        csrf: session.csrfToken,
+      });
+      storeKey.current = undefined;
+      setMessage("BOQ issued to Store with the saved delivery plan.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to issue to Store.");
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <section className="detail-panel operations-panel">
+      {(portal || workspace === "received") && (
+        <section aria-label="Operations buckets">
+          <h2>Operations delivery portal</h2>
+          <p>
+            Delivery planning and Store preparation · Hamza Mir & Moaz Ahsan
+          </p>
+          <div className="stage-grid">
+            {[
+              "Issued IPOs",
+              "Received BOQs",
+              "Delivery planning",
+              "Ready for Store",
+              "Sent to Store",
+              "Stock demand",
+            ].map((name) => (
+              <button
+                key={name}
+                className={`stage-card ${bucket === name ? "selected" : ""}`}
+                aria-pressed={bucket === name}
+                onClick={() => {
+                  setBucket(name);
+                  setSelected(undefined);
+                  setWorkspace("received");
+                }}
+              >
+                <strong>{name}</strong>
+                <span>
+                  {name === "Issued IPOs"
+                    ? (portalData?.ipos.length ?? 0)
+                    : name === "Stock demand"
+                      ? (portalData?.demand.length ?? 0)
+                      : rows.filter((r) =>
+                          name === "Delivery planning"
+                            ? !r.delivery_plan_id && !r.store_issuance_id
+                            : name === "Ready for Store"
+                              ? r.delivery_plan_id && !r.store_issuance_id
+                              : name === "Sent to Store"
+                                ? r.store_issuance_id
+                                : true,
+                        ).length}
+                </span>
+              </button>
+            ))}
+          </div>
+          {bucket === "Issued IPOs" && (
+            <div className="order-table-scroll">
+              <table className="order-table">
+                <thead>
+                  <tr>
+                    <th>IPO</th>
+                    <th>Customer / site</th>
+                    <th>BOQ receipt</th>
+                    <th>Document</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {portalData?.ipos.map((i: any) => (
+                    <tr key={i.id}>
+                      <td>{i.number}</td>
+                      <td>
+                        {i.customer}
+                        <br />
+                        {i.site}
+                      </td>
+                      <td>
+                        {i.issuance_id
+                          ? "BOQ received"
+                          : "Awaiting coordinator handoff"}
+                      </td>
+                      <td>
+                        <a
+                          href={`/api/orders/${i.id}/ipo.pdf`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          View IPO
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {bucket === "Stock demand" && (
+            <>
+              <p>
+                Required quantities from issued BOQs. Sending to Store tracks
+                requested preparation; it does not reduce physical stock.
+                Procurement and stock-on-hand reconciliation follow later.
+              </p>
+              <div className="order-table-scroll">
+                <table className="order-table">
+                  <thead>
+                    <tr>
+                      <th>Item / specification</th>
+                      <th>Brand</th>
+                      <th>Unit</th>
+                      <th>Required</th>
+                      <th>Awaiting Store</th>
+                      <th>Sent to Store</th>
+                      <th>Sites</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {portalData?.demand.map((d: any, index: number) => (
+                      <tr key={index}>
+                        <td>
+                          {d.item_key}
+                          <br />
+                          {d.specification}
+                        </td>
+                        <td>{d.brand}</td>
+                        <td>{d.unit}</td>
+                        <td>{d.required_quantity}</td>
+                        <td>{d.awaiting_store_quantity}</td>
+                        <td>{d.sent_to_store_quantity}</td>
+                        <td>{d.sites}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </section>
+      )}
       <div
         className="master-tabs"
         role="tablist"
         aria-label="Operations workspaces"
       >
-        <button
-          role="tab"
-          aria-selected={workspace === "handoff"}
-          className={workspace === "handoff" ? "selected" : ""}
-          disabled={busy}
-          onClick={() => {
-            setWorkspace("handoff");
-            setSelected(undefined);
-          }}
-        >
-          Coordinator handoff
-        </button>
+        {session.user.role !== "Operations" && (
+          <button
+            role="tab"
+            aria-selected={workspace === "handoff"}
+            className={workspace === "handoff" ? "selected" : ""}
+            disabled={busy}
+            onClick={() => {
+              setWorkspace("handoff");
+              setSelected(undefined);
+            }}
+          >
+            Coordinator handoff
+          </button>
+        )}
         <button
           role="tab"
           aria-selected={workspace === "received"}
@@ -320,7 +491,7 @@ export function Operations({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {(workspace === "received" ? bucketRows : rows).map((r) => (
                 <tr key={r.id}>
                   <td>{r.number}</td>
                   <td>
@@ -390,7 +561,12 @@ export function Operations({
                 >
                   <fieldset
                     className="order-fields"
-                    disabled={busy || planLoading}
+                    disabled={
+                      busy ||
+                      planLoading ||
+                      !!selected.store_issuance_id ||
+                      !isOperations
+                    }
                   >
                     {deliveryFields.map(([key, label]) => (
                       <label key={key}>
@@ -421,7 +597,12 @@ export function Operations({
                       </label>
                     ))}
                   </fieldset>
-                  <button className="dark-button" disabled={busy}>
+                  <button
+                    className="dark-button"
+                    disabled={
+                      busy || !!selected.store_issuance_id || !isOperations
+                    }
+                  >
                     Save delivery details
                   </button>
                   {plan && (
@@ -431,6 +612,35 @@ export function Operations({
                     </p>
                   )}
                 </form>
+              )}
+              {selected.store_issuance_id ? (
+                <p>
+                  Issued to Store: <strong>{selected.store_number}</strong> ·{" "}
+                  <a
+                    href={`/api/operations/store/${selected.store_issuance_id}/report.pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Download Store BOQ
+                  </a>
+                </p>
+              ) : (
+                isOperations && (
+                  <button
+                    className="dark-button"
+                    disabled={
+                      busy ||
+                      !planReady ||
+                      !plan ||
+                      !deliveryFields.every(
+                        ([key]) => details[key] === plan.details[key],
+                      )
+                    }
+                    onClick={() => void sendStore()}
+                  >
+                    Issue BOQ to Store
+                  </button>
+                )
               )}
             </section>
           )}

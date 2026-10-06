@@ -13,6 +13,14 @@ export function ordersHttp(
   const r = Router();
   r.use(requireSession);
   r.use((req, _res, next) => {
+    if (req.method !== "GET" && req.authSession!.user.role === "Operations")
+      throw new HttpError(
+        403,
+        "Operations accounts cannot change costing, quotations or IPO approvals.",
+      );
+    next();
+  });
+  r.use((req, _res, next) => {
     if (
       req.method !== "GET" &&
       !equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken)

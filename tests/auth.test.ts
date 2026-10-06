@@ -260,7 +260,7 @@ test("production cookies use the host prefix and Secure", async () => {
 test("all supported roles are persisted and returned; role cannot be supplied through login", async () => {
   await setup();
   const hashed = await hashPassword(password);
-  for (const role of ["Management", "Employee", "Coordinator"]) {
+  for (const role of ["Management", "Employee", "Coordinator", "Operations"]) {
     const email = `${role.toLowerCase()}@example.test`;
     await db.pool.query(
       `INSERT INTO users (id,email,display_name,password_hash,role) VALUES (gen_random_uuid(),$1,$2,$3,$2)`,
