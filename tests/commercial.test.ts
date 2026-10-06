@@ -239,13 +239,17 @@ test("all presentations reconcile without duplicated BESS/EPC amounts or interna
       assert.deepEqual(q.terms, TERMS);
       assert(!JSON.stringify(q).includes("approved_specification"));
       assert(!JSON.stringify(q).includes("rateVersion"));
-      assert(!JSON.stringify(q).includes("markup"));
+      assert(!/"(?:markup|markups|profit)"\s*:/.test(JSON.stringify(q)));
       if (taxMode === "Tax Included") {
         assert.deepEqual(
           q.footer.map((r) => r.label),
           ["Total", "Special Discount", "Net Total"],
         );
-        assert(!/GST|sales tax|tax included/i.test(JSON.stringify(q)));
+        assert(
+          !/GST|sales tax|tax included/i.test(
+            JSON.stringify({ lines: q.lines, footer: q.footer }),
+          ),
+        );
       } else
         assert.deepEqual(
           q.footer.map((r) => r.label),

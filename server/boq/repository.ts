@@ -313,7 +313,7 @@ export class BoqRepository {
   async attachment(owner: string, id: string) {
     const r = (
       await this.pool.query(
-        "SELECT * FROM survey_uploads WHERE id=$1 AND (owner_id=$2 OR EXISTS(SELECT 1 FROM boq_uploads WHERE upload_id=$1) OR EXISTS(SELECT 1 FROM boq_review_submissions s JOIN survey_drafts d ON d.id=s.draft_id WHERE (s.snapshot->'survey'->'uploadIds') ? $1::text AND (d.owner_id=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')))))",
+        "SELECT * FROM survey_uploads WHERE id=$1 AND (owner_id=$2 OR EXISTS(SELECT 1 FROM boq_uploads WHERE upload_id=$1) OR EXISTS(SELECT 1 FROM costing_approval_evidence e JOIN costing_approval_instructions a ON a.submission_id=e.submission_id WHERE e.upload_id=$1 AND (a.recorded_by=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')))) OR EXISTS(SELECT 1 FROM boq_review_submissions s JOIN survey_drafts d ON d.id=s.draft_id WHERE (s.snapshot->'survey'->'uploadIds') ? $1::text AND (d.owner_id=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')))))",
         [id, owner],
       )
     ).rows[0];

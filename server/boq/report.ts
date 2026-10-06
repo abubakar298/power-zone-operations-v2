@@ -1,4 +1,8 @@
-import { drawReportLogo, drawReportFooter, reportBottomMargin } from "../reports/branding.js";
+import {
+  drawReportLogo,
+  drawReportFooter,
+  reportBottomMargin,
+} from "../reports/branding.js";
 import type { BoqSnapshot } from "./engine.js";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
@@ -47,6 +51,11 @@ export function buildCostingPdf(
     `Customer: ${s.customer.name}`,
     `Site: ${s.survey.siteName} | Code: ${s.survey.siteCode} | Location: ${s.survey.location}`,
     `PV: ${money(s.engineering.pvKwp, 3)} kWp | Inverter: ${s.survey.inverter} | Battery: ${s.survey.batteryKwh} kWh`,
+    ...(s.generalAllowances
+      ? [
+          `Source: General quotation without survey | Allowances: ${s.generalAllowances.version}`,
+        ]
+      : []),
     `Prepared by: ${s.survey.preparedBy}${createdAt ? " | Saved: " + new Date(createdAt).toISOString().slice(0, 10) : ""}`,
     number
       ? "Saved BOQ costing. This report uses the preserved snapshot."
@@ -74,7 +83,12 @@ export function buildCostingPdf(
     y += 5;
     autoTable(pdf, {
       startY: y,
-      margin: { left: margin, right: margin, top: 18, bottom: reportBottomMargin },
+      margin: {
+        left: margin,
+        right: margin,
+        top: 18,
+        bottom: reportBottomMargin,
+      },
       head: [head],
       body,
       theme: "striped",
@@ -165,6 +179,9 @@ export function buildCostingPdf(
     ]),
     true,
   );
-  drawReportFooter(pdf, label(`${title} | ${s.survey.siteCode} | Internal costing`));
+  drawReportFooter(
+    pdf,
+    label(`${title} | ${s.survey.siteCode} | Internal costing`),
+  );
   return pdf;
 }

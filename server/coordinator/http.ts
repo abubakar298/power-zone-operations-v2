@@ -9,6 +9,14 @@ export function coordinatorHttp(
 ) {
   const r = Router();
   r.use(requireSession);
+  r.use((req, _res, next) => {
+    if (req.method !== "GET" && req.authSession!.user.role === "Operations")
+      throw new HttpError(
+        403,
+        "Operations accounts cannot change commercial workflow.",
+      );
+    next();
+  });
   r.get("/", async (req, res) => {
     const scope = req.query.scope ?? "mine";
     if (scope !== "mine" && scope !== "team")

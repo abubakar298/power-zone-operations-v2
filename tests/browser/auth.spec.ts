@@ -284,6 +284,17 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Submit for review", exact: true })
     .click();
+  for (const [label, value] of [
+    ["Solar", "20"],
+    ["Structure", "20"],
+    ["BESS", "15"],
+    ["Earthing", "20"],
+    ["Balance of systems", "20"],
+    ["Other items", "20"],
+  ])
+    await page
+      .getByLabel(`Approval ${label} markup %`, { exact: true })
+      .fill(value);
   await page
     .getByRole("button", { name: "Approve & save", exact: true })
     .click();
@@ -323,6 +334,17 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Submit for review", exact: true })
     .click();
+  for (const [label, value] of [
+    ["Solar", "20"],
+    ["Structure", "20"],
+    ["BESS", "15"],
+    ["Earthing", "20"],
+    ["Balance of systems", "20"],
+    ["Other items", "20"],
+  ])
+    await page
+      .getByLabel(`Approval ${label} markup %`, { exact: true })
+      .fill(value);
   await page
     .getByRole("button", { name: "Approve & create quotation", exact: true })
     .click();
@@ -452,6 +474,17 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Submit for review", exact: true })
     .click();
+  for (const [label, value] of [
+    ["Solar", "20"],
+    ["Structure", "20"],
+    ["BESS", "15"],
+    ["Earthing", "20"],
+    ["Balance of systems", "20"],
+    ["Other items", "20"],
+  ])
+    await page
+      .getByLabel(`Approval ${label} markup %`, { exact: true })
+      .fill(value);
   await page
     .getByRole("button", { name: "Approve & create quotation", exact: true })
     .click();
@@ -950,6 +983,28 @@ test("management bucket opens a coordinator costing review and isolates approval
   await expect(
     page.getByRole("heading", { name: "Management document hub" }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Customer & site budgets", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Customer & site portfolio" }),
+  ).toBeVisible();
+  await page.getByLabel("Reporting customer").selectOption("3");
+  await expect(
+    page.getByRole("button", { name: "View site budget" }).first(),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "View site budget" }).first().click();
+  await expect(
+    page.getByRole("heading", { name: /Peachtree phase comparison/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "Not entered", exact: true }),
+  ).toHaveCount(6);
+  await page.screenshot({
+    path: "test-results/director-portfolio.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Approvals", exact: true }).click();
   await expect(page.getByLabel("Work scope")).toHaveValue("team");
   await page
     .getByLabel("Show documents awaiting management action only")
@@ -973,6 +1028,161 @@ test("management bucket opens a coordinator costing review and isolates approval
   ).toBeVisible();
   await page.screenshot({
     path: "test-results/management-bucket-review.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Back to BOQs", exact: true }).click();
+  await page.getByRole("button", { name: "Quick BOQ · no survey" }).click();
+  await page.getByLabel("Customer", { exact: true }).selectOption("3");
+  await page.getByLabel("New site name").fill("Quick proposal 67890");
+  await page.getByLabel("Panel quantity", { exact: true }).fill("60");
+  await page.getByLabel("Panel wattage (W)", { exact: true }).fill("645");
+  await page
+    .getByLabel("Inverter configuration", { exact: true })
+    .selectOption("2×15 kW");
+  await page
+    .getByLabel("Total battery capacity (kWh)", { exact: true })
+    .fill("40");
+  for (const [field, label] of [
+    ["Solar Panel brand", "Any of the Above"],
+    ["Inverter brand", "Chint Power"],
+    ["Battery & BMS brand", "Chint Power"],
+    ["Cable brand", "Newage Cables"],
+    ["Switchgear brand", "CHINT"],
+  ])
+    await page.getByLabel(field, { exact: true }).selectOption({ label });
+  await expect(
+    page.getByRole("heading", { name: "Automatic cable allowances" }),
+  ).toBeVisible();
+  await expect(page.getByText("174.15 m", { exact: true })).toHaveCount(2);
+  await expect(page.getByLabel("Upload survey document")).toHaveCount(0);
+  await expect(page.getByLabel("6mm² DC cable total (m)")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Calculate & review BOQ", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Costing preview", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "test-results/quick-boq-desktop.png",
+    fullPage: true,
+  });
+});
+
+test("Coordinator records external approval with screenshots and receives its quotation settings", async ({
+  page,
+}) => {
+  const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? "3180"}`;
+  const login = await page.request.post("/api/auth/login", {
+    headers: { Origin: origin },
+    data: {
+      email: "atif-browser@example.test",
+      password: "browser-coordinator-only-298",
+    },
+  });
+  expect(login.ok()).toBe(true);
+  const session = await login.json();
+  const headers = { Origin: origin, "X-CSRF-Token": session.csrfToken };
+  const masters = await (await page.request.get("/api/masters")).json();
+  const brand = (category: string) =>
+    masters.brands.find(
+      (b: any) => b.category === category && b.status === "Active",
+    ).id;
+  const inputs = {
+    sourceMode: "General quotation",
+    customerId: 0,
+    siteName: "SAMPLE External chat approval",
+    siteCode: "CHATBROWSER",
+    location: "Lahore",
+    panelQty: 30,
+    panelWattage: "645",
+    structure: "L2",
+    dcMetres: "0",
+    earth25: "0",
+    earth6: "0",
+    earth10: "0",
+    inverter: "20 kW",
+    batteryKwh: 15,
+    smartMeter: false,
+    genset: false,
+    preparedBy: "Atif",
+    brands: {
+      solar: brand("Solar Panel"),
+      inverter: brand("Inverter"),
+      battery: brand("Battery & BMS"),
+      cable: brand("Cable"),
+      switchgear: brand("Switchgear"),
+    },
+  };
+  const d = await (
+    await page.request.post("/api/boqs/drafts", {
+      headers,
+      data: { version: 0, inputs },
+    })
+  ).json();
+  const p = await (
+    await page.request.post("/api/boqs/preview", { headers, data: inputs })
+  ).json();
+  const s = await page.request.post("/api/boqs/reviews", {
+    headers,
+    data: { draftId: d.id, version: d.version, fingerprint: p.fingerprint },
+  });
+  expect(s.ok()).toBe(true);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: /Costing review/ }).click();
+  await page
+    .getByRole("row", { name: /SAMPLE External chat approval/ })
+    .getByRole("button", { name: "Open workflow" })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Record approval received outside the app",
+    }),
+  ).toBeVisible();
+  await page.getByLabel("External approver name").fill("Director Operations");
+  await page
+    .getByLabel("Approval quotation format")
+    .selectOption("Full Breakup");
+  await page.getByLabel("Approval tax display").selectOption("Tax Included");
+  await page.getByLabel("Approval BESS markup %").fill("33");
+  await page
+    .getByLabel("Instructions for quotation")
+    .fill("Approved costing and these quotation settings.");
+  const screenshot = await page.screenshot();
+  await page
+    .getByLabel("Approval screenshots")
+    .setInputFiles({
+      name: "sample-approval.png",
+      mimeType: "image/png",
+      buffer: screenshot,
+    });
+  await expect(
+    page.getByText("sample-approval.png", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel(
+      "I confirm these screenshots approve this exact costing and the quotation instructions entered above.",
+    )
+    .check();
+  await page
+    .getByRole("button", { name: "Record external approval & save BOQ" })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "External costing approval recorded",
+  );
+  await page
+    .getByRole("button", { name: "Create quotation", exact: true })
+    .click();
+  await expect(page.getByLabel("Price presentation")).toHaveValue(
+    "Full Breakup",
+  );
+  await expect(
+    page.getByLabel("Tax presentation", { exact: true }),
+  ).toHaveValue("Tax Included");
+  await expect(page.getByLabel("BESS Markup %", { exact: true })).toHaveValue(
+    "33",
+  );
+  await page.screenshot({
+    path: "test-results/external-approval-pricing.png",
     fullPage: true,
   });
 });

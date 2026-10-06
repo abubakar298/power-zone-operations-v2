@@ -1,5 +1,6 @@
 import { Decimal } from "decimal.js";
 import { HttpError } from "../http/errors.js";
+import { generalAllowances, GENERAL_ALLOWANCE_VERSION } from "./general.js";
 import type { Survey } from "./schema.js";
 export interface CustomerMaster {
   id: number;
@@ -83,6 +84,10 @@ export function calculate(s: Survey, m: Masters) {
   const config = m.inverters.find((i) => i.configuration === s.inverter);
   if (!config)
     throw new HttpError(400, "Select a supported inverter configuration.");
+  const allowances =
+    s.sourceMode === "General quotation"
+      ? generalAllowances(s.panelQty, s.panelWattage, config.quantity)
+      : undefined;
   const rule = (n: number) => {
     const v = m.rules.find((r) => r.key === `engineering-${n}`);
     if (!v) throw new HttpError(422, `Engineering rule ${n} is missing.`);
@@ -183,13 +188,25 @@ export function calculate(s: Survey, m: Masters) {
   add("BAT-HV-05 KW WO BMS", modules, "BESS", "battery");
   add("CH-BMS-HV", bms, "BESS", "battery");
   for (const [key, qty] of Object.entries({
-    "6mm² DC Cable Red": new Decimal(s.dcMetres).div(2),
-    "6mm² DC Cable Black": new Decimal(s.dcMetres).div(2),
-    "2.5mm² Earthing Cable": s.earth25,
-    "6mm² Earthing Cable": s.earth6,
-    "10mm² Earthing Cable": s.earth10,
-    "16mm² 4C AC Cable": dual ? rule(11).mul(config.quantity) : rule(9),
-    "25mm² 4C AC Cable": dual ? rule(12) : rule(10),
+    "6mm² DC Cable Red": allowances
+      ? new Decimal(allowances.dcRed)
+      : new Decimal(s.dcMetres).div(2),
+    "6mm² DC Cable Black": allowances
+      ? new Decimal(allowances.dcBlack)
+      : new Decimal(s.dcMetres).div(2),
+    "2.5mm² Earthing Cable": allowances?.earth25 ?? s.earth25,
+    "6mm² Earthing Cable": allowances?.earth6 ?? s.earth6,
+    "10mm² Earthing Cable": allowances?.earth10 ?? s.earth10,
+    "16mm² 4C AC Cable": allowances
+      ? allowances.ac16
+      : dual
+        ? rule(11).mul(config.quantity)
+        : rule(9),
+    "25mm² 4C AC Cable": allowances
+      ? allowances.ac25
+      : dual
+        ? rule(12)
+        : rule(10),
   }))
     add(key, qty, "EPC", "cable", "Installation Cost");
   for (const [key, qty] of Object.entries({
@@ -299,6 +316,14 @@ export function calculate(s: Survey, m: Masters) {
     rules: m.rules,
     inverterConfig: config,
     classifications: m.classifications,
+    ...(allowances
+      ? {
+          generalAllowances: {
+            version: GENERAL_ALLOWANCE_VERSION,
+            ...allowances,
+          },
+        }
+      : {}),
     engineVersion: 1,
   };
 }

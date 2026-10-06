@@ -1,3 +1,4 @@
+import { Director } from "./Director.js";
 import { Coordinator } from "./Coordinator.js";
 import { Operations } from "./Operations.js";
 import { Commercial } from "./Commercial.js";
@@ -110,6 +111,9 @@ export function Dashboard({
     setMobileOpen(false);
     setMenuOpen(false);
   }
+  const Home = ["Admin", "Management"].includes(session.user.role)
+    ? Director
+    : Coordinator;
   return (
     <div className="workspace">
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
@@ -339,7 +343,7 @@ export function Dashboard({
             <Operations session={session} portal />
           )}
           {view === "dashboard" && session.user.role !== "Operations" && (
-            <Coordinator
+            <Home
               session={session}
               onOpen={(task) => {
                 if (task.draft_id) setRevisionDraftId(task.draft_id);

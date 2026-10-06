@@ -343,6 +343,39 @@ export function Commercial({
         .catch(fail)
         .finally(() => setRevisionLoading(false));
   }, []);
+  async function applyApprovalInstructions(id: string) {
+    const a = await api<any>(`/boqs/${id}/instructions`);
+    if (a) {
+      setInput((old) =>
+        old.boqRevisionId === id
+          ? {
+              ...old,
+              presentation: a.instructions.presentation,
+              taxMode: a.instructions.taxMode,
+              markups: a.instructions.markups,
+              remarks: a.instructions.notes,
+            }
+          : old,
+      );
+      setNotice(
+        `Costing approval instructions loaded · ${a.channel} · ${a.claimed_approver}.`,
+      );
+    }
+  }
+  useEffect(() => {
+    if (
+      initialRevisionId &&
+      !initialRequestId &&
+      !initialQuotationId &&
+      !initialPricingId
+    ) {
+      void api<any>(`/commercial/revision-context/${initialRevisionId}`)
+        .then((context) => {
+          if (!context) return applyApprovalInstructions(initialRevisionId);
+        })
+        .catch(fail);
+    }
+  }, []);
   function fail(e: unknown) {
     setError(
       e instanceof Error ? e.message : "Unable to complete this action.",
@@ -583,7 +616,11 @@ export function Commercial({
                   <select
                     aria-label="Approved BOQ revision"
                     value={input.boqRevisionId}
-                    onChange={(e) => update({ boqRevisionId: e.target.value })}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      update({ boqRevisionId: id });
+                      if (id) void applyApprovalInstructions(id).catch(fail);
+                    }}
                     required
                   >
                     <option value="">Select approved revision</option>
@@ -614,6 +651,7 @@ export function Commercial({
                 <label>
                   Tax presentation
                   <select
+                    aria-label="Tax presentation"
                     value={input.taxMode}
                     onChange={(e) =>
                       update({

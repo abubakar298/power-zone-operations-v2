@@ -381,3 +381,100 @@ test("costing PDF exports require authentication, owned drafts and an unchanged 
   assert.equal(saved.body.subarray(0, 5).toString(), "%PDF-");
   assert(saved.headers["content-disposition"].includes(record.number));
 });
+
+test("general quotations derive exact cable allowances server-side without changing surveyed BOQs", () => {
+  const before = calculate(survey, masters);
+  const quick = calculate(
+    {
+      ...survey,
+      sourceMode: "General quotation",
+      dcMetres: "1",
+      earth25: "1",
+      earth6: "1",
+      earth10: "1",
+    },
+    masters,
+  );
+  const qty = (s: any, key: string) =>
+    s.lines.find((l: any) => l.key === key)?.qty ?? "0";
+  assert.equal(qty(quick, "6mm² DC Cable Red"), "174.15");
+  assert.equal(qty(quick, "6mm² DC Cable Black"), "174.15");
+  assert.equal(qty(quick, "2.5mm² Earthing Cable"), "29.025");
+  assert.equal(qty(quick, "6mm² Earthing Cable"), "116.1");
+  assert.equal(qty(quick, "10mm² Earthing Cable"), "116.1");
+  assert.equal(qty(quick, "16mm² 4C AC Cable"), "15");
+  assert.equal(qty(quick, "25mm² 4C AC Cable"), "20");
+  assert.equal(quick.generalAllowances?.version, "general-cables-2026-10-v1");
+  const single = calculate(
+    {
+      ...survey,
+      inverter: "15 kW",
+      batteryKwh: 20,
+      sourceMode: "General quotation",
+    },
+    masters,
+  );
+  assert.equal(qty(single, "16mm² 4C AC Cable"), "30");
+  assert.equal(qty(single, "25mm² 4C AC Cable"), "0");
+  assert.deepEqual(calculate(survey, masters), before);
+  assert.equal(before.generalAllowances, undefined);
+});
+
+test("quick quotation scope uses calculated cable quantities and includes the additional-quantity note", async () => {
+  const { price, quote } = await import("../server/commercial/engine.js");
+  const { pricingSchema, quotationSchema } =
+    await import("../server/commercial/schema.js");
+  const { randomUUID } = await import("node:crypto");
+  const b = calculate(
+    {
+      ...survey,
+      sourceMode: "General quotation",
+      dcMetres: "0",
+      earth25: "0",
+      earth6: "0",
+      earth10: "0",
+    },
+    masters,
+  );
+  const p = price(
+    b,
+    "GENERAL-R0",
+    pricingSchema.parse({
+      boqRevisionId: randomUUID(),
+      presentation: "Full Breakup",
+      taxMode: "Show Sales Tax Separately",
+      markups: {
+        solar: "10",
+        structure: "20",
+        bess: "30",
+        earthing: "20",
+        balance: "20",
+        rest: "20",
+      },
+      preparedBy: "Test",
+    }),
+  );
+  const q = quote(
+    p,
+    b,
+    quotationSchema.parse({
+      pricingId: randomUUID(),
+      quotedDate: "2026-10-07",
+      validity: "7 Days",
+      proposedBy: "Test",
+    }),
+  );
+  assert.equal(
+    q.lines.find((l) => l.description.startsWith("6mm² DC Cable Red and Black"))
+      ?.qty,
+    "348.3",
+  );
+  assert.equal(
+    q.lines.find((l) => l.description.startsWith("2.5mm² Earthing Cable"))?.qty,
+    "29.025",
+  );
+  assert(
+    q.notes.some((n) => n.includes("20% markup") && n.includes("18% GST")),
+  );
+  assert(q.notes.some((n) => n.includes("without a site survey")));
+});

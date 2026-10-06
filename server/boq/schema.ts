@@ -7,6 +7,7 @@ const quantity = z
   );
 export const surveySchema = z
   .object({
+    sourceMode: z.enum(["Survey", "General quotation"]).optional(),
     customerId: z.number().int().min(0),
     siteName: z.string().trim().min(1).max(200),
     siteCode: z

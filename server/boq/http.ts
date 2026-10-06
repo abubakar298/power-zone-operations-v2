@@ -1,3 +1,4 @@
+import { instructionsSchema, externalApprovalSchema } from "./instructions.js";
 import { buildCostingPdf } from "./report.js";
 import { Router, type RequestHandler } from "express";
 import { z } from "zod";
@@ -117,6 +118,34 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         ),
       );
   });
+  r.get("/:id/instructions", async (req, res) => {
+    if (!z.uuid().safeParse(req.params.id).success)
+      throw new HttpError(400, "Invalid BOQ.");
+    res.json(
+      await reviews.instructions(
+        req.authSession!.user.id,
+        String(req.params.id),
+      ),
+    );
+  });
+  r.post("/reviews/:id/external-approval", async (req, res) => {
+    const v = externalApprovalSchema.safeParse(req.body);
+    if (!v.success || !z.uuid().safeParse(req.params.id).success)
+      throw new HttpError(
+        400,
+        "Record the approver, margins, quotation settings and approval screenshots.",
+      );
+    res.json(
+      await reviews.decide(
+        req.authSession!.user.id,
+        String(req.params.id),
+        "Approved",
+        v.data.comments,
+        v.data.instructions,
+        { approver: v.data.approver, evidenceIds: v.data.evidenceIds },
+      ),
+    );
+  });
   r.get("/reviews/:id", async (req, res) => {
     if (!z.uuid().safeParse(req.params.id).success)
       throw new HttpError(400, "Invalid review.");
@@ -127,6 +156,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
   r.post("/reviews/:id/decision", async (req, res) => {
     const v = z
       .object({
+        instructions: instructionsSchema.optional(),
         outcome: z.enum(["Approved", "Changes requested"]),
         comments: z.string().trim().max(2000).default(""),
       })
@@ -140,6 +170,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         String(req.params.id),
         v.data.outcome,
         v.data.comments,
+        v.data.instructions,
       ),
     );
   });

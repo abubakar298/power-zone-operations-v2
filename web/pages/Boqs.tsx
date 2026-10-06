@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, ApiError, type Session } from "../api.js";
 import { recommendSiteCode } from "../../server/boq/schema.js";
+import { generalAllowances } from "../../server/boq/general.js";
 import { extractText, surveySuggestions } from "../ocr.js";
+import {
+  ApprovalInstructions,
+  blankInstructions,
+} from "../components/ApprovalInstructions.js";
 import { BoqCosting } from "./BoqCosting.js";
 const brandFields = {
   solar: "Solar Panel",
@@ -37,6 +42,12 @@ export function Boqs({
     [reviewRows, setReviewRows] = useState<any[]>([]),
     [currentReview, setCurrentReview] = useState<any>(),
     [reviewComments, setReviewComments] = useState(""),
+    [instructions, setInstructions] = useState(blankInstructions),
+    [approvalEvidence, setApprovalEvidence] = useState<
+      { id: string; filename: string }[]
+    >([]),
+    [externalApprover, setExternalApprover] = useState(""),
+    [externalConfirmed, setExternalConfirmed] = useState(false),
     [baseRevisionId, setBaseRevisionId] = useState<string>(),
     [revisionReason, setRevisionReason] = useState(""),
     [revisionOrigin, setRevisionOrigin] = useState("Internal management"),
@@ -56,6 +67,8 @@ export function Boqs({
     [preview, setPreview] = useState<{ snapshot: any; fingerprint: string }>(),
     [saved, setSaved] = useState<any>(),
     [suggestions, setSuggestions] = useState<Record<string, string>>({}),
+    [sourceMode, setSourceMode] = useState("Survey"),
+    [pvInput, setPvInput] = useState({ qty: 0, wattage: "0" }),
     [inverter, setInverter] = useState("10 kW");
   const form = useRef<HTMLFormElement>(null);
   async function load() {
@@ -99,7 +112,9 @@ export function Boqs({
       })
       .catch(fail);
   }, []);
-  function fresh() {
+  function fresh(mode = "Survey") {
+    setSourceMode(mode);
+    setPvInput({ qty: 0, wattage: "0" });
     setView("new");
     setBaseRevisionId(undefined);
     setRevisionReason("");
@@ -120,6 +135,11 @@ export function Boqs({
     setInverter("10 kW");
   }
   function resume(d: any) {
+    setSourceMode(d.inputs.sourceMode ?? "Survey");
+    setPvInput({
+      qty: d.inputs.panelQty ?? 0,
+      wattage: d.inputs.panelWattage || "0",
+    });
     setBaseRevisionId(d.base_revision_id ?? undefined);
     setRevisionReason(d.revision_reason ?? "");
     setRevisionOrigin(d.revision_origin ?? "Internal management");
@@ -150,6 +170,9 @@ export function Boqs({
     if (!form.current || (validate && !form.current.reportValidity())) return;
     const f = new FormData(form.current);
     return {
+      ...(sourceMode === "General quotation"
+        ? { sourceMode: "General quotation" }
+        : {}),
       customerId: baseRevisionId
         ? initial.customerId
         : f.get("customerId")
@@ -161,10 +184,10 @@ export function Boqs({
       panelQty: f.get("panelQty") ? Number(f.get("panelQty")) : undefined,
       panelWattage: f.get("panelWattage"),
       structure: f.get("structure"),
-      dcMetres: f.get("dcMetres"),
-      earth25: f.get("earth25"),
-      earth6: f.get("earth6"),
-      earth10: f.get("earth10"),
+      dcMetres: sourceMode === "General quotation" ? "0" : f.get("dcMetres"),
+      earth25: sourceMode === "General quotation" ? "0" : f.get("earth25"),
+      earth6: sourceMode === "General quotation" ? "0" : f.get("earth6"),
+      earth10: sourceMode === "General quotation" ? "0" : f.get("earth10"),
       inverter: f.get("inverter"),
       batteryKwh: Number(f.get("batteryKwh")),
       smartMeter: f.get("smartMeter") === "yes",
@@ -226,6 +249,10 @@ export function Boqs({
     }
   }
   async function openReview(id: string) {
+    setInstructions(blankInstructions());
+    setApprovalEvidence([]);
+    setExternalApprover("");
+    setExternalConfirmed(false);
     setBusy(true);
     setError("");
     try {
@@ -279,6 +306,67 @@ export function Boqs({
       setBusy(false);
     }
   }
+  async function uploadApproval(file?: File) {
+    if (!file || busy) return;
+    if (
+      !["image/png", "image/jpeg"].includes(file.type) ||
+      file.size > 8388608
+    ) {
+      setError("Attach a PNG or JPEG screenshot up to 8 MB.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const uploaded = await api<{ id: string; filename: string }>(
+        "/survey-uploads",
+        {
+          body: { filename: file.name, mime: file.type, base64 },
+          csrf: session.csrfToken,
+        },
+      );
+      setApprovalEvidence((old) => [...old, uploaded]);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function recordExternalApproval() {
+    if (busy || !currentReview) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api<{ saved: any }>(
+        `/boqs/reviews/${currentReview.id}/external-approval`,
+        {
+          body: {
+            instructions,
+            approver: externalApprover,
+            comments: reviewComments,
+            evidenceIds: approvalEvidence.map((e) => e.id),
+            confirmed: externalConfirmed,
+          },
+          csrf: session.csrfToken,
+        },
+      );
+      await load();
+      await openSaved(result.saved.id);
+      setNotice(
+        "External costing approval recorded with its screenshots and quotation instructions. The exact costing is saved; you can now prepare the quotation.",
+      );
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function decide(
     outcome: "Approved" | "Changes requested",
     createQuotation = false,
@@ -290,7 +378,11 @@ export function Boqs({
       const result = await api<{ saved?: any }>(
         `/boqs/reviews/${currentReview.id}/decision`,
         {
-          body: { outcome, comments: reviewComments },
+          body: {
+            outcome,
+            comments: reviewComments,
+            ...(outcome === "Approved" ? { instructions } : {}),
+          },
           csrf: session.csrfToken,
         },
       );
@@ -426,8 +518,11 @@ export function Boqs({
         <>
           <div className="panel-heading">
             <h2>BOQ workspace</h2>
-            <button className="primary" onClick={fresh}>
+            <button className="primary" onClick={() => fresh()}>
               New BOQ
+            </button>
+            <button onClick={() => fresh("General quotation")}>
+              Quick BOQ · no survey
             </button>
           </div>
           <p>
@@ -573,11 +668,20 @@ export function Boqs({
               <p>Reviewer feedback: {currentReview.comments}</p>
             )}
             {currentReview.reviewed_by_name && (
-              <p>Reviewed by {currentReview.reviewed_by_name}</p>
+              <p>
+                {currentReview.approval?.channel === "External chat"
+                  ? `External approval by ${currentReview.approval.claimed_approver} · recorded by ${currentReview.approval.recorded_by_name}`
+                  : `Reviewed by ${currentReview.reviewed_by_name}`}
+              </p>
             )}
             {currentReview.status === "Awaiting review" &&
               ["Admin", "Management"].includes(session.user.role) && (
                 <div className="review-actions">
+                  <ApprovalInstructions
+                    value={instructions}
+                    onChange={setInstructions}
+                    disabled={busy}
+                  />
                   <label>
                     Review comments
                     <textarea
@@ -616,6 +720,103 @@ export function Boqs({
                   </p>
                 </div>
               )}
+            {currentReview.status === "Awaiting review" &&
+              currentReview.owner_id === session.user.id &&
+              session.user.role === "Coordinator" && (
+                <section className="detail-panel">
+                  <h3>Record approval received outside the app</h3>
+                  <p>
+                    Share the costing PDF with your Director, then attach the
+                    chat screenshots confirming this costing and its quotation
+                    margins. This records external approval; it does not claim
+                    an authenticated Director action.
+                  </p>
+                  <label>
+                    Approver name
+                    <input
+                      aria-label="External approver name"
+                      value={externalApprover}
+                      maxLength={100}
+                      onChange={(e) => setExternalApprover(e.target.value)}
+                    />
+                  </label>
+                  <ApprovalInstructions
+                    value={instructions}
+                    onChange={setInstructions}
+                    disabled={busy}
+                  />
+                  <label>
+                    Approval screenshots
+                    <input
+                      aria-label="Approval screenshots"
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      disabled={busy || approvalEvidence.length >= 10}
+                      onChange={(e) => {
+                        void uploadApproval(e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {approvalEvidence.map((e) => (
+                    <p key={e.id}>
+                      <span>{e.filename}</span>{" "}
+                      <button
+                        disabled={busy}
+                        onClick={() =>
+                          setApprovalEvidence(
+                            approvalEvidence.filter((x) => x.id !== e.id),
+                          )
+                        }
+                      >
+                        Remove screenshot
+                      </button>
+                    </p>
+                  ))}
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={externalConfirmed}
+                      onChange={(e) => setExternalConfirmed(e.target.checked)}
+                    />
+                    I confirm these screenshots approve this exact costing and
+                    the quotation instructions entered above.
+                  </label>
+                  <button
+                    className="primary"
+                    disabled={
+                      busy ||
+                      !externalConfirmed ||
+                      !externalApprover.trim() ||
+                      !approvalEvidence.length
+                    }
+                    onClick={() => void recordExternalApproval()}
+                  >
+                    Record external approval &amp; save BOQ
+                  </button>
+                </section>
+              )}
+            {currentReview.approval && (
+              <section className="detail-panel">
+                <h3>Saved quotation instructions</h3>
+                <p>
+                  {currentReview.approval.channel} ·{" "}
+                  {currentReview.approval.instructions.presentation} ·{" "}
+                  {currentReview.approval.instructions.taxMode}
+                </p>
+                <p>
+                  {Object.entries(currentReview.approval.instructions.markups)
+                    .map(([k, v]) => `${k}: ${v}%`)
+                    .join(" · ")}
+                </p>
+                <p>{currentReview.approval.instructions.notes}</p>
+                {currentReview.approval.evidence?.map((e: any) => (
+                  <p key={e.id}>
+                    <a href={`/api/boqs/uploads/${e.id}`}>{e.filename}</a>
+                  </p>
+                ))}
+              </section>
+            )}
             {currentReview.status === "Changes requested" &&
               currentReview.owner_id === session.user.id &&
               drafts.some(
@@ -663,7 +864,9 @@ export function Boqs({
           <section className="detail-panel">
             <h3>Revision / History</h3>
             {onPricing &&
-              ["Admin", "Management"].includes(session.user.role) && (
+              ["Admin", "Management", "Coordinator"].includes(
+                session.user.role,
+              ) && (
                 <button
                   className="primary"
                   disabled={busy}
@@ -746,85 +949,96 @@ export function Boqs({
               />
             </label>
           )}
-          <section className="detail-panel upload-panel">
-            <h3>Upload survey information</h3>
-            <p>
-              Use a survey image, screenshot, PDF (up to 5 pages) or text file.
-              OCR runs on your device. Manual entry is always available.
-            </p>
-            <input
-              aria-label="Upload survey document"
-              type="file"
-              accept="image/png,image/jpeg,application/pdf,text/plain"
-              disabled={busy}
-              onChange={(e) => {
-                void upload(e.target.files?.[0]);
-                e.target.value = "";
-              }}
-            />
-            {progress && <p role="status">{progress}</p>}
-            {uploads.map((u) => (
-              <p key={u.id}>
-                <a href={`/api/boqs/uploads/${u.id}`}>{u.filename}</a>{" "}
-                <button
-                  disabled={busy}
-                  onClick={() => {
-                    setUploads(uploads.filter((x) => x.id !== u.id));
-                    setReviewed(false);
-                    setPreview(undefined);
-                  }}
-                >
-                  Remove from survey
-                </button>
+          {sourceMode !== "General quotation" && (
+            <section className="detail-panel upload-panel">
+              <h3>Upload survey information</h3>
+              <p>
+                Use a survey image, screenshot, PDF (up to 5 pages) or text
+                file. OCR runs on your device. Manual entry is always available.
               </p>
-            ))}
-            {uploads.length > 0 && (
-              <>
-                <label className="source-label">
-                  Extracted source text
-                  <textarea
-                    aria-label="Extracted source text"
-                    value={ocrText}
-                    maxLength={100000}
-                    onChange={(e) => {
-                      setOcrText(e.target.value);
+              <input
+                aria-label="Upload survey document"
+                type="file"
+                accept="image/png,image/jpeg,application/pdf,text/plain"
+                disabled={busy}
+                onChange={(e) => {
+                  void upload(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              {progress && <p role="status">{progress}</p>}
+              {uploads.map((u) => (
+                <p key={u.id}>
+                  <a href={`/api/boqs/uploads/${u.id}`}>{u.filename}</a>{" "}
+                  <button
+                    disabled={busy}
+                    onClick={() => {
+                      setUploads(uploads.filter((x) => x.id !== u.id));
                       setReviewed(false);
                       setPreview(undefined);
-                      setSuggestions(surveySuggestions(e.target.value));
                     }}
-                  />
-                </label>
-                {Object.keys(suggestions).length > 0 && (
-                  <>
-                    <p>
-                      Recognised labelled fields:{" "}
-                      {Object.entries(suggestions)
-                        .map(
-                          ([k, v]) =>
-                            `${quantities[k as keyof typeof quantities]}: ${v}`,
-                        )
-                        .join(" · ")}
-                    </p>
-                    <button disabled={busy} onClick={applySuggestions}>
-                      Apply recognised values for review
-                    </button>
-                  </>
-                )}
-                <label className="review-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={reviewed}
-                    onChange={(e) => {
-                      setReviewed(e.target.checked);
-                      setPreview(undefined);
-                    }}
-                  />
-                  I checked the survey fields against the uploaded source
-                  documents.
-                </label>
-              </>
-            )}
-          </section>
+                  >
+                    Remove from survey
+                  </button>
+                </p>
+              ))}
+              {uploads.length > 0 && (
+                <>
+                  <label className="source-label">
+                    Extracted source text
+                    <textarea
+                      aria-label="Extracted source text"
+                      value={ocrText}
+                      maxLength={100000}
+                      onChange={(e) => {
+                        setOcrText(e.target.value);
+                        setReviewed(false);
+                        setPreview(undefined);
+                        setSuggestions(surveySuggestions(e.target.value));
+                      }}
+                    />
+                  </label>
+                  {Object.keys(suggestions).length > 0 && (
+                    <>
+                      <p>
+                        Recognised labelled fields:{" "}
+                        {Object.entries(suggestions)
+                          .map(
+                            ([k, v]) =>
+                              `${quantities[k as keyof typeof quantities]}: ${v}`,
+                          )
+                          .join(" · ")}
+                      </p>
+                      <button disabled={busy} onClick={applySuggestions}>
+                        Apply recognised values for review
+                      </button>
+                    </>
+                  )}
+                  <label className="review-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={reviewed}
+                      onChange={(e) => {
+                        setReviewed(e.target.checked);
+                        setPreview(undefined);
+                      }}
+                    />
+                    I checked the survey fields against the uploaded source
+                    documents.
+                  </label>
+                </>
+              )}
+            </section>
+          )}
+          {sourceMode === "General quotation" && (
+            <section className="detail-panel">
+              <h3>General quotation · no survey</h3>
+              <p>
+                Cable quantities are calculated automatically from installed PV
+                wattage. These are allowances, not measured site quantities.
+              </p>
+            </section>
+          )}
           <form
             ref={form}
             className="survey-form"
@@ -832,6 +1046,13 @@ export function Boqs({
             onChange={() => {
               setPreview(undefined);
               setNotice("");
+              if (form.current) {
+                const fields = new FormData(form.current);
+                setPvInput({
+                  qty: Number(fields.get("panelQty")) || 0,
+                  wattage: String(fields.get("panelWattage") || "0"),
+                });
+              }
             }}
           >
             <fieldset disabled={busy}>
@@ -898,43 +1119,102 @@ export function Boqs({
                 </label>
               </div>
             </fieldset>
+            {sourceMode === "General quotation" && (
+              <section className="detail-panel">
+                <h3>Automatic cable allowances</h3>
+                <p>
+                  Installed PV:{" "}
+                  {
+                    generalAllowances(
+                      pvInput.qty,
+                      pvInput.wattage,
+                      inverter.startsWith("2×") ? 2 : 1,
+                    ).pvWatts
+                  }{" "}
+                  W
+                </p>
+                <dl className="survey-grid">
+                  {Object.entries(
+                    generalAllowances(
+                      pvInput.qty,
+                      pvInput.wattage,
+                      inverter.startsWith("2×") ? 2 : 1,
+                    ),
+                  )
+                    .filter(([k]) => !["pvWatts", "dcMetres"].includes(k))
+                    .map(([k, v]) => (
+                      <div key={k}>
+                        <dt>
+                          {
+                            {
+                              dcRed: "DC cable · red",
+                              dcBlack: "DC cable · black",
+                              earth25: "2.5mm² earthing",
+                              earth6: "6mm² earthing",
+                              earth10: "10mm² earthing",
+                              ac16: "16mm² AC cable",
+                              ac25: "25mm² AC cable",
+                            }[k]
+                          }
+                        </dt>
+                        <dd>{v} m</dd>
+                      </div>
+                    ))}
+                </dl>
+              </section>
+            )}
             <fieldset disabled={busy}>
-              <legend>2 · Survey quantities & solution</legend>
+              <legend>
+                2 ·{" "}
+                {sourceMode === "General quotation"
+                  ? "PV capacity & solution"
+                  : "Survey quantities & solution"}
+              </legend>
               <div className="survey-grid">
-                {Object.entries(quantities).map(([k, label]) => (
-                  <label key={k}>
-                    {label}
-                    <input
-                      name={k}
-                      aria-label={label}
-                      type="number"
-                      required
-                      min={
-                        k === "panelQty" ? 1 : k === "panelWattage" ? 0.0001 : 0
-                      }
-                      max={
-                        k === "batteryKwh"
-                          ? inverter.startsWith("2×")
-                            ? 120
-                            : 60
-                          : k === "panelQty"
-                            ? 1000000
-                            : 99999999
-                      }
-                      step={
-                        k === "panelQty" ? 1 : k === "batteryKwh" ? 5 : 0.0001
-                      }
-                      defaultValue={
-                        initial[k] ??
-                        (k.startsWith("earth") ||
-                        k === "dcMetres" ||
-                        k === "batteryKwh"
-                          ? "0"
-                          : "")
-                      }
-                    />
-                  </label>
-                ))}
+                {Object.entries(quantities)
+                  .filter(
+                    ([k]) =>
+                      sourceMode !== "General quotation" ||
+                      !["dcMetres", "earth25", "earth6", "earth10"].includes(k),
+                  )
+                  .map(([k, label]) => (
+                    <label key={k}>
+                      {label}
+                      <input
+                        name={k}
+                        aria-label={label}
+                        type="number"
+                        required
+                        min={
+                          k === "panelQty"
+                            ? 1
+                            : k === "panelWattage"
+                              ? 0.0001
+                              : 0
+                        }
+                        max={
+                          k === "batteryKwh"
+                            ? inverter.startsWith("2×")
+                              ? 120
+                              : 60
+                            : k === "panelQty"
+                              ? 1000000
+                              : 99999999
+                        }
+                        step={
+                          k === "panelQty" ? 1 : k === "batteryKwh" ? 5 : 0.0001
+                        }
+                        defaultValue={
+                          initial[k] ??
+                          (k.startsWith("earth") ||
+                          k === "dcMetres" ||
+                          k === "batteryKwh"
+                            ? "0"
+                            : "")
+                        }
+                      />
+                    </label>
+                  ))}
                 <label>
                   Structure
                   <select

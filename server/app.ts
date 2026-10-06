@@ -1,3 +1,5 @@
+import { DirectorRepository } from "./director/repository.js";
+import { directorHttp } from "./director/http.js";
 import { CoordinatorRepository } from "./coordinator/repository.js";
 import { coordinatorHttp } from "./coordinator/http.js";
 import { OperationsRepository } from "./operations/repository.js";
@@ -114,6 +116,10 @@ export function createApp(
   app.use(
     "/api/coordinator",
     coordinatorHttp(new CoordinatorRepository(pool), auth.requireSession),
+  );
+  app.use(
+    "/api/director",
+    directorHttp(new DirectorRepository(pool), auth.requireSession),
   );
   app.use("/api/dashboard", dashboardRoutes(auth.requireSession));
   app.use(

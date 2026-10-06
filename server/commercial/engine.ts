@@ -3,6 +3,7 @@ import type { BoqSnapshot } from "../boq/engine.js";
 import { HttpError } from "../http/errors.js";
 import type { PricingInput, QuotationInput } from "./schema.js";
 export const NOTES = [
+  "Additional quantities beyond this quotation are chargeable at their cost plus 20% markup, followed by 18% GST.",
   "Certified that goods supplied under this quotation were imported by us and income tax under section 148 has already been paid on these goods at import stage. Accordingly, the provisions of Section 153(1) of the Income Tax Ordinance, 2001 are not applicable at the time of payment against this invoice.",
   "All Internal Wiring of existing panel will be done by Customer's Authorized Technician.",
 ];
@@ -188,13 +189,13 @@ export function quotationLines(
   add(
     `6mm² DC Cable Red and Black — ${brand("cable")}`,
     "m",
-    s.survey.dcMetres,
+    s.generalAllowances?.dcMetres ?? s.survey.dcMetres,
     "balance",
   );
   for (const [key, quantity] of [
-    ["2.5mm² Earthing Cable", s.survey.earth25],
-    ["6mm² Earthing Cable", s.survey.earth6],
-    ["10mm² Earthing Cable", s.survey.earth10],
+    ["2.5mm² Earthing Cable", s.generalAllowances?.earth25 ?? s.survey.earth25],
+    ["6mm² Earthing Cable", s.generalAllowances?.earth6 ?? s.survey.earth6],
+    ["10mm² Earthing Cable", s.generalAllowances?.earth10 ?? s.survey.earth10],
   ])
     if (full || D(quantity).gt(0))
       add(`${key} — ${brand("cable")}`, "m", quantity, "balance");
@@ -431,7 +432,14 @@ export function quote(
       "Quotation for Solar Hybrid / Battery Energy Storage System (BESS).",
     lines,
     footer,
-    notes: NOTES,
+    notes: [
+      ...NOTES,
+      ...(boq.survey.sourceMode === "General quotation"
+        ? [
+            "Prepared without a site survey. Cable quantities are calculated allowances; additional quantities are chargeable as stated above.",
+          ]
+        : []),
+    ],
     terms: TERMS,
   };
 }
