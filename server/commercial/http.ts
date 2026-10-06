@@ -101,6 +101,7 @@ export function commercialHttp(
     res.json({
       pricingId: row.pricing_id,
       ...row.snapshot.input,
+      discount: row.snapshot.footer.find((r: any) => r.label === "Special Discount")?.amount ?? "0",
       descriptions: row.snapshot.lines.map((l: any) => l.description),
     });
   });

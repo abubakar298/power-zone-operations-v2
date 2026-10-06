@@ -200,6 +200,10 @@ export function quote(
   boq: BoqSnapshot,
   input: QuotationInput,
 ) {
+  const discount = money(D(input.discount ?? p.discount));
+  if (D(discount).gt(p.total))
+    throw new HttpError(400, "Special discount cannot exceed the quoted total.");
+  const netTotal = money(D(p.total).minus(discount));
   const lines = quotationLines(boq);
   if (input.descriptions && input.descriptions.length !== lines.length)
     throw new HttpError(400, "Provide one description for each quotation row.");
@@ -223,8 +227,8 @@ export function quote(
           { label: "SALES TAX ON OTHER ITEMS @18%", amount: p.otherTax },
         ];
   footer.push(
-    { label: "Special Discount", amount: p.discount },
-    { label: "Net Total", amount: p.netTotal },
+    { label: "Special Discount", amount: discount },
+    { label: "Net Total", amount: netTotal },
   );
   if (p.input.presentation === "Basic Breakup")
     for (const category of p.rows) {
@@ -259,8 +263,9 @@ export function quote(
       quotedDate: input.quotedDate,
       validity: input.validity,
       proposedBy: input.proposedBy,
+      discount,
     },
-    customer: p.customer,
+    customer: { ...p.customer, contactPerson: "", phone: "" },
     siteName: p.siteName,
     siteCode: p.siteCode,
     boqNumber: p.boqNumber,

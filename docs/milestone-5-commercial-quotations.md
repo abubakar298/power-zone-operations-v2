@@ -13,3 +13,6 @@ Saved pricing is CP-{BOQ number}-Vn; quotation identity is Q-{BOQ number}-Vn. Th
 PDF exports are authenticated server attachments. All four presentation combinations are tested and representative PDFs rendered page by page; totals remain together, fixed import/withholding note and all terms are present. The locked BAFL reference No Breakup 15% BESS / 20% rest yields subtotal 7,601,457.40; solar tax 181,116.00; other tax 1,042,253.53; net 8,824,826.93 before discount, or 8,500,000.00 after 324,826.93 discount.
 
 No customer approval, PO, IPO, inventory, invoice, email-provider activation or new paid service is included in this milestone. User production BOQ and rates are not modified by verification.
+
+
+Owner-requested quotation refinements: the preview renders the generated PDF pages, with supplied Power Zone logo/contact footer and top-right Confidential label. Quoted date, proposed by and validity align left; contact person/phone are read from customer master and frozen per quotation (blank when absent). Discount may be overridden on a new quotation without altering its pricing version; net total updates in preview and server validation/fingerprint confirmation is required before save. BESS and Balance amount cells span their scope rows without combined labels.

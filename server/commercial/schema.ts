@@ -24,6 +24,7 @@ export const pricingSchema = z.object({
 export type PricingInput = z.infer<typeof pricingSchema>;
 export const quotationSchema = z.object({
   pricingId: z.uuid(),
+  discount: amount.optional(),
   quotedDate: z.iso.date(),
   validity: z.string().trim().min(1).max(100),
   proposedBy: z.string().trim().min(1).max(100),

@@ -353,3 +353,22 @@ test("saved quotation versions retain pricing, customer descriptions and PDF aft
     /immutable/,
   );
 });
+
+test("quotation discount overrides pricing without changing the saved pricing or earlier quote", async () => {
+  const input = { pricingId: pricing.id, quotedDate: "2026-10-06", validity: "7 Days", proposedBy: "Abu Bakar", discount: "1000.50" };
+  await db.pool.query("UPDATE customers SET contact_person='Test Contact',phone='042-0000000' WHERE id=$1", [pricing.snapshot.customer.id]);
+  const preview = (await post("/quotations/preview", input).expect(200)).body;
+  assert.equal(preview.snapshot.customer.contactPerson, "Test Contact");
+  assert.equal(preview.snapshot.customer.phone, "042-0000000");
+  assert.equal(preview.snapshot.footer.find((r: any) => r.label === "Special Discount").amount, "1000.50");
+  assert.equal(preview.snapshot.footer.at(-1).amount, new Decimal(pricing.snapshot.total).minus("1000.50").toFixed(2));
+  const saved = (await post("/quotations", { ...input, fingerprint: preview.fingerprint, requestKey: randomUUID() }).expect(201)).body;
+  assert.equal(saved.snapshot.input.discount, "1000.50");
+  const copy = (await get(`/quotations/${saved.id}/copy`).expect(200)).body;
+  assert.equal(copy.discount, "1000.50");
+  assert.equal((await get(`/pricing/${pricing.id}`).expect(200)).body.snapshot.discount, pricing.snapshot.discount);
+  assert.equal((await get(`/quotations/${issued.id}`).expect(200)).body.snapshot.footer.find((r: any) => r.label === "Special Discount").amount, issued.snapshot.footer.find((r: any) => r.label === "Special Discount").amount);
+  await post("/quotations/preview", { ...input, discount: "999999999999" }).expect(400);
+  await post("/quotations/preview", { ...input, discount: "-1" }).expect(400);
+  await post("/quotations", { ...input, discount: "2000", fingerprint: preview.fingerprint, requestKey: randomUUID() }).expect(409);
+});

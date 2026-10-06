@@ -1,3 +1,4 @@
+import { drawReportLogo, drawReportFooter, reportBottomMargin } from "../reports/branding.js";
 import type { BoqSnapshot } from "./engine.js";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
@@ -31,10 +32,11 @@ export function buildCostingPdf(
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(19);
   pdf.setTextColor(57, 50, 83);
-  pdf.text("POWER ZONE", margin, 21);
+  drawReportLogo(pdf);
   pdf.setFontSize(9);
   pdf.setFont("helvetica", "normal");
-  pdf.text("ENGINEERING & SERVICES | INTERNAL PROJECT COSTING", margin, 28);
+  pdf.text("ENGINEERING & SERVICES", 60, 19);
+  pdf.text("INTERNAL PROJECT COSTING", 60, 25);
   pdf.setTextColor(35, 35, 40);
   pdf.setFontSize(13);
   pdf.setFont("helvetica", "bold");
@@ -47,7 +49,7 @@ export function buildCostingPdf(
     `PV: ${money(s.engineering.pvKwp, 3)} kWp | Inverter: ${s.survey.inverter} | Battery: ${s.survey.batteryKwh} kWh`,
     `Prepared by: ${s.survey.preparedBy}${createdAt ? " | Saved: " + new Date(createdAt).toISOString().slice(0, 10) : ""}`,
     number
-      ? "Saved R0 costing. This report uses the preserved snapshot."
+      ? "Saved BOQ costing. This report uses the preserved snapshot."
       : "DRAFT PREVIEW - No BOQ number has been issued.",
   ];
   let y = 47;
@@ -72,7 +74,7 @@ export function buildCostingPdf(
     y += 5;
     autoTable(pdf, {
       startY: y,
-      margin: { left: margin, right: margin, top: 18, bottom: 18 },
+      margin: { left: margin, right: margin, top: 18, bottom: reportBottomMargin },
       head: [head],
       body,
       theme: "striped",
@@ -163,20 +165,6 @@ export function buildCostingPdf(
     ]),
     true,
   );
-  const pages = pdf.getNumberOfPages();
-  for (let page = 1; page <= pages; page++) {
-    pdf.setPage(page);
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(8);
-    pdf.setTextColor(110, 110, 120);
-    pdf.text(
-      label(`${title} | ${s.survey.siteCode} | Internal costing`),
-      margin,
-      287,
-    );
-    pdf.text(`Page ${page} of ${pages}`, width - margin, 287, {
-      align: "right",
-    });
-  }
+  drawReportFooter(pdf, label(`${title} | ${s.survey.siteCode} | Internal costing`));
   return pdf;
 }

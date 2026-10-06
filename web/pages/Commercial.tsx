@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { Decimal } from "decimal.js";
+import { useEffect, useRef, useState } from "react";
 import { api, type Session } from "../api.js";
 import type {
   PricingInput,
@@ -29,116 +31,58 @@ const defaults = (name: string, id = ""): PricingInput => ({
   preparedBy: name,
   remarks: "",
 });
-export function QuotationView({
-  snapshot: s,
-  number,
-  pdfUrl,
-}: {
-  snapshot: QuotationSnapshot;
-  number?: string;
-  pdfUrl?: string;
+export function QuotationView({ snapshot: s, number, pdfUrl, discount, onDiscount, draftInput, csrf }: {
+  snapshot: QuotationSnapshot; number?: string; pdfUrl?: string; discount?: string;
+  onDiscount?: (value: string) => void; draftInput?: QuotationInput; csrf?: string;
 }) {
-  const amounts = s.presentation === "Basic Breakup";
-  return (
-    <section className="boq-costing quotation-preview">
-      <div className="panel-heading">
-        <h2>{number ?? "Quotation preview"}</h2>
-        {pdfUrl && (
-          <a className="dark-button" href={pdfUrl} download>
-            Download quotation PDF
-          </a>
-        )}
-      </div>
-      <p className="eyebrow">POWER ZONE ENGINEERING & SERVICES (PVT) LIMITED</p>
-      <div className="quote-metadata">
-        <p>
-          <strong>Customer</strong> {s.customer.name}
-        </p>
-        <p>
-          <strong>Quoted date</strong> {s.input.quotedDate}
-        </p>
-        <p>
-          <strong>Site</strong> {s.siteName} · {s.siteCode}
-        </p>
-        <p>
-          <strong>Proposed by</strong> {s.input.proposedBy}
-        </p>
-        <p>
-          <strong>BOQ revision</strong> {s.boqNumber}
-        </p>
-        <p>
-          <strong>Validity</strong> {s.input.validity}
-        </p>
-      </div>
-      <p>{s.subject}</p>
-      <p>Solution ID: {s.solutionId} · Security Level: Confidential</p>
-      <div className="table-scroll">
-        <table className="master-table quotation-table">
-          <thead>
-            <tr>
-              <th>No.</th>
-              <th>Product / Service Description</th>
-              <th>UOM</th>
-              <th className="numeric">Qty</th>
-              {amounts && <th className="numeric">Amount (PKR)</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {s.lines.map((l, i) => (
-              <tr key={i}>
-                <td>{i + 1}</td>
-                <td>{l.description}</td>
-                <td>{l.unit}</td>
-                <td className="numeric">
-                  {new Intl.NumberFormat("en-PK", {
-                    maximumFractionDigits: 4,
-                  }).format(Number(l.qty))}
-                </td>
-                {amounts && l.amount && (
-                  <td rowSpan={l.span} className="numeric">
-                    {money(l.amount)}
-                    {(l.span ?? 1) > 1 && (
-                      <small className="merged-amount">
-                        Combined {l.group === "bess" ? "BESS" : "Balance / EPC"}
-                      </small>
-                    )}
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="quote-totals">
-        {s.footer.map((r, i) => (
-          <p
-            key={r.label}
-            className={i === s.footer.length - 1 ? "net-total" : ""}
-          >
-            <span>{r.label}</span>
-            <strong>PKR {money(r.amount)}</strong>
-          </p>
-        ))}
-      </div>
-      <h3>Notes</h3>
-      <ol>
-        {s.notes.map((n) => (
-          <li key={n}>{n}</li>
-        ))}
-      </ol>
-      <h3>Terms and conditions</h3>
-      <ol>
-        {s.terms.map((t) => (
-          <li key={t}>{t}</li>
-        ))}
-      </ol>
-      {!number && (
-        <p className="muted-label">
-          Draft preview. No quotation number has been issued.
-        </p>
-      )}
-    </section>
-  );
+  const pages = useRef<HTMLDivElement>(null);
+  const [pdfError, setPdfError] = useState("");
+  const serialized = draftInput ? JSON.stringify(draftInput) : "";
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    let task: any;
+    async function render() {
+      setPdfError("");
+      try {
+        const response = await fetch(pdfUrl ?? "/api/commercial/quotations/preview.pdf", {
+          method: pdfUrl ? "GET" : "POST", credentials: "same-origin", cache: "no-store", signal: controller.signal,
+          ...(pdfUrl ? {} : { headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf ?? "" }, body: serialized }),
+        });
+        if (!response.ok) throw new Error((await response.json()).message ?? "Unable to load quotation PDF.");
+        const data = await response.arrayBuffer();
+        const pdf = await import("pdfjs-dist");
+        pdf.GlobalWorkerOptions.workerSrc = pdfWorker;
+        task = pdf.getDocument({ data });
+        const document = await task.promise;
+        const canvases: HTMLCanvasElement[] = [];
+        for (let i = 1; i <= document.numPages; i++) {
+          if (cancelled) return;
+          const page = await document.getPage(i), viewport = page.getViewport({ scale: 1.5 });
+          const canvas = window.document.createElement("canvas");
+          canvas.width = viewport.width; canvas.height = viewport.height;
+          canvas.setAttribute("aria-label", `Quotation PDF page ${i}`);
+          await page.render({ canvasContext: canvas.getContext("2d")!, canvas, viewport }).promise;
+          canvases.push(canvas);
+        }
+        if (!cancelled) pages.current?.replaceChildren(...canvases);
+      } catch (e) { if (!cancelled) setPdfError(e instanceof Error ? e.message : "Unable to load PDF."); }
+    }
+    void render();
+    return () => { cancelled = true; controller.abort(); void task?.destroy(); };
+  }, [pdfUrl, serialized, csrf]);
+  return <section className="boq-costing quotation-preview">
+    <div className="panel-heading"><h2>{number ?? "Quotation preview"}</h2>
+      {pdfUrl && <a className="dark-button" href={pdfUrl} download>Download quotation PDF</a>}
+    </div>
+    {onDiscount && <div className="quotation-preview-controls">
+      <label>Quotation discount (PKR)<input aria-label="Quotation discount (PKR)" type="number" min="0" step="0.01" value={discount ?? s.input.discount} onChange={(e) => onDiscount(e.target.value)} /></label>
+      <strong>Net Total: PKR {money(s.footer.at(-1)!.amount)}</strong>
+    </div>}
+    {pdfError && <p role="alert">{pdfError}</p>}
+    <div className="quote-metadata sr-only">Validity {s.input.validity}</div>
+    <div className="quotation-pdf-pages" ref={pages} aria-label="Quotation PDF preview" />
+  </section>;
 }
 export function Commercial({
   session,
@@ -275,6 +219,7 @@ export function Commercial({
       });
       setQuoteInput({
         ...data,
+        discount: result.snapshot.input.discount,
         descriptions: result.snapshot.lines.map((l) => l.description),
       });
       setQuotePreview(result);
@@ -326,6 +271,23 @@ export function Commercial({
     setQuotePreview(undefined);
     setSavedQuote(undefined);
     setKey(crypto.randomUUID());
+  }
+  function changeQuotationDiscount(value: string) {
+    if (!quoteInput || !quotePreview) return;
+    setQuoteInput({ ...quoteInput, discount: value });
+    setKey(crypto.randomUUID());
+    const footer = quotePreview.snapshot.footer;
+    const oldDiscount = footer.find((r) => r.label === "Special Discount")!.amount;
+    const oldNet = footer.find((r) => r.label === "Net Total")!.amount;
+    const total = new Decimal(oldDiscount).add(oldNet);
+    const valid = /^\d{1,12}(\.\d{1,2})?$/.test(value) && new Decimal(value).lte(total);
+    setQuotePreview({
+      fingerprint: "",
+      snapshot: { ...quotePreview.snapshot, footer: valid ? footer.map((r) => ({
+        ...r, amount: r.label === "Special Discount" ? new Decimal(value).toFixed(2) : r.label === "Net Total" ? total.minus(value).toFixed(2) : r.amount,
+      })) : footer },
+    });
+    setNotice(valid ? "Net total updated. Confirm quotation totals before saving." : "Enter a nonnegative discount up to the quotation total, with at most two decimals.");
   }
   const p = preview?.snapshot;
   return (
@@ -648,10 +610,11 @@ export function Commercial({
       )}
       {quotePreview && !savedQuote && (
         <>
-          <QuotationView snapshot={quotePreview.snapshot} />
+          <QuotationView snapshot={quotePreview.snapshot} discount={quoteInput?.discount} onDiscount={manager ? changeQuotationDiscount : undefined} draftInput={quoteInput} csrf={session.csrfToken} />
+          {!quotePreview.fingerprint && <button className="primary" disabled={busy} onClick={() => void calculateQuote()}>Confirm quotation totals</button>}
           <button
             className="primary"
-            disabled={busy}
+            disabled={busy || !quotePreview.fingerprint}
             onClick={() => void saveQuote()}
           >
             Save quotation version

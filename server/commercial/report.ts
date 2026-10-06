@@ -1,3 +1,4 @@
+import { drawReportLogo, drawReportFooter, reportBottomMargin } from "../reports/branding.js";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import type { QuotationSnapshot } from "./engine.js";
@@ -22,10 +23,10 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(17);
   pdf.setTextColor(57, 50, 83);
-  pdf.text("POWER ZONE", margin, 20);
+  drawReportLogo(pdf);
   pdf.setFontSize(9);
   pdf.setFont("helvetica", "normal");
-  pdf.text("ENGINEERING & SERVICES (PVT) LIMITED", margin, 27);
+  pdf.text("ENGINEERING & SERVICES (PVT) LIMITED", 60, 22);
   pdf.setTextColor(40, 40, 45);
   pdf.setFontSize(12);
   pdf.text(number ?? "DRAFT QUOTATION - NOT SAVED", margin, 39);
@@ -34,18 +35,16 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
     startY: 45,
     margin: { left: margin, right: margin },
     theme: "plain",
-    styles: { fontSize: 9, cellPadding: 2, textColor: [40, 40, 45] },
+    styles: { fontSize: 9, cellPadding: 1, textColor: [40, 40, 45] },
     body: [
-      [
-        { content: text(`Customer: ${s.customer.name}`) },
-        { content: text(`Quoted date: ${s.input.quotedDate}`) },
-      ],
-      [
-        text(`Site: ${s.siteName} (${s.siteCode})`),
-        text(`Proposed by: ${s.input.proposedBy}`),
-      ],
-      [text(`BOQ: ${s.boqNumber}`), text(`Validity: ${s.input.validity}`)],
-      [text(`Solution ID: ${s.solutionId}`), "Security Level: Confidential"],
+      [text(`Customer: ${s.customer.name}`)],
+      [text(`Contact person: ${s.customer.contactPerson ?? ""}`)],
+      [text(`Contact number: ${s.customer.phone ?? ""}`)],
+      [text(`Site: ${s.siteName} (${s.siteCode})`)],
+      [text(`BOQ: ${s.boqNumber} | Solution ID: ${s.solutionId}`)],
+      [text(`Quoted date: ${s.input.quotedDate}`)],
+      [text(`Proposed by: ${s.input.proposedBy}`)],
+      [text(`Validity: ${s.input.validity}`)],
     ],
   });
   let y = (pdf as any).lastAutoTable.finalY + 6;
@@ -67,7 +66,7 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
   });
   autoTable(pdf, {
     startY: y,
-    margin: { left: margin, right: margin, bottom: 18 },
+    margin: { left: margin, right: margin, bottom: reportBottomMargin },
     head: [
       [
         "No.",
@@ -92,14 +91,14 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
       1: { cellWidth: amounts ? 109 : 131 },
       2: { cellWidth: 14 },
       3: { cellWidth: 25, halign: "right" },
-      ...(amounts ? { 4: { cellWidth: 22, halign: "right" } } : {}),
+      ...(amounts ? { 4: { cellWidth: 22, halign: "right", valign: "middle" } } : {}),
     },
     rowPageBreak: "avoid",
   });
   y = (pdf as any).lastAutoTable.finalY + 7;
   autoTable(pdf, {
     startY: y,
-    margin: { left: margin, right: margin, bottom: 18 },
+    margin: { left: margin, right: margin, bottom: reportBottomMargin },
     theme: "plain",
     pageBreak: "avoid",
     body: s.footer.map((r) => [r.label, money(r.amount)]),
@@ -115,7 +114,7 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
   y = (pdf as any).lastAutoTable.finalY + 7;
   autoTable(pdf, {
     startY: y,
-    margin: { left: margin, right: margin, bottom: 18 },
+    margin: { left: margin, right: margin, bottom: reportBottomMargin },
     theme: "plain",
     body: [
       [{ content: "NOTES", styles: { fontStyle: "bold" } }],
@@ -126,14 +125,6 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
     styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak" },
     rowPageBreak: "avoid",
   });
-  for (let page = 1; page <= pdf.getNumberOfPages(); page++) {
-    pdf.setPage(page);
-    pdf.setFontSize(8);
-    pdf.setTextColor(115, 115, 125);
-    pdf.text(text(number ?? "Draft quotation"), margin, 287);
-    pdf.text(`${page} / ${pdf.getNumberOfPages()}`, 196, 287, {
-      align: "right",
-    });
-  }
+  drawReportFooter(pdf, text(number ?? "Draft quotation"));
   return Buffer.from(pdf.output("arraybuffer"));
 }
