@@ -38,3 +38,5 @@ The owner supplied a dashboard reference during implementation. The shell adopts
 ## Subsequent milestones
 
 Account lifecycle and immutable survey/BOQ R0 persistence now extend this foundation through separate service/repository/HTTP modules. See milestone-accounts.md and milestone-3-survey-boq.md for current behavior and validation.
+
+Costing review and revision workflows are documented in milestone-4-boq-review.md. PostgreSQL append-only review submissions/decisions and BOQ revisions preserve the exact approved costing; current master changes do not rewrite it.

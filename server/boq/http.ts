@@ -6,6 +6,7 @@ import { HttpError } from "../http/errors.js";
 import { surveySchema, surveyDraftSchema } from "./schema.js";
 import { BoqRepository } from "./repository.js";
 export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
+  const reviews = repo.reviews();
   const r = Router();
   r.use(requireSession);
   r.use((req, _res, next) => {
@@ -26,6 +27,8 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         id: z.uuid().optional(),
         version: z.number().int().min(0),
         inputs: surveyDraftSchema,
+        baseRevisionId: z.uuid().optional(),
+        revisionReason: z.string().trim().max(2000).default(""),
       })
       .strict()
       .safeParse(req.body);
@@ -40,6 +43,8 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         v.data.id,
         v.data.version,
         v.data.inputs,
+        v.data.baseRevisionId,
+        v.data.revisionReason,
       ),
     );
   });
@@ -73,6 +78,87 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
           v.data.fingerprint,
         ),
       );
+  });
+  r.get("/reviews", async (req, res) =>
+    res.json({ reviews: await reviews.list(req.authSession!.user.id) }),
+  );
+  r.post("/reviews", async (req, res) => {
+    const v = z
+      .object({
+        draftId: z.uuid(),
+        version: z.number().int().positive(),
+        fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!v.success)
+      throw new HttpError(
+        400,
+        "Calculate and review the draft before submitting.",
+      );
+    res
+      .status(201)
+      .json(
+        await reviews.submit(
+          req.authSession!.user.id,
+          v.data.draftId,
+          v.data.version,
+          v.data.fingerprint,
+        ),
+      );
+  });
+  r.get("/reviews/:id", async (req, res) => {
+    if (!z.uuid().safeParse(req.params.id).success)
+      throw new HttpError(400, "Invalid review.");
+    res.json(
+      await reviews.get(req.authSession!.user.id, String(req.params.id)),
+    );
+  });
+  r.post("/reviews/:id/decision", async (req, res) => {
+    const v = z
+      .object({
+        outcome: z.enum(["Approved", "Changes requested"]),
+        comments: z.string().trim().max(2000).default(""),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!v.success || !z.uuid().safeParse(req.params.id).success)
+      throw new HttpError(400, "Check the review decision and comments.");
+    res.json(
+      await reviews.decide(
+        req.authSession!.user.id,
+        String(req.params.id),
+        v.data.outcome,
+        v.data.comments,
+      ),
+    );
+  });
+  r.get("/reviews/:id/costing.pdf", async (req, res) => {
+    if (!z.uuid().safeParse(req.params.id).success)
+      throw new HttpError(400, "Invalid review.");
+    const review = await reviews.get(
+      req.authSession!.user.id,
+      String(req.params.id),
+    );
+    const filename =
+      `REVIEW-${review.snapshot.survey.siteCode}-v${review.draft_version}-costing.pdf`.replace(
+        /[^a-zA-Z0-9._-]/g,
+        "-",
+      );
+    res
+      .set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "private, no-store",
+      })
+      .send(
+        Buffer.from(buildCostingPdf(review.snapshot).output("arraybuffer")),
+      );
+  });
+  r.get("/:id/history", async (req, res) => {
+    if (!z.uuid().safeParse(req.params.id).success)
+      throw new HttpError(400, "Invalid BOQ.");
+    res.json({ revisions: await repo.history(String(req.params.id)) });
   });
   r.get("/drafts/:id/costing.pdf", async (req, res) => {
     const id = z.uuid().safeParse(req.params.id);
