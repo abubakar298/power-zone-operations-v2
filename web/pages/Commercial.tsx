@@ -221,6 +221,12 @@ export function Commercial({
         validity: "7 Days",
         proposedBy: session.user.displayName,
       };
+      if (copy) {
+        const source = await api<any>(`/commercial/pricing/${data.pricingId}`);
+        setSavedPrice(source);
+        setInput(source.snapshot.input);
+        setPreview({ snapshot: source.snapshot, fingerprint: source.fingerprint });
+      }
       const result = await api<{
         snapshot: QuotationSnapshot;
         fingerprint: string;

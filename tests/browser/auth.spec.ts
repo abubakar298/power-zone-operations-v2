@@ -417,6 +417,9 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(page.locator(".quotation-pdf-pages canvas")).toHaveCount(1);
   await expect(page.locator(".quotation-pdf-pages canvas").first()).toBeVisible();
   await page.getByRole("button", {name: "Save quotation version", exact: true}).click();
+  await page.reload();
+  await page.getByRole("button", {name: "Quotations", exact: true}).click();
+  await page.getByRole("button", {name: /Q-BAFL-05850-001-R0-V3/}).click();
   await page.getByRole("button", {name: "Create new quotation version", exact: true}).click();
   await expect(page.getByLabel("Cost (PKR)", {exact: true})).toHaveValue("100");
   await expect(page.getByLabel("Markup on cost %", {exact: true})).toHaveValue("25");
