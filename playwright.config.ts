@@ -1,5 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
+const port = process.env.PZ_E2E_PORT ?? "3180";
+const origin = `http://127.0.0.1:${port}`;
 export default defineConfig({
   testDir: "./tests/browser",
   workers: 1,
@@ -7,13 +9,13 @@ export default defineConfig({
   timeout: 150000,
   use: {
     actionTimeout: 10000,
-    baseURL: "http://127.0.0.1:3180",
+    baseURL: origin,
     trace: "retain-on-failure",
   },
   webServer: {
     command:
       "mkdir -p .local && pnpm build && pnpm exec tsx tests/e2e-server.ts",
-    url: "http://127.0.0.1:3180/api/health",
+    url: `${origin}/api/health`,
     reuseExistingServer: false,
     timeout: 120000,
     gracefulShutdown: { signal: "SIGTERM", timeout: 10000 },

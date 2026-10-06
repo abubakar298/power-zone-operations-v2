@@ -38,7 +38,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "Welcome, Abu Bakar Siddique." }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Operations Coordination" }),
+    page.getByRole("heading", { name: "Management document hub" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "My account", exact: true }).click();
   await expect(
@@ -618,7 +618,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "Pending tasks" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Operations Coordination" }),
+    page.getByRole("heading", { name: "Management document hub" }),
   ).toBeVisible();
   await page.screenshot({
     path: "test-results/coordinator-desktop.png",
@@ -640,7 +640,11 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
             await readFile(".local/e2e-control.json", "utf8"),
           );
           if (restarted.generation <= control.generation) return 0;
-          return (await fetch("http://127.0.0.1:3180/api/health")).status;
+          return (
+            await fetch(
+              `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? "3180"}/api/health`,
+            )
+          ).status;
         } catch {
           return 0;
         }
@@ -653,7 +657,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "Welcome, Abu Bakar Siddique." }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Operations Coordination" }),
+    page.getByRole("heading", { name: "Management document hub" }),
   ).toBeVisible();
   expect(
     (await context.cookies()).find((c) => c.name === "pz_session")?.value,
@@ -688,7 +692,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "Welcome, Abu Bakar Siddique." }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Operations Coordination" }),
+    page.getByRole("heading", { name: "Management document hub" }),
   ).toBeVisible();
   await page.screenshot({
     path: "test-results/dashboard-mobile.png",
@@ -778,4 +782,106 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("heading", { name: "Welcome back." }),
   ).toBeVisible();
+});
+
+test("management bucket opens a coordinator costing review and isolates approval work", async ({
+  page,
+}) => {
+  const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? "3180"}`;
+  const login = await page.request.post("/api/auth/login", {
+    headers: { Origin: origin },
+    data: {
+      email: "atif-browser@example.test",
+      password: "browser-coordinator-only-298",
+    },
+  });
+  expect(login.ok()).toBe(true);
+  const session = await login.json();
+  const headers = { Origin: origin, "X-CSRF-Token": session.csrfToken };
+  const masters = await (await page.request.get("/api/masters")).json();
+  const brand = (category: string) =>
+    masters.brands.find(
+      (b: any) => b.category === category && b.status === "Active",
+    ).id;
+  const inputs = {
+    customerId: 0,
+    siteName: "SAMPLE Management bucket review",
+    siteCode: "MGRBUCKET",
+    location: "Lahore",
+    panelQty: 30,
+    panelWattage: "645",
+    structure: "L2",
+    dcMetres: "120",
+    earth25: "20",
+    earth6: "40",
+    earth10: "40",
+    inverter: "20 kW",
+    batteryKwh: 15,
+    smartMeter: false,
+    genset: false,
+    preparedBy: "Atif Hameed",
+    brands: {
+      solar: brand("Solar Panel"),
+      inverter: brand("Inverter"),
+      battery: brand("Battery & BMS"),
+      cable: brand("Cable"),
+      switchgear: brand("Switchgear"),
+    },
+  };
+  const saved = await page.request.post("/api/boqs/drafts", {
+    headers,
+    data: { version: 0, inputs },
+  });
+  expect(saved.ok()).toBe(true);
+  const draft = await saved.json();
+  const preview = await (
+    await page.request.post("/api/boqs/preview", { headers, data: inputs })
+  ).json();
+  const submitted = await page.request.post("/api/boqs/reviews", {
+    headers,
+    data: {
+      draftId: draft.id,
+      version: draft.version,
+      fingerprint: preview.fingerprint,
+    },
+  });
+  expect(submitted.ok()).toBe(true);
+  await page.request.post("/api/auth/logout", { headers });
+  const admin = await page.request.post("/api/auth/login", {
+    headers: { Origin: origin },
+    data: {
+      email: "admin@example.test",
+      password: "browser-test-passphrase-298",
+    },
+  });
+  expect(admin.ok()).toBe(true);
+  await page.goto("/dashboard");
+  await expect(
+    page.getByRole("heading", { name: "Management document hub" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Work scope")).toHaveValue("team");
+  await page
+    .getByLabel("Show documents awaiting management action only")
+    .check();
+  await expect(
+    page.getByRole("row", { name: /SAMPLE bucket training/ }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: /Costing review/ }).click();
+  const row = page.getByRole("row", {
+    name: /SAMPLE Management bucket review/,
+  });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "Open workflow" }).click();
+  await expect(
+    page.getByRole("heading", { name: /Costing review · Draft version/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      /Demo Sites · SAMPLE Management bucket review · Site code MGRBUCKET/,
+    ),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "test-results/management-bucket-review.png",
+    fullPage: true,
+  });
 });

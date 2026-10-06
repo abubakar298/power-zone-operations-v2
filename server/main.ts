@@ -5,10 +5,20 @@ import { readConfig } from "./config.js";
 import { createPool } from "./db/pool.js";
 import { createApp } from "./app.js";
 import { AuthRepository } from "./auth/repository.js";
+import { runRequestedDashboardSamples } from "./coordinator/samples.js";
 
 const config = readConfig();
 const pool = createPool(config);
 pool.on("error", () => console.error("Database connection interrupted."));
+// Only an explicit operator setting enables the owner-requested training batch.
+// Normal deployments never create sample records. Batch retries are idempotent.
+if (process.env.PZ_DASHBOARD_SAMPLE_BATCH === "atif-training-20-v1") {
+  await runRequestedDashboardSamples(
+    pool,
+    process.env.PZ_DASHBOARD_SAMPLE_BATCH,
+  );
+  console.log("Atif dashboard training batch ready: 20 sample proposals.");
+}
 const app = createApp(pool, config, resolve("dist/web"));
 const server = app.listen(config.port, "0.0.0.0", () =>
   console.log(`Power Zone V2 listening on port ${config.port}`),

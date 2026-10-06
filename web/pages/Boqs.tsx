@@ -85,7 +85,16 @@ export function Boqs({
         if (initialDraftId) {
           const d = await api<{ drafts: any[] }>("/boqs/drafts");
           const row = d.drafts.find((x) => x.id === initialDraftId);
-          if (row) resume(row);
+          if (row && row.review_status !== "Awaiting review") resume(row);
+          else {
+            const reviews = await api<{ reviews: any[] }>("/boqs/reviews");
+            const review = reviews.reviews.find(
+              (r) =>
+                r.draft_id === initialDraftId && r.status === "Awaiting review",
+            );
+            if (review) await openReview(review.id);
+            else if (row) resume(row);
+          }
         }
       })
       .catch(fail);

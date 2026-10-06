@@ -21,14 +21,15 @@ export function Coordinator({
   session: Session;
   onOpen: (task: any) => void;
 }) {
-  const [scope, setScope] = useState("mine"),
+  const manager = ["Admin", "Management"].includes(session.user.role);
+  const [scope, setScope] = useState(manager ? "team" : "mine"),
     [data, setData] = useState<any>(),
     [error, setError] = useState(""),
     [filter, setFilter] = useState("All"),
+    [approvalsOnly, setApprovalsOnly] = useState(false),
     [overdueOnly, setOverdueOnly] = useState(false),
     [tick, setTick] = useState(0),
     [busy, setBusy] = useState(false);
-  const manager = ["Admin", "Management"].includes(session.user.role);
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -67,6 +68,12 @@ export function Coordinator({
     (t.preparation_minutes != null &&
       t.preparation_minutes > 15 &&
       t.responsibility === "Coordinator");
+  const visibleTasks = (data?.tasks ?? []).filter(
+    (t: any) =>
+      (filter === "All" || t.stage === filter) &&
+      (!overdueOnly || overdue(t)) &&
+      (!approvalsOnly || t.responsibility === "Management"),
+  );
   const action = async (t: any, kind: string) => {
     const notes =
       kind === "Changes requested"
@@ -95,9 +102,13 @@ export function Coordinator({
     <section className="coordinator-panel">
       <div className="coordination-heading">
         <div>
-          <h2>Operations Coordination</h2>
+          <h2>
+            {manager ? "Management document hub" : "Operations Coordination"}
+          </h2>
           <p>
-            Choose a work bucket, open a document and complete its next action.
+            {manager
+              ? "Review documents by bucket, open the exact record and complete the next approval action."
+              : "Choose a work bucket, open a document and complete its next action."}
           </p>
         </div>
         {manager && (
@@ -122,7 +133,24 @@ export function Coordinator({
           {error}
         </p>
       )}
+      {data?.tasks?.some((t: any) => t.site?.startsWith("SAMPLE")) && (
+        <p>
+          Training samples are included in this view and its performance
+          figures. Their starting ages simulate pending work; subsequent actions
+          are recorded normally.
+        </p>
+      )}
       <h3>Work stages</h3>
+      {manager && (
+        <label className="approval-filter">
+          <input
+            type="checkbox"
+            checked={approvalsOnly}
+            onChange={(e) => setApprovalsOnly(e.target.checked)}
+          />
+          Show documents awaiting management action only
+        </label>
+      )}
       <div className="stage-grid">
         {stages.map((stage) => (
           <button
@@ -132,7 +160,15 @@ export function Coordinator({
             aria-pressed={filter === stage}
           >
             <span>{stage}</span>
-            <strong>{data?.stageCounts?.[stage] ?? 0}</strong>
+            <strong>
+              {
+                (data?.tasks ?? []).filter(
+                  (t: any) =>
+                    t.stage === stage &&
+                    (!approvalsOnly || t.responsibility === "Management"),
+                ).length
+              }
+            </strong>
             <small>
               {[
                 "Costing review",
@@ -144,12 +180,23 @@ export function Coordinator({
                   ? "Customer"
                   : "Coordinator"}
             </small>
+            <small>
+              {
+                (data?.tasks ?? []).filter(
+                  (t: any) =>
+                    t.stage === stage &&
+                    overdue(t) &&
+                    (!approvalsOnly || t.responsibility === "Management"),
+                ).length
+              }{" "}
+              overdue
+            </small>
           </button>
         ))}
       </div>
       <section className="detail-panel">
         <div className="coordination-heading">
-          <h3>Pending tasks</h3>
+          <h3>Pending tasks{data ? ` (${visibleTasks.length})` : ""}</h3>
           <label>
             Stage
             <select value={filter} onChange={(e) => setFilter(e.target.value)}>
@@ -185,107 +232,105 @@ export function Coordinator({
                 </tr>
               </thead>
               <tbody>
-                {data.tasks
-                  .filter(
-                    (t: any) =>
-                      (filter === "All" || t.stage === filter) &&
-                      (!overdueOnly || overdue(t)),
-                  )
-                  .map((t: any) => (
-                    <tr
-                      key={`${t.kind}-${t.id}`}
-                      className={overdue(t) ? "task-overdue" : ""}
-                    >
-                      <td>
-                        {t.reference}
-                        <br />
-                        {t.site}
-                      </td>
-                      <td>
-                        {t.stage}
-                        <br />
-                        <small>{t.responsibility}</small>
-                      </td>
-                      <td>
-                        {duration(minutes(t.started_at))}
-                        {t.preparation_minutes != null && (
-                          <>
-                            <br />
-                            <small>
-                              Survey → quote active:{" "}
-                              {duration(t.preparation_minutes)}
-                            </small>
-                          </>
-                        )}
-                      </td>
-                      <td>
-                        {t.target_minutes
-                          ? `${t.target_minutes} min target`
-                          : t.preparation_minutes != null
-                            ? "15 min survey → quote target"
-                            : "Tracking elapsed time"}
-                        <br />
-                        <strong>
-                          {overdue(t) ? "Overdue" : "In progress"}
-                        </strong>
-                      </td>
-                      <td>
-                        <button
-                          className="workflow-button"
-                          onClick={() => onOpen(t)}
-                        >
-                          Open workflow
-                        </button>
-                        {t.kind === "Sale confirmation" && (
-                          <div className="bucket-actions">
-                            {t.status ===
-                              "Quotation ready: submit for approval" && (
-                              <button
-                                disabled={busy}
-                                onClick={() => void action(t, "Submitted")}
-                              >
-                                Send for approval
-                              </button>
+                {visibleTasks.map((t: any) => (
+                  <tr
+                    key={`${t.kind}-${t.id}`}
+                    className={overdue(t) ? "task-overdue" : ""}
+                  >
+                    <td>
+                      {t.reference}
+                      <br />
+                      {t.site}
+                      {t.site?.startsWith("SAMPLE") && (
+                        <>
+                          <br />
+                          <small className="sample-badge">
+                            Training sample
+                          </small>
+                        </>
+                      )}
+                    </td>
+                    <td>
+                      {t.stage}
+                      <br />
+                      <small>{t.responsibility}</small>
+                    </td>
+                    <td>
+                      {duration(minutes(t.started_at))}
+                      {t.preparation_minutes != null && (
+                        <>
+                          <br />
+                          <small>
+                            Survey → quote active:{" "}
+                            {duration(t.preparation_minutes)}
+                          </small>
+                        </>
+                      )}
+                    </td>
+                    <td>
+                      {t.target_minutes
+                        ? `${t.target_minutes} min target`
+                        : t.preparation_minutes != null
+                          ? "15 min survey → quote target"
+                          : "Tracking elapsed time"}
+                      <br />
+                      <strong>{overdue(t) ? "Overdue" : "In progress"}</strong>
+                    </td>
+                    <td>
+                      <button
+                        className="workflow-button"
+                        onClick={() => onOpen(t)}
+                      >
+                        Open workflow
+                      </button>
+                      {t.kind === "Sale confirmation" && (
+                        <div className="bucket-actions">
+                          {t.status ===
+                            "Quotation ready: submit for approval" && (
+                            <button
+                              disabled={busy}
+                              onClick={() => void action(t, "Submitted")}
+                            >
+                              Send for approval
+                            </button>
+                          )}
+                          {t.status === "Awaiting quotation approval" &&
+                            manager && (
+                              <>
+                                <button
+                                  disabled={busy}
+                                  onClick={() => void action(t, "Approved")}
+                                >
+                                  Approve quotation
+                                </button>
+                                <button
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void action(t, "Changes requested")
+                                  }
+                                >
+                                  Request revision
+                                </button>
+                              </>
                             )}
-                            {t.status === "Awaiting quotation approval" &&
-                              manager && (
-                                <>
-                                  <button
-                                    disabled={busy}
-                                    onClick={() => void action(t, "Approved")}
-                                  >
-                                    Approve quotation
-                                  </button>
-                                  <button
-                                    disabled={busy}
-                                    onClick={() =>
-                                      void action(t, "Changes requested")
-                                    }
-                                  >
-                                    Request revision
-                                  </button>
-                                </>
-                              )}
-                            {t.status === "Awaiting PO / sale confirmation" && (
-                              <button
-                                disabled={busy}
-                                onClick={() => void action(t, "PO received")}
-                              >
-                                Record PO / approval received
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                          {t.status === "Awaiting PO / sale confirmation" && (
+                            <button
+                              disabled={busy}
+                              onClick={() => void action(t, "PO received")}
+                            >
+                              Record PO / approval received
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
-            {data.tasks.filter(
-              (t: any) =>
-                (filter === "All" || t.stage === filter) &&
-                (!overdueOnly || overdue(t)),
-            ).length === 0 && <p>No documents match this bucket.</p>}
+            {visibleTasks.length === 0 && (
+              <p>No documents match this bucket.</p>
+            )}
           </div>
         )}
       </section>
