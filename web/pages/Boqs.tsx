@@ -394,7 +394,7 @@ export function Boqs({
         }
         await openSaved(result.saved.id);
         setNotice(
-          "Approved. The exact reviewed costing is now saved. Use Create quotation to set its commercial pricing and prepare a customer quotation.",
+          "Approved. The exact costing and your quotation instructions are saved for the Coordinator. Their work queue now shows this BOQ ready for quotation.",
         );
       } else {
         await openReview(currentReview.id);
@@ -706,7 +706,7 @@ export function Boqs({
                       disabled={busy}
                       onClick={() => void decide("Approved")}
                     >
-                      Approve &amp; save
+                      Approve &amp; send to Coordinator
                     </button>
                     {onPricing && (
                       <button
@@ -714,13 +714,15 @@ export function Boqs({
                         disabled={busy}
                         onClick={() => void decide("Approved", true)}
                       >
-                        Approve &amp; create quotation
+                        Approve &amp; create quotation myself
                       </button>
                     )}
                   </div>
                   <p>
-                    Approval preserves this exact costing and issues its BOQ
-                    revision. Future changes need a new revision.
+                    Sending to Coordinator keeps you out of the quotation
+                    editor. Creating it yourself opens pricing with your saved
+                    instructions. Approval preserves this exact costing and
+                    issues its BOQ revision. Future changes need a new revision.
                   </p>
                 </div>
               )}

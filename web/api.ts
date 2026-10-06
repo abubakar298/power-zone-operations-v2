@@ -2,7 +2,14 @@ export interface User {
   id: string;
   email: string;
   displayName: string;
-  role: "Admin" | "Management" | "Employee" | "Coordinator" | "Operations";
+  role:
+    | "Admin"
+    | "Management"
+    | "Employee"
+    | "Coordinator"
+    | "Operations"
+    | "Inventory"
+    | "Accounts";
 }
 export interface Session {
   user: User;

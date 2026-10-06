@@ -1,4 +1,8 @@
-import { drawReportLogo, drawReportFooter, reportBottomMargin } from "../reports/branding.js";
+import {
+  drawReportLogo,
+  drawReportFooter,
+  reportBottomMargin,
+} from "../reports/branding.js";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import type { QuotationSnapshot } from "./engine.js";
@@ -39,11 +43,26 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
     styles: { fontSize: 8, cellPadding: 0.6, textColor: [40, 40, 45] },
     columnStyles: { 0: { cellWidth: 102 }, 1: { cellWidth: 80 } },
     body: [
-      [text(`Customer: ${s.customer.name}`), text(`Quoted date: ${s.input.quotedDate}`)],
-      [text(`Contact person: ${s.customer.contactPerson ?? ""}`), text(`Proposed by: ${s.input.proposedBy}`)],
-      [text(`Contact number: ${s.customer.phone ?? ""}`), text(`Validity: ${s.input.validity}`)],
-      [text(`Site: ${s.siteName} (${s.siteCode})`), text(`Solution ID: ${s.solutionId}`)],
-      [text(`BOQ: ${s.boqNumber}`), text(`Quotation No.: ${number ?? "DRAFT"}`)],
+      [
+        text(`Customer: ${s.customer.name}`),
+        text(`Quoted date: ${s.input.quotedDate}`),
+      ],
+      [
+        text(`Contact person: ${s.customer.contactPerson ?? ""}`),
+        text(`Proposed by: ${s.input.proposedBy}`),
+      ],
+      [
+        text(`Contact number: ${s.customer.phone ?? ""}`),
+        text(`Validity: ${s.input.validity}`),
+      ],
+      [
+        text(`Site: ${s.siteName} (${s.siteCode})`),
+        text(`Solution ID: ${s.solutionId}`),
+      ],
+      [
+        text(`BOQ: ${s.boqNumber}`),
+        text(`Quotation No.: ${number ?? "DRAFT"}`),
+      ],
     ],
   });
   let y = (pdf as any).lastAutoTable.finalY + 4;
@@ -90,19 +109,25 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
       1: { cellWidth: amounts ? 129 : 151 },
       2: { cellWidth: 14 },
       3: { cellWidth: 10, halign: "center" },
-      ...(amounts ? { 4: { cellWidth: 22, halign: "right", valign: "middle" } } : {}),
+      ...(amounts
+        ? { 4: { cellWidth: 22, halign: "right", valign: "middle" } }
+        : {}),
     },
     rowPageBreak: "avoid",
   });
   y = (pdf as any).lastAutoTable.finalY + 3;
   autoTable(pdf, {
     startY: y,
-    margin: { left: margin, right: margin, bottom: reportBottomMargin },
+    margin: { left: 96, right: margin, bottom: reportBottomMargin },
     theme: "plain",
     pageBreak: "avoid",
+    tableWidth: 100,
     body: s.footer.map((r) => [r.label, money(r.amount)]),
     styles: { fontSize: 8, cellPadding: 1 },
-    columnStyles: { 0: { cellWidth: 135 }, 1: { halign: "right" } },
+    columnStyles: {
+      0: { cellWidth: 78, halign: "right" },
+      1: { cellWidth: 22, halign: "right" },
+    },
     didParseCell(data) {
       if (data.row.index === s.footer.length - 1) {
         data.cell.styles.fontStyle = "bold";

@@ -1,3 +1,4 @@
+import { Departments } from "./Departments.js";
 import { Director } from "./Director.js";
 import { Coordinator } from "./Coordinator.js";
 import { Operations } from "./Operations.js";
@@ -36,6 +37,8 @@ export function Dashboard({
     | "pricing"
     | "quotes"
     | "operations"
+    | "inventory"
+    | "finance"
     | "orders"
   >("dashboard");
   useEffect(() => {
@@ -103,6 +106,8 @@ export function Dashboard({
       | "pricing"
       | "quotes"
       | "operations"
+      | "inventory"
+      | "finance"
       | "orders",
     task?: any,
   ) {
@@ -174,7 +179,9 @@ export function Dashboard({
               <span>Customers & sites</span>
               <small>Ready</small>
             </div>
-            {session.user.role !== "Operations" && (
+            {!["Operations", "Inventory", "Accounts"].includes(
+              session.user.role,
+            ) && (
               <>
                 <button
                   className={view === "boqs" ? "nav-active" : ""}
@@ -220,6 +227,28 @@ export function Dashboard({
               <Icon name="file" />
               BOQ to Operations
             </button>
+            {["Admin", "Management", "Inventory"].includes(
+              session.user.role,
+            ) && (
+              <button
+                className={view === "inventory" ? "nav-active" : ""}
+                onClick={() => navigate("inventory")}
+              >
+                <Icon name="file" />
+                Inventory workspace
+              </button>
+            )}
+            {["Admin", "Management", "Accounts"].includes(
+              session.user.role,
+            ) && (
+              <button
+                className={view === "finance" ? "nav-active" : ""}
+                onClick={() => navigate("finance")}
+              >
+                <Icon name="file" />
+                Accounts workspace
+              </button>
+            )}
           </div>
           <p className="nav-hint">
             Modules become available after
@@ -253,7 +282,11 @@ export function Dashboard({
                             ? "BOQ to Operations"
                             : view === "orders"
                               ? "Customer PO & IPO"
-                              : "My account"}
+                              : view === "inventory"
+                                ? "Inventory workspace"
+                                : view === "finance"
+                                  ? "Accounts workspace"
+                                  : "My account"}
             </strong>
           </span>
           <div className="account">
@@ -307,15 +340,23 @@ export function Dashboard({
                               ? "Operations delivery portal"
                               : view === "orders"
                                 ? "Customer PO & IPO"
-                                : "My account"}
+                                : view === "inventory"
+                                  ? "Inventory workspace"
+                                  : view === "finance"
+                                    ? "Accounts workspace"
+                                    : "My account"}
               </h1>
               <p className="dashboard-intro">
                 {view === "dashboard"
-                  ? session.user.role === "Operations"
-                    ? "Plan delivery and issue received BOQs to Store."
-                    : ["Admin", "Management"].includes(session.user.role)
-                      ? "Review approvals and track customer/site budgets."
-                      : "Pending coordination work and recent completed activity."
+                  ? session.user.role === "Inventory"
+                    ? "Prepare stock requirements and track Store dispatch work."
+                    : session.user.role === "Accounts"
+                      ? "Review IPOs and collect supporting documents for accounting."
+                      : session.user.role === "Operations"
+                        ? "Plan delivery and issue received BOQs to Store."
+                        : ["Admin", "Management"].includes(session.user.role)
+                          ? "Review approvals and track customer/site budgets."
+                          : "Pending coordination work and recent completed activity."
                   : view === "masters"
                     ? "Your customers, sites and approved reference data."
                     : view === "boqs"
@@ -330,7 +371,11 @@ export function Dashboard({
                               ? "Send approved site requirements to Operations after IPO creation."
                               : view === "orders"
                                 ? "Turn an accepted quotation and customer PO into an internal purchase order."
-                                : "Your identity and access to the Power Zone workspace."}
+                                : view === "inventory"
+                                  ? "Stock preparation and dispatch document queues."
+                                  : view === "finance"
+                                    ? "IPO review and supporting-document queues."
+                                    : "Your identity and access to the Power Zone workspace."}
               </p>
             </div>
             <button className="dark-button" onClick={logout} disabled={busy}>
@@ -343,22 +388,33 @@ export function Dashboard({
               {error}
             </p>
           )}
+          {(view === "inventory" ||
+            (view === "dashboard" && session.user.role === "Inventory")) && (
+            <Departments session={session} department="Inventory" />
+          )}
+          {(view === "finance" ||
+            (view === "dashboard" && session.user.role === "Accounts")) && (
+            <Departments session={session} department="Accounts" />
+          )}
           {view === "dashboard" && session.user.role === "Operations" && (
             <Operations session={session} portal />
           )}
-          {view === "dashboard" && session.user.role !== "Operations" && (
-            <Home
-              session={session}
-              onOpen={(task) => {
-                if (task.draft_id) setRevisionDraftId(task.draft_id);
-                else setRevisionDraftId(undefined);
-                setPricingRevisionId(task.boq_revision_id ?? undefined);
-                setPricingRequestId(task.request_id ?? undefined);
-                setOperationsIpoId(task.ipo_id ?? undefined);
-                navigate(task.target, task);
-              }}
-            />
-          )}
+          {view === "dashboard" &&
+            !["Operations", "Inventory", "Accounts"].includes(
+              session.user.role,
+            ) && (
+              <Home
+                session={session}
+                onOpen={(task) => {
+                  if (task.draft_id) setRevisionDraftId(task.draft_id);
+                  else setRevisionDraftId(undefined);
+                  setPricingRevisionId(task.boq_revision_id ?? undefined);
+                  setPricingRequestId(task.request_id ?? undefined);
+                  setOperationsIpoId(task.ipo_id ?? undefined);
+                  navigate(task.target, task);
+                }}
+              />
+            )}
           {(view === "pricing" || view === "quotes") && (
             <Commercial
               key={view + String(pricingRevisionId) + String(pricingRequestId)}

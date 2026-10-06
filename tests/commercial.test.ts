@@ -9,7 +9,13 @@ import { readConfig } from "../server/config.js";
 import { MastersRepository } from "../server/masters/repository.js";
 import { calculate } from "../server/boq/engine.js";
 import { surveySchema } from "../server/boq/schema.js";
-import { price, quote, NOTES, TERMS } from "../server/commercial/engine.js";
+import {
+  price,
+  quote,
+  NOTES,
+  TERMS,
+  cableExcessNote,
+} from "../server/commercial/engine.js";
 import { pricingSchema, quotationSchema } from "../server/commercial/schema.js";
 import { buildQuotationPdf } from "../server/commercial/report.js";
 import { hashPassword } from "../server/auth/crypto.js";
@@ -235,7 +241,7 @@ test("all presentations reconcile without duplicated BESS/EPC amounts or interna
             proposedBy: "Abu Bakar",
           }),
         );
-      assert.deepEqual(q.notes, NOTES);
+      assert.deepEqual(q.notes, [cableExcessNote(boq.snapshot), ...NOTES]);
       assert.deepEqual(q.terms, TERMS);
       assert(!JSON.stringify(q).includes("approved_specification"));
       assert(!JSON.stringify(q).includes("rateVersion"));

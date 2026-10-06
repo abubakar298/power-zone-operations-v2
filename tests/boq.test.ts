@@ -1,3 +1,4 @@
+import { Decimal } from "decimal.js";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import request from "supertest";
@@ -474,7 +475,16 @@ test("quick quotation scope uses calculated cable quantities and includes the ad
     "29.025",
   );
   assert(
-    q.notes.some((n) => n.includes("20% markup") && n.includes("18% GST")),
+    q.notes.some(
+      (n) =>
+        n.includes("rates per running metre") && n.includes("including GST"),
+    ),
+  );
+  const cable = b.lines.find((l) => l.key === "6mm² DC Cable Red")!;
+  assert(
+    q.notes[0].includes(
+      `6mm² DC Cable Red: PKR ${new Decimal(cable.rate).mul("1.20").mul("1.18").toFixed(2)}`,
+    ),
   );
   assert(q.notes.some((n) => n.includes("without a site survey")));
 });

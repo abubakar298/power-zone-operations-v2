@@ -23,6 +23,8 @@ export function Director({
   useEffect(() => {
     let active = true;
     setError("");
+    setData(undefined);
+    setSelected("");
     void api<any>(
       `/director/portfolio${customer !== "" ? `?customerId=${customer}` : ""}`,
     )
@@ -112,6 +114,14 @@ export function Director({
                   <strong>PKR {money(data.totals.sellingRevenue)}</strong>
                 </div>
                 <div>
+                  <h4>Overall margin · priced proposals</h4>
+                  <strong>
+                    {data.totals.budgetedMarginPercent === null
+                      ? "—"
+                      : `${data.totals.budgetedMarginPercent}%`}
+                  </strong>
+                </div>
+                <div>
                   <h4>Priced / awaiting quotation</h4>
                   <strong>
                     {data.totals.pricedProposals} /{" "}
@@ -134,6 +144,7 @@ export function Director({
                       <th>Budgeted cost</th>
                       <th>Selling revenue</th>
                       <th>Budgeted profit</th>
+                      <th>Total margin %</th>
                       <th>View</th>
                     </tr>
                   </thead>
@@ -150,11 +161,18 @@ export function Director({
                           <br />
                           {p.quotationNumber ?? "Quotation pending"}
                           <br />
+                          <small>Quoted: {p.quotedDate ?? "—"}</small>
+                          <br />
                           {p.ipoNumber ?? ""}
                         </td>
                         <td>{money(p.budgetedCost)}</td>
                         <td>{money(p.sellingRevenue)}</td>
                         <td>{money(p.budgetedProfit)}</td>
+                        <td>
+                          {p.budgetedMarginPercent === null
+                            ? "—"
+                            : `${p.budgetedMarginPercent}%`}
+                        </td>
                         <td>
                           <button
                             className="workflow-button"
@@ -173,7 +191,68 @@ export function Director({
               )}
               {proposal && (
                 <section className="detail-panel">
-                  <h3>{proposal.site} · Peachtree phase comparison</h3>
+                  <h3>
+                    {proposal.customer} · {proposal.site}
+                  </h3>
+                  <h4>Quotation version history</h4>
+                  <p>
+                    Every saved quotation version for this proposal, with its
+                    original attached costing. Earlier versions are shown for
+                    reference and are not added to portfolio totals. Saved
+                    versions do not confirm customer delivery.
+                  </p>
+                  <div className="table-scroll">
+                    <table className="order-table">
+                      <thead>
+                        <tr>
+                          <th>Quotation / quoted date</th>
+                          <th>Attached BOQ</th>
+                          <th>Budgeted cost</th>
+                          <th>Selling revenue</th>
+                          <th>Customer payable</th>
+                          <th>Total margin %</th>
+                          <th>PDF</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {proposal.quotationVersions.map((v: any) => (
+                          <tr key={v.id}>
+                            <td>
+                              {v.number}
+                              <br />
+                              {v.quotedDate}
+                            </td>
+                            <td>{v.boqNumber}</td>
+                            <td>{money(v.budgetedCost)}</td>
+                            <td>{money(v.sellingRevenue)}</td>
+                            <td>{money(v.customerPayable)}</td>
+                            <td>
+                              {v.budgetedMarginPercent === null
+                                ? "—"
+                                : `${v.budgetedMarginPercent}%`}
+                            </td>
+                            <td>
+                              <a
+                                href={`/api/commercial/quotations/${v.id}/quotation.pdf`}
+                              >
+                                Quotation
+                              </a>{" "}
+                              ·{" "}
+                              <a
+                                href={`/api/boqs/${v.boqRevisionId}/costing.pdf`}
+                              >
+                                Costing
+                              </a>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {!proposal.quotationVersions.length && (
+                    <p>No saved quotations for this proposal yet.</p>
+                  )}
+                  <h4>Latest quotation · Peachtree phase comparison</h4>
                   <p>
                     {proposal.basis} · customer payable: PKR{" "}
                     {money(proposal.customerPayable)}

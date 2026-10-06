@@ -199,6 +199,8 @@ export function Team({
                     <option>Employee</option>
                     <option>Coordinator</option>
                     <option>Operations</option>
+                    <option>Inventory</option>
+                    <option>Accounts</option>
                     <option>Management</option>
                     <option>Admin</option>
                   </select>
@@ -305,6 +307,8 @@ export function Team({
                             <option>Employee</option>
                             <option>Coordinator</option>
                             <option>Operations</option>
+                            <option>Inventory</option>
+                            <option>Accounts</option>
                             <option>Management</option>
                             <option>Admin</option>
                           </select>

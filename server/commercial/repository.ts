@@ -343,7 +343,27 @@ export class CommercialRepository {
           "SELECT description FROM quotation_description_defaults WHERE key='bms'",
         )
       ).rows[0]?.description,
-      snapshot = quote(p.snapshot, b.snapshot, input, wording);
+      cableRates = (
+        await c.query(
+          "SELECT DISTINCT ON(key) key,rate FROM rate_versions WHERE key=ANY($1::text[]) ORDER BY key,version DESC",
+          [
+            b.snapshot.lines
+              .filter((l: any) => l.unit === "m")
+              .map((l: any) => l.key),
+          ],
+        )
+      ).rows,
+      snapshot = quote(
+        p.snapshot,
+        b.snapshot,
+        input,
+        wording,
+        Object.fromEntries(
+          cableRates
+            .filter((r: any) => r.rate !== null)
+            .map((r: any) => [r.key, r.rate]),
+        ),
+      );
     await this.requireCostingContext(c, b.id, input.revisionRequestId);
     if (
       !input.revisionRequestId &&

@@ -465,6 +465,27 @@ test("external approval preserves evidence, recorder identity and instructions; 
   ).body;
   const row = portfolio.proposals.find((r: any) => r.id === saved.boq_id);
   assert.equal(row.quotationId, q2.id);
+  assert.equal(row.quotationVersions.length, 2);
+  assert.deepEqual(
+    row.quotationVersions.map((v: any) => v.id),
+    [q2.id, q.id],
+  );
+  assert.equal(row.quotedDate, "2026-10-07");
+  assert.equal(row.quotationVersions[1].quotedDate, "2026-10-07");
+  assert.equal(
+    row.quotationVersions[1].customerPayable,
+    qp.snapshot.footer.find((f: any) => f.label === "Net Total")!.amount,
+  );
+  assert.equal(row.quotationVersions[0].budgetedCost, row.budgetedCost);
+  assert.equal(
+    row.quotationVersions[0].budgetedMarginPercent,
+    row.budgetedMarginPercent,
+  );
+  assert.equal(
+    portfolio.proposals.every((p: any) => p.customerId === 3),
+    true,
+  );
+
   assert.notEqual(row.quotationId, q.id);
   assert.equal(
     portfolio.proposals.filter((r: any) => r.id === saved.boq_id).length,

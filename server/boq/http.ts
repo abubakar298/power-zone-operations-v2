@@ -11,10 +11,15 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
   const r = Router();
   r.use(requireSession);
   r.use((req, _res, next) => {
-    if (req.method !== "GET" && req.authSession!.user.role === "Operations")
+    if (
+      req.method !== "GET" &&
+      ["Operations", "Inventory", "Accounts"].includes(
+        req.authSession!.user.role,
+      )
+    )
       throw new HttpError(
         403,
-        "Operations accounts cannot change costing, quotations or IPO approvals.",
+        "Department accounts cannot change costing, quotations or IPO approvals.",
       );
     next();
   });

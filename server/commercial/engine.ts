@@ -3,7 +3,6 @@ import type { BoqSnapshot } from "../boq/engine.js";
 import { HttpError } from "../http/errors.js";
 import type { PricingInput, QuotationInput } from "./schema.js";
 export const NOTES = [
-  "Additional quantities beyond this quotation are chargeable at their cost plus 20% markup, followed by 18% GST.",
   "Certified that goods supplied under this quotation were imported by us and income tax under section 148 has already been paid on these goods at import stage. Accordingly, the provisions of Section 153(1) of the Income Tax Ordinance, 2001 are not applicable at the time of payment against this invoice.",
   "All Internal Wiring of existing panel will be done by Customer's Authorized Technician.",
 ];
@@ -17,6 +16,36 @@ export const TERMS = [
 const D = (v: string) => new Decimal(v),
   money = (v: Decimal) =>
     v.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2);
+export function cableExcessNote(
+  boq: BoqSnapshot,
+  currentRates?: Record<string, string>,
+) {
+  const cableKeys = [
+    "6mm² DC Cable Red",
+    "6mm² DC Cable Black",
+    "2.5mm² Earthing Cable",
+    "6mm² Earthing Cable",
+    "10mm² Earthing Cable",
+    "16mm² 4C AC Cable",
+    "25mm² 4C AC Cable",
+  ];
+  const rates = cableKeys.flatMap((key) => {
+    const line = boq.lines.find((l) => l.key === key);
+    if (!line) return [];
+    const rate = currentRates ? currentRates[key] : line.rate;
+    if (
+      rate === undefined ||
+      !new Decimal(rate).isFinite() ||
+      new Decimal(rate).isNegative()
+    )
+      throw new HttpError(
+        422,
+        `Enter a valid Rate Master cost for ${key} before preparing the quotation.`,
+      );
+    return [`${key}: PKR ${money(D(rate).mul("1.20").mul("1.18"))}`];
+  });
+  return `Cable quantities used in excess of the quantities stated in this quotation will be charged at the following rates per running metre (including GST): ${rates.join("; ")}.`;
+}
 export function price(
   boq: BoqSnapshot,
   boqNumber: string,
@@ -242,6 +271,7 @@ export function quote(
   boq: BoqSnapshot,
   input: QuotationInput,
   bmsDescription?: string,
+  currentCableRates?: Record<string, string>,
 ) {
   const full = p.input.presentation === "Full Breakup";
   const extra = input.additionalItem;
@@ -433,6 +463,7 @@ export function quote(
     lines,
     footer,
     notes: [
+      cableExcessNote(boq, currentCableRates),
       ...NOTES,
       ...(boq.survey.sourceMode === "General quotation"
         ? [

@@ -1,3 +1,5 @@
+import { DepartmentRepository } from "./departments/repository.js";
+import { departmentsHttp } from "./departments/http.js";
 import { DirectorRepository } from "./director/repository.js";
 import { directorHttp } from "./director/http.js";
 import { CoordinatorRepository } from "./coordinator/repository.js";
@@ -120,6 +122,10 @@ export function createApp(
   app.use(
     "/api/director",
     directorHttp(new DirectorRepository(pool), auth.requireSession),
+  );
+  app.use(
+    "/api/departments",
+    departmentsHttp(new DepartmentRepository(pool), auth.requireSession),
   );
   app.use("/api/dashboard", dashboardRoutes(auth.requireSession));
   app.use(

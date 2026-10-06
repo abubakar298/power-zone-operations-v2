@@ -296,7 +296,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
       .getByLabel(`Approval ${label} markup %`, { exact: true })
       .fill(value);
   await page
-    .getByRole("button", { name: "Approve & save", exact: true })
+    .getByRole("button", { name: "Approve & send to Coordinator", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "BAFL-05850-001-R0", exact: true }),
@@ -346,7 +346,10 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
       .getByLabel(`Approval ${label} markup %`, { exact: true })
       .fill(value);
   await page
-    .getByRole("button", { name: "Approve & create quotation", exact: true })
+    .getByRole("button", {
+      name: "Approve & create quotation myself",
+      exact: true,
+    })
     .click();
   await expect(
     page.getByRole("heading", { name: "Commercial pricing", exact: true }),
@@ -486,7 +489,10 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
       .getByLabel(`Approval ${label} markup %`, { exact: true })
       .fill(value);
   await page
-    .getByRole("button", { name: "Approve & create quotation", exact: true })
+    .getByRole("button", {
+      name: "Approve & create quotation myself",
+      exact: true,
+    })
     .click();
   await page.getByLabel("Price presentation").selectOption("Full Breakup");
   await page
@@ -1195,4 +1201,119 @@ test("Coordinator records external approval with screenshots and receives its qu
     path: "test-results/external-approval-pricing.png",
     fullPage: true,
   });
+});
+
+test("Inventory and Accounts roles have dedicated queues, original PDFs and isolated progress actions", async ({
+  page,
+}) => {
+  const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? "3180"}`;
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const login = await page.request.post("/api/auth/login", {
+    headers: { Origin: origin },
+    data: {
+      email: "admin@example.test",
+      password: "browser-test-passphrase-298",
+    },
+  });
+  expect(login.ok()).toBe(true);
+  const session = await login.json(),
+    headers = { Origin: origin, "X-CSRF-Token": session.csrfToken };
+  for (const role of ["Inventory", "Accounts"]) {
+    const created = await page.request.post("/api/accounts/create", {
+      headers,
+      data: {
+        email: `${role.toLowerCase()}@example.test`,
+        displayName: `Test ${role}`,
+        role,
+        password: "browser-test-passphrase-298",
+        newPassword: "department-browser-only-298",
+        confirmPassword: "department-browser-only-298",
+      },
+    });
+    expect(created.status()).toBe(201);
+  }
+  await page.goto("/dashboard");
+  await page
+    .getByRole("button", { name: "Inventory workspace", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Inventory workspace", exact: true }),
+  ).toHaveCount(2);
+  await page
+    .getByRole("button", { name: "Open document", exact: true })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("link", { name: "Download issued BOQ" }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Progress note / missing documents")
+    .fill("SAMPLE: stock preparation started");
+  await page
+    .getByRole("button", { name: "Record progress", exact: true })
+    .click();
+  await page.getByRole("button", { name: /Preparing stock/ }).click();
+  await page
+    .getByRole("button", { name: "Open document", exact: true })
+    .first()
+    .click();
+  await expect(
+    page.getByText("SAMPLE: stock preparation started"),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "test-results/inventory-dashboard.png",
+    fullPage: true,
+  });
+  await page
+    .getByRole("button", { name: "Accounts workspace", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Open document", exact: true })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("link", { name: "Download Peachtree division" }),
+  ).toBeVisible();
+  await page.getByLabel("Next stage").selectOption("Awaiting documents");
+  await page
+    .getByLabel("Progress note / missing documents")
+    .fill("SAMPLE: signed delivery order pending");
+  await page
+    .getByRole("button", { name: "Record progress", exact: true })
+    .click();
+  await page.getByRole("button", { name: /Awaiting documents/ }).click();
+  await page
+    .getByRole("button", { name: "Open document", exact: true })
+    .first()
+    .click();
+  await expect(
+    page.getByText("SAMPLE: signed delivery order pending"),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "test-results/accounts-dashboard.png",
+    fullPage: true,
+  });
+  for (const role of ["Inventory", "Accounts"]) {
+    const login = await page.request.post("/api/auth/login", {
+      headers: { Origin: origin },
+      data: {
+        email: `${role.toLowerCase()}@example.test`,
+        password: "department-browser-only-298",
+      },
+    });
+    expect(login.ok()).toBe(true);
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: `${role} workspace`, exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Commercial pricing", exact: true }),
+    ).toHaveCount(0);
+    const denied = await page.request.get(
+      `/api/departments/${role === "Inventory" ? "Accounts" : "Inventory"}`,
+    );
+    expect(denied.status()).toBe(403);
+  }
+  expect(errors).toEqual([]);
 });

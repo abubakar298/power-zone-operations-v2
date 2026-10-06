@@ -135,6 +135,55 @@ export class DirectorRepository {
         phases.reduce((sum, p) => sum.add(p.budgetedCost), new Decimal(0)),
       );
       const revenue = division?.phaseTotal ?? null;
+      const versionRows = (
+        await this.pool.query(
+          `SELECT q.id,q.number,q.created_at,q.snapshot,br.number AS boq_number,br.id AS boq_revision_id,br.snapshot AS costing_snapshot,extra.input AS additional_input FROM quotation_versions q JOIN boq_revisions br ON br.id=q.boq_revision_id LEFT JOIN quotation_additional_inputs extra ON extra.quotation_id=q.id WHERE br.boq_id=$1 ORDER BY q.created_at DESC,q.version DESC`,
+          [r.boq_id],
+        )
+      ).rows;
+      const quotationVersions = [];
+      for (const v of versionRows) {
+        const d = (
+          await orders.preview(
+            actor,
+            orderSchema.parse({
+              quotationId: v.id,
+              evidenceType: "Written approval",
+              evidenceNotes: "Read-only reporting calculation",
+              orderDate: v.snapshot.input.quotedDate,
+              invoiceCompany: r.customer,
+              salesPerson: v.snapshot.input.proposedBy,
+              customerAccepted: true,
+            }),
+          )
+        ).snapshot.peachtree;
+        const vp = phaseBudgets(
+          v.costing_snapshot,
+          d.phases,
+          v.additional_input?.cost ?? "0",
+        );
+        const vc = money(
+          vp.reduce((sum, p) => sum.add(p.budgetedCost), new Decimal(0)),
+        );
+        const profit = new Decimal(d.phaseTotal).minus(vc);
+        quotationVersions.push({
+          id: v.id,
+          number: v.number,
+          quotedDate: v.snapshot.input.quotedDate,
+          savedAt: v.created_at,
+          boqNumber: v.boq_number,
+          boqRevisionId: v.boq_revision_id,
+          budgetedCost: vc,
+          sellingRevenue: d.phaseTotal,
+          customerPayable: d.ipoPayable,
+          budgetedProfit: money(profit),
+          budgetedMarginPercent: new Decimal(d.phaseTotal).gt(0)
+            ? profit.div(d.phaseTotal).mul(100).toFixed(2)
+            : null,
+          basis: d.basis,
+          phases: vp,
+        });
+      }
       proposals.push({
         id: r.boq_id,
         siteId: r.site_id,
@@ -147,6 +196,12 @@ export class DirectorRepository {
         quotationId: r.quotation_id,
         quotationNumber: r.quotation_number,
         ipoNumber: r.ipo_number,
+        quotedDate: r.quotation_snapshot?.input?.quotedDate ?? null,
+        quotationVersions,
+        budgetedMarginPercent:
+          revenue !== null && new Decimal(revenue).gt(0)
+            ? new Decimal(revenue).minus(cost).div(revenue).mul(100).toFixed(2)
+            : null,
         budgetedCost: cost,
         sellingRevenue: revenue,
         customerPayable: division?.ipoPayable ?? null,
@@ -156,11 +211,28 @@ export class DirectorRepository {
         phases,
       });
     }
+    const priced = proposals.filter((p) => p.sellingRevenue !== null);
+    const pricedRevenue = priced.reduce(
+      (sum, p) => sum.add(p.sellingRevenue!),
+      new Decimal(0),
+    );
+    const pricedCost = priced.reduce(
+      (sum, p) => sum.add(p.budgetedCost),
+      new Decimal(0),
+    );
     return {
       customers,
       proposals,
       recordLimit: 250,
       totals: {
+        budgetedProfit: money(pricedRevenue.minus(pricedCost)),
+        budgetedMarginPercent: pricedRevenue.gt(0)
+          ? pricedRevenue
+              .minus(pricedCost)
+              .div(pricedRevenue)
+              .mul(100)
+              .toFixed(2)
+          : null,
         budgetedCost: money(
           proposals.reduce((sum, p) => sum.add(p.budgetedCost), new Decimal(0)),
         ),
