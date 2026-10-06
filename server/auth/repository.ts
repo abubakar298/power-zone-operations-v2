@@ -6,7 +6,7 @@ export interface User {
   id: string;
   email: string;
   display_name: string;
-  role: "Admin" | "Management" | "Employee";
+  role: "Admin" | "Management" | "Employee" | "Coordinator";
 }
 export interface StoredUser extends User {
   password_hash: string;

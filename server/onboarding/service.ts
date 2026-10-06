@@ -32,13 +32,46 @@ export class AccountsService {
         "Email delivery has not been activated. Contact your administrator.",
       );
   }
+  async createDirect(body: unknown, actor: User, ip: string) {
+    await this.throttle(ip, "create-account");
+    const parsed = z
+      .object({
+        email,
+        displayName: z.string().trim().min(1).max(100),
+        role: z.enum(["Admin", "Management", "Employee", "Coordinator"]),
+        password: z.string().max(128),
+        newPassword: z.string().min(12).max(128),
+        confirmPassword: z.string().max(128),
+      })
+      .strict()
+      .safeParse(body);
+    if (!parsed.success)
+      throw new HttpError(
+        400,
+        "Enter a name, email, role and password of at least 12 characters.",
+      );
+    const v = parsed.data;
+    if (v.newPassword !== v.confirmPassword)
+      throw new HttpError(400, "New passwords do not match.");
+    const a = await this.auth.findUser(actor.email);
+    if (!a || !(await verifyPassword(v.password, a.password_hash)))
+      throw new HttpError(403, "Your current password is incorrect.");
+    return this.repository.createDirect({
+      email: v.email,
+      displayName: v.displayName,
+      role: v.role,
+      passwordHash: await hashPassword(v.newPassword),
+      actorId: a.id,
+      actorHash: a.password_hash,
+    });
+  }
   async invite(body: unknown, actor: User, ip: string) {
     await this.throttle(ip, "invite");
     this.available();
     const v = z
       .object({
         email,
-        role: z.enum(["Admin", "Management", "Employee"]),
+        role: z.enum(["Admin", "Management", "Employee", "Coordinator"]),
         password: z.string().max(128),
       })
       .strict()
@@ -142,7 +175,9 @@ export class AccountsService {
     const v = z
       .object({
         password: z.string().max(128),
-        role: z.enum(["Admin", "Management", "Employee"]).optional(),
+        role: z
+          .enum(["Admin", "Management", "Employee", "Coordinator"])
+          .optional(),
         active: z.boolean().optional(),
         revokeSessions: z.literal(true).optional(),
       })

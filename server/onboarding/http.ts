@@ -46,6 +46,20 @@ export function accountsHttp(
       emailConfigured: service.delivery.configured,
     }),
   );
+  r.post("/create", async (req, res) => {
+    const account = await service.createDirect(
+      req.body,
+      req.authSession!.user,
+      req.ip ?? "unknown",
+    );
+    res
+      .status(201)
+      .json({
+        message:
+          "Account created. Sign in with the selected email and password. Email verification remains pending.",
+        account,
+      });
+  });
   r.post("/invite", async (req, res) => {
     await service.invite(req.body, req.authSession!.user, req.ip ?? "unknown");
     res.status(201).json({ message: "Invitation queued." });

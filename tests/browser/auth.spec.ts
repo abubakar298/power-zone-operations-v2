@@ -38,7 +38,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "Welcome, Abu Bakar Siddique." }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "You’re ready to get started." }),
+    page.getByRole("heading", { name: "Operations Coordination" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "My account", exact: true }).click();
   await expect(
@@ -576,6 +576,32 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   );
   await peachDownload.saveAs("test-results/peachtree-browser.pdf");
   await ipoDownload.saveAs("test-results/ipo-browser.pdf");
+  await page
+    .getByRole("button", { name: "Send BOQ to Operations", exact: true })
+    .click();
+  await page
+    .getByLabel("Instructions to Operations")
+    .fill("Browser-test handoff: prepare the approved requirements.");
+  await expect(
+    page.getByRole("heading", { name: "Requirements to send" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Send BOQ to Operations", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "OPS-BOQ-000001", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "BOQ to Operations", exact: true })
+    .click();
+  await expect(
+    page.getByRole("cell", { name: "OPS-BOQ-000001", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "test-results/operations-desktop.png",
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(
@@ -588,6 +614,16 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Pending tasks" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Operations Coordination" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "test-results/coordinator-desktop.png",
+    fullPage: true,
+  });
   const cookieBefore = (await context.cookies()).find(
     (c) => c.name === "pz_session",
   )?.value;
@@ -617,7 +653,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "Welcome, Abu Bakar Siddique." }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "You’re ready to get started." }),
+    page.getByRole("heading", { name: "Operations Coordination" }),
   ).toBeVisible();
   expect(
     (await context.cookies()).find((c) => c.name === "pz_session")?.value,
@@ -652,7 +688,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "Welcome, Abu Bakar Siddique." }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "You’re ready to get started." }),
+    page.getByRole("heading", { name: "Operations Coordination" }),
   ).toBeVisible();
   await page.screenshot({
     path: "test-results/dashboard-mobile.png",
@@ -671,6 +707,46 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page.getByRole("button", { name: "Abu Bakar Siddique Admin" }).click();
   await expect(page.locator("#account-menu")).toBeVisible();
   await page.getByRole("button", { name: "Abu Bakar Siddique Admin" }).click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("button", { name: "Team access", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create account with password", exact: true })
+    .click();
+  await page.getByLabel("New account name").fill("Atif Hameed");
+  await page
+    .getByLabel("New account password", { exact: true })
+    .fill("browser-coordinator-only-298");
+  await page
+    .getByLabel("Confirm new account password")
+    .fill("browser-coordinator-only-298");
+  await page.getByLabel("Employee email").fill("atif-browser@example.test");
+  await page.getByLabel("Employee role").selectOption("Coordinator");
+  await page
+    .getByLabel("Your current password")
+    .fill("browser-test-passphrase-298");
+  await page
+    .getByRole("button", { name: "Create account", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Account created");
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await page.getByLabel("Email address").fill("atif-browser@example.test");
+  await page
+    .getByLabel("Password", { exact: true })
+    .fill("browser-coordinator-only-298");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Welcome, Atif Hameed." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Operations Coordination" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Team access", exact: true }),
+  ).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/atif-dashboard-desktop.png",
+    fullPage: true,
+  });
   expect(errors).toEqual([]);
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(

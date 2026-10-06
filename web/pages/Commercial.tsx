@@ -238,7 +238,9 @@ export function Commercial({
   onRevisionPricing?: (id: string, requestId: string) => void;
   initialRequestId?: string;
 }) {
-  const manager = ["Admin", "Management"].includes(session.user.role);
+  const manager = ["Admin", "Management", "Coordinator"].includes(
+    session.user.role,
+  );
   const [boqs, setBoqs] = useState<any[]>([]),
     [prices, setPrices] = useState<any[]>([]),
     [quotes, setQuotes] = useState<any[]>([]),
@@ -795,7 +797,7 @@ export function Commercial({
       )}
       {!manager && section === "pricing" && (
         <p>
-          Admin and Management prepare commercial pricing. Saved customer
+          Coordinators and management prepare commercial pricing. Saved customer
           quotations are available below.
         </p>
       )}

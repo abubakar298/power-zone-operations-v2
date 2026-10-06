@@ -1,3 +1,5 @@
+import { Coordinator } from "./Coordinator.js";
+import { Operations } from "./Operations.js";
 import { Commercial } from "./Commercial.js";
 import { Orders } from "./Orders.js";
 import { useEffect, useState } from "react";
@@ -17,6 +19,7 @@ export function Dashboard({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [operationsIpoId, setOperationsIpoId] = useState<string>();
   const [pricingRevisionId, setPricingRevisionId] = useState<string>();
   const [revisionDraftId, setRevisionDraftId] = useState<string>();
   const [pricingRequestId, setPricingRequestId] = useState<string>();
@@ -31,6 +34,7 @@ export function Dashboard({
     | "boqs"
     | "pricing"
     | "quotes"
+    | "operations"
     | "orders"
   >("dashboard");
   useEffect(() => {
@@ -96,6 +100,7 @@ export function Dashboard({
       | "boqs"
       | "pricing"
       | "quotes"
+      | "operations"
       | "orders",
   ) {
     setView(next);
@@ -194,6 +199,16 @@ export function Dashboard({
               <Icon name="file" />
               Customer PO & IPO
             </button>
+            <button
+              className={view === "operations" ? "nav-active" : ""}
+              onClick={() => {
+                setOperationsIpoId(undefined);
+                navigate("operations");
+              }}
+            >
+              <Icon name="file" />
+              BOQ to Operations
+            </button>
           </div>
           <p className="nav-hint">
             Modules become available after
@@ -223,9 +238,11 @@ export function Dashboard({
                         ? "Commercial pricing"
                         : view === "quotes"
                           ? "Quotations"
-                          : view === "orders"
-                            ? "Customer PO & IPO"
-                            : "My account"}
+                          : view === "operations"
+                            ? "BOQ to Operations"
+                            : view === "orders"
+                              ? "Customer PO & IPO"
+                              : "My account"}
             </strong>
           </span>
           <div className="account">
@@ -275,13 +292,15 @@ export function Dashboard({
                           ? "Commercial pricing"
                           : view === "quotes"
                             ? "Quotations"
-                            : view === "orders"
-                              ? "Customer PO & IPO"
-                              : "My account"}
+                            : view === "operations"
+                              ? "Send approved site requirements to Operations after IPO creation."
+                              : view === "orders"
+                                ? "Customer PO & IPO"
+                                : "My account"}
               </h1>
               <p className="dashboard-intro">
                 {view === "dashboard"
-                  ? "A clear view of your workspace, ready for the work ahead."
+                  ? "Pending coordination work and recent completed activity."
                   : view === "masters"
                     ? "Your customers, sites and approved reference data."
                     : view === "boqs"
@@ -292,9 +311,11 @@ export function Dashboard({
                           ? "Prepare and share immutable customer quotation versions."
                           : view === "team"
                             ? "Invite and manage authorised team members."
-                            : view === "orders"
-                              ? "Turn an accepted quotation and customer PO into an internal purchase order."
-                              : "Your identity and access to the Power Zone workspace."}
+                            : view === "operations"
+                              ? "Send approved site requirements to Operations after IPO creation."
+                              : view === "orders"
+                                ? "Turn an accepted quotation and customer PO into an internal purchase order."
+                                : "Your identity and access to the Power Zone workspace."}
               </p>
             </div>
             <button className="dark-button" onClick={logout} disabled={busy}>
@@ -308,57 +329,17 @@ export function Dashboard({
             </p>
           )}
           {view === "dashboard" && (
-            <>
-              <section className="welcome-panel">
-                <div className="welcome-icon">
-                  <Icon name="shield" />
-                </div>
-                <div>
-                  <span className="eyebrow">
-                    {verified ? "SIGNED IN" : "LOADING WORKSPACE"}
-                  </span>
-                  <h2>
-                    {verified
-                      ? "You’re ready to get started."
-                      : "Checking your workspace…"}
-                  </h2>
-                  <p>
-                    Your account is connected. Project operations will become
-                    available as each module is released.
-                  </p>
-                </div>
-                <span className="status-pill">
-                  <span />
-                  {verified ? "Connected" : "Connecting"}
-                </span>
-              </section>
-              <div className="summary-grid">
-                <section className="summary-card">
-                  <div className="summary-label">
-                    <span>Workspace access</span>
-                    <Icon name="shield" />
-                  </div>
-                  <strong>{session.user.role}</strong>
-                  <p>Your current account role</p>
-                </section>
-                <section className="summary-card">
-                  <div className="summary-label">
-                    <span>Session</span>
-                    <Icon name="account" />
-                  </div>
-                  <strong>{verified ? "Active" : "Checking"}</strong>
-                  <p>Sign out when you finish your work</p>
-                </section>
-                <section className="summary-card">
-                  <div className="summary-label">
-                    <span>Latest milestone</span>
-                    <Icon name="users" />
-                  </div>
-                  <strong>Commercial pricing & quotation</strong>
-                  <p>Approved costing to customer proposal</p>
-                </section>
-              </div>
-            </>
+            <Coordinator
+              session={session}
+              onOpen={(task) => {
+                if (task.draft_id) setRevisionDraftId(task.draft_id);
+                else setRevisionDraftId(undefined);
+                setPricingRevisionId(task.boq_revision_id ?? undefined);
+                setPricingRequestId(task.request_id ?? undefined);
+                setOperationsIpoId(task.ipo_id ?? undefined);
+                navigate(task.target);
+              }}
+            />
           )}
           {(view === "pricing" || view === "quotes") && (
             <Commercial
@@ -390,12 +371,23 @@ export function Dashboard({
               onLogout={onLogout}
             />
           )}
-          {view === "orders" && <Orders session={session} />}
+          {view === "orders" && (
+            <Orders
+              session={session}
+              onOperations={(id) => {
+                setOperationsIpoId(id);
+                navigate("operations");
+              }}
+            />
+          )}
+          {view === "operations" && (
+            <Operations session={session} initialIpoId={operationsIpoId} />
+          )}
           {view === "team" && <Team session={session} onLogout={onLogout} />}
           {view === "masters" && (
             <Masters session={session} onLogout={onLogout} />
           )}
-          {(view === "dashboard" || view === "account") && (
+          {view === "account" && (
             <div
               className={`dashboard-grid ${view === "account" ? "account-view" : ""}`}
             >
@@ -434,55 +426,17 @@ export function Dashboard({
                 </button>
               </section>
               <section className="detail-panel next-panel">
-                <span className="eyebrow">
-                  {view === "dashboard"
-                    ? "WORKSPACE ROADMAP"
-                    : "ACCOUNT ACCESS"}
-                </span>
-                <h2>
-                  {view === "dashboard"
-                    ? "Built one step at a time."
-                    : "Your workspace, securely connected."}
-                </h2>
+                <span className="eyebrow">ACCOUNT ACCESS</span>
+                <h2>Your workspace, securely connected.</h2>
                 <p>
-                  {view === "dashboard"
-                    ? "We’ll introduce each part of the project workflow after it has been tested against your reference data."
-                    : "Access is checked by the server. Your session stays available when you refresh, and signing out ends this session."}
+                  Your account controls access and records your work under your
+                  name.
                 </p>
                 <span className="muted-label">
-                  {view === "dashboard"
-                    ? "Commercial pricing & quotation · Current milestone"
-                    : "Need help with access? Contact your administrator."}
+                  Need help with access? Contact your administrator.
                 </span>
               </section>
             </div>
-          )}
-          {view === "dashboard" && (
-            <section className="workflow-panel">
-              <div className="panel-heading">
-                <h2>Your project workflow</h2>
-                <span className="muted-label">Upcoming milestones</span>
-              </div>
-              <div className="workflow-list">
-                {[
-                  "Survey & new BOQ",
-                  "BOQ & costing",
-                  "Revision & history",
-                  "Commercial pricing",
-                  "Quotation",
-                ].map((name, i) => (
-                  <div className="workflow-step" key={name}>
-                    <span className="step-number">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <strong>{name}</strong>
-                    <span className="planned-badge">
-                      {i < 5 ? "Ready" : "Planned"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
           )}
           <footer className="dashboard-footer">
             Power Zone Operations <span>V2 · Team workspace</span>

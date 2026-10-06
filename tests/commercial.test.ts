@@ -1113,3 +1113,329 @@ test("presentation-only pricing changes preserve original margins and payable ac
       );
     }
 });
+
+test("Operations issuance requires saved IPO, freezes exact approved requirements, and is immutable and retry safe", async () => {
+  const ipo = (
+    await db.pool.query(
+      "SELECT * FROM internal_purchase_orders ORDER BY created_at LIMIT 1",
+    )
+  ).rows[0];
+  const source = (
+    await request(app)
+      .get(`/api/operations/sources/${ipo.id}`)
+      .set("Cookie", cookie)
+      .expect(200)
+  ).body.snapshot;
+  assert.equal(source.ipoNumber, ipo.number);
+  assert.equal(source.boqRevisionId, ipo.snapshot.boqRevisionId);
+  assert.ok(source.items.length > 0);
+  assert.ok(source.items.every((l: any) => !("rate" in l) && !("total" in l)));
+  const b = (
+    await db.pool.query("SELECT snapshot FROM boq_revisions WHERE id=$1", [
+      source.boqRevisionId,
+    ])
+  ).rows[0].snapshot;
+  assert.deepEqual(
+    source.items.map((l: any) => [l.key, l.boqQty, l.boqUnit]),
+    b.lines
+      .filter((l: any) => Number(l.qty) > 0)
+      .map((l: any) => [l.key, l.qty, l.unit]),
+  );
+  await request(app).get("/api/operations").expect(401);
+  const input = {
+    ipoId: ipo.id,
+    notes: "Prepare the exact approved site requirements.",
+    requestKey: randomUUID(),
+  };
+  await request(app)
+    .post("/api/operations")
+    .set("Origin", origin)
+    .set("Cookie", cookie)
+    .send(input)
+    .expect(403);
+  const issue = (body: any) =>
+    request(app)
+      .post("/api/operations")
+      .set("Origin", origin)
+      .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrf)
+      .send(body);
+  await issue({ ...input, ipoId: randomUUID() }).expect(404);
+  const responses = await Promise.all([issue(input), issue(input)]);
+  responses.forEach((r) => assert.equal(r.status, 201));
+  const row = responses[0].body;
+  assert.equal(row.id, responses[1].body.id);
+  assert.deepEqual(row.snapshot.items, source.items);
+  assert.equal(source.items[0].qty, String(b.survey.panelQty));
+  assert.equal(source.items[0].unit, "No.");
+  await issue({ ...input, notes: "Changed payload" }).expect(409);
+  await issue({ ...input, requestKey: randomUUID() }).expect(409);
+  await request(app)
+    .get(`/api/operations/${row.id}/report.pdf`)
+    .set("Cookie", cookie)
+    .expect(200)
+    .expect("Content-Type", /application\/pdf/);
+  await request(app).get(`/api/operations/${row.id}/report.pdf`).expect(401);
+  await assert.rejects(
+    db.pool.query(
+      "UPDATE operations_boq_issuances SET snapshot='{}' WHERE id=$1",
+      [row.id],
+    ),
+  );
+  await assert.rejects(
+    db.pool.query("DELETE FROM operations_boq_issuances WHERE id=$1", [row.id]),
+  );
+  assert.deepEqual(
+    (await request(app).get(`/api/operations/${row.id}`).set("Cookie", cookie))
+      .body.snapshot,
+    row.snapshot,
+  );
+});
+
+test("coordination dashboard derives live tasks, clears completed handoffs and enforces personal/team scope", async () => {
+  await request(app).get("/api/coordinator").expect(401);
+  await request(app)
+    .get("/api/coordinator?scope=team")
+    .set("Cookie", employeeCookie)
+    .expect(403);
+  await request(app)
+    .get("/api/coordinator?scope=other")
+    .set("Cookie", cookie)
+    .expect(400);
+  const team = (
+    await request(app)
+      .get("/api/coordinator?scope=team")
+      .set("Cookie", cookie)
+      .expect(200)
+  ).body;
+  assert.equal(team.scope, "team");
+  assert.equal(
+    team.total,
+    Object.values(team.counts).reduce((a: any, n: any) => a + n, 0),
+  );
+  assert.ok(team.activity.handoffs >= 1);
+  const issued = (
+    await db.pool.query("SELECT ipo_id FROM operations_boq_issuances")
+  ).rows.map((r: any) => r.ipo_id);
+  assert.ok(
+    team.tasks
+      .filter((t: any) => t.kind === "Operations issuance")
+      .every((t: any) => !issued.includes(t.ipo_id)),
+  );
+  const mine = (
+    await request(app)
+      .get("/api/coordinator")
+      .set("Cookie", employeeCookie)
+      .expect(200)
+  ).body;
+  const employee = (
+    await db.pool.query("SELECT id FROM users WHERE email=$1", [
+      "commercial-employee@example.test",
+    ])
+  ).rows[0];
+  // Each personal IPO task is either approved by or submitted by this user.
+  for (const t of mine.tasks.filter(
+    (t: any) => t.kind === "Operations issuance",
+  )) {
+    const row = (
+      await db.pool.query(
+        "SELECT i.created_by,s.created_by AS submitted_by FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE i.id=$1",
+        [t.ipo_id],
+      )
+    ).rows[0];
+    assert.ok(employee);
+    assert.ok(
+      row.created_by === employee.id || row.submitted_by === employee.id,
+    );
+  }
+  assert.ok(mine.total <= team.total);
+  assert.equal(mine.scope, "mine");
+  assert.deepEqual(
+    (
+      await request(app)
+        .get("/api/coordinator?scope=team")
+        .set("Cookie", cookie)
+    ).body,
+    team,
+  );
+});
+
+test("completing a pending Operations handoff clears the task and increments recorded activity", async () => {
+  const before = (
+    await request(app)
+      .get("/api/coordinator?scope=team")
+      .set("Cookie", cookie)
+      .expect(200)
+  ).body;
+  const task = before.tasks.find((t: any) => t.kind === "Operations issuance");
+  assert.ok(task, "Isolated IPO fixture must contain a pending handoff");
+  const r = await request(app)
+    .post("/api/operations")
+    .set("Origin", origin)
+    .set("Cookie", cookie)
+    .set("X-CSRF-Token", csrf)
+    .send({
+      ipoId: task.ipo_id,
+      notes: "Dashboard completion verification",
+      requestKey: randomUUID(),
+    })
+    .expect(201);
+  const after = (
+    await request(app)
+      .get("/api/coordinator?scope=team")
+      .set("Cookie", cookie)
+      .expect(200)
+  ).body;
+  assert.equal(after.total, before.total - 1);
+  assert.equal(after.activity.handoffs, before.activity.handoffs + 1);
+  assert.ok(!after.tasks.some((t: any) => t.ipo_id === task.ipo_id));
+  assert.equal(r.body.snapshot.ipoNumber, task.reference);
+  const outsider = randomUUID();
+  await db.pool.query(
+    "INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$5)",
+    [
+      outsider,
+      "unrelated-worker@example.test",
+      "Unrelated worker",
+      await hashPassword("unrelated-isolated-password"),
+      "Employee",
+    ],
+  );
+  const draft = randomUUID();
+  await db.pool.query(
+    "INSERT INTO survey_drafts(id,owner_id,inputs) VALUES($1,$2,$3)",
+    [draft, outsider, { siteName: "Unrelated private draft" }],
+  );
+  const personal = (
+    await request(app)
+      .get("/api/coordinator")
+      .set("Cookie", employeeCookie)
+      .expect(200)
+  ).body;
+  assert.ok(!personal.tasks.some((t: any) => t.id === draft));
+  const team = (
+    await request(app)
+      .get("/api/coordinator?scope=team")
+      .set("Cookie", cookie)
+      .expect(200)
+  ).body;
+  assert.ok(team.tasks.some((t: any) => t.id === draft));
+});
+
+test("Coordinator can prepare commercial work but cannot approve IPO evidence or BOQs or view management team scope", async () => {
+  const id = randomUUID();
+  await db.pool.query(
+    "INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$5)",
+    [
+      id,
+      "atif-isolated@example.test",
+      "Atif Hameed",
+      await hashPassword("atif-isolated-password-only"),
+      "Coordinator",
+    ],
+  );
+  const login = await request(app)
+    .post("/api/auth/login")
+    .set("Origin", origin)
+    .send({
+      email: "atif-isolated@example.test",
+      password: "atif-isolated-password-only",
+    })
+    .expect(200);
+  const ck = login.headers["set-cookie"][0].split(";")[0],
+    token = login.body.csrfToken;
+  await request(app)
+    .post("/api/commercial/pricing/preview")
+    .set("Origin", origin)
+    .set("Cookie", ck)
+    .set("X-CSRF-Token", token)
+    .send(inputs())
+    .expect(200);
+  const sub = (await db.pool.query("SELECT id FROM ipo_submissions LIMIT 1"))
+    .rows[0];
+  await request(app)
+    .post(`/api/orders/submissions/${sub.id}/approve`)
+    .set("Origin", origin)
+    .set("Cookie", ck)
+    .set("X-CSRF-Token", token)
+    .send({ requestKey: randomUUID() })
+    .expect(403);
+  const review = (
+    await db.pool.query("SELECT id FROM boq_review_submissions LIMIT 1")
+  ).rows[0];
+  await request(app)
+    .post(`/api/boqs/reviews/${review.id}/decision`)
+    .set("Origin", origin)
+    .set("Cookie", ck)
+    .set("X-CSRF-Token", token)
+    .send({ outcome: "Approved", comments: "" })
+    .expect(403);
+  await request(app)
+    .get("/api/coordinator?scope=team")
+    .set("Cookie", ck)
+    .expect(403);
+  await request(app).get("/api/accounts").set("Cookie", ck).expect(403);
+  await db.pool.query("UPDATE users SET role='Employee' WHERE id=$1", [id]);
+  await request(app)
+    .post("/api/commercial/pricing/preview")
+    .set("Origin", origin)
+    .set("Cookie", ck)
+    .set("X-CSRF-Token", token)
+    .send(inputs())
+    .expect(403);
+});
+
+test("admin can create a separate Coordinator login without email delivery, with current-password checks and no password leakage", async () => {
+  const payload = {
+    email: "direct-atif@example.test",
+    displayName: "Atif Hameed",
+    role: "Coordinator",
+    password: "commercial-test-passphrase-123",
+    newPassword: "direct-atif-test-passphrase",
+    confirmPassword: "direct-atif-test-passphrase",
+  };
+  const create = (body: any, ck = cookie, token = csrf) =>
+    request(app)
+      .post("/api/accounts/create")
+      .set("Origin", origin)
+      .set("Cookie", ck)
+      .set("X-CSRF-Token", token)
+      .send(body);
+  await request(app)
+    .post("/api/accounts/create")
+    .set("Origin", origin)
+    .send(payload)
+    .expect(401);
+  await create(payload, employeeCookie, employeeCsrf).expect(403);
+  await create({ ...payload, password: "wrong" }).expect(403);
+  await create({ ...payload, confirmPassword: "different" }).expect(400);
+  const response = (await create(payload).expect(201)).body;
+  assert.equal(response.account.role, "Coordinator");
+  assert.ok(!JSON.stringify(response).includes(payload.newPassword));
+  const stored = (
+    await db.pool.query("SELECT * FROM users WHERE id=$1", [
+      response.account.id,
+    ])
+  ).rows[0];
+  assert.ok(stored.password_hash.startsWith("scrypt$"));
+  assert.notEqual(stored.password_hash, payload.newPassword);
+  assert.equal(stored.email_verified_at, null);
+  await create(payload).expect(409);
+  const login = await request(app)
+    .post("/api/auth/login")
+    .set("Origin", origin)
+    .send({ email: payload.email, password: payload.newPassword })
+    .expect(200);
+  assert.equal(login.body.user.displayName, "Atif Hameed");
+  const ck = login.headers["set-cookie"][0].split(";")[0];
+  await request(app).get("/api/coordinator").set("Cookie", ck).expect(200);
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT COUNT(*)::integer n FROM audit_log WHERE target_user_id=$1 AND action='account.created.by_admin'",
+        [response.account.id],
+      )
+    ).rows[0].n,
+    1,
+  );
+});

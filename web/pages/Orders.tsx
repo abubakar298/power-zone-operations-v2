@@ -32,7 +32,13 @@ const money = (v: string) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-export function Orders({ session }: { session: Session }) {
+export function Orders({
+  session,
+  onOperations,
+}: {
+  session: Session;
+  onOperations?: (id: string) => void;
+}) {
   const [quotes, setQuotes] = useState<any[]>([]),
     [orders, setOrders] = useState<any[]>([]),
     [input, setInput] = useState<Partial<OrderInput>>({
@@ -329,6 +335,11 @@ export function Orders({ session }: { session: Session }) {
             </table>
           </div>
           <div className="survey-actions">
+            {saved && onOperations && (
+              <button onClick={() => onOperations(saved.id)}>
+                Send BOQ to Operations
+              </button>
+            )}
             {!saved && !review && preview && (
               <button
                 disabled={busy}

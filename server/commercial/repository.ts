@@ -187,7 +187,7 @@ export class CommercialRepository {
         "Use the revision request linked to this approved costing.",
       );
   }
-  async manager(c: Pool | PoolClient, id: string) {
+  async manager(c: Pool | PoolClient, id: string, commercial = true) {
     const user = (
       await c.query(
         "SELECT active,role FROM users WHERE id=$1" +
@@ -196,10 +196,18 @@ export class CommercialRepository {
       )
     ).rows[0];
     if (!user?.active) throw new HttpError(401, "Your access has ended.");
-    if (!["Admin", "Management"].includes(user.role))
+    if (
+      !(
+        commercial
+          ? ["Admin", "Management", "Coordinator"]
+          : ["Admin", "Management"]
+      ).includes(user.role)
+    )
       throw new HttpError(
         403,
-        "Admin or Management commercial access required.",
+        commercial
+          ? "Commercial preparation access required."
+          : "Management approval required.",
       );
   }
   async boq(c: Pool | PoolClient, id: string) {

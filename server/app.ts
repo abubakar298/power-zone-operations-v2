@@ -1,3 +1,7 @@
+import { CoordinatorRepository } from "./coordinator/repository.js";
+import { coordinatorHttp } from "./coordinator/http.js";
+import { OperationsRepository } from "./operations/repository.js";
+import { operationsHttp } from "./operations/http.js";
 import { CommercialRepository } from "./commercial/repository.js";
 import { commercialHttp } from "./commercial/http.js";
 import { OrdersRepository } from "./orders/repository.js";
@@ -102,6 +106,14 @@ export function createApp(
       ),
       auth.requireSession,
     ),
+  );
+  app.use(
+    "/api/operations",
+    operationsHttp(new OperationsRepository(pool), auth.requireSession),
+  );
+  app.use(
+    "/api/coordinator",
+    coordinatorHttp(new CoordinatorRepository(pool), auth.requireSession),
   );
   app.use("/api/dashboard", dashboardRoutes(auth.requireSession));
   app.use(

@@ -194,7 +194,7 @@ export class OrdersRepository {
     ).rows;
   }
   async approve(actor: string, id: string, key: string) {
-    await new CommercialRepository(this.pool).manager(this.pool, actor);
+    await new CommercialRepository(this.pool).manager(this.pool, actor, false);
     const s = (
       await this.pool.query("SELECT * FROM ipo_submissions WHERE id=$1", [id])
     ).rows[0];
@@ -211,7 +211,7 @@ export class OrdersRepository {
   ) {
     return transaction(this.pool, async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(742019004)");
-      await new CommercialRepository(this.pool).manager(c, actor);
+      await new CommercialRepository(this.pool).manager(c, actor, false);
       const replay = (
         await c.query(
           "SELECT * FROM internal_purchase_orders WHERE request_key=$1",
