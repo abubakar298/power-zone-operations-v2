@@ -48,3 +48,9 @@ Some desktop sandboxes block native PostgreSQL's shared-memory system calls. In 
 See [deployment instructions](docs/deployment.md) for database migrations, HTTPS, setup secret, trusted proxy configuration and smoke verification. The application supports deployment in Singapore as required by the handover. A deployment is not considered verified solely because the build is green.
 
 Future saved BOQ revisions and issued quotation versions must capture inputs, rates, rules, brands and outputs in immutable snapshots. They must never be recomputed from current master data. This invariant is recorded in the architecture document; its tables and business logic are intentionally deferred.
+
+## Current milestone checkpoint
+
+Reviewed master data, employee account lifecycle (email activation pending), survey drafts, authenticated uploads, browser OCR review, New BOQ and immutable R0 costing are implemented. See docs/milestone-accounts.md, docs/milestone-3-survey-boq.md and docs/owner-next-steps.md. Revisions, commercial pricing and quotations remain later milestones.
+
+The build bundles OCR worker, runtime and English language assets from locked npm dependencies; no OCR credentials or external OCR service are required. Email settings are optional until activation. Tests always use isolated PostgreSQL, never production credentials.
