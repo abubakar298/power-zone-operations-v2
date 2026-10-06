@@ -1,7 +1,14 @@
 name: Power Zone verification
 on:
   push:
-    branches: [main, 'milestone-1/**', 'milestone-2/**', 'milestone-3/**']
+    branches:
+      [
+        main,
+        "milestone-1/**",
+        "milestone-2/**",
+        "milestone-3/**",
+        "milestone-4/**",
+      ]
   pull_request:
 permissions:
   contents: read

@@ -179,21 +179,30 @@ test("survey authentication, validation, persisted drafts and concurrent save is
     await post("/drafts", { version: 0, inputs: survey }).expect(200)
   ).body;
   const preview = (await post("/preview", survey).expect(200)).body;
-  const responses = await Promise.all([
-    post("/save", {
+  const submitted = (
+    await post("/reviews", {
       draftId: draft.id,
       version: 1,
       fingerprint: preview.fingerprint,
+    }).expect(201)
+  ).body;
+  const approvals = await Promise.all([
+    post(`/reviews/${submitted.id}/decision`, {
+      outcome: "Approved",
+      comments: "",
     }),
-    post("/save", {
-      draftId: draft.id,
-      version: 1,
-      fingerprint: preview.fingerprint,
+    post(`/reviews/${submitted.id}/decision`, {
+      outcome: "Approved",
+      comments: "",
     }),
   ]);
+  const responses = approvals.map((r) => ({
+    status: r.status,
+    body: r.body.saved,
+  }));
   assert.deepEqual(
     responses.map((r) => r.status),
-    [201, 201],
+    [200, 200],
   );
   assert.equal(responses[0].body.id, responses[1].body.id);
   assert.equal(responses[0].body.number, "BAFL-05850-001-R0");
@@ -222,7 +231,7 @@ test("master changes cannot rewrite snapshots and stale previews are rejected", 
   await db.pool.query(
     "INSERT INTO rate_versions(key,version,rate,status) VALUES('Solar PV Modules',2,40,'Active')",
   );
-  await post("/save", {
+  await post("/reviews", {
     draftId: d.id,
     version: 1,
     fingerprint: p.fingerprint,
@@ -240,11 +249,17 @@ test("master changes cannot rewrite snapshots and stale previews are rejected", 
   );
   const recalculated = (await post("/preview", s)).body;
   assert.equal(recalculated.snapshot.total, "6495486");
-  await post("/save", {
-    draftId: d.id,
-    version: 1,
-    fingerprint: recalculated.fingerprint,
-  }).expect(201);
+  const submitted = (
+    await post("/reviews", {
+      draftId: d.id,
+      version: 1,
+      fingerprint: recalculated.fingerprint,
+    }).expect(201)
+  ).body;
+  await post(`/reviews/${submitted.id}/decision`, {
+    outcome: "Approved",
+    comments: "",
+  }).expect(200);
 });
 test("uploaded sources are type checked, require authentication, and require review before saving", async () => {
   const upload = (data: object) =>
@@ -279,7 +294,7 @@ test("uploaded sources are type checked, require authentication, and require rev
   };
   const d = (await post("/drafts", { version: 0, inputs: s })).body,
     p = (await post("/preview", s)).body;
-  await post("/save", {
+  await post("/reviews", {
     draftId: d.id,
     version: 1,
     fingerprint: p.fingerprint,
@@ -289,13 +304,19 @@ test("uploaded sources are type checked, require authentication, and require rev
       await post("/drafts", { id: d.id, version: 1, inputs: reviewed })
     ).body,
     pr = (await post("/preview", reviewed)).body;
-  const saved = (
-    await post("/save", {
+  const submitted = (
+    await post("/reviews", {
       draftId: d.id,
       version: updated.version,
       fingerprint: pr.fingerprint,
     }).expect(201)
   ).body;
+  const saved = (
+    await post(`/reviews/${submitted.id}/decision`, {
+      outcome: "Approved",
+      comments: "",
+    }).expect(200)
+  ).body.saved;
   assert.equal(saved.snapshot.survey.uploadIds[0], u.id);
   await request(app)
     .get(`/api/boqs/uploads/${u.id}`)
@@ -311,7 +332,7 @@ test("incomplete drafts can be saved but never become a BOQ until complete", asy
       inputs: { siteName: "Incomplete survey" },
     }).expect(200)
   ).body;
-  await post("/save", {
+  await post("/reviews", {
     draftId: d.id,
     version: 1,
     fingerprint: "0".repeat(64),

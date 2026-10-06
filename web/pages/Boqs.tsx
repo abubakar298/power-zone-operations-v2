@@ -29,7 +29,13 @@ export function Boqs({
   const [masters, setMasters] = useState<any>(),
     [records, setRecords] = useState<any[]>([]),
     [drafts, setDrafts] = useState<any[]>([]),
-    [view, setView] = useState<"list" | "new" | "saved">("list"),
+    [view, setView] = useState<"list" | "new" | "saved" | "review">("list"),
+    [reviewRows, setReviewRows] = useState<any[]>([]),
+    [currentReview, setCurrentReview] = useState<any>(),
+    [reviewComments, setReviewComments] = useState(""),
+    [baseRevisionId, setBaseRevisionId] = useState<string>(),
+    [revisionReason, setRevisionReason] = useState(""),
+    [history, setHistory] = useState<any[]>([]),
     [draft, setDraft] = useState<{ id: string; version: number }>(),
     [initial, setInitial] = useState<any>({}),
     [uploads, setUploads] = useState<{ id: string; filename: string }[]>([]),
@@ -46,14 +52,16 @@ export function Boqs({
   const form = useRef<HTMLFormElement>(null);
   async function load() {
     try {
-      const [m, b, d] = await Promise.all([
+      const [m, b, d, r] = await Promise.all([
         api("/masters"),
         api<{ boqs: any[] }>("/boqs"),
         api<{ drafts: any[] }>("/boqs/drafts"),
+        api<{ reviews: any[] }>("/boqs/reviews"),
       ]);
       setMasters(m);
       setRecords(b.boqs);
       setDrafts(d.drafts);
+      setReviewRows(r.reviews);
     } catch (e) {
       fail(e);
     }
@@ -68,6 +76,8 @@ export function Boqs({
   }, []);
   function fresh() {
     setView("new");
+    setBaseRevisionId(undefined);
+    setRevisionReason("");
     setInitial({});
     setDraft(undefined);
     setUploads([]);
@@ -81,6 +91,9 @@ export function Boqs({
     setInverter("10 kW");
   }
   function resume(d: any) {
+    setBaseRevisionId(d.base_revision_id ?? undefined);
+    setRevisionReason(d.revision_reason ?? "");
+    setError("");
     setInitial(d.inputs);
     setDraft({ id: d.id, version: d.version });
     setUploads(
@@ -94,13 +107,21 @@ export function Boqs({
     setPreview(undefined);
     setInverter(d.inputs.inverter ?? "10 kW");
     setView("new");
-    setNotice("Draft loaded. Review and recalculate before saving.");
+    setNotice(
+      d.comments
+        ? `Changes requested: ${d.comments}`
+        : "Draft loaded. Review and recalculate before submitting.",
+    );
   }
   function read(validate = true) {
     if (!form.current || (validate && !form.current.reportValidity())) return;
     const f = new FormData(form.current);
     return {
-      customerId: f.get("customerId") ? Number(f.get("customerId")) : undefined,
+      customerId: baseRevisionId
+        ? initial.customerId
+        : f.get("customerId")
+          ? Number(f.get("customerId"))
+          : undefined,
       siteName: f.get("siteName"),
       siteCode: f.get("siteCode"),
       location: f.get("location"),
@@ -129,7 +150,13 @@ export function Boqs({
   async function persist(inputs = read(false)) {
     if (!inputs) return;
     const d = await api<{ id: string; version: number }>("/boqs/drafts", {
-      body: { id: draft?.id, version: draft?.version ?? 0, inputs },
+      body: {
+        id: draft?.id,
+        version: draft?.version ?? 0,
+        inputs,
+        baseRevisionId,
+        revisionReason,
+      },
       csrf: session.csrfToken,
     });
     setDraft(d);
@@ -150,19 +177,51 @@ export function Boqs({
       );
       await persist(inputs);
       setPreview(p);
-      setNotice("Review the costing below. No BOQ number has been issued yet.");
+      setNotice(
+        "Review the costing below, then submit it for approval. No new BOQ number has been issued yet.",
+      );
     } catch (e) {
       fail(e);
     } finally {
       setBusy(false);
     }
   }
-  async function save() {
+  async function openReview(id: string) {
+    setBusy(true);
+    setError("");
+    try {
+      setCurrentReview(await api(`/boqs/reviews/${id}`));
+      setReviewComments("");
+      setView("review");
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function openSaved(id: string) {
+    setBusy(true);
+    setError("");
+    try {
+      const [record, h] = await Promise.all([
+        api(`/boqs/${id}`),
+        api<{ revisions: any[] }>(`/boqs/${id}/history`),
+      ]);
+      setSaved(record);
+      setHistory(h.revisions);
+      setView("saved");
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function submitReview() {
     if (!draft || !preview || busy) return;
     setBusy(true);
     setError("");
     try {
-      const r = await api("/boqs/save", {
+      const r = await api<{ id: string }>("/boqs/reviews", {
         body: {
           draftId: draft.id,
           version: draft.version,
@@ -170,15 +229,67 @@ export function Boqs({
         },
         csrf: session.csrfToken,
       });
-      setSaved(r);
-      setView("saved");
-      setPreview(undefined);
       await load();
+      await openReview(r.id);
+      setNotice(
+        "Submitted for review. This costing version is preserved until a reviewer approves it or requests changes.",
+      );
     } catch (e) {
       fail(e);
     } finally {
       setBusy(false);
     }
+  }
+  async function decide(outcome: "Approved" | "Changes requested") {
+    if (busy || !currentReview) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api<{ saved?: any }>(
+        `/boqs/reviews/${currentReview.id}/decision`,
+        {
+          body: { outcome, comments: reviewComments },
+          csrf: session.csrfToken,
+        },
+      );
+      await load();
+      if (result.saved) {
+        await openSaved(result.saved.id);
+        setNotice(
+          "Approved. The exact reviewed costing is now saved. Margins and quotation will use this approved revision in the next milestone.",
+        );
+      } else {
+        await openReview(currentReview.id);
+        setNotice(
+          "Changes requested. The preparer can edit this draft and resubmit it.",
+        );
+      }
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+  function reviseSaved() {
+    const original = saved;
+    fresh();
+    setBaseRevisionId(original.id);
+    setInitial({
+      ...original.snapshot.survey,
+      preparedBy: session.user.displayName,
+    });
+    setInverter(original.snapshot.survey.inverter);
+    setUploads(
+      original.snapshot.survey.uploadIds.map((id: string, i: number) => ({
+        id,
+        filename: `Source document ${i + 1}`,
+      })),
+    );
+    setOcrText(original.snapshot.survey.ocrText);
+    setReviewed(original.snapshot.survey.ocrReviewed);
+    setNotice(
+      `Revision of ${original.number}. Earlier versions remain unchanged.`,
+    );
   }
   async function upload(file?: File) {
     if (!file || busy) return;
@@ -272,8 +383,60 @@ export function Boqs({
           </div>
           <p>
             Create a new site from a survey, review the costing, then save an
-            immutable R0.
+            approved immutable R0.
           </p>
+          <section className="detail-panel review-workspace">
+            <h3>
+              {["Admin", "Management"].includes(session.user.role)
+                ? "Costing review inbox"
+                : "My costing submissions"}
+            </h3>
+            {!reviewRows.length ? (
+              <p>No costing submissions yet.</p>
+            ) : (
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Customer / Site</th>
+                      <th>Submitted by</th>
+                      <th>Version</th>
+                      <th>Status</th>
+                      <th>Cost (PKR)</th>
+                      <th>Review</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reviewRows.map((r) => (
+                      <tr key={r.id}>
+                        <td>
+                          {r.customer}
+                          <br />
+                          {r.site}
+                        </td>
+                        <td>{r.submitted_by_name}</td>
+                        <td>{r.draft_version}</td>
+                        <td>
+                          <span className="master-status">{r.status}</span>
+                        </td>
+                        <td className="numeric">
+                          {Number(r.total).toLocaleString("en-PK")}
+                        </td>
+                        <td>
+                          <button
+                            disabled={busy}
+                            onClick={() => void openReview(r.id)}
+                          >
+                            Open review
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
           <section className="detail-panel">
             <h3>Survey drafts</h3>
             {drafts.length === 0 ? (
@@ -283,10 +446,14 @@ export function Boqs({
                 <button
                   key={d.id}
                   className="draft-button"
+                  disabled={
+                    !!d.review_id && d.review_status === "Awaiting review"
+                  }
                   onClick={() => resume(d)}
                 >
                   {d.inputs.siteName || "Untitled survey"} ·{" "}
-                  {new Date(d.updated_at).toLocaleString()}
+                  {new Date(d.updated_at).toLocaleString()}{" "}
+                  {d.review_id && `· ${d.review_status}`}
                 </button>
               ))
             )}
@@ -311,16 +478,7 @@ export function Boqs({
                       <tr key={r.id}>
                         <td>
                           <button
-                            onClick={() => {
-                              setBusy(true);
-                              void api(`/boqs/${r.id}`)
-                                .then((v) => {
-                                  setSaved(v);
-                                  setView("saved");
-                                })
-                                .catch(fail)
-                                .finally(() => setBusy(false));
-                            }}
+                            onClick={() => void openSaved(r.id)}
                             disabled={busy}
                           >
                             {r.number}
@@ -345,6 +503,95 @@ export function Boqs({
             )}
           </section>
         </>
+      ) : view === "review" ? (
+        <>
+          <div className="panel-heading">
+            <h2>
+              Costing review · Draft version {currentReview.draft_version}
+            </h2>
+            <button onClick={() => setView("list")}>Back to BOQs</button>
+          </div>
+          <section className="detail-panel">
+            <p>
+              <strong>{currentReview.status}</strong> · Submitted by{" "}
+              {currentReview.submitted_by_name} ·{" "}
+              {new Date(currentReview.created_at).toLocaleString()}
+            </p>
+            {currentReview.revision_reason && (
+              <p>Revision reason: {currentReview.revision_reason}</p>
+            )}
+            {currentReview.comments && (
+              <p>Reviewer feedback: {currentReview.comments}</p>
+            )}
+            {currentReview.reviewed_by_name && (
+              <p>Reviewed by {currentReview.reviewed_by_name}</p>
+            )}
+            {currentReview.status === "Awaiting review" &&
+              ["Admin", "Management"].includes(session.user.role) && (
+                <div className="review-actions">
+                  <label>
+                    Review comments
+                    <textarea
+                      value={reviewComments}
+                      maxLength={2000}
+                      onChange={(e) => setReviewComments(e.target.value)}
+                    />
+                  </label>
+                  <div className="survey-actions">
+                    <button
+                      disabled={busy || !reviewComments.trim()}
+                      onClick={() => void decide("Changes requested")}
+                    >
+                      Request revision
+                    </button>
+                    <button
+                      className="primary"
+                      disabled={busy}
+                      onClick={() => void decide("Approved")}
+                    >
+                      Approve costing
+                    </button>
+                  </div>
+                  <p>
+                    Approval preserves this exact costing and issues its BOQ
+                    revision. Future changes need a new revision.
+                  </p>
+                </div>
+              )}
+            {currentReview.status === "Changes requested" &&
+              currentReview.owner_id === session.user.id &&
+              drafts.some(
+                (d) =>
+                  d.id === currentReview.draft_id &&
+                  d.review_id === currentReview.id &&
+                  d.review_status === "Changes requested",
+              ) && (
+                <button
+                  disabled={busy}
+                  onClick={() => {
+                    const d = drafts.find(
+                      (d) => d.id === currentReview.draft_id,
+                    );
+                    if (d) resume(d);
+                  }}
+                >
+                  Edit requested revision
+                </button>
+              )}
+            {currentReview.revision_id && (
+              <button
+                disabled={busy}
+                onClick={() => void openSaved(currentReview.revision_id)}
+              >
+                Open approved BOQ
+              </button>
+            )}
+          </section>
+          <BoqCosting
+            snapshot={currentReview.snapshot}
+            pdfUrl={`/api/boqs/reviews/${currentReview.id}/costing.pdf`}
+          />
+        </>
       ) : view === "saved" ? (
         <>
           <button
@@ -355,6 +602,34 @@ export function Boqs({
           >
             Back to BOQs
           </button>
+          <section className="detail-panel">
+            <h3>Revision / History</h3>
+            <p>
+              {saved.revision_reason} · Current view: {saved.number}
+            </p>
+            <button
+              disabled={
+                busy || (history.length > 0 && history[0].id !== saved.id)
+              }
+              onClick={reviseSaved}
+            >
+              Create revision draft
+            </button>
+            <p>
+              Revision retains the customer, site and sequence. A reason and
+              approval are required.
+            </p>
+            {history.map((r) => (
+              <button
+                key={r.id}
+                className="draft-button"
+                disabled={busy}
+                onClick={() => void openSaved(r.id)}
+              >
+                {r.number} · {r.revision_reason}
+              </button>
+            ))}
+          </section>
           <BoqCosting
             pdfUrl={`/api/boqs/${saved.id}/costing.pdf`}
             snapshot={saved.snapshot}
@@ -365,15 +640,33 @@ export function Boqs({
       ) : (
         <>
           <div className="panel-heading">
-            <h2>New survey & BOQ</h2>
+            <h2>
+              {baseRevisionId ? "Revise survey & BOQ" : "New survey & BOQ"}
+            </h2>
             <button onClick={() => setView("list")} disabled={busy}>
               Back to BOQs
             </button>
           </div>
           <p>
-            A new BOQ creates a new site. No BOQ number is generated until you
-            save the reviewed costing.
+            {baseRevisionId
+              ? "This revision uses the existing customer and site. Approval saves a new immutable revision."
+              : "A new BOQ creates a new site. Its number is issued when the reviewed costing is approved."}
           </p>
+          {baseRevisionId && (
+            <label className="source-label">
+              Revision reason
+              <textarea
+                aria-label="Revision reason"
+                value={revisionReason}
+                onChange={(e) => {
+                  setRevisionReason(e.target.value);
+                  setPreview(undefined);
+                }}
+                maxLength={2000}
+                required
+              />
+            </label>
+          )}
           <section className="detail-panel upload-panel">
             <h3>Upload survey information</h3>
             <p>
@@ -470,6 +763,7 @@ export function Boqs({
                   <select
                     name="customerId"
                     aria-label="Customer"
+                    disabled={!!baseRevisionId}
                     defaultValue={initial.customerId ?? ""}
                     required
                   >
@@ -503,6 +797,7 @@ export function Boqs({
                   <input
                     name="siteCode"
                     aria-label="Site code"
+                    readOnly={!!baseRevisionId}
                     defaultValue={initial.siteCode ?? ""}
                     required
                     maxLength={30}
@@ -681,17 +976,17 @@ export function Boqs({
               />
               <div className="save-boq-panel">
                 <p>
-                  Save the reviewed survey as a new site and an immutable R0
-                  BOQ.
+                  Submit this exact costing for approval. If changes are
+                  requested, edit the draft and resubmit.
                 </p>
                 <button
                   className="primary"
                   disabled={busy || (uploads.length > 0 && !reviewed)}
                   onClick={() => {
-                    void save();
+                    void submitReview();
                   }}
                 >
-                  Save new BOQ
+                  Submit for review
                 </button>
               </div>
             </>

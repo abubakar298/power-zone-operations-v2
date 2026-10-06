@@ -145,7 +145,7 @@ export function BoqCosting({
       <p>
         Prepared by {s.survey.preparedBy}.{" "}
         {number
-          ? "Saved R0 is immutable. Rates, rules, brands and approved specifications are preserved as used on this record."
+          ? "Saved BOQ revision is immutable. Rates, rules, brands and approved specifications are preserved as used on this record."
           : "Preview uses the current master data. A final review is required before saving."}
       </p>
       {s.survey.uploadIds.length > 0 && (

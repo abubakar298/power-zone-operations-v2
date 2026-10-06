@@ -393,7 +393,7 @@ export function Dashboard({
                     </span>
                     <strong>{name}</strong>
                     <span className="planned-badge">
-                      {i < 2 ? "Ready" : "Planned"}
+                      {i < 3 ? "Ready" : "Planned"}
                     </span>
                   </div>
                 ))}

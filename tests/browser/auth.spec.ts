@@ -262,7 +262,30 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     path: "test-results/boq-preview-mobile.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Save new BOQ", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Submit for review", exact: true })
+    .click();
+  await page
+    .getByLabel("Review comments")
+    .fill("Confirm the survey preparation details.");
+  await page
+    .getByRole("button", { name: "Request revision", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Edit requested revision", exact: true })
+    .click();
+  await page
+    .getByLabel("Prepared by", { exact: true })
+    .fill("Abu Bakar Reviewed");
+  await page
+    .getByRole("button", { name: "Calculate & review BOQ", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Submit for review", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Approve costing", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "BAFL-05850-001-R0", exact: true }),
   ).toBeVisible();
@@ -285,6 +308,18 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     "EPC Costing Breakup",
     "Project Costing Detailed Breakup",
   ]);
+
+  await page.getByRole("button", { name: "Create revision draft", exact: true }).click();
+  await page.getByLabel("Revision reason", { exact: true }).fill("Updated cable routing");
+  await page.getByLabel("6mm² DC cable total (m)", { exact: true }).fill("362");
+  await page.getByRole("button", { name: "Calculate & review BOQ", exact: true }).click();
+  await page.getByRole("button", { name: "Submit for review", exact: true }).click();
+  await page.getByRole("button", { name: "Approve costing", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "BAFL-05850-001-R1", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "BAFL-05850-001-R0 · Initial BOQ", exact: true }).click();
+  await expect(page.getByText("PKR 6,456,786", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", {name:"Create revision draft",exact:true})).toBeDisabled();
+  await page.screenshot({path:"test-results/boq-review-history.png",fullPage:true});
 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();

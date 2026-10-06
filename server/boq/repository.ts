@@ -1,11 +1,12 @@
+import { ReviewRepository } from "./reviews.js";
 import type { Pool, PoolClient } from "pg";
 import { randomUUID, createHash } from "node:crypto";
 import { transaction } from "../db/transaction.js";
 import { MastersRepository } from "../masters/repository.js";
-import { calculate } from "./engine.js";
+import { calculate, type BoqSnapshot } from "./engine.js";
 import { surveySchema, type Survey, type SurveyDraft } from "./schema.js";
 import { HttpError } from "../http/errors.js";
-function fingerprint(value: unknown) {
+export function fingerprint(value: unknown) {
   const canonical = (v: unknown): unknown =>
     Array.isArray(v)
       ? v.map(canonical)
@@ -22,10 +23,22 @@ function fingerprint(value: unknown) {
 }
 export class BoqRepository {
   constructor(private pool: Pool) {}
+  reviews() {
+    return new ReviewRepository(this.pool, this);
+  }
+  async history(id: string) {
+    const base = await this.get(id);
+    return (
+      await this.pool.query(
+        "SELECT id,number,revision,revision_reason,created_at,snapshot->>\'total\' AS total FROM boq_revisions WHERE boq_id=$1 ORDER BY revision DESC",
+        [base.boq_id],
+      )
+    ).rows;
+  }
   async drafts(owner: string) {
     return (
       await this.pool.query(
-        "SELECT id,inputs,version,updated_at FROM survey_drafts WHERE owner_id=$1 AND id NOT IN (SELECT draft_id FROM boqs) ORDER BY updated_at DESC LIMIT 100",
+        `SELECT d.*,s.id AS review_id,s.draft_version AS submitted_version,COALESCE(v.outcome,'Awaiting review') AS review_status,v.comments FROM survey_drafts d LEFT JOIN LATERAL(SELECT * FROM boq_review_submissions WHERE draft_id=d.id ORDER BY draft_version DESC LIMIT 1) s ON true LEFT JOIN boq_review_decisions v ON v.submission_id=s.id WHERE d.owner_id=$1 AND d.id NOT IN(SELECT draft_id FROM boq_draft_finalizations) ORDER BY d.updated_at DESC LIMIT 100`,
         [owner],
       )
     ).rows;
@@ -33,7 +46,7 @@ export class BoqRepository {
   async draftForReport(owner: string, id: string) {
     const row = (
       await this.pool.query(
-        "SELECT inputs FROM survey_drafts WHERE id=$1 AND owner_id=$2 AND id NOT IN (SELECT draft_id FROM boqs)",
+        "SELECT inputs FROM survey_drafts WHERE id=$1 AND owner_id=$2 AND id NOT IN (SELECT draft_id FROM boq_draft_finalizations)",
         [id, owner],
       )
     ).rows[0];
@@ -45,15 +58,61 @@ export class BoqRepository {
     id: string | undefined,
     version: number,
     inputs: SurveyDraft,
+    baseRevisionId?: string,
+    reason = "",
   ) {
     return transaction(this.pool, async (c) => {
       await this.actor(c, owner);
-      await this.uploads(c, owner, inputs.uploadIds);
+      const existingDraft = id
+        ? (
+            await c.query(
+              "SELECT * FROM survey_drafts WHERE id=$1 AND owner_id=$2 FOR UPDATE",
+              [id, owner],
+            )
+          ).rows[0]
+        : undefined;
+      if (id && !existingDraft) throw new HttpError(404, "Draft not found.");
+      const base = existingDraft?.base_revision_id ?? baseRevisionId;
+      if (
+        baseRevisionId &&
+        existingDraft &&
+        baseRevisionId !== existingDraft.base_revision_id
+      )
+        throw new HttpError(409, "Revision identity cannot change.");
+      if (
+        id &&
+        (
+          await c.query(
+            "SELECT 1 FROM boq_review_submissions s LEFT JOIN boq_review_decisions v ON v.submission_id=s.id WHERE s.draft_id=$1 AND v.submission_id IS NULL",
+            [id],
+          )
+        ).rowCount
+      )
+        throw new HttpError(
+          409,
+          "This draft is awaiting review. A reviewer must request changes before it can be edited.",
+        );
+      if (base) {
+        const original = (
+          await c.query("SELECT * FROM boq_revisions WHERE id=$1", [base])
+        ).rows[0];
+        if (!original)
+          throw new HttpError(404, "Original BOQ revision not found.");
+        if (
+          inputs.customerId !== original.snapshot.survey.customerId ||
+          inputs.siteCode !== original.snapshot.survey.siteCode
+        )
+          throw new HttpError(
+            400,
+            "A revision must retain the original customer and site code.",
+          );
+      }
+      await this.uploads(c, owner, inputs.uploadIds, base);
       if (id) {
         const row = (
           await c.query(
-            "UPDATE survey_drafts SET inputs=$1,version=version+1,updated_at=now() WHERE id=$2 AND owner_id=$3 AND version=$4 AND id NOT IN (SELECT draft_id FROM boqs) RETURNING id,version",
-            [inputs, id, owner, version],
+            "UPDATE survey_drafts SET inputs=$1,version=version+1,updated_at=now(),revision_reason=$5 WHERE id=$2 AND owner_id=$3 AND version=$4 AND id NOT IN (SELECT draft_id FROM boq_draft_finalizations) RETURNING id,version",
+            [inputs, id, owner, version, reason],
           )
         ).rows[0];
         if (!row)
@@ -65,8 +124,8 @@ export class BoqRepository {
       }
       const next = randomUUID();
       await c.query(
-        "INSERT INTO survey_drafts(id,owner_id,inputs) VALUES($1,$2,$3)",
-        [next, owner, inputs],
+        "INSERT INTO survey_drafts(id,owner_id,inputs,base_revision_id,revision_reason) VALUES($1,$2,$3,$4,$5)",
+        [next, owner, inputs, base ?? null, reason],
       );
       return { id: next, version: 1 };
     });
@@ -81,62 +140,63 @@ export class BoqRepository {
     ).rows[0];
     if (!u?.active) throw new HttpError(401, "Your access has ended.");
   }
-  private async uploads(c: PoolClient, owner: string, ids: string[]) {
+  async uploads(c: PoolClient, owner: string, ids: string[], base?: string) {
     if (!ids.length) return;
     if (new Set(ids).size !== ids.length)
       throw new HttpError(400, "Duplicate attachment.");
     const n = (
       await c.query(
-        "SELECT count(*) FROM survey_uploads WHERE id=ANY($1::uuid[]) AND owner_id=$2",
-        [ids, owner],
+        "SELECT count(*) FROM survey_uploads WHERE id=ANY($1::uuid[]) AND (owner_id=$2 OR id IN(SELECT upload_id FROM boq_uploads WHERE revision_id=$3))",
+        [ids, owner, base ?? null],
       )
     ).rows[0].count;
     if (Number(n) !== ids.length)
       throw new HttpError(403, "One or more attachments are unavailable.");
   }
-  async save(owner: string, id: string, version: number, expected: string) {
-    return transaction(this.pool, async (c) => {
-      await c.query("SELECT pg_advisory_xact_lock(742019002)");
-      await this.actor(c, owner);
-      const d = (
+  async save(owner: string, id: string, _version: number, _expected: string) {
+    const existing = (
+      await this.pool.query(
+        "SELECT r.* FROM boq_draft_finalizations f JOIN survey_drafts d ON d.id=f.draft_id JOIN boq_revisions r ON r.id=f.revision_id WHERE f.draft_id=$1 AND d.owner_id=$2",
+        [id, owner],
+      )
+    ).rows[0];
+    if (existing) return existing;
+    throw new HttpError(
+      409,
+      "Submit the costing for review. Approval saves the exact reviewed BOQ.",
+    );
+  }
+  async finalize(c: PoolClient, actor: string, d: any, snapshot: BoqSnapshot) {
+    const s = snapshot.survey;
+    let boq: string, revision: number, number: string;
+    if (d.base_revision_id) {
+      const base = (
+        await c.query("SELECT * FROM boq_revisions WHERE id=$1", [
+          d.base_revision_id,
+        ])
+      ).rows[0];
+      const latest = (
         await c.query(
-          "SELECT * FROM survey_drafts WHERE id=$1 AND owner_id=$2 FOR UPDATE",
-          [id, owner],
+          "SELECT * FROM boq_revisions WHERE boq_id=$1 ORDER BY revision DESC LIMIT 1",
+          [base.boq_id],
         )
       ).rows[0];
-      if (!d) throw new HttpError(404, "Draft not found.");
-      const existing = (
-        await c.query(
-          "SELECT r.* FROM boqs b JOIN boq_revisions r ON r.boq_id=b.id WHERE b.draft_id=$1 AND r.revision=0",
-          [id],
-        )
-      ).rows[0];
-      if (existing) return existing;
-      if (d.version !== version)
-        throw new HttpError(409, "This draft changed. Review it again.");
-      const parsed = surveySchema.safeParse(d.inputs);
-      if (!parsed.success)
-        throw new HttpError(
-          400,
-          "Complete the survey fields before saving a BOQ.",
-        );
-      const s = parsed.data;
-      if (s.uploadIds.length && !s.ocrReviewed)
-        throw new HttpError(
-          400,
-          "Review uploaded source information before saving.",
-        );
-      await this.uploads(c, owner, s.uploadIds);
-      // Read all masters on the transaction connection while the master-write lock is held.
-      const snapshot = calculate(
-        s,
-        await new MastersRepository(c, true).list(),
-      );
-      if (fingerprint(snapshot) !== expected)
+      if (latest.id !== base.id)
         throw new HttpError(
           409,
-          "Reference data changed after your preview. Recalculate and review before saving.",
+          "A newer BOQ revision exists. Start from the latest revision.",
         );
+      if (!d.revision_reason.trim())
+        throw new HttpError(400, "Enter a revision reason.");
+      if (
+        s.customerId !== base.snapshot.survey.customerId ||
+        s.siteCode !== base.snapshot.survey.siteCode
+      )
+        throw new HttpError(400, "Revision identity cannot change.");
+      boq = base.boq_id;
+      revision = base.revision + 1;
+      number = base.number.replace(/-R\d+$/, `-R${revision}`);
+    } else {
       if (
         (
           await c.query(
@@ -147,7 +207,7 @@ export class BoqRepository {
       )
         throw new HttpError(
           409,
-          "This customer already has a site with this code. New BOQ requires a new site; choose a new code.",
+          "This customer already has a site with this code. Use the Revision workflow for an existing BOQ.",
         );
       const site = (
         await c.query("SELECT COALESCE(max(id),0)+1 AS id FROM sites")
@@ -156,36 +216,47 @@ export class BoqRepository {
         "INSERT INTO sites(id,customer_id,name,code,location,status) VALUES($1,$2,$3,$4,$5,'Active')",
         [site, s.customerId, s.siteName, s.siteCode, s.location],
       );
-      const sequence = 1,
-        boq = randomUUID(),
-        revision = randomUUID(),
-        number = `${snapshot.customer.shortCode}-${s.siteCode}-${String(sequence).padStart(3, "0")}-R0`;
+      boq = randomUUID();
+      revision = 0;
+      number = `${snapshot.customer.shortCode}-${s.siteCode}-001-R0`;
       await c.query(
-        "INSERT INTO boqs(id,draft_id,site_id,customer_id,sequence,created_by) VALUES($1,$2,$3,$4,$5,$6)",
-        [boq, id, site, s.customerId, sequence, owner],
+        "INSERT INTO boqs(id,draft_id,site_id,customer_id,sequence,created_by) VALUES($1,$2,$3,$4,1,$5)",
+        [boq, d.id, site, s.customerId, actor],
       );
-      const saved = (
-        await c.query(
-          "INSERT INTO boq_revisions(id,boq_id,revision,number,snapshot,created_by) VALUES($1,$2,0,$3,$4,$5) RETURNING *",
-          [revision, boq, number, snapshot, owner],
-        )
-      ).rows[0];
-      for (const upload of s.uploadIds)
-        await c.query(
-          "INSERT INTO boq_uploads(revision_id,upload_id) VALUES($1,$2)",
-          [revision, upload],
-        );
-      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
-        owner,
-        `boq.${number}.created`,
-      ]);
-      return saved;
-    });
+    }
+    const saved = (
+      await c.query(
+        "INSERT INTO boq_revisions(id,boq_id,revision,number,snapshot,created_by,revision_reason) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+        [
+          randomUUID(),
+          boq,
+          revision,
+          number,
+          snapshot,
+          actor,
+          d.base_revision_id ? d.revision_reason : "Initial BOQ",
+        ],
+      )
+    ).rows[0];
+    for (const upload of s.uploadIds)
+      await c.query(
+        "INSERT INTO boq_uploads(revision_id,upload_id) VALUES($1,$2)",
+        [saved.id, upload],
+      );
+    await c.query(
+      "INSERT INTO boq_draft_finalizations(draft_id,revision_id) VALUES($1,$2)",
+      [d.id, saved.id],
+    );
+    await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
+      actor,
+      `boq.${number}.approved`,
+    ]);
+    return saved;
   }
   async list() {
     return (
       await this.pool.query(
-        "SELECT r.id,r.number,r.created_at,r.snapshot->'customer'->>'name' AS customer,r.snapshot->'survey'->>'siteName' AS site,r.snapshot->>'total' AS total FROM boq_revisions r ORDER BY created_at DESC LIMIT 200",
+        "SELECT r.id,r.number,r.revision,r.revision_reason,r.boq_id,r.created_at,r.snapshot->'customer'->>'name' AS customer,r.snapshot->'survey'->>'siteName' AS site,r.snapshot->>'total' AS total FROM boq_revisions r ORDER BY created_at DESC LIMIT 200",
       )
     ).rows;
   }
@@ -226,7 +297,7 @@ export class BoqRepository {
   async attachment(owner: string, id: string) {
     const r = (
       await this.pool.query(
-        "SELECT * FROM survey_uploads WHERE id=$1 AND (owner_id=$2 OR EXISTS(SELECT 1 FROM boq_uploads WHERE upload_id=$1))",
+        "SELECT * FROM survey_uploads WHERE id=$1 AND (owner_id=$2 OR EXISTS(SELECT 1 FROM boq_uploads WHERE upload_id=$1) OR EXISTS(SELECT 1 FROM boq_review_submissions s JOIN survey_drafts d ON d.id=s.draft_id WHERE (s.snapshot->'survey'->'uploadIds') ? $1::text AND (d.owner_id=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')))))",
         [id, owner],
       )
     ).rows[0];
