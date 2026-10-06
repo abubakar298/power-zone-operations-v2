@@ -1,3 +1,4 @@
+import { OrdersRepository } from "../orders/repository.js";
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { z } from "zod";
@@ -43,6 +44,11 @@ export class DepartmentRepository {
         [inventory ? "Received BOQs" : "New IPOs"],
       )
     ).rows;
+    if (!inventory) {
+      const orders = new OrdersRepository(this.pool);
+      for (const row of rows)
+        row.division = (await orders.peachtree(row.id)).division;
+    }
     return { department, records: rows };
   }
   async checkpoint(

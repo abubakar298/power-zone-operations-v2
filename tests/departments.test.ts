@@ -66,7 +66,9 @@ test("Department queues enforce roles, ordered Inventory progress, concurrency, 
     assert.equal(portal.records.length, 1);
     assert.equal(portal.records[0].stage, "Received BOQs");
     assert.deepEqual(portal.records[0].snapshot.items, store.snapshot.items);
-    assert.equal((await repo.portal(accounts, "Accounts")).records.length, 2);
+    const accountsPortal = await repo.portal(accounts, "Accounts");
+    assert.equal(accountsPortal.records.length, 2);
+    assert.equal(accountsPortal.records[0].division.phases.length, 6);
     await assert.rejects(repo.portal(coord, "Inventory"), /Inventory access/);
     await assert.rejects(repo.portal(inventory, "Accounts"), /Accounts access/);
     const input = {

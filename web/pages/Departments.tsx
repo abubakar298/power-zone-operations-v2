@@ -5,6 +5,7 @@ type RecordRow = {
   id: string;
   number: string;
   snapshot: any;
+  division?: any;
   created_at: string;
   stage_since: string;
   stage: string;
@@ -286,12 +287,12 @@ export function Departments({
                   Download Peachtree division
                 </a>
               </p>
-              {selected.snapshot.peachtree && (
+              {selected.division && (
                 <>
                   <h4>Peachtree phase division</h4>
                   <p>
-                    {selected.snapshot.peachtree.basis} · Discount allocated
-                    from the accepted quotation.
+                    {selected.division.basis} · Discount allocated from the
+                    accepted quotation.
                   </p>
                   <table>
                     <thead>
@@ -301,7 +302,7 @@ export function Departments({
                       </tr>
                     </thead>
                     <tbody>
-                      {selected.snapshot.peachtree.phases.map((p: any) => (
+                      {selected.division.phases.map((p: any) => (
                         <tr key={p.name}>
                           <td>{p.name}</td>
                           <td>
@@ -315,14 +316,12 @@ export function Departments({
                     </tbody>
                   </table>
                   <p>
-                    <strong>Phase total:</strong>{" "}
-                    {selected.snapshot.peachtree.phaseTotal} ·{" "}
-                    <strong>IPO tax:</strong>{" "}
-                    {selected.snapshot.peachtree.taxMode === "Tax Included"
+                    <strong>Phase total:</strong> {selected.division.phaseTotal}{" "}
+                    · <strong>IPO tax:</strong>{" "}
+                    {selected.division.taxMode === "Tax Included"
                       ? "0.00"
-                      : selected.snapshot.peachtree.ipoTax}{" "}
-                    · <strong>Payable:</strong>{" "}
-                    {selected.snapshot.peachtree.ipoPayable}
+                      : selected.division.ipoTax}{" "}
+                    · <strong>Payable:</strong> {selected.division.ipoPayable}
                   </p>
                 </>
               )}
