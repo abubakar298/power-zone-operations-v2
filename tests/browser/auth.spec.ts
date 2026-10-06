@@ -424,20 +424,21 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   )?.value;
   const control = JSON.parse(
     await readFile(".local/e2e-control.json", "utf8"),
-  ) as { pid: number };
+  ) as { pid: number; generation: number };
   process.kill(control.pid, "SIGUSR2");
-  // Give the supervisor time to stop the old process, then wait for readiness.
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  // Wait for supervisor confirmation of a healthy replacement process.
   await expect
     .poll(
       async () => {
         try {
+          const restarted = JSON.parse(await readFile(".local/e2e-control.json", "utf8"));
+          if (restarted.generation <= control.generation) return 0;
           return (await fetch("http://127.0.0.1:3180/api/health")).status;
         } catch {
           return 0;
         }
       },
-      { timeout: 15000 },
+      { timeout: 30000 },
     )
     .toBe(200);
   await page.reload();

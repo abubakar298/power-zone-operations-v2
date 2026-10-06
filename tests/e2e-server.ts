@@ -19,12 +19,16 @@ async function startApp() {
 }
 await startApp();
 let restarting = false;
+let generation = 0;
 process.on('SIGUSR2', () => {
   if (restarting) return;
   restarting = true;
   void (async () => {
     const exited = once(app,'exit'); app.kill('SIGTERM'); await exited;
-    await startApp(); restarting = false;
+    await startApp();
+    generation++;
+    await import('node:fs/promises').then(fs => fs.writeFile('.local/e2e-control.json',JSON.stringify({pid:process.pid,generation})));
+    restarting = false;
   })().catch(() => { console.error('Test restart failed.'); process.exit(1); });
 });
 let closing = false;
@@ -36,4 +40,4 @@ async function stop() {
 process.on('SIGTERM', () => {void stop();});
 process.on('SIGINT', () => {void stop();});
 // Browser test can request a restart without a production HTTP backdoor.
-await import('node:fs/promises').then(fs => fs.writeFile('.local/e2e-control.json',JSON.stringify({pid:process.pid})));
+await import('node:fs/promises').then(fs => fs.writeFile('.local/e2e-control.json',JSON.stringify({pid:process.pid,generation})));
