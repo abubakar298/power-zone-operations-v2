@@ -7,6 +7,7 @@ import { CommercialRepository } from "../commercial/repository.js";
 import { quote } from "../commercial/engine.js";
 import { HttpError } from "../http/errors.js";
 import { allocateDiscount } from "./allocation.js";
+import { peachtreeDivision } from "./peachtree.js";
 import type { OrderInput } from "./schema.js";
 
 export class OrdersRepository {
@@ -128,6 +129,12 @@ export class OrdersRepository {
       solutionId: source.solutionId,
       document,
       allocation,
+      peachtree: peachtreeDivision(
+        allocation,
+        b.snapshot,
+        p.snapshot,
+        extra?.cost ?? "0",
+      ),
     };
     return { snapshot, fingerprint: fingerprint(snapshot) };
   }
@@ -328,6 +335,39 @@ export class OrdersRepository {
     ).rows[0];
     if (!row) throw new HttpError(404, "IPO not found.");
     return row;
+  }
+  async peachtree(id: string) {
+    const row = await this.get(id);
+    if (row.snapshot.peachtree)
+      return { row, division: row.snapshot.peachtree };
+    // Earlier IPOs retain their snapshots. Version-1 report derivation uses only
+    // their immutable costing/pricing links, never today's master data.
+    const b = (
+      await this.pool.query("SELECT snapshot FROM boq_revisions WHERE id=$1", [
+        row.snapshot.boqRevisionId,
+      ])
+    ).rows[0];
+    const p = (
+      await this.pool.query(
+        "SELECT p.snapshot FROM commercial_pricing_versions p JOIN quotation_versions q ON q.pricing_id=p.id WHERE q.id=$1",
+        [row.snapshot.quotationId],
+      )
+    ).rows[0];
+    const extra = (
+      await this.pool.query(
+        "SELECT input FROM quotation_additional_inputs WHERE quotation_id=$1",
+        [row.snapshot.quotationId],
+      )
+    ).rows[0]?.input;
+    return {
+      row,
+      division: peachtreeDivision(
+        row.snapshot.allocation,
+        b.snapshot,
+        p.snapshot,
+        extra?.cost ?? "0",
+      ),
+    };
   }
   async upload(actor: string, filename: string, mime: string, bytes: Buffer) {
     const id = randomUUID(),

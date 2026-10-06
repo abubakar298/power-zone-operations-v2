@@ -676,13 +676,30 @@ test("customer PO and IPO preserve accepted selling amounts, discount allocation
   );
   const body = { ...input, documentId: file.body.id };
   const p = (await op("/preview", body).expect(200)).body;
-  const discounted = (await db.pool.query("SELECT * FROM quotation_versions WHERE (snapshot->'input'->>'discount')::numeric>0 ORDER BY created_at DESC LIMIT 1")).rows[0];
+  const discounted = (
+    await db.pool.query(
+      "SELECT * FROM quotation_versions WHERE (snapshot->'input'->>'discount')::numeric>0 ORDER BY created_at DESC LIMIT 1",
+    )
+  ).rows[0];
   assert.ok(discounted);
-  const dp=(await op("/preview",{...body,quotationId:discounted.id}).expect(200)).body;
-  assert.equal(dp.snapshot.allocation.total,discounted.snapshot.footer.at(-1).amount);
+  const dp = (
+    await op("/preview", { ...body, quotationId: discounted.id }).expect(200)
+  ).body;
+  assert.equal(
+    dp.snapshot.allocation.total,
+    discounted.snapshot.footer.at(-1).amount,
+  );
   assert.ok(new Decimal(dp.snapshot.allocation.originalDiscount).gt(0));
-  assert.equal(dp.snapshot.allocation.lines[0].allocatedDiscount,"0.00");
-  assert.equal(dp.snapshot.allocation.lines.reduce((v:Decimal,l:any)=>v.add(l.allocatedDiscount),new Decimal(0)).toFixed(2),discounted.snapshot.input.discount);
+  assert.equal(dp.snapshot.allocation.lines[0].allocatedDiscount, "0.00");
+  assert.equal(
+    dp.snapshot.allocation.lines
+      .reduce(
+        (v: Decimal, l: any) => v.add(l.allocatedDiscount),
+        new Decimal(0),
+      )
+      .toFixed(2),
+    discounted.snapshot.input.discount,
+  );
   assert.equal(
     p.snapshot.allocation.total,
     issued.snapshot.footer.at(-1).amount,
@@ -730,6 +747,16 @@ test("customer PO and IPO preserve accepted selling amounts, discount allocation
     requestKey: key,
   }).expect(409);
   assert.equal(saved.snapshot.checkedBy, "Commercial Admin");
+  assert.equal(
+    saved.snapshot.peachtree.phaseTotal,
+    saved.snapshot.allocation.subtotal,
+  );
+  const peach = await request(app)
+    .get(`/api/orders/${saved.id}/peachtree.pdf`)
+    .set("Cookie", employeeCookie)
+    .expect(200);
+  assert.equal(peach.headers["content-type"], "application/pdf");
+  await request(app).get(`/api/orders/${saved.id}/peachtree.pdf`).expect(401);
   await assert.rejects(
     db.pool.query(
       "UPDATE internal_purchase_orders SET number='bad' WHERE id=$1",

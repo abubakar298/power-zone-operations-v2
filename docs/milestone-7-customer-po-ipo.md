@@ -16,9 +16,17 @@ Keep solar and all non-18% tax categories unchanged. Allocate the quotation's af
 
 The immutable allocation preserves original before-tax values, original tax and total, each allocated after-tax discount, before-tax and tax reductions, adjusted amounts, net unit rates and tax-rounding adjustments. This supports future departmental and executive reporting. Net rates are stored to six decimals; monetary line totals are authoritative and retained to two decimals. Original BOQ costs, pricing versions and quotation snapshots are not rewritten. IPO PDFs show adjusted net rates and amounts without a separate discount row. Internal allocation details remain available on the authenticated review/history screen.
 
+## Peachtree Division attachment
+
+Each IPO offers a separate internal phase-entry PDF: Solar Panels, Structure, Inverter, Batteries, BMS and EPC (all remaining scope). Tax Separate uses adjusted before-tax selling values; Tax Included uses adjusted tax-inclusive selling values, with the IPO tax retained separately for reconciliation.
+
+Full Breakup retains the accepted item prices/markups after discount allocation. Basic Breakup pools BESS and Balance/EPC profit over their combined costs and redistributes their selling value using a common weighted effective markup. Separately priced Solar, Structure, Earthing and an approved separately priced additional item retain their net accepted values. No Breakup alone fixes Solar at approved cost x 1.10 (tax separate) or x 1.21 (tax inclusive), then allocates the remaining value across the other phases proportionally to approved phase costs. Taxes are not reclassified as accounting profit. Internal phase allocation does not change quotation amounts, IPO payable or tax treatment.
+
+New IPO snapshots preserve the division. Earlier IPOs derive the version-1 division from their immutable costing/pricing links, without reading today's masters or rewriting the IPO. Accounts' actual Peachtree entry/invoicing remains external; this is an internal attachment, not an API integration.
+
 ## Scope boundaries
 
-Direct inverter/battery sales without a quotation or BOQ are explicitly deferred by the owner. Store issuance, physical inventory, installation reports, invoicing, external accounts-software integration, actual-cost comparisons, job closure, departmental dashboards and KPI formulas remain later milestones. The owner roadmap is retained separately in `Power-Zone-Department-Roadmap.md`.
+Direct inverter/battery sales without a quotation or BOQ are explicitly deferred by the owner. Store issuance, physical inventory, installation reports, invoicing, external accounts-software integration, actual-cost comparisons, job closure, departmental dashboards and KPI formulas remain later milestones. The owner roadmap is retained separately in `Power-Zone-Department-Roadmap.md`. PO extraction/customer-master autofill and operations scheduling were subsequently requested and remain to be implemented; the current IPO form is reviewed manually. Procurement is a future department with rules to be supplied later.
 
 This is an internal purchase order, not an implemented statutory invoice or a claim of FBR integration. Accounts still generates invoices in its own software.
 

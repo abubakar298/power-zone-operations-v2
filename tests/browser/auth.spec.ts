@@ -515,33 +515,78 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(page.locator(".quote-metadata")).toContainText("7 Days");
 
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.getByRole("button", { name: "Customer PO & IPO", exact:true }).click();
-  const acceptedQuote=page.getByLabel("Accepted quotation");
-  await expect(acceptedQuote.locator("option").filter({hasText:"Q-BAFL-05850-001-R0-V1"})).toHaveCount(1);
-  await acceptedQuote.selectOption((await acceptedQuote.locator("option").filter({hasText:"Q-BAFL-05850-001-R0-V1"}).getAttribute("value"))!);
+  await page
+    .getByRole("button", { name: "Customer PO & IPO", exact: true })
+    .click();
+  const acceptedQuote = page.getByLabel("Accepted quotation");
+  await expect(
+    acceptedQuote
+      .locator("option")
+      .filter({ hasText: "Q-BAFL-05850-001-R0-V1" }),
+  ).toHaveCount(1);
+  await acceptedQuote.selectOption(
+    (await acceptedQuote
+      .locator("option")
+      .filter({ hasText: "Q-BAFL-05850-001-R0-V1" })
+      .getAttribute("value"))!,
+  );
   await page.getByLabel("Sale confirmation type").selectOption("Customer PO");
-  await page.getByLabel("Customer PO reference",{exact:true}).fill("BROWSER-PO-001");
+  await page
+    .getByLabel("Customer PO reference", { exact: true })
+    .fill("BROWSER-PO-001");
   await page.getByLabel("Company to invoice").fill("PZES (Pvt) Ltd.");
-  await page.getByLabel("Approval evidence / verbal confirmation details").fill("Customer PO received against this exact quotation.");
+  await page
+    .getByLabel("Approval evidence / verbal confirmation details")
+    .fill("Customer PO received against this exact quotation.");
   await page.getByLabel(/Sale has been confirmed against/).check();
-  await page.getByRole("button",{name:"Review IPO",exact:true}).click();
-  await expect(page.getByRole("heading",{name:"IPO preview · Not saved"})).toBeVisible();
-  await page.getByRole("button",{name:"Submit evidence for IPO approval"}).click();
-  await expect(page.getByRole("heading",{name:"IPO submission · Awaiting evidence approval"})).toBeVisible();
+  await page.getByRole("button", { name: "Review IPO", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "IPO preview · Not saved" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Submit evidence for IPO approval" })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "IPO submission · Awaiting evidence approval",
+    }),
+  ).toBeVisible();
   await page.reload();
-  await page.getByRole("button", { name: "Customer PO & IPO", exact:true }).click();
-  await page.getByRole("button",{name:/Q-BAFL-05850-001-R0-V1 · Customer PO ·/}).click();
-  await page.getByRole("button",{name:"Approve evidence & save IPO"}).click();
-  await expect(page.getByRole("heading",{name:"IPO-000001 · Saved IPO"})).toBeVisible();
-  const downloadPromise=page.waitForEvent("download");
-  await page.getByRole("button",{name:"Download IPO PDF"}).click();
-  const ipoDownload=await downloadPromise;
+  await page
+    .getByRole("button", { name: "Customer PO & IPO", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: /Q-BAFL-05850-001-R0-V1 · Customer PO ·/ })
+    .click();
+  await page
+    .getByRole("button", { name: "Approve evidence & save IPO" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "IPO-000001 · Saved IPO" }),
+  ).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download IPO PDF" }).click();
+  const ipoDownload = await downloadPromise;
   expect(ipoDownload.suggestedFilename()).toBe("IPO-000001-IPO.pdf");
+  const peachPromise = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download Peachtree Division" }).click();
+  const peachDownload = await peachPromise;
+  expect(peachDownload.suggestedFilename()).toBe(
+    "IPO-000001-Peachtree-Division.pdf",
+  );
+  await peachDownload.saveAs("test-results/peachtree-browser.pdf");
   await ipoDownload.saveAs("test-results/ipo-browser.pdf");
-  await page.setViewportSize({width:390,height:844});
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
-  await page.screenshot({path:"test-results/ipo-mobile.png",fullPage:true});
-  await page.setViewportSize({width:1440,height:1000});
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/ipo-mobile.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   const cookieBefore = (await context.cookies()).find(
     (c) => c.name === "pz_session",

@@ -425,6 +425,15 @@ export function Orders({ session }: { session: Session }) {
             >
               {saved ? "Download IPO PDF" : "Download preview PDF"}
             </button>
+            {saved && (
+              <a
+                className="dark-button"
+                href={`/api/orders/${saved.id}/peachtree.pdf`}
+                download
+              >
+                Download Peachtree Division
+              </a>
+            )}
             {snapshot.document && (
               <a
                 href={`/api/orders/documents/${snapshot.document.id}`}

@@ -5,6 +5,7 @@ import { HttpError } from "../http/errors.js";
 import { orderSchema } from "./schema.js";
 import { OrdersRepository } from "./repository.js";
 import { buildIpoPdf } from "./report.js";
+import { buildPeachtreePdf } from "./peachtree-report.js";
 export function ordersHttp(
   repo: OrdersRepository,
   requireSession: RequestHandler,
@@ -158,6 +159,18 @@ export function ordersHttp(
       parse(z.uuid(), req.params.id),
     );
     res.type(d.mime).set("Content-Disposition", "attachment").send(d.content);
+  });
+  r.get("/:id/peachtree.pdf", async (req, res) => {
+    const { row, division } = await repo.peachtree(
+      parse(z.uuid(), req.params.id),
+    );
+    res
+      .type("application/pdf")
+      .set(
+        "Content-Disposition",
+        `attachment; filename="${row.number}-Peachtree-Division.pdf"`,
+      )
+      .send(buildPeachtreePdf(row.snapshot, division, row.number));
   });
   r.get("/:id/ipo.pdf", async (req, res) => {
     const q = await repo.get(parse(z.uuid(), req.params.id));
