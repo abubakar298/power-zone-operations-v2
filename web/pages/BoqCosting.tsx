@@ -17,11 +17,18 @@ export function BoqCosting({
     <section className="boq-costing">
       <div className="panel-heading">
         <h2>{number ?? "Costing preview"}</h2>
-        {number && (
-          <button className="dark-button" onClick={() => window.print()}>
-            Print / Save PDF
+        {
+          <button
+            className="dark-button"
+            onClick={() => {
+              void import("../costing-pdf.js").then(({ downloadCostingPdf }) =>
+                downloadCostingPdf(s, number, createdAt),
+              );
+            }}
+          >
+            Download costing PDF
           </button>
-        )}
+        }
       </div>
       <p>
         {s.customer.name} · {s.survey.siteName} · Site code {s.survey.siteCode}{" "}
@@ -55,6 +62,49 @@ export function BoqCosting({
           ))}
         </details>
       )}
+      <h3>Project Costing Summary</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th className="numeric">Budgeted Cost (PKR)</th>
+            <th className="numeric">Cost/W</th>
+          </tr>
+        </thead>
+        <tbody>
+          {s.summary.map((x) => (
+            <tr key={x.name}>
+              <td>{x.name}</td>
+              <td className="numeric">{format(x.cost)}</td>
+              <td className="numeric">{format(x.perWatt, 2)}</td>
+            </tr>
+          ))}
+          <tr>
+            <th>TOTAL PROJECT COST</th>
+            <th className="numeric">{format(s.total)}</th>
+            <th className="numeric">{format(s.perWatt, 2)}</th>
+          </tr>
+        </tbody>
+      </table>
+      <h3>EPC Costing Breakup</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th className="numeric">Budgeted Cost (PKR)</th>
+            <th className="numeric">Cost/W</th>
+          </tr>
+        </thead>
+        <tbody>
+          {s.epc.map((x) => (
+            <tr key={x.name}>
+              <td>{x.name}</td>
+              <td className="numeric">{format(x.cost)}</td>
+              <td className="numeric">{format(x.perWatt, 2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <h3>Project Costing Detailed Breakup</h3>
       <div className="table-scroll">
         <table>
@@ -99,49 +149,6 @@ export function BoqCosting({
           </tbody>
         </table>
       </div>
-      <h3>Project Costing Summary</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th className="numeric">Budgeted Cost (PKR)</th>
-            <th className="numeric">Cost/W</th>
-          </tr>
-        </thead>
-        <tbody>
-          {s.summary.map((x) => (
-            <tr key={x.name}>
-              <td>{x.name}</td>
-              <td className="numeric">{format(x.cost)}</td>
-              <td className="numeric">{format(x.perWatt, 2)}</td>
-            </tr>
-          ))}
-          <tr>
-            <th>TOTAL PROJECT COST</th>
-            <th className="numeric">{format(s.total)}</th>
-            <th className="numeric">{format(s.perWatt, 2)}</th>
-          </tr>
-        </tbody>
-      </table>
-      <h3>EPC Costing Breakup</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th className="numeric">Budgeted Cost (PKR)</th>
-            <th className="numeric">Cost/W</th>
-          </tr>
-        </thead>
-        <tbody>
-          {s.epc.map((x) => (
-            <tr key={x.name}>
-              <td>{x.name}</td>
-              <td className="numeric">{format(x.cost)}</td>
-              <td className="numeric">{format(x.perWatt, 2)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
       <p>
         Prepared by {s.survey.preparedBy}.{" "}
         {number

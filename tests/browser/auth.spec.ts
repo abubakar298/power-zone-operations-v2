@@ -231,6 +231,23 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "Costing preview", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("PKR 6,456,786", { exact: true })).toBeVisible();
+  const pdfDownload = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Download costing PDF", exact: true })
+    .click();
+  const report = await pdfDownload;
+  expect(report.suggestedFilename()).toBe("PREVIEW-05850-costing.pdf");
+  const pdfPath = await report.path();
+  expect((await readFile(pdfPath!)).subarray(0, 5).toString()).toBe("%PDF-");
+  const reportHeadings = await page
+    .locator(".boq-costing h3")
+    .allTextContents();
+  expect(reportHeadings.slice(0, 3)).toEqual([
+    "Project Costing Summary",
+    "EPC Costing Breakup",
+    "Project Costing Detailed Breakup",
+  ]);
+
   await page.screenshot({
     path: "test-results/boq-preview-desktop.png",
     fullPage: true,
@@ -250,6 +267,23 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "BAFL-05850-001-R0", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("PKR 6,456,786", { exact: true })).toBeVisible();
+  const savedPdfDownload = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Download costing PDF", exact: true })
+    .click();
+  const savedReport = await savedPdfDownload;
+  expect(savedReport.suggestedFilename()).toBe("BAFL-05850-001-R0-costing.pdf");
+  const savedPdfPath = await savedReport.path();
+  expect((await readFile(savedPdfPath!)).subarray(0, 5).toString()).toBe("%PDF-");
+  const savedReportHeadings = await page
+    .locator(".boq-costing h3")
+    .allTextContents();
+  expect(savedReportHeadings.slice(0, 3)).toEqual([
+    "Project Costing Summary",
+    "EPC Costing Breakup",
+    "Project Costing Detailed Breakup",
+  ]);
+
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   const cookieBefore = (await context.cookies()).find(
