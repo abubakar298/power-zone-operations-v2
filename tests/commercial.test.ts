@@ -239,6 +239,7 @@ test("all presentations reconcile without duplicated BESS/EPC amounts or interna
       const pdf = buildQuotationPdf(q);
       assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
       assert(pdf.length < 2_000_000, "Branded PDFs must remain practical to preview and share");
+      assert.equal((pdf.toString("latin1").match(/\/Type \/Page\b/g) ?? []).length, 1, "Reference quotation should fit on one A4 page");
       await mkdir(".local/quotation-qa", { recursive: true });
       await writeFile(
         `.local/quotation-qa/${presentation.replaceAll(" ", "-")}-${taxMode === "Tax Included" ? "included" : "separate"}.pdf`,

@@ -26,30 +26,29 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
   drawReportLogo(pdf);
   pdf.setFontSize(9);
   pdf.setFont("helvetica", "normal");
-  pdf.text("ENGINEERING & SERVICES (PVT) LIMITED", 60, 22);
+
   pdf.setTextColor(40, 40, 45);
   pdf.setFontSize(12);
-  pdf.text(number ?? "DRAFT QUOTATION - NOT SAVED", margin, 39);
+  pdf.text(number ?? "DRAFT QUOTATION - NOT SAVED", margin, 37);
   pdf.setFontSize(9);
+  pdf.text("POWER ZONE ENGINEERING & SERVICES (PVT) LIMITED", margin, 42);
   autoTable(pdf, {
-    startY: 45,
+    startY: 46,
     margin: { left: margin, right: margin },
     theme: "plain",
-    styles: { fontSize: 9, cellPadding: 1, textColor: [40, 40, 45] },
+    styles: { fontSize: 8, cellPadding: 0.6, textColor: [40, 40, 45] },
+    columnStyles: { 0: { cellWidth: 102 }, 1: { cellWidth: 80 } },
     body: [
-      [text(`Customer: ${s.customer.name}`)],
-      [text(`Contact person: ${s.customer.contactPerson ?? ""}`)],
-      [text(`Contact number: ${s.customer.phone ?? ""}`)],
-      [text(`Site: ${s.siteName} (${s.siteCode})`)],
-      [text(`BOQ: ${s.boqNumber} | Solution ID: ${s.solutionId}`)],
-      [text(`Quoted date: ${s.input.quotedDate}`)],
-      [text(`Proposed by: ${s.input.proposedBy}`)],
-      [text(`Validity: ${s.input.validity}`)],
+      [text(`Customer: ${s.customer.name}`), text(`Quoted date: ${s.input.quotedDate}`)],
+      [text(`Contact person: ${s.customer.contactPerson ?? ""}`), text(`Proposed by: ${s.input.proposedBy}`)],
+      [text(`Contact number: ${s.customer.phone ?? ""}`), text(`Validity: ${s.input.validity}`)],
+      [text(`Site: ${s.siteName} (${s.siteCode})`), text(`Solution ID: ${s.solutionId}`)],
+      [text(`BOQ: ${s.boqNumber}`), ""],
     ],
   });
-  let y = (pdf as any).lastAutoTable.finalY + 6;
+  let y = (pdf as any).lastAutoTable.finalY + 4;
   pdf.text(text(s.subject), margin, y);
-  y += 8;
+  y += 5;
   const amounts = s.presentation === "Basic Breakup";
   const body = s.lines.map((r, i) => {
     const cells: any[] = [
@@ -79,30 +78,30 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
     body,
     theme: "grid",
     styles: {
-      fontSize: 8,
-      cellPadding: 3,
+      fontSize: 7.5,
+      cellPadding: 1,
       overflow: "linebreak",
       lineColor: [230, 230, 238],
       lineWidth: 0.2,
     },
     headStyles: { fillColor: [65, 54, 104] },
     columnStyles: {
-      0: { cellWidth: 12 },
-      1: { cellWidth: amounts ? 109 : 131 },
+      0: { cellWidth: 10 },
+      1: { cellWidth: amounts ? 121 : 143 },
       2: { cellWidth: 14 },
-      3: { cellWidth: 25, halign: "right" },
+      3: { cellWidth: 15, halign: "right" },
       ...(amounts ? { 4: { cellWidth: 22, halign: "right", valign: "middle" } } : {}),
     },
     rowPageBreak: "avoid",
   });
-  y = (pdf as any).lastAutoTable.finalY + 7;
+  y = (pdf as any).lastAutoTable.finalY + 3;
   autoTable(pdf, {
     startY: y,
     margin: { left: margin, right: margin, bottom: reportBottomMargin },
     theme: "plain",
     pageBreak: "avoid",
     body: s.footer.map((r) => [r.label, money(r.amount)]),
-    styles: { fontSize: 9, cellPadding: 3 },
+    styles: { fontSize: 8, cellPadding: 1 },
     columnStyles: { 0: { cellWidth: 135 }, 1: { halign: "right" } },
     didParseCell(data) {
       if (data.row.index === s.footer.length - 1) {
@@ -111,7 +110,7 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
       }
     },
   });
-  y = (pdf as any).lastAutoTable.finalY + 7;
+  y = (pdf as any).lastAutoTable.finalY + 3;
   autoTable(pdf, {
     startY: y,
     margin: { left: margin, right: margin, bottom: reportBottomMargin },
@@ -122,7 +121,7 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
       [{ content: "TERMS AND CONDITIONS", styles: { fontStyle: "bold" } }],
       ...s.terms.map((r, i) => [text(`${i + 1}. ${r}`)]),
     ],
-    styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak" },
+    styles: { fontSize: 7.5, cellPadding: 0.7, overflow: "linebreak" },
     rowPageBreak: "avoid",
   });
   drawReportFooter(pdf, text(number ?? "Draft quotation"));
