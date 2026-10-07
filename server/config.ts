@@ -13,6 +13,13 @@ const schema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(0),
   RESEND_API_KEY: z.string().min(10).optional(),
   EMAIL_FROM: z.email().optional(),
+  EMAIL_FROM_NAME: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .regex(/^[^\r\n"<>]+$/)
+    .optional(),
   EMAIL_TOKEN_ENCRYPTION_KEY: z
     .string()
     .regex(/^[a-fA-F0-9]{64}$/)
@@ -31,6 +38,7 @@ export interface Config {
   sessionHours: number;
   emailApiKey?: string;
   emailFrom?: string;
+  emailFromName?: string;
   emailEncryptionKey?: string;
 }
 
@@ -64,6 +72,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     sessionHours: 12,
     emailApiKey: e.RESEND_API_KEY,
     emailFrom: e.EMAIL_FROM,
+    emailFromName: e.EMAIL_FROM_NAME,
     emailEncryptionKey: e.EMAIL_TOKEN_ENCRYPTION_KEY,
   };
 }

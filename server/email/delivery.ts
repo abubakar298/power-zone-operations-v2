@@ -59,7 +59,9 @@ export class ResendDelivery implements EmailDelivery {
         "Idempotency-Key": id,
       },
       body: JSON.stringify({
-        from: this.config.emailFrom,
+        from: this.config.emailFromName
+          ? `${this.config.emailFromName} <${this.config.emailFrom}>`
+          : this.config.emailFrom,
         to: [message.to],
         subject: message.subject,
         text: message.text,
