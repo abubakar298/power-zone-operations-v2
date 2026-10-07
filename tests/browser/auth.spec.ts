@@ -340,6 +340,10 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Submit for review", exact: true })
     .click();
+  await expect(page.getByLabel("Approval Solar markup %", { exact: true })).toBeDisabled();
+  await expect(page.getByLabel("Approval Solar markup %", { exact: true })).toHaveValue("20");
+  await page.getByRole("checkbox", { name: /Change quotation settings/ }).check();
+  await expect(page.getByLabel("Approval Solar markup %", { exact: true })).toBeEnabled();
   for (const [label, value] of [
     ["Solar", "20"],
     ["Structure", "20"],
@@ -496,6 +500,10 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Submit for review", exact: true })
     .click();
+  await expect(page.getByLabel("Approval Solar markup %", { exact: true })).toBeDisabled();
+  await expect(page.getByLabel("Approval Solar markup %", { exact: true })).toHaveValue("20");
+  await page.getByRole("checkbox", { name: /Change quotation settings/ }).check();
+  await expect(page.getByLabel("Approval Solar markup %", { exact: true })).toBeEnabled();
   for (const [label, value] of [
     ["Solar", "20"],
     ["Structure", "20"],
