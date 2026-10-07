@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import { transaction } from "../db/transaction.js";
 import { HttpError } from "../http/errors.js";
+import { canWriteMaster } from "./permissions.js";
 
 export class MastersRepository {
   constructor(
@@ -66,8 +67,11 @@ export class MastersRepository {
             actor,
           ])
         ).rows[0];
-        if (!user?.active || user.role !== "Admin")
-          throw new HttpError(403, "Administrator access required.");
+        if (!user?.active || !canWriteMaster(user.role, kind, id))
+          throw new HttpError(
+            403,
+            "You do not have permission to change this master record.",
+          );
         let nextId = id;
         if (kind === "rates" || kind === "rules" || kind === "items") {
           const table =

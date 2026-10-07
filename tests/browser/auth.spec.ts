@@ -928,6 +928,52 @@ test("management bucket opens a coordinator costing review and isolates approval
   expect(login.ok()).toBe(true);
   const session = await login.json();
   const headers = { Origin: origin, "X-CSRF-Token": session.csrfToken };
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "Master data", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Add customer", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Edit / })).toHaveCount(0);
+  for (const name of ["Sites", "Rates", "Items & specifications"]) {
+    await page.getByRole("tab", { name: new RegExp(`^${name} `) }).click();
+    await expect(
+      page.getByRole("button", { name: /^Edit / }).first(),
+    ).toBeVisible();
+  }
+  await page.getByRole("tab", { name: /^Engineering rules / }).click();
+  await expect(page.getByRole("button", { name: /^Edit / })).toHaveCount(0);
+  await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Quick BOQ · no survey", exact: true })
+    .click();
+  await page
+    .getByLabel("New site name", { exact: true })
+    .fill("Preserve unsaved site");
+  await page.getByRole("button", { name: "Add customer", exact: true }).click();
+  const customerDialog = page.getByRole("dialog", {
+    name: "Add customer",
+    exact: true,
+  });
+  await customerDialog
+    .getByLabel("Customer name", { exact: true })
+    .fill("SAMPLE Quick quote customer");
+  await customerDialog
+    .getByLabel("Short code", { exact: true })
+    .fill("BROWSER-QUICK-CUSTOMER");
+  await customerDialog
+    .getByRole("button", { name: "Add customer & continue", exact: true })
+    .click();
+  await expect(customerDialog).not.toBeVisible();
+  await expect(
+    page.getByLabel("Customer", { exact: true }).locator("option:checked"),
+  ).toContainText("SAMPLE Quick quote customer");
+  await expect(page.getByLabel("New site name", { exact: true })).toHaveValue(
+    "Preserve unsaved site",
+  );
+  await page.screenshot({
+    path: "test-results/coordinator-master-access.png",
+    fullPage: true,
+  });
   const masters = await (await page.request.get("/api/masters")).json();
   const brand = (category: string) =>
     masters.brands.find(

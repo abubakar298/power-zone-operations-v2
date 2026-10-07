@@ -8,6 +8,8 @@ import {
   blankInstructions,
 } from "../components/ApprovalInstructions.js";
 import { BoqCosting } from "./BoqCosting.js";
+import { NewCustomer } from "../components/NewCustomer.js";
+import { canWriteMaster } from "../../server/masters/permissions.js";
 const brandFields = {
   solar: "Solar Panel",
   inverter: "Inverter",
@@ -70,7 +72,18 @@ export function Boqs({
     [sourceMode, setSourceMode] = useState("Survey"),
     [pvInput, setPvInput] = useState({ qty: 0, wattage: "0" }),
     [inverter, setInverter] = useState("10 kW");
+  const [addingCustomer, setAddingCustomer] = useState(false);
+  const [createdCustomerId, setCreatedCustomerId] = useState<string>();
   const form = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (!createdCustomerId || !masters) return;
+    const select = form.current?.elements.namedItem("customerId");
+    if (select instanceof HTMLSelectElement) {
+      select.value = createdCustomerId;
+      setPreview(undefined);
+      setCreatedCustomerId(undefined);
+    }
+  }, [masters, createdCustomerId]);
   async function load() {
     try {
       const [m, b, d, r] = await Promise.all([
@@ -508,6 +521,20 @@ export function Boqs({
     return <p role="status">{error || "Loading project references…"}</p>;
   return (
     <section className="boq-section">
+      {addingCustomer && (
+        <NewCustomer
+          session={session}
+          onLogout={onLogout}
+          onClose={() => setAddingCustomer(false)}
+          onCreated={async (id) => {
+            setMasters(await api("/masters"));
+            setCreatedCustomerId(id);
+            setNotice(
+              "Customer added and selected. Continue entering the site details.",
+            );
+          }}
+        />
+      )}
       {error && (
         <p className="form-error" role="alert">
           {error}
@@ -1088,6 +1115,15 @@ export function Boqs({
                         </option>
                       ))}
                   </select>
+                  {!baseRevisionId &&
+                    canWriteMaster(session.user.role, "customers", "new") && (
+                      <button
+                        type="button"
+                        onClick={() => setAddingCustomer(true)}
+                      >
+                        Add customer
+                      </button>
+                    )}
                 </label>
                 <label>
                   New site name
