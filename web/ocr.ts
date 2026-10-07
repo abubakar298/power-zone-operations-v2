@@ -32,8 +32,8 @@ export async function extractText(file: File, progress: (s: string) => void) {
     }
     const pdf = await import("pdfjs-dist");
     pdf.GlobalWorkerOptions.workerSrc = pdfWorker;
-    const doc = await pdf.getDocument({ data: await file.arrayBuffer() })
-      .promise;
+    const loadingTask = pdf.getDocument({ data: await file.arrayBuffer() });
+    const doc = await loadingTask.promise;
     try {
       if (doc.numPages > 5)
         throw new Error(
@@ -66,7 +66,7 @@ export async function extractText(file: File, progress: (s: string) => void) {
       }
       return { text: parts.join("\n\n"), confidence: null };
     } finally {
-      await doc.destroy();
+      await loadingTask.destroy();
     }
   } finally {
     await worker?.terminate();

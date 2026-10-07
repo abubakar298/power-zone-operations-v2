@@ -708,10 +708,11 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   );
   const ipoFile = await ipoDownload.path();
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const packDocument = await getDocument({
+  const packLoadingTask = getDocument({
     data: new Uint8Array(await readFile(ipoFile!)),
     useSystemFonts: true,
-  }).promise;
+  });
+  const packDocument = await packLoadingTask.promise;
   expect(packDocument.numPages).toBeGreaterThanOrEqual(2);
   const lastPage = await packDocument.getPage(packDocument.numPages);
   const packText = (await lastPage.getTextContent()).items
@@ -719,7 +720,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .join(" ");
   expect(packText).toContain("PEACHTREE DIVISION");
   expect(packText).toContain("IPO-000001");
-  await packDocument.destroy();
+  await packLoadingTask.destroy();
   await ipoDownload.saveAs("test-results/ipo-browser.pdf");
   await page
     .getByRole("button", { name: "Send BOQ to Operations", exact: true })
@@ -2098,4 +2099,64 @@ test("Design uploads a physical survey, sends technical requirements without bra
     path: "test-results/design-survey-atif-handoff.png",
     fullPage: true,
   });
+});
+
+test("Admin downloads an encrypted recovery backup and clears passphrases after download", async ({
+  page,
+}) => {
+  const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? "3180"}`;
+  expect(
+    (
+      await page.request.post("/api/auth/login", {
+        headers: { Origin: origin },
+        data: {
+          email: "admin@example.test",
+          password: "browser-test-passphrase-298",
+        },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "Team access", exact: true }).click();
+  const panel = page.locator(".backup-panel");
+  await expect(
+    panel.getByRole("heading", { name: "Encrypted database backups" }),
+  ).toBeVisible();
+  await panel
+    .getByLabel("Backup administrator password", { exact: true })
+    .fill("browser-test-passphrase-298");
+  await panel
+    .getByLabel("Backup encryption passphrase", { exact: true })
+    .fill("browser-isolated-backup-phrase-298");
+  await panel
+    .getByLabel("Confirm backup passphrase", { exact: true })
+    .fill("browser-isolated-backup-phrase-298");
+  const pending = page.waitForEvent("download");
+  await panel
+    .getByRole("button", { name: "Download encrypted backup", exact: true })
+    .click();
+  const download = await pending;
+  expect(download.suggestedFilename()).toMatch(/^Power-Zone-Backup-.*\.pzb$/);
+  const { decodeBackup } = await import("../../server/backups/archive.js");
+  const records = await decodeBackup(
+    (await download.path())!,
+    "browser-isolated-backup-phrase-298",
+  );
+  expect(JSON.parse(records[0]).format).toBe("power-zone-database-v1");
+  expect(records.some((r) => r.includes('"table":"quotation_versions"'))).toBe(
+    true,
+  );
+  await expect(
+    panel.getByLabel("Backup encryption passphrase", { exact: true }),
+  ).toHaveValue("");
+  await expect(panel.getByRole("status")).toContainText("download started");
+  await page.setViewportSize({ width: 390, height: 844 });
+  const bounds = await panel.evaluate((el) => ({
+    left: el.getBoundingClientRect().left,
+    right: el.getBoundingClientRect().right,
+    width: window.innerWidth,
+  }));
+  expect(bounds.left).toBeGreaterThanOrEqual(0);
+  expect(bounds.right).toBeLessThanOrEqual(bounds.width + 1);
+  await panel.screenshot({ path: "test-results/admin-backup-panel.png" });
 });

@@ -91,3 +91,10 @@
 .design-portal .department-buckets button{padding:20px;background:#fff;border-color:#e2e2ef;text-align:left}
 .design-portal .department-buckets button[aria-pressed=true]{background:#f0efff;border-color:#8174ff}
 @media(max-width:700px){.design-portal .button-row{align-items:stretch}.design-portal .button-row button{flex:1 1 100%}.design-portal .detail-panel{padding:16px}.design-portal input[type=file]{width:100%}}
+
+.backup-panel { margin-top: 2rem; padding: 1.25rem; border: 1px solid #e5e3ef; border-radius: 14px; background: #fcfbff; }
+.backup-form { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 1rem; }
+.backup-form label { display: flex; flex-direction: column; gap: .4rem; }
+.backup-form input { width: 100%; box-sizing: border-box; padding: .7rem; border: 1px solid #ddd9eb; border-radius: 8px; }
+.backup-form button { width: fit-content; padding: .8rem 1rem; border-radius: 9px; background: #6c5ce7; color: white; border: 0; }
+@media (max-width: 760px) { .backup-form { grid-template-columns: 1fr; } .backup-form button { width: 100%; } }

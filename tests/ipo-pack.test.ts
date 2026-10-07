@@ -17,10 +17,11 @@ import { createApp } from "../server/app.js";
 import { readConfig } from "../server/config.js";
 
 async function pdfText(bytes: Buffer) {
-  const pdf = await getDocument({
+  const loadingTask = getDocument({
     data: new Uint8Array(bytes),
     useSystemFonts: true,
-  }).promise;
+  });
+  const pdf = await loadingTask.promise;
   const pages: string[] = [];
   for (let n = 1; n <= pdf.numPages; n++)
     pages.push(
@@ -28,7 +29,7 @@ async function pdfText(bytes: Buffer) {
         .map((i: any) => i.str ?? "")
         .join(" "),
     );
-  await pdf.destroy();
+  await loadingTask.destroy();
   return pages;
 }
 test("Combined IPO packs retain accepted amounts, show sale type across all six variants and follow immutable links through Operations and departments", async () => {

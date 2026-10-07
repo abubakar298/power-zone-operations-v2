@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, type Session } from "../api.js";
+import { Backups } from "./Backups.js";
 type Person = {
   id: string;
   email: string;
@@ -349,6 +350,7 @@ export function Team({
           )}
         </>
       )}
+      <Backups session={session} />
     </section>
   );
 }

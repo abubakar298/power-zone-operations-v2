@@ -1,4 +1,5 @@
 import { DesignRepository } from "./design/repository.js";
+import { backupsHttp } from "./backups/http.js";
 import { designHttp } from "./design/http.js";
 import { DepartmentRepository } from "./departments/repository.js";
 import { departmentsHttp } from "./departments/http.js";
@@ -124,6 +125,7 @@ export function createApp(
     }
   });
   app.use("/api/auth", auth.router);
+  app.use("/api/backups", backupsHttp(pool, auth.requireSession));
   app.use(
     "/api/accounts",
     accountsHttp(
@@ -169,6 +171,10 @@ export function createApp(
     });
   }
   const errors: ErrorRequestHandler = (err: unknown, _req, res, _next) => {
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
     if (err instanceof HttpError) {
       if (err.status === 429) res.set("Retry-After", "900");
       res.status(err.status).json({ message: err.message });
