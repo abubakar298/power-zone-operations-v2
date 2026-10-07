@@ -13,7 +13,7 @@ import tempfile
 import urllib.request
 from zoneinfo import ZoneInfo
 
-ORIGIN = "https://power-zone-operations-v2.onrender.com"
+ORIGIN = "https://app.powerzone.systems"
 SERVICE = "pk.powerzone.operations.backup.v1"
 ACCOUNT = "scheduled-backup"
 STATE = Path(__file__).resolve().parent / "last-success.json"
