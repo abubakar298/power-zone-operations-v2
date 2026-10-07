@@ -1644,5 +1644,6 @@ test("quotation-linked BOQ revisions move between coordinator revision and manag
   const prior = (await db.pool.query("SELECT instructions FROM costing_approval_instructions WHERE revision_id=$1", [boq.id])).rows[0];
   if (prior) assert.deepEqual(review.previous_instructions, prior.instructions);
   assert.ok(originalBudget.quotations.some((q: any) => q.id === issued.id));
+  assert.equal(originalBudget.quotations.find((q: any) => q.id === issued.id).net_total, issued.snapshot.footer.find((f: any) => f.label === "Net Total").amount);
   assert.equal((await db.pool.query("SELECT outcome FROM boq_review_decisions WHERE submission_id=$1", [first])).rows[0].outcome, "Changes requested");
 });

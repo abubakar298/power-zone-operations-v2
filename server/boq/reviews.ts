@@ -54,7 +54,7 @@ export class ReviewRepository {
             COALESCE(l.snapshot->'survey'->>'sourceMode','Survey') AS survey_type,
             COALESCE((SELECT jsonb_agg(jsonb_build_object(
               'id',q.id,'number',q.number,'quoted_at',q.created_at,
-              'net_total',q.snapshot->>'netTotal',
+              'net_total',(SELECT entry->>'amount' FROM jsonb_array_elements(q.snapshot->'footer') entry WHERE entry->>'label'='Net Total' LIMIT 1),
               'status',COALESCE((SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1),'Not submitted')
             ) ORDER BY q.version) FROM quotation_versions q WHERE q.boq_revision_id=l.id),'[]'::jsonb) AS quotations
           FROM lineage l ORDER BY l.revision,l.created_at`,
