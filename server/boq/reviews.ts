@@ -37,6 +37,47 @@ export class ReviewRepository {
       )
     ).rows[0];
     if (!row) throw new HttpError(404, "Review not found.");
+    // History comes from immutable BOQ/quotation snapshots, never current masters.
+    row.workflow_history = row.base_revision_id
+      ? (
+          await this.pool.query(
+            `WITH RECURSIVE lineage AS (
+            SELECT b.*,ARRAY[b.id] AS visited FROM boq_revisions b WHERE b.id=$1
+            UNION ALL
+            SELECT b.*,l.visited || b.id FROM lineage l
+            JOIN boq_draft_finalizations f ON f.revision_id=l.id
+            JOIN survey_drafts d ON d.id=f.draft_id
+            JOIN boq_revisions b ON b.id=d.base_revision_id
+            WHERE NOT b.id=ANY(l.visited)
+          ) SELECT l.id,l.number,l.revision,l.created_at,l.revision_reason,l.revision_origin,
+            l.snapshot->>'total' AS budgeted_cost,
+            COALESCE(l.snapshot->'survey'->>'sourceMode','Survey') AS survey_type,
+            COALESCE((SELECT jsonb_agg(jsonb_build_object(
+              'id',q.id,'number',q.number,'quoted_at',q.created_at,
+              'net_total',q.snapshot->>'netTotal',
+              'status',COALESCE((SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1),'Not submitted')
+            ) ORDER BY q.version) FROM quotation_versions q WHERE q.boq_revision_id=l.id),'[]'::jsonb) AS quotations
+          FROM lineage l ORDER BY l.revision,l.created_at`,
+            [row.base_revision_id],
+          )
+        ).rows
+      : [];
+    row.revision_context =
+      (
+        await this.pool.query(
+          `SELECT r.origin,r.reason,r.requested_by,q.number AS source_quotation,
+        (SELECT e.notes FROM coordination_events e WHERE e.quotation_id=q.id AND e.kind='Changes requested' ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS management_feedback
+       FROM quotation_revision_requests r JOIN quotation_versions q ON q.id=r.source_quotation_id WHERE r.draft_id=$1`,
+          [row.draft_id],
+        )
+      ).rows[0] ?? null;
+    row.revision_origin =
+      (
+        await this.pool.query(
+          "SELECT revision_origin FROM survey_drafts WHERE id=$1",
+          [row.draft_id],
+        )
+      ).rows[0]?.revision_origin ?? null;
     row.approval = (
       await this.pool.query(
         "SELECT a.*,u.display_name AS recorded_by_name FROM costing_approval_instructions a JOIN users u ON u.id=a.recorded_by WHERE submission_id=$1",

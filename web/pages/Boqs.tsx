@@ -1,3 +1,4 @@
+import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js";
 import { confirmTransition } from "../confirm.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, ApiError, type Session } from "../api.js";
@@ -723,6 +724,7 @@ export function Boqs({
               {currentReview.submitted_by_name} ·{" "}
               {new Date(currentReview.created_at).toLocaleString()}
             </p>
+            <CostingWorkflowHistory review={currentReview} />
             {currentReview.revision_reason && (
               <p>Revision reason: {currentReview.revision_reason}</p>
             )}

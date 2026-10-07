@@ -1619,7 +1619,7 @@ test("quotation-linked BOQ revisions move between coordinator revision and manag
   let tasks = await task();
   assert.equal(tasks.length, 1);
   assert.equal(tasks[0].stage, "Revision required");
-  await db.pool.query("INSERT INTO boq_review_submissions(id,draft_id,draft_version,snapshot,fingerprint,submitted_by) VALUES($1,$2,1,'{}','revision-bucket-1',$3)", [first, draft, adminId]);
+  await db.pool.query("INSERT INTO boq_review_submissions(id,draft_id,draft_version,snapshot,fingerprint,submitted_by,base_revision_id) VALUES($1,$2,1,'{}','revision-bucket-1',$3,$4)", [first, draft, adminId, boq.id]);
   for (const team of [false, true]) {
     tasks = await task(team);
     assert.equal(tasks.length, 1);
@@ -1630,7 +1630,15 @@ test("quotation-linked BOQ revisions move between coordinator revision and manag
   }
   await db.pool.query("INSERT INTO boq_review_decisions(submission_id,outcome,comments,reviewed_by) VALUES($1,'Changes requested','Check panel quantity',$2)", [first, adminId]);
   assert.equal((await task())[0].stage, "Revision required");
-  await db.pool.query("INSERT INTO boq_review_submissions(id,draft_id,draft_version,snapshot,fingerprint,submitted_by) VALUES($1,$2,2,'{}','revision-bucket-2',$3)", [second, draft, adminId]);
+  await db.pool.query("INSERT INTO boq_review_submissions(id,draft_id,draft_version,snapshot,fingerprint,submitted_by,base_revision_id) VALUES($1,$2,2,'{}','revision-bucket-2',$3,$4)", [second, draft, adminId, boq.id]);
   assert.equal((await task())[0].stage, "Costing review");
+  const { BoqRepository } = await import("../server/boq/repository.js");
+  const review = await new BoqRepository(db.pool).reviews().get(adminId, second);
+  assert.equal(review.revision_context.origin, "Internal management");
+  assert.equal(review.revision_context.reason, "Reduce solar capacity");
+  assert.equal(review.revision_context.source_quotation, issued.number);
+  const originalBudget = review.workflow_history.find((b: any) => b.id === boq.id);
+  assert.equal(originalBudget.budgeted_cost, boq.snapshot.total);
+  assert.ok(originalBudget.quotations.some((q: any) => q.id === issued.id));
   assert.equal((await db.pool.query("SELECT outcome FROM boq_review_decisions WHERE submission_id=$1", [first])).rows[0].outcome, "Changes requested");
 });
