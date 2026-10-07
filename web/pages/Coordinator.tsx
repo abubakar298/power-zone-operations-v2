@@ -1,3 +1,4 @@
+import { confirmTransition } from "../confirm.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
 export type CoordinatorTarget =
@@ -84,6 +85,19 @@ export function Coordinator({
             ) ?? "")
           : "";
     if (["Changes requested", "PO received"].includes(kind) && !notes.trim())
+      return;
+    if (
+      !confirmTransition(
+        kind === "Submitted"
+          ? "Send quotation for approval"
+          : kind === "Approved"
+            ? "Approve quotation"
+            : kind === "PO received"
+              ? "Record sale confirmation received"
+              : "Request quotation revision",
+        `${t.reference ?? "This quotation"} will move to its next workflow stage. ${kind === "PO received" ? "Sale evidence still needs to be uploaded for IPO approval." : ""}`,
+      )
+    )
       return;
     setBusy(true);
     try {

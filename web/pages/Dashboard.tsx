@@ -75,7 +75,10 @@ export function Dashboard({
     setBusy(true);
     setError("");
     try {
-      await api("/auth/logout", { body: {}, csrf: session.csrfToken });
+      // Another tab may have changed the cookie/account since this page loaded.
+      // Refresh only for logout; never retry a business action under another user.
+      const current = await api<Session>("/auth/session");
+      await api("/auth/logout", { body: {}, csrf: current.csrfToken });
       onLogout();
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) onLogout();

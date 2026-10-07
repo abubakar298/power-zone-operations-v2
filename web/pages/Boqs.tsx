@@ -1,3 +1,4 @@
+import { confirmTransition } from "../confirm.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, ApiError, type Session } from "../api.js";
 import { recommendSiteCode } from "../../server/boq/schema.js";
@@ -297,6 +298,13 @@ export function Boqs({
   }
   async function submitReview() {
     if (!draft || !preview || busy) return;
+    if (
+      !confirmTransition(
+        "Submit costing for review",
+        "This sends the current BOQ costing to Management and preserves this review version.",
+      )
+    )
+      return;
     setBusy(true);
     setError("");
     try {
@@ -353,6 +361,13 @@ export function Boqs({
   }
   async function recordExternalApproval() {
     if (busy || !currentReview) return;
+    if (
+      !confirmTransition(
+        "Record external costing approval",
+        "The attached evidence and quotation instructions will approve this costing and make it ready for quotation.",
+      )
+    )
+      return;
     setBusy(true);
     setError("");
     try {
@@ -385,6 +400,15 @@ export function Boqs({
     createQuotation = false,
   ) {
     if (busy || !currentReview) return;
+    if (
+      !confirmTransition(
+        outcome === "Approved" ? "Approve costing" : "Request costing revision",
+        outcome === "Approved"
+          ? "This freezes the costing and quotation instructions. The Coordinator can proceed to quotation."
+          : "This returns the draft to its preparer for changes.",
+      )
+    )
+      return;
     setBusy(true);
     setError("");
     try {
@@ -422,6 +446,13 @@ export function Boqs({
     }
   }
   function reviseSaved() {
+    if (
+      !confirmTransition(
+        "Create BOQ revision draft",
+        "A separate editable draft will be created. The approved BOQ remains unchanged.",
+      )
+    )
+      return;
     const original = saved;
     fresh(original.snapshot.survey.sourceMode ?? "Survey");
     setPvInput({

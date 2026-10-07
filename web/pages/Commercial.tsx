@@ -1,3 +1,4 @@
+import { confirmTransition } from "../confirm.js";
 import { createPortal } from "react-dom";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { Decimal } from "decimal.js";
@@ -418,6 +419,13 @@ export function Commercial({
   }
   async function pricingSave() {
     if (!preview) return;
+    if (
+      !confirmTransition(
+        "Save pricing version",
+        "This preserves the selling prices and margins used to prepare the quotation.",
+      )
+    )
+      return;
     await action(async () => {
       const p = await api<any>("/commercial/pricing", {
         body: { ...input, fingerprint: preview.fingerprint, requestKey: key },
@@ -517,6 +525,13 @@ export function Commercial({
   }
   async function saveQuote() {
     if (!quoteInput || !quotePreview) return;
+    if (
+      !confirmTransition(
+        "Save quotation version",
+        "This preserves the quotation prices, discount and terms as an immutable version.",
+      )
+    )
+      return;
     await action(async () => {
       const q = await api<any>("/commercial/quotations", {
         body: {
@@ -1111,6 +1126,13 @@ export function Commercial({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                if (
+                  !confirmTransition(
+                    "Start quotation revision",
+                    "A separate revision will be created. The existing approved costing and quotation remain unchanged.",
+                  )
+                )
+                  return;
                 void action(async () => {
                   const r = await api<any>("/commercial/revision-requests", {
                     body: {

@@ -1,3 +1,4 @@
+import { confirmTransition } from "../confirm.js";
 import { quotationTypeLabel } from "../../server/orders/sale-type.js";
 import { useEffect, useState, useRef } from "react";
 import { api, type Session } from "../api.js";
@@ -92,6 +93,13 @@ export function Operations({
   }, [selected?.id, workspace]);
   async function savePlan() {
     if (!planReady || busy) return;
+    if (
+      !confirmTransition(
+        "Save delivery plan",
+        "This records delivery details and makes this BOQ ready for Store issuance.",
+      )
+    )
+      return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -161,6 +169,14 @@ export function Operations({
   }, [ipoId]);
   const pending = orders.filter((o) => !rows.some((r) => r.ipo_id === o.id));
   async function send() {
+    if (
+      busy ||
+      !confirmTransition(
+        "Issue BOQ to Operations",
+        "This sends the approved site requirements linked to the selected IPO to Operations for delivery planning.",
+      )
+    )
+      return;
     setBusy(true);
     setError("");
     try {
@@ -196,6 +212,13 @@ export function Operations({
   );
   async function sendStore() {
     if (!selected || !plan || busy) return;
+    if (
+      !confirmTransition(
+        "Issue BOQ to Store",
+        "Store will receive these site requirements with the saved delivery plan for stock preparation.",
+      )
+    )
+      return;
     setBusy(true);
     setError("");
     storeKey.current ??= crypto.randomUUID();

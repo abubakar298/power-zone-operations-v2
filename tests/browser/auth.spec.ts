@@ -2,6 +2,12 @@ import { test, expect } from "@playwright/test";
 import { jsPDF } from "jspdf";
 import { readFile } from "node:fs/promises";
 
+test.beforeEach(async ({ page }) => {
+  page.on("dialog", async (dialog) => {
+    if (dialog.type() === "confirm") await dialog.accept();
+  });
+});
+
 test("setup, invalid login, dashboard, reload, process restart, logout, relogin, mobile", async ({
   page,
   context,
@@ -1373,4 +1379,204 @@ test("Inventory and Accounts roles have dedicated queues, original PDFs and isol
     expect(denied.status()).toBe(403);
   }
   expect(errors).toEqual([]);
+});
+
+test("Atif completes an approved sample through quotation, IPO and Operations with safe cancellation", async ({
+  page,
+  browser,
+}) => {
+  const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? "3180"}`;
+  const login = await page.request.post("/api/auth/login", {
+    headers: { Origin: origin },
+    data: {
+      email: "atif-browser@example.test",
+      password: "browser-coordinator-only-298",
+    },
+  });
+  expect(login.ok()).toBe(true);
+  const session = await login.json();
+  const headers = { Origin: origin, "X-CSRF-Token": session.csrfToken };
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: /Quotation preparation/ }).click();
+  await page
+    .getByRole("row", { name: /SAMPLE External chat approval/ })
+    .getByRole("button", { name: "Open workflow" })
+    .click();
+  await page
+    .getByRole("button", { name: "Calculate selling price", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Save pricing version", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Prepare quotation", exact: true })
+    .click();
+  await expect(
+    page.locator(".quotation-pdf-pages canvas").first(),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Save quotation version", exact: true })
+    .click();
+  const quoteHeading = page.getByRole("heading", {
+    name: /^Q-DEMO-CHATBROWSER/,
+  });
+  await expect(quoteHeading).toBeVisible();
+  const number = await quoteHeading.innerText();
+  const quotes = await (
+    await page.request.get("/api/commercial/quotations")
+  ).json();
+  const quote = quotes.quotations.find((q: any) => q.number === number);
+  expect(quote).toBeTruthy();
+  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await page
+    .getByRole("button", { name: /Ready for quotation approval/ })
+    .click();
+  const row = page.getByRole("row", { name: new RegExp(number) });
+  await expect(
+    row.getByRole("button", { name: "Send for approval" }),
+  ).toBeVisible();
+  page.removeAllListeners("dialog");
+  page.once("dialog", async (d) => {
+    expect(d.message()).toContain("Send quotation for approval");
+    await d.dismiss();
+  });
+  await row.getByRole("button", { name: "Send for approval" }).click();
+  await expect(
+    row.getByRole("button", { name: "Send for approval" }),
+  ).toBeVisible();
+  const unchanged = await (await page.request.get("/api/coordinator")).json();
+  expect(unchanged.tasks.find((t: any) => t.id === quote.id).stage).toBe(
+    "Ready for quotation approval",
+  );
+  page.on("dialog", async (d) => {
+    if (d.type() === "confirm") await d.accept();
+    else if (d.type() === "prompt")
+      await d.accept("SAMPLE PO received for final workflow check");
+  });
+  await row.getByRole("button", { name: "Send for approval" }).click();
+  await expect(row).toHaveCount(0);
+  const denied = await page.request.post("/api/coordinator/events", {
+    headers,
+    data: { quotationId: quote.id, kind: "Approved" },
+  });
+  expect(denied.status()).toBe(403);
+  const manager = await browser.newContext();
+  try {
+    const ml = await manager.request.post(`${origin}/api/auth/login`, {
+      headers: { Origin: origin },
+      data: {
+        email: "admin@example.test",
+        password: "browser-test-passphrase-298",
+      },
+    });
+    expect(ml.ok()).toBe(true);
+    const mh = { Origin: origin, "X-CSRF-Token": (await ml.json()).csrfToken };
+    expect(
+      (
+        await manager.request.post(`${origin}/api/coordinator/events`, {
+          headers: mh,
+          data: { quotationId: quote.id, kind: "Approved" },
+        })
+      ).ok(),
+    ).toBe(true);
+    await page.reload();
+    await page.getByRole("button", { name: /Customer confirmation/ }).click();
+    await page
+      .getByRole("row", { name: new RegExp(number) })
+      .getByRole("button", { name: "Record PO / approval received" })
+      .click();
+    await page.getByRole("button", { name: /IPO preparation/ }).click();
+    await page
+      .getByRole("row", { name: new RegExp(number) })
+      .getByRole("button", { name: "Open workflow" })
+      .click();
+    await expect(page.getByLabel("Accepted quotation")).toHaveValue(quote.id);
+    await page
+      .getByLabel("Sale confirmation type")
+      .selectOption("Verbal sale confirmation");
+    await page
+      .getByLabel("Company to invoice")
+      .fill("SAMPLE Power Zone workflow test");
+    await page
+      .getByLabel("Approval evidence / verbal confirmation details")
+      .fill(
+        "SAMPLE ONLY: confirmed exact sample quotation for isolated workflow testing.",
+      );
+    await page.getByLabel(/Sale has been confirmed against/).check();
+    await page.getByRole("button", { name: "Review IPO", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Approve evidence & save IPO" }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Submit evidence for IPO approval" })
+      .click();
+    await expect(
+      page.getByRole("heading", {
+        name: "IPO submission · Awaiting evidence approval",
+      }),
+    ).toBeVisible();
+    const submissions = await (
+      await manager.request.get(`${origin}/api/orders/submissions`)
+    ).json();
+    const submission = submissions.submissions.find(
+      (s: any) =>
+        s.quotation_id === quote.id || s.input?.quotationId === quote.id,
+    );
+    expect(submission).toBeTruthy();
+    const approved = await manager.request.post(
+      `${origin}/api/orders/submissions/${submission.id}/approve`,
+      { headers: mh, data: { requestKey: crypto.randomUUID() } },
+    );
+    expect(approved.ok()).toBe(true);
+    const ipo = await approved.json();
+    await page.reload();
+    await page.getByRole("button", { name: /Operations handoff/ }).click();
+    await page
+      .getByRole("row", { name: new RegExp(ipo.number) })
+      .getByRole("button", { name: "Open workflow" })
+      .click();
+    await page
+      .getByLabel("Instructions to Operations")
+      .fill("SAMPLE ONLY: approved requirements for workflow verification.");
+    await page
+      .getByRole("button", { name: "Send BOQ to Operations", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: /^OPS-BOQ-/ }),
+    ).toBeVisible();
+    const pack = await page.request.get(`/api/orders/${ipo.id}/ipo.pdf`);
+    expect(pack.ok()).toBe(true);
+    expect((await pack.body()).subarray(0, 5).toString()).toBe("%PDF-");
+    await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+    await page.screenshot({
+      path: "test-results/atif-final-workflow-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: "test-results/atif-final-workflow-mobile.png",
+      fullPage: true,
+    });
+    // Another tab changes account; logout must invalidate that current session safely.
+    const changed = await page.request.post("/api/auth/login", {
+      headers: { Origin: origin },
+      data: {
+        email: "admin@example.test",
+        password: "browser-test-passphrase-298",
+      },
+    });
+    expect(changed.ok()).toBe(true);
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Welcome back." }),
+    ).toBeVisible();
+    expect((await page.request.get("/api/auth/session")).status()).toBe(401);
+  } finally {
+    await manager.close();
+  }
 });

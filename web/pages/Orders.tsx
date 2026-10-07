@@ -1,3 +1,4 @@
+import { confirmTransition } from "../confirm.js";
 import { quotationTypeLabel } from "../../server/orders/sale-type.js";
 import { ipoPresentation } from "../../server/orders/presentation.js";
 import { useEffect, useState, useRef } from "react";
@@ -464,6 +465,13 @@ export function Orders({
                 disabled={busy}
                 onClick={() =>
                   void act(async () => {
+                    if (
+                      !confirmTransition(
+                        "Submit sale evidence for IPO approval",
+                        "Management will review the accepted quotation and attached sale evidence before issuing the IPO.",
+                      )
+                    )
+                      return;
                     const row = await api<any>("/orders/submissions", {
                       body: {
                         input: orderSchema.parse({
@@ -491,6 +499,13 @@ export function Orders({
                 disabled={busy}
                 onClick={() =>
                   void act(async () => {
+                    if (
+                      !confirmTransition(
+                        "Approve evidence and issue IPO",
+                        "This creates the immutable IPO and Peachtree accounts pack from the accepted quotation.",
+                      )
+                    )
+                      return;
                     const row = review
                       ? await api<any>(
                           `/orders/submissions/${review.id}/approve`,

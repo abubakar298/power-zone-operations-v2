@@ -1,3 +1,4 @@
+import { confirmTransition } from "../confirm.js";
 import { quotationTypeLabel } from "../../server/orders/sale-type.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
@@ -94,6 +95,13 @@ export function Departments({
     e.preventDefault();
     if (!selected || busy) return;
     const f = new FormData(e.currentTarget);
+    if (
+      !confirmTransition(
+        "Update document progress",
+        `${selected.number} will move to ${f.get("stage")}. The progress note will be recorded in its history.`,
+      )
+    )
+      return;
     setBusy(true);
     setError("");
     try {
