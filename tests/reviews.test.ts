@@ -44,8 +44,8 @@ before(async () => {
       csrf: login.body.csrfToken,
     };
   }
-  employee = await account("Employee");
-  other = await account("Employee");
+  employee = await account("Coordinator");
+  other = await account("Coordinator");
   manager = await account("Management");
   const masters = await new MastersRepository(db.pool).list();
   const brand = (category: string, name: string) =>
@@ -361,7 +361,7 @@ test("external approval preserves evidence, recorder identity and instructions; 
     evidenceIds: [upload.body.id],
     confirmed: true,
   };
-  await post(other, `/reviews/${s.id}/external-approval`, body).expect(403);
+  await post(other, `/reviews/${s.id}/external-approval`, body).expect(404);
   await post(employee, `/reviews/${s.id}/external-approval`, {
     ...body,
     confirmed: false,
@@ -381,7 +381,7 @@ test("external approval preserves evidence, recorder identity and instructions; 
   const review = (await get(manager, `/reviews/${s.id}`).expect(200)).body;
   assert.equal(review.approval.channel, "External chat");
   assert.equal(review.approval.recorded_by, employee.id);
-  assert.equal(review.reviewed_by_name, "Employee"); // Stored recorder; UI labels the external channel explicitly.
+  assert.equal(review.reviewed_by_name, "Coordinator"); // Stored recorder; UI labels the external channel explicitly.
   assert.equal(review.approval.claimed_approver, "Director Operations");
   assert.equal(review.approval.evidence[0].id, upload.body.id);
   await get(manager, `/uploads/${upload.body.id}`).expect(200);

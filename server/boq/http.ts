@@ -34,7 +34,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
   r.get("/drafts", async (req, res) =>
     res.json({ drafts: await repo.drafts(req.authSession!.user.id) }),
   );
-  r.get("/", async (_req, res) => res.json({ boqs: await repo.list() }));
+  r.get("/", async (req, res) => res.json({ boqs: await repo.list(req.authSession!.user.id) }));
   r.post("/drafts", async (req, res) => {
     const v = z
       .object({

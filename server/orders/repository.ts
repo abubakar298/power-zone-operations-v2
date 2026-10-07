@@ -1,3 +1,4 @@
+import { ownedCondition } from "../http/permissions.js";
 import {
   validateExternal,
   recordExternal,
@@ -428,10 +429,11 @@ export class OrdersRepository {
       return row;
     });
   }
-  async list() {
+  async list(actor?: string) {
     const rows = (
       await this.pool.query(
-        "SELECT id,number,created_at,snapshot->>'quotationNumber' AS quotation_number,snapshot->'input'->>'poNumber' AS po_number,snapshot->'customer'->>'name' AS customer,snapshot->'allocation'->>'total' AS total FROM internal_purchase_orders ORDER BY created_at DESC LIMIT 200",
+        `SELECT i.id,i.number,i.created_at,i.snapshot->>'quotationNumber' AS quotation_number,i.snapshot->'input'->>'poNumber' AS po_number,i.snapshot->'customer'->>'name' AS customer,i.snapshot->'allocation'->>'total' AS total FROM internal_purchase_orders i ${actor ? `WHERE ${ownedCondition("ipo", "i.id", "$1")}` : ""} ORDER BY i.created_at DESC LIMIT 200`,
+        actor ? [actor] : [],
       )
     ).rows;
     const types = await this.quotationTypes(rows.map((r) => r.id));
@@ -558,7 +560,7 @@ export class OrdersRepository {
   async document(actor: string, id: string) {
     const row = (
       await this.pool.query(
-        "SELECT * FROM customer_po_documents d WHERE d.id=$1 AND (d.owner_id=$2 OR EXISTS(SELECT 1 FROM customer_purchase_orders p WHERE p.document_id=d.id) OR (EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')) AND EXISTS(SELECT 1 FROM ipo_submissions s WHERE s.input->>'documentId'=d.id::text)))",
+        "SELECT * FROM customer_po_documents d WHERE d.id=$1 AND (d.owner_id=$2 OR EXISTS(SELECT 1 FROM customer_purchase_orders p WHERE p.document_id=d.id AND (p.created_by=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')) OR EXISTS(SELECT 1 FROM internal_purchase_orders i JOIN ipo_accounts_handoffs h ON h.ipo_id=i.id JOIN users u ON u.id=$2 AND u.active AND u.role='Accounts' WHERE i.customer_po_id=p.id))) OR (EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')) AND EXISTS(SELECT 1 FROM ipo_submissions s WHERE s.input->>'documentId'=d.id::text)))",
         [id, actor],
       )
     ).rows[0];

@@ -109,8 +109,8 @@ export function commercialHttp(
       await repo.pricingGet(req.authSession!.user.id, id(req.params.id)),
     ),
   );
-  r.get("/quotations", async (_req, res) =>
-    res.json({ quotations: await repo.quotationList() }),
+  r.get("/quotations", async (req, res) =>
+    res.json({ quotations: await repo.quotationList(req.authSession!.user.id) }),
   );
   r.post("/quotations/preview", async (req, res) =>
     res.json(

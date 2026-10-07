@@ -30,9 +30,12 @@ export async function api<T>(
   options?: { body: unknown; csrf?: string },
 ): Promise<T> {
   let response: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
   try {
     response = await fetch(`/api${path}`, {
       method: options ? "POST" : "GET",
+      signal: controller.signal,
       credentials: "same-origin",
       cache: "no-store",
       headers: options
@@ -44,17 +47,37 @@ export async function api<T>(
       ...(options ? { body: JSON.stringify(options.body) } : {}),
     });
   } catch {
+    clearTimeout(timeout);
     throw new ApiError(
       0,
-      "Unable to connect. Check your connection and try again.",
+      controller.signal.aborted
+        ? "The request took too long. Refresh to check whether it completed before trying again."
+        : "Unable to connect. Check your connection and try again.",
     );
   }
-  if (response.status === 204) return undefined as T;
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok)
-    throw new ApiError(
-      response.status,
-      body.message ?? "The request could not be completed.",
-    );
-  return body as T;
+  try {
+    if (response.status === 204) return undefined as T;
+    let body: { message?: string; requestId?: string };
+    try {
+      body = await response.json();
+    } catch {
+      if (controller.signal.aborted)
+        throw new ApiError(
+          0,
+          "The request took too long. Refresh to check whether it completed before trying again.",
+        );
+      throw new ApiError(
+        response.status,
+        "The server returned an unexpected response. Please refresh and try again.",
+      );
+    }
+    if (!response.ok)
+      throw new ApiError(
+        response.status,
+        `${body.message ?? "The request could not be completed."}${body.requestId ? ` Reference: ${body.requestId}` : ""}`,
+      );
+    return body as T;
+  } finally {
+    clearTimeout(timeout);
+  }
 }

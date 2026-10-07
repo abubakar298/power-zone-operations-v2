@@ -1,3 +1,4 @@
+import { ownedCondition } from "../http/permissions.js";
 import { ReviewRepository } from "./reviews.js";
 import type { Pool, PoolClient } from "pg";
 import { randomUUID, createHash } from "node:crypto";
@@ -269,10 +270,11 @@ export class BoqRepository {
     ]);
     return saved;
   }
-  async list() {
+  async list(actor?: string) {
     return (
       await this.pool.query(
-        "SELECT r.id,r.number,r.revision,r.revision_reason,r.boq_id,r.created_at,r.snapshot->'customer'->>'name' AS customer,r.snapshot->'survey'->>'siteName' AS site,r.snapshot->>'total' AS total FROM boq_revisions r ORDER BY created_at DESC LIMIT 200",
+        `SELECT r.id,r.number,r.revision,r.revision_reason,r.boq_id,r.created_at,r.snapshot->'customer'->>'name' AS customer,r.snapshot->'survey'->>'siteName' AS site,r.snapshot->>'total' AS total FROM boq_revisions r ${actor ? `WHERE ${ownedCondition("boq", "r.id", "$1")}` : ""} ORDER BY created_at DESC LIMIT 200`,
+        actor ? [actor] : [],
       )
     ).rows;
   }
@@ -313,7 +315,7 @@ export class BoqRepository {
   async attachment(owner: string, id: string) {
     const r = (
       await this.pool.query(
-        "SELECT * FROM survey_uploads WHERE id=$1 AND (owner_id=$2 OR EXISTS(SELECT 1 FROM design_survey_handoffs h WHERE h.assigned_to=$2 AND h.inputs->'uploadIds' ? $1::text) OR EXISTS(SELECT 1 FROM boq_uploads WHERE upload_id=$1) OR EXISTS(SELECT 1 FROM external_document_approval_files ef JOIN external_document_approvals ea ON ea.id=ef.approval_id WHERE ef.upload_id=$1 AND (ea.recorded_by=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')))) OR EXISTS(SELECT 1 FROM costing_approval_evidence e JOIN costing_approval_instructions a ON a.submission_id=e.submission_id WHERE e.upload_id=$1 AND (a.recorded_by=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')))) OR EXISTS(SELECT 1 FROM boq_review_submissions s JOIN survey_drafts d ON d.id=s.draft_id WHERE (s.snapshot->'survey'->'uploadIds') ? $1::text AND (d.owner_id=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')))))",
+        "SELECT * FROM survey_uploads WHERE id=$1 AND (owner_id=$2 OR EXISTS(SELECT 1 FROM design_survey_handoffs h WHERE h.assigned_to=$2 AND h.inputs->'uploadIds' ? $1::text) OR EXISTS(SELECT 1 FROM boq_uploads bu JOIN boq_revisions br ON br.id=bu.revision_id JOIN boqs b ON b.id=br.boq_id JOIN survey_drafts sd ON sd.id=b.draft_id WHERE bu.upload_id=$1 AND (b.created_by=$2 OR sd.owner_id=$2 OR br.created_by=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')))) OR EXISTS(SELECT 1 FROM external_document_approval_files ef JOIN external_document_approvals ea ON ea.id=ef.approval_id WHERE ef.upload_id=$1 AND (ea.recorded_by=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')))) OR EXISTS(SELECT 1 FROM costing_approval_evidence e JOIN costing_approval_instructions a ON a.submission_id=e.submission_id WHERE e.upload_id=$1 AND (a.recorded_by=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')))) OR EXISTS(SELECT 1 FROM boq_review_submissions s JOIN survey_drafts d ON d.id=s.draft_id WHERE (s.snapshot->'survey'->'uploadIds') ? $1::text AND (d.owner_id=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND active AND role IN('Admin','Management')))))",
         [id, owner],
       )
     ).rows[0];

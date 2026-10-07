@@ -1,3 +1,4 @@
+import { ownedCondition } from "../http/permissions.js";
 import { workflowHistory } from "../boq/workflow-history.js";
 import { Decimal } from "decimal.js";
 import { allocateDiscount } from "../orders/allocation.js";
@@ -240,7 +241,8 @@ export class CommercialRepository {
     await this.manager(this.pool, actor);
     return (
       await this.pool.query(
-        "SELECT id,number,version,boq_revision_id,created_at,snapshot->>'boqNumber' AS boq_number,snapshot->>'netTotal' AS total FROM commercial_pricing_versions ORDER BY created_at DESC LIMIT 200",
+        `SELECT p.id,p.number,p.version,p.boq_revision_id,p.created_at,p.snapshot->>'boqNumber' AS boq_number,p.snapshot->>'netTotal' AS total FROM commercial_pricing_versions p WHERE ${ownedCondition("pricing", "p.id", "$1")} ORDER BY p.created_at DESC LIMIT 200`,
+        [actor],
       )
     ).rows;
   }
@@ -550,10 +552,11 @@ export class CommercialRepository {
       return row;
     });
   }
-  async quotationList() {
+  async quotationList(actor?: string) {
     return (
       await this.pool.query(
-        "SELECT id,number,version,pricing_id,boq_revision_id,created_at,snapshot->>'boqNumber' AS boq_number,snapshot->'customer'->>'name' AS customer,snapshot->>'siteName' AS site FROM quotation_versions ORDER BY created_at DESC LIMIT 200",
+        `SELECT q.id,q.number,q.version,q.pricing_id,q.boq_revision_id,q.created_at,q.snapshot->>'boqNumber' AS boq_number,q.snapshot->'customer'->>'name' AS customer,q.snapshot->>'siteName' AS site FROM quotation_versions q ${actor ? `WHERE ${ownedCondition("quotation", "q.id", "$1")}` : ""} ORDER BY q.created_at DESC LIMIT 200`,
+        actor ? [actor] : [],
       )
     ).rows;
   }

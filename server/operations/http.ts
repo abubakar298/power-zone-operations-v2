@@ -28,7 +28,7 @@ export function operationsHttp(
     if (!p.success) throw new HttpError(400, "Invalid issuance ID.");
     return p.data;
   };
-  r.get("/portal", async (_req, res) => res.json(await repo.portal()));
+  r.get("/portal", async (req, res) => res.json(await repo.portal(req.authSession!.user.id)));
   r.post("/:id/send-to-store", async (req, res) => {
     const p = storeIssuanceSchema.safeParse(req.body);
     if (!p.success)
@@ -54,7 +54,7 @@ export function operationsHttp(
       .set("Content-Disposition", `attachment; filename="${row.number}.pdf"`)
       .send(buildOperationsPdf(row));
   });
-  r.get("/", async (_req, res) => res.json({ issuances: await repo.list() }));
+  r.get("/", async (req, res) => res.json({ issuances: await repo.list(req.authSession!.user.id) }));
   r.post("/", async (req, res) => {
     const p = issuanceSchema.safeParse(req.body);
     if (!p.success) throw new HttpError(400, p.error.issues[0].message);

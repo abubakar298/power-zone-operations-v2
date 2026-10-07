@@ -21,6 +21,7 @@ import { AccountsService } from "./onboarding/service.js";
 import { accountsHttp } from "./onboarding/http.js";
 import { ResendDelivery, type EmailDelivery } from "./email/delivery.js";
 import express, { type ErrorRequestHandler } from "express";
+import { randomUUID } from "node:crypto";
 import helmet from "helmet";
 import type { Pool } from "pg";
 import { resolve } from "node:path";
@@ -30,6 +31,7 @@ import { AuthService } from "./auth/service.js";
 import { authHttp } from "./auth/http.js";
 import { dashboardRoutes } from "./dashboard/routes.js";
 import { HttpError } from "./http/errors.js";
+import { workflowBoundary, coordinatorRecords } from "./http/permissions.js";
 import { MastersRepository } from "./masters/repository.js";
 import { mastersHttp } from "./masters/http.js";
 
@@ -54,6 +56,8 @@ export function createApp(
     }),
   );
   app.use("/api", (_req, res, next) => {
+    res.locals.requestId = randomUUID();
+    res.set("X-Request-ID", res.locals.requestId);
     res.set("Cache-Control", "no-store");
     next();
   });
@@ -82,33 +86,34 @@ export function createApp(
       "/api/masters",
     ],
     auth.requireSession,
-    (req, _res, next) => {
-      if (req.authSession!.user.role === "Design")
-        throw new HttpError(403, "Design accounts can access surveys only.");
-      next();
-    },
+    workflowBoundary(pool),
   );
   const boqs = new BoqRepository(pool);
   app.use(
     "/api/survey-uploads",
     auth.requireSession,
+    workflowBoundary(pool),
     express.json({ limit: "12mb" }),
+    coordinatorRecords(pool),
     uploadHttp(boqs, auth.requireSession),
   );
   app.use(
     "/api/boqs",
     express.json({ limit: "128kb" }),
+    coordinatorRecords(pool),
     boqHttp(boqs, auth.requireSession),
   );
   app.use(
     "/api/commercial",
     express.json({ limit: "128kb" }),
+    coordinatorRecords(pool),
     commercialHttp(new CommercialRepository(pool), auth.requireSession),
   );
   app.use(
     "/api/orders",
     auth.requireSession,
     express.json({ limit: "12mb" }),
+    coordinatorRecords(pool),
     ordersHttp(new OrdersRepository(pool), auth.requireSession),
   );
   app.use(
@@ -144,10 +149,14 @@ export function createApp(
   );
   app.use(
     "/api/operations",
+    auth.requireSession,
+    coordinatorRecords(pool),
     operationsHttp(new OperationsRepository(pool), auth.requireSession),
   );
   app.use(
     "/api/coordinator",
+    auth.requireSession,
+    coordinatorRecords(pool),
     coordinatorHttp(new CoordinatorRepository(pool), auth.requireSession),
   );
   app.use(
@@ -174,7 +183,7 @@ export function createApp(
         .sendFile(resolve(webDirectory, "index.html"));
     });
   }
-  const errors: ErrorRequestHandler = (err: unknown, _req, res, _next) => {
+  const errors: ErrorRequestHandler = (err: unknown, req, res, _next) => {
     if (res.headersSent) {
       res.destroy();
       return;
@@ -193,12 +202,21 @@ export function createApp(
       res.status(413).json({ message: "Request is too large." });
     } else {
       // Do not emit request bodies, database URLs, tokens or SQL parameter values.
-      console.error(
-        "Request failed",
-        err instanceof Error ? err.name : "UnknownError",
-      );
+      const code = typeof err === "object" && err && "code" in err &&
+        typeof err.code === "string" && /^[A-Z0-9_]{2,30}$/.test(err.code)
+        ? err.code : undefined;
+      console.error(JSON.stringify({
+        event: "request.failed",
+        requestId: res.locals.requestId,
+        method: req.method,
+        // Route patterns exclude URL/query values, bodies and credentials.
+        route: req.route?.path ?? "unmatched",
+        error: err instanceof Error ? err.name : "UnknownError",
+        code,
+      }));
       res.status(503).json({
         message: "Service temporarily unavailable. Please try again.",
+        requestId: res.locals.requestId,
       });
     }
   };

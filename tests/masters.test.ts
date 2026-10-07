@@ -132,7 +132,7 @@ test("anonymous reads are denied; employee writes and missing CSRF are denied", 
   await request(app)
     .get("/api/masters")
     .set("Cookie", e.headers["set-cookie"][0].split(";")[0])
-    .expect(200);
+    .expect(403);
   await request(app)
     .post("/api/masters/rates")
     .set("Origin", origin)

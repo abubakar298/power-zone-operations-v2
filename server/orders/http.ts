@@ -39,7 +39,7 @@ export function ordersHttp(
     if (!v.success) throw new HttpError(400, v.error.issues[0].message);
     return v.data;
   };
-  r.get("/", async (_req, res) => res.json({ orders: await repo.list() }));
+  r.get("/", async (req, res) => res.json({ orders: await repo.list(req.authSession!.user.id) }));
   r.post("/:id/accounts-handoff", async (req, res) => {
     res
       .status(201)

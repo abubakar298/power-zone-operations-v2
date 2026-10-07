@@ -322,11 +322,12 @@ export function Operations({
                       </td>
                       <td>
                         <a
-                          href={`/api/orders/${i.id}/ipo.pdf`}
+                          hidden={!i.issuance_id}
+                          href={`/api/operations/${i.issuance_id}/report.pdf`}
                           target="_blank"
                           rel="noreferrer"
                         >
-                          View IPO &amp; Peachtree PDF
+                          View received BOQ PDF
                         </a>
                       </td>
                     </tr>

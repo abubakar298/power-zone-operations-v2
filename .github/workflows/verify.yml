@@ -9,6 +9,7 @@ on:
         "milestone-3/**",
         "milestone-4/**",
         "milestone-5/**",
+        "hardening/**",
       ]
   pull_request:
 permissions:

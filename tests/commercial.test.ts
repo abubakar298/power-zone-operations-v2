@@ -382,9 +382,7 @@ test("saved quotation versions retain pricing, customer descriptions and PDF aft
   await post("/quotations/preview", input).expect(409);
   assert.equal(issued.id, saved[1].body.id);
   assert.equal(issued.number, "Q-BAFL-05850-001-R0-V1");
-  await get(`/quotations/${issued.id}/quotation.pdf`, true)
-    .expect(200)
-    .expect("Content-Type", /application\/pdf/);
+  await get(`/quotations/${issued.id}/quotation.pdf`, true).expect(403);
   await get(`/quotations/${issued.id}/copy`, true).expect(403);
   await post(
     "/quotations",
@@ -640,7 +638,7 @@ test("Full Breakup additional cost, markup and tax reconcile and stay internal a
   );
   assert(
     !JSON.stringify(
-      (await get(`/quotations/${savedQ.id}`, true).expect(200)).body,
+      (await get(`/quotations/${savedQ.id}`).expect(200)).body,
     ).includes('"markup"'),
   );
   await get(`/quotations/${savedQ.id}/copy`, true).expect(403);
@@ -771,7 +769,7 @@ test("customer PO and IPO preserve accepted selling amounts, discount allocation
   );
   const peach = await request(app)
     .get(`/api/orders/${saved.id}/peachtree.pdf`)
-    .set("Cookie", employeeCookie)
+    .set("Cookie", cookie)
     .expect(200);
   assert.equal(peach.headers["content-type"], "application/pdf");
   await request(app).get(`/api/orders/${saved.id}/peachtree.pdf`).expect(401);
@@ -790,12 +788,12 @@ test("customer PO and IPO preserve accepted selling amounts, discount allocation
   );
   const loaded = await request(app)
     .get(`/api/orders/${saved.id}`)
-    .set("Cookie", employeeCookie)
+    .set("Cookie", cookie)
     .expect(200);
   assert.deepEqual(loaded.body.snapshot, saved.snapshot);
   await request(app)
     .get(`/api/orders/documents/${file.body.id}`)
-    .set("Cookie", employeeCookie)
+    .set("Cookie", cookie)
     .expect(200);
   const pdf = buildIpoPdf(saved.snapshot, saved.number);
   assert.ok(pdf.length > 5000);
@@ -812,6 +810,9 @@ test("customer PO and IPO preserve accepted selling amounts, discount allocation
     evidenceNotes:
       "Customer confirmed the exact quote by WhatsApp on 6 October.",
   };
+  const preparingUser = (await db.pool.query("SELECT id FROM users WHERE email='commercial-employee@example.test'")).rows[0].id;
+  await db.pool.query("UPDATE users SET role='Coordinator' WHERE id=$1", [preparingUser]);
+  await db.pool.query("UPDATE survey_drafts SET owner_id=$1 WHERE id=(SELECT draft_id FROM boqs WHERE id=$2)", [preparingUser, boq.boq_id]);
   const ep = (await op("/preview", evidence, true).expect(200)).body;
   const submissionKey = randomUUID();
   const submitted = (
@@ -913,11 +914,10 @@ test("revision routing requires approved separate costing and preserves origin, 
     requestedBy: "Customer contact",
     requestKey: randomUUID(),
   };
-  await post(
-    "/revision-requests",
-    { ...base, costingChange: false },
-    true,
-  ).expect(403);
+  // A generic employee remains unable to prepare commercial revisions.
+  await db.pool.query("UPDATE users SET role='Employee' WHERE email='commercial-employee@example.test'");
+  await post("/revision-requests", { ...base, costingChange: false }, true).expect(403);
+  await db.pool.query("UPDATE users SET role='Coordinator' WHERE email='commercial-employee@example.test'");
   const started = (await post("/revision-requests", base, true).expect(201))
     .body;
   assert(
@@ -1392,7 +1392,7 @@ test("Coordinator can prepare commercial work but cannot approve IPO evidence or
     .set("Cookie", ck)
     .set("X-CSRF-Token", token)
     .send(inputs())
-    .expect(200);
+    .expect(404);
   const sub = (await db.pool.query("SELECT id FROM ipo_submissions LIMIT 1"))
     .rows[0];
   await request(app)
@@ -1401,7 +1401,7 @@ test("Coordinator can prepare commercial work but cannot approve IPO evidence or
     .set("Cookie", ck)
     .set("X-CSRF-Token", token)
     .send({ requestKey: randomUUID() })
-    .expect(403);
+    .expect(404);
   const review = (
     await db.pool.query("SELECT id FROM boq_review_submissions LIMIT 1")
   ).rows[0];
@@ -1411,7 +1411,7 @@ test("Coordinator can prepare commercial work but cannot approve IPO evidence or
     .set("Cookie", ck)
     .set("X-CSRF-Token", token)
     .send({ outcome: "Approved", comments: "" })
-    .expect(403);
+    .expect(404);
   await request(app)
     .get("/api/coordinator?scope=team")
     .set("Cookie", ck)
@@ -1625,7 +1625,7 @@ test("discount review and six-format export are read-only and management profita
     .expect(200)
     .expect("Content-Type", /application\/pdf/);
   assert.ok(pdf.body.length > 10000);
-  await get(`/quotations/${issued.id}/comparison.pdf`, true).expect(403);
+  await get(`/quotations/${issued.id}/comparison.pdf`, true).expect(200);
   assert.deepEqual(
     (await get(`/quotations/${issued.id}`).expect(200)).body.snapshot,
     original.snapshot,
@@ -1764,6 +1764,7 @@ test("external chat approvals require owned screenshots and exact submitted vers
       .set("Cookie", ck)
       .set("X-CSRF-Token", token)
       .send(body);
+  await db.pool.query("UPDATE survey_drafts SET owner_id=$1 WHERE id=(SELECT draft_id FROM boqs WHERE id=$2)", [actor, boq.boq_id]);
   const qid = randomUUID();
   const ver =
     Number(

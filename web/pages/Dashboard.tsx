@@ -1,17 +1,19 @@
-import { Design } from "./Design.js";
-import { Departments } from "./Departments.js";
-import { Director } from "./Director.js";
-import { Coordinator } from "./Coordinator.js";
-import { Operations } from "./Operations.js";
-import { Commercial } from "./Commercial.js";
-import { Orders } from "./Orders.js";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { WorkspaceBoundary } from "../components/WorkspaceBoundary.js";
 import { api, ApiError, type Session, type User } from "../api.js";
 import { Brand } from "../components/Brand.js";
 import { Icon } from "../components/Icon.js";
-import { Boqs } from "./Boqs.js";
-import { Team } from "./Team.js";
-import { Masters } from "./Masters.js";
+
+const Design = lazy(() => import("./Design.js").then(module => ({ default: module.Design })));
+const Departments = lazy(() => import("./Departments.js").then(module => ({ default: module.Departments })));
+const Director = lazy(() => import("./Director.js").then(module => ({ default: module.Director })));
+const Coordinator = lazy(() => import("./Coordinator.js").then(module => ({ default: module.Coordinator })));
+const Operations = lazy(() => import("./Operations.js").then(module => ({ default: module.Operations })));
+const Commercial = lazy(() => import("./Commercial.js").then(module => ({ default: module.Commercial })));
+const Orders = lazy(() => import("./Orders.js").then(module => ({ default: module.Orders })));
+const Boqs = lazy(() => import("./Boqs.js").then(module => ({ default: module.Boqs })));
+const Team = lazy(() => import("./Team.js").then(module => ({ default: module.Team })));
+const Masters = lazy(() => import("./Masters.js").then(module => ({ default: module.Masters })));
 
 export function Dashboard({
   session,
@@ -158,7 +160,7 @@ export function Dashboard({
               <Icon name="account" />
               My account
             </button>
-            {session.user.role !== "Design" && (
+            {["Admin", "Management", "Coordinator"].includes(session.user.role) && (
               <button
                 className={view === "masters" ? "nav-active" : ""}
                 aria-current={view === "masters" ? "page" : undefined}
@@ -181,15 +183,13 @@ export function Dashboard({
           )}
           <div className="nav-divider" />
           <div className="nav-label">PROJECT OPERATIONS</div>
-          <div className="upcoming-nav" aria-label="Upcoming modules">
+          <div className="upcoming-nav" aria-label="Project workspaces">
             <div>
               <Icon name="users" />
               <span>Customers & sites</span>
               <small>Ready</small>
             </div>
-            {!["Operations", "Inventory", "Accounts", "Design"].includes(
-              session.user.role,
-            ) && (
+            {["Admin", "Management", "Coordinator"].includes(session.user.role) && (
               <>
                 <button
                   className={view === "boqs" ? "nav-active" : ""}
@@ -234,7 +234,7 @@ export function Dashboard({
                 Design workspace
               </button>
             )}
-            {session.user.role !== "Design" && (
+            {["Admin", "Management", "Coordinator", "Operations"].includes(session.user.role) && (
               <>
                 <button
                   className={view === "operations" ? "nav-active" : ""}
@@ -343,6 +343,8 @@ export function Dashboard({
           </div>
         </header>
         <main className="dashboard">
+          <WorkspaceBoundary>
+          <Suspense fallback={<p role="status" aria-live="polite">Opening workspace…</p>}>
           <div className="page-heading">
             <div>
               <span className="eyebrow">POWER ZONE OPERATIONS</span>
@@ -429,13 +431,14 @@ export function Dashboard({
             (view === "dashboard" && session.user.role === "Accounts")) && (
             <Departments session={session} department="Accounts" />
           )}
+          {view === "dashboard" && session.user.role === "Employee" && (
+            <section className="card"><h2>Department access required</h2><p>Your account is active. Ask your administrator to assign your department before starting a workflow.</p></section>
+          )}
           {view === "dashboard" && session.user.role === "Operations" && (
             <Operations session={session} portal />
           )}
           {view === "dashboard" &&
-            !["Operations", "Inventory", "Accounts", "Design"].includes(
-              session.user.role,
-            ) && (
+            ["Admin", "Management", "Coordinator"].includes(session.user.role) && (
               <Home
                 session={session}
                 onOpen={(task) => {
@@ -570,6 +573,8 @@ export function Dashboard({
           <footer className="dashboard-footer">
             Power Zone Operations <span>V2 · Team workspace</span>
           </footer>
+                  </Suspense>
+          </WorkspaceBoundary>
         </main>
       </div>
     </div>
