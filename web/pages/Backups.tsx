@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, type Session } from "../api.js";
+import { readBackupResponse } from "../backup-response.js";
 export function Backups({ session }: { session: Session }) {
   const [password, setPassword] = useState(""),
     [passphrase, setPassphrase] = useState(""),
@@ -65,11 +66,7 @@ export function Backups({ session }: { session: Session }) {
           passphraseConfirmation: confirm,
         }),
       });
-      if (!response.ok)
-        throw new Error(
-          (await response.json()).message ?? "Backup could not be prepared.",
-        );
-      const file = await response.blob(),
+      const file = await readBackupResponse(response),
         url = URL.createObjectURL(file),
         link = document.createElement("a");
       link.href = url;
