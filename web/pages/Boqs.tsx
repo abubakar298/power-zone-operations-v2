@@ -746,7 +746,7 @@ export function Boqs({
               ["Admin", "Management"].includes(session.user.role) && (
                 <div className="review-actions">
                   {currentReview.previous_instructions && <label>
-                    <input type="checkbox" checked={changeQuotationSettings}
+                    <input type="checkbox" style={{ width: "auto", display: "inline-block", marginRight: 8 }} checked={changeQuotationSettings}
                       onChange={(e) => {
                         setChangeQuotationSettings(e.target.checked);
                         if (!e.target.checked) setInstructions(currentReview.previous_instructions);
@@ -819,7 +819,7 @@ export function Boqs({
                     />
                   </label>
                   {currentReview.previous_instructions && <label>
-                    <input type="checkbox" checked={changeQuotationSettings}
+                    <input type="checkbox" style={{ width: "auto", display: "inline-block", marginRight: 8 }} checked={changeQuotationSettings}
                       onChange={(e) => {
                         setChangeQuotationSettings(e.target.checked);
                         if (!e.target.checked) setInstructions(currentReview.previous_instructions);
