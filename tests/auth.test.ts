@@ -318,3 +318,19 @@ test("production rejects HTTP and invalid origin/configuration", () => {
     /ADMIN_SETUP_TOKEN/,
   );
 });
+
+
+test("customer import accepts a full-sized list while ordinary forms retain their size limit", async () => {
+  await setup();
+  const session = await login();
+  const rows = Array.from({ length: 285 }, (_, i) => ({
+    name: `Import size fixture ${i}`, contact_person: "Example contact", phone: "00123456789",
+    address: "Example address for isolated payload regression", city: "Lahore", province: "Punjab",
+  }));
+  const payload = { source: "Isolated payload-size regression", rows };
+  assert.ok(JSON.stringify(payload).length > 8192);
+  await request(app).post("/api/masters/customer-import/preview")
+    .set("Origin", origin).set("Cookie", session.cookie).set("X-CSRF-Token", session.csrf)
+    .send(payload).expect(200);
+  await post("/api/auth/login", { email: "admin@example.test", password: "x".repeat(9000) }).expect(413);
+});

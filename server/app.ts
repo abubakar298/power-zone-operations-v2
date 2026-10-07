@@ -115,6 +115,8 @@ export function createApp(
     express.json({ limit: "128kb" }),
     designHttp(new DesignRepository(pool), auth.requireSession),
   );
+  // Customer imports are larger than ordinary forms; keep the general limit small.
+  app.use("/api/masters/customer-import", express.json({ limit: "2mb" }));
   app.use(express.json({ limit: "8kb" }));
   app.get("/api/health", async (_req, res) => {
     try {
