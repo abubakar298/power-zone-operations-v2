@@ -1479,9 +1479,13 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
   });
   await expect(quoteHeading).toBeVisible();
   const number = await quoteHeading.innerText();
-  const quotes = await (
-    await page.request.get("/api/commercial/quotations")
-  ).json();
+  // This read follows a PDF render, so the API client's earlier keep-alive
+  // connection may have expired. Retry ECONNRESET once, never an HTTP error.
+  const quotesResponse = await page.request.get("/api/commercial/quotations", {
+    maxRetries: 1,
+  });
+  expect(quotesResponse.status()).toBe(200);
+  const quotes = await quotesResponse.json();
   const quote = quotes.quotations.find((q: any) => q.number === number);
   expect(quote).toBeTruthy();
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
