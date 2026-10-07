@@ -59,6 +59,7 @@ before(async () => {
     panelWattage: "645",
     structure: "Elevated",
     dcMetres: "360",
+    acInverter16: "15", acInverter25: "0", acPanel16: "0", acPanel25: "20",
     earth25: "20",
     earth6: "90",
     earth10: "90",
@@ -135,7 +136,7 @@ test("string boundaries, all configurations, battery limits, fractional quantiti
     assert.equal(result.engineering.bms, dual ? "6" : "3");
     assert.equal(
       result.lines.find((l) => l.key === "16mm² 4C AC Cable")?.qty,
-      dual ? "15" : "30",
+      "15",
     );
     assert.equal(
       result.lines.find((l) => l.key === "100A 4P MCCB")?.qty,
@@ -487,4 +488,20 @@ test("quick quotation scope uses calculated cable quantities and includes the ad
     ),
   );
   assert(q.notes.some((n) => n.includes("without a site survey")));
+});
+
+test("surveyed AC termination lengths drive costing while quick BOQs retain fixed allowances", () => {
+  const measured = {...survey,acInverter16:"12.5",acPanel16:"7.5",acInverter25:"3",acPanel25:"27"};
+  const result=calculate(measured,masters);
+  for(const [key,qty] of [["16mm² 4C AC Cable","20"],["25mm² 4C AC Cable","30"]]) {
+    const line=result.lines.find(l=>l.key===key)!;
+    assert.equal(line.qty,qty);
+    assert.equal(line.total,new Decimal(line.rate).mul(qty).toString());
+  }
+  const zero=calculate({...measured,acInverter16:"0",acPanel16:"0",acInverter25:"0",acPanel25:"0"},masters);
+  assert.ok(zero.lines.filter(l=>l.key.includes("4C AC Cable")).every(l=>l.qty==="0"));
+  const quick=calculate({...measured,sourceMode:"General quotation"},masters);
+  assert.equal(quick.lines.find(l=>l.key==="16mm² 4C AC Cable")?.qty,"15");
+  assert.equal(quick.lines.find(l=>l.key==="25mm² 4C AC Cable")?.qty,"20");
+  assert.equal(surveySchema.safeParse({...measured,acPanel16:"-1"}).success,false);
 });

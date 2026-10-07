@@ -199,14 +199,10 @@ export function calculate(s: Survey, m: Masters) {
     "10mm² Earthing Cable": allowances?.earth10 ?? s.earth10,
     "16mm² 4C AC Cable": allowances
       ? allowances.ac16
-      : dual
-        ? rule(11).mul(config.quantity)
-        : rule(9),
+      : new Decimal(s.acInverter16 ?? "0").add(s.acPanel16 ?? "0"),
     "25mm² 4C AC Cable": allowances
       ? allowances.ac25
-      : dual
-        ? rule(12)
-        : rule(10),
+      : new Decimal(s.acInverter25 ?? "0").add(s.acPanel25 ?? "0"),
   }))
     add(key, qty, "EPC", "cable", "Installation Cost");
   for (const [key, qty] of Object.entries({

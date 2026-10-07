@@ -60,6 +60,7 @@ before(async () => {
     panelWattage: "645",
     structure: "Elevated",
     dcMetres: "360",
+    acInverter16:"15", acInverter25:"0", acPanel16:"0", acPanel25:"20",
     earth25: "20",
     earth6: "90",
     earth10: "90",

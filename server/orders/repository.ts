@@ -35,6 +35,7 @@ export class OrdersRepository {
     if (!row) throw new HttpError(404, "Quotation customer not found.");
     return {
       customerName: row.name,
+      invoiceCompany: row.name,
       quotationType: { presentation: row.presentation, taxMode: row.tax_mode },
       contactPerson: row.contact_person || row.name,
       phone: row.phone,

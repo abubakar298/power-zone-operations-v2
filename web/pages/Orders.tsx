@@ -11,7 +11,7 @@ import { poSuggestions } from "../../server/orders/po-extraction.js";
 const fields: [keyof OrderInput, string][] = [
   ["poNumber", "Customer PO reference"],
   ["orderDate", "Order date"],
-  ["invoiceCompany", "Company to invoice"],
+  ["invoiceCompany", "Customer / company name on invoice"],
   ["salesPerson", "Sales person"],
   ["customerNtn", "Customer NTN"],
   ["customerStrn", "Customer STRN"],
@@ -141,7 +141,11 @@ export function Orders({
     return (
       <label key={field}>
         {label}
-        <input
+        {field === "salesSource" ? <select aria-label="Sales source" value={String(input.salesSource ?? "")} onChange={e => change("salesSource",e.target.value)}>
+          <option value="">Select sales source</option>
+          {["Sales team","Director referral","Existing customer","Customer referral","Website / online inquiry","Walk-in","Other"].map(v => <option key={v}>{v}</option>)}
+          {input.salesSource && !["Sales team","Director referral","Existing customer","Customer referral","Website / online inquiry","Walk-in","Other"].includes(input.salesSource) && <option>{input.salesSource}</option>}
+        </select> : <input
           type={
             field === "orderDate"
               ? "date"
@@ -172,7 +176,8 @@ export function Orders({
           placeholder={field === "email" ? "N/A" : undefined}
           value={String(input[field] ?? "")}
           onChange={(e) => change(field, e.target.value)}
-        />
+        />}
+        {field === "invoiceCompany" && <small>The customer or legal entity receiving the invoice. Filled from the customer record; edit if their billing name differs.</small>}
       </label>
     );
   }

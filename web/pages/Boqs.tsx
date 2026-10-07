@@ -23,6 +23,11 @@ const quantities = {
   panelQty: "Panel quantity",
   panelWattage: "Panel wattage (W)",
   dcMetres: "6mm² DC cable total (m)",
+  acInverter16: "Inverter termination · 16 mm² 4-core (m)",
+  acInverter25: "Inverter termination · 25 mm² 4-core (m)",
+  acPanel16: "Panel termination · 16 mm² 4-core (m)",
+  acPanel25: "Panel termination · 25 mm² 4-core (m)",
+
   earth25: "2.5mm² earth cable (m)",
   earth6: "6mm² earth cable (m)",
   earth10: "10mm² earth cable (m)",
@@ -206,6 +211,10 @@ export function Boqs({
       panelWattage: f.get("panelWattage"),
       structure: f.get("structure"),
       dcMetres: sourceMode === "General quotation" ? "0" : f.get("dcMetres"),
+      acInverter16: sourceMode === "General quotation" ? "0" : f.get("acInverter16"),
+      acInverter25: sourceMode === "General quotation" ? "0" : f.get("acInverter25"),
+      acPanel16: sourceMode === "General quotation" ? "0" : f.get("acPanel16"),
+      acPanel25: sourceMode === "General quotation" ? "0" : f.get("acPanel25"),
       earth25: sourceMode === "General quotation" ? "0" : f.get("earth25"),
       earth6: sourceMode === "General quotation" ? "0" : f.get("earth6"),
       earth10: sourceMode === "General quotation" ? "0" : f.get("earth10"),
@@ -1341,7 +1350,7 @@ export function Boqs({
                   .filter(
                     ([k]) =>
                       sourceMode !== "General quotation" ||
-                      !["dcMetres", "earth25", "earth6", "earth10"].includes(k),
+                      !["dcMetres", "earth25", "earth6", "earth10", "acInverter16", "acInverter25", "acPanel16", "acPanel25"].includes(k),
                   )
                   .map(([k, label]) => (
                     <label key={k}>
@@ -1372,7 +1381,7 @@ export function Boqs({
                         }
                         defaultValue={
                           initial[k] ??
-                          (k.startsWith("earth") ||
+                          (k.startsWith("earth") || k.startsWith("ac") ||
                           k === "dcMetres" ||
                           k === "batteryKwh"
                             ? "0"

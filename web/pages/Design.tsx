@@ -6,6 +6,11 @@ const quantities: Record<string, string> = {
   panelQty: "Panel quantity",
   panelWattage: "Panel wattage (W)",
   dcMetres: "6mm² DC cable total (m)",
+  acInverter16: "Inverter termination · 16 mm² 4-core (m)",
+  acInverter25: "Inverter termination · 25 mm² 4-core (m)",
+  acPanel16: "Panel termination · 16 mm² 4-core (m)",
+  acPanel25: "Panel termination · 25 mm² 4-core (m)",
+
   earth25: "2.5mm² earth cable (m)",
   earth6: "6mm² earth cable (m)",
   earth10: "10mm² earth cable (m)",
@@ -359,7 +364,7 @@ export function Design({ session }: { session: Session }) {
                       step={
                         ["panelQty", "batteryKwh"].includes(key) ? 1 : 0.0001
                       }
-                      defaultValue={initial[key] ?? ""}
+                      defaultValue={initial[key] ?? (key.startsWith("ac") ? "0" : "")}
                     />
                   </label>
                 ))}

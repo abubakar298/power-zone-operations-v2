@@ -506,6 +506,7 @@ export function Commercial({
           .map((l) => l.description),
       });
       setQuotePreview(result);
+      setQuotePdfInput(data);
       setSavedQuote(undefined);
       setKey(crypto.randomUUID());
       setNotice(
@@ -524,7 +525,7 @@ export function Commercial({
         body: { ...quoteInput, discount: quoteInput.discount?.trim() || "0" },
         csrf: session.csrfToken,
       });
-      if (sequence === previewSequence.current) setQuotePreview(result);
+      if (sequence === previewSequence.current) { setQuotePreview(result); setQuotePdfInput(quoteInput); }
     });
   }
   async function saveQuote(submit = false) {
@@ -570,6 +571,7 @@ export function Commercial({
       setQuotePreview(undefined);
     });
   }
+  const [quotePdfInput, setQuotePdfInput] = useState<QuotationInput>();
   const previewSequence = useRef(0);
   const quoteFields = quoteInput
     ? JSON.stringify({ ...quoteInput, discount: undefined })
@@ -588,6 +590,7 @@ export function Commercial({
         .then((result) => {
           if (sequence === previewSequence.current) {
             setQuotePreview(result);
+            setQuotePdfInput(quoteInput);
             setError("");
           }
         })
@@ -1122,7 +1125,7 @@ export function Commercial({
             snapshot={quotePreview.snapshot}
             discount={quoteInput?.discount}
             onDiscount={manager ? changeQuotationDiscount : undefined}
-            draftInput={quoteInput}
+            draftInput={quotePdfInput}
             csrf={session.csrfToken}
           />
           {!quotePreview.fingerprint && (

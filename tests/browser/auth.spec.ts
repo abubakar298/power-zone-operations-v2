@@ -119,6 +119,8 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page.getByLabel("Panel quantity", { exact: true }).fill("60");
   await page.getByLabel("Panel wattage (W)", { exact: true }).fill("645");
   await page.getByLabel("6mm² DC cable total (m)", { exact: true }).fill("360");
+  await page.getByLabel("Inverter termination · 16 mm² 4-core (m)", {exact:true}).fill("15");
+  await page.getByLabel("Panel termination · 25 mm² 4-core (m)", {exact:true}).fill("20");
   await page.getByLabel("2.5mm² earth cable (m)", { exact: true }).fill("20");
   await page.getByLabel("6mm² earth cable (m)", { exact: true }).fill("90");
   await page.getByLabel("10mm² earth cable (m)", { exact: true }).fill("90");
@@ -424,7 +426,13 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(page.locator(".pdf-inline-net")).toHaveText("8,824,826.93");
   const description = page.locator(".quote-description textarea").first();
   const originalDescription = await description.inputValue();
+  const invalidPreview=page.waitForResponse(r=>r.url().endsWith("/api/commercial/quotations/preview") && !!r.request().postData()?.includes('"descriptions":[""'));
+  await description.fill("");
+  expect((await invalidPreview).ok()).toBe(false);
+  await expect(page.locator(".quotation-pdf-pages canvas").first()).toBeVisible();
+  const updatedPdf=page.waitForResponse(r=>r.url().endsWith("/api/commercial/quotations/preview.pdf") && !!r.request().postData()?.includes("reviewed wording"));
   await description.fill(originalDescription + " - reviewed wording");
+  expect((await updatedPdf).ok()).toBe(true);
   await expect(
     page.locator(".quotation-pdf-pages canvas").first(),
   ).toBeVisible();
@@ -621,6 +629,8 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByLabel("Delivery address", { exact: true }),
   ).toHaveCount(0);
   await expect(page.getByLabel("Customer NTN", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Sales source",{exact:true}).selectOption("Existing customer");
+  await expect(page.getByLabel("Sales source",{exact:true})).toHaveValue("Existing customer");
   await page.getByLabel("Sale confirmation type").selectOption("Customer PO");
   const poFile = new jsPDF();
   poFile.text(
@@ -659,7 +669,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByLabel("Customer PO reference", { exact: true })
     .fill("BROWSER-PO-001");
-  await page.getByLabel("Company to invoice").fill("PZES (Pvt) Ltd.");
+  await page.getByLabel("Customer / company name on invoice").fill("PZES (Pvt) Ltd.");
   await page
     .getByLabel("Approval evidence / verbal confirmation details")
     .fill("Customer PO received against this exact quotation.");
@@ -1542,7 +1552,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
       .getByLabel("Sale confirmation type")
       .selectOption("Verbal sale confirmation");
     await page
-      .getByLabel("Company to invoice")
+      .getByLabel("Customer / company name on invoice")
       .fill("SAMPLE Power Zone workflow test");
     await page
       .getByLabel("Approval evidence / verbal confirmation details")

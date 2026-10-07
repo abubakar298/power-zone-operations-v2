@@ -21,6 +21,11 @@ export const surveySchema = z
     panelWattage: quantity.refine((v) => Number(v) > 0),
     structure: z.enum(["L1", "L2", "L3", "Elevated"]),
     dcMetres: quantity,
+    acInverter16: quantity.optional(),
+    acInverter25: quantity.optional(),
+    acPanel16: quantity.optional(),
+    acPanel25: quantity.optional(),
+
     earth25: quantity,
     earth6: quantity,
     earth10: quantity,
