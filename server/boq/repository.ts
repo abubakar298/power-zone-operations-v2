@@ -213,25 +213,38 @@ export class BoqRepository {
       revision = base.revision + 1;
       number = base.number.replace(/-R\d+$/, `-R${revision}`);
     } else {
+      const existingSite = (
+        await c.query(
+          "SELECT id,status FROM sites WHERE customer_id=$1 AND lower(code)=lower($2) FOR UPDATE",
+          [s.customerId, s.siteCode],
+        )
+      ).rows[0];
+      if (existingSite && existingSite.status !== "Active")
+        throw new HttpError(
+          409,
+          "This site is inactive. Select an active site.",
+        );
       if (
+        existingSite &&
         (
-          await c.query(
-            "SELECT id FROM sites WHERE customer_id=$1 AND lower(code)=lower($2)",
-            [s.customerId, s.siteCode],
-          )
+          await c.query("SELECT 1 FROM boqs WHERE site_id=$1", [
+            existingSite.id,
+          ])
         ).rowCount
       )
         throw new HttpError(
           409,
-          "This customer already has a site with this code. Use the Revision workflow for an existing BOQ.",
+          "This customer already has a BOQ for this site. Use the Revision workflow for an existing BOQ.",
         );
-      const site = (
-        await c.query("SELECT COALESCE(max(id),0)+1 AS id FROM sites")
-      ).rows[0].id;
-      await c.query(
-        "INSERT INTO sites(id,customer_id,name,code,location,status) VALUES($1,$2,$3,$4,$5,'Active')",
-        [site, s.customerId, s.siteName, s.siteCode, s.location],
-      );
+      const site =
+        existingSite?.id ??
+        (await c.query("SELECT COALESCE(max(id),0)+1 AS id FROM sites")).rows[0]
+          .id;
+      if (!existingSite)
+        await c.query(
+          "INSERT INTO sites(id,customer_id,name,code,location,status) VALUES($1,$2,$3,$4,$5,'Active')",
+          [site, s.customerId, s.siteName, s.siteCode, s.location],
+        );
       boq = randomUUID();
       revision = 0;
       number = `${snapshot.customer.shortCode}-${s.siteCode}-001-R0`;
