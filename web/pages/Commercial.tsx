@@ -1,3 +1,4 @@
+import { QuotationWorkflow } from "./QuotationWorkflow.js";
 import { confirmTransition } from "../confirm.js";
 import { createPortal } from "react-dom";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -514,20 +515,25 @@ export function Commercial({
   }
   async function calculateQuote() {
     if (!quoteInput) return;
+    const sequence = ++previewSequence.current;
     await action(async () => {
-      setQuotePreview(
-        await api("/commercial/quotations/preview", {
-          body: quoteInput,
-          csrf: session.csrfToken,
-        }),
-      );
+      const result = await api<{
+        snapshot: QuotationSnapshot;
+        fingerprint: string;
+      }>("/commercial/quotations/preview", {
+        body: { ...quoteInput, discount: quoteInput.discount?.trim() || "0" },
+        csrf: session.csrfToken,
+      });
+      if (sequence === previewSequence.current) setQuotePreview(result);
     });
   }
-  async function saveQuote() {
+  async function saveQuote(submit = false) {
     if (!quoteInput || !quotePreview) return;
     if (
       !confirmTransition(
-        "Save quotation version",
+        submit
+          ? "Save and send quotation for approval"
+          : "Save quotation version",
         "This preserves the quotation prices, discount and terms as an immutable version.",
       )
     )
@@ -536,6 +542,7 @@ export function Commercial({
       const q = await api<any>("/commercial/quotations", {
         body: {
           ...quoteInput,
+          discount: quoteInput.discount?.trim() || "0",
           fingerprint: quotePreview.fingerprint,
           requestKey: key,
         },
@@ -543,6 +550,13 @@ export function Commercial({
       });
       setSavedQuote(q);
       setQuoteInput(undefined);
+      if (submit) {
+        await api("/coordinator/events", {
+          body: { quotationId: q.id, kind: "Submitted", notes: "" },
+          csrf: session.csrfToken,
+        });
+        setSavedQuote(await api(`/commercial/quotations/${q.id}`));
+      }
       await load();
       setNotice(
         `${q.number} saved. Earlier quotation versions remain unchanged.`,
@@ -556,13 +570,45 @@ export function Commercial({
       setQuotePreview(undefined);
     });
   }
+  const previewSequence = useRef(0);
+  const quoteFields = quoteInput
+    ? JSON.stringify({ ...quoteInput, discount: undefined })
+    : "";
+  useEffect(() => {
+    if (!quoteInput || !quotePreview) return;
+    const sequence = ++previewSequence.current;
+    const timer = setTimeout(() => {
+      void api<{ snapshot: QuotationSnapshot; fingerprint: string }>(
+        "/commercial/quotations/preview",
+        {
+          body: { ...quoteInput, discount: quoteInput.discount?.trim() || "0" },
+          csrf: session.csrfToken,
+        },
+      )
+        .then((result) => {
+          if (sequence === previewSequence.current) {
+            setQuotePreview(result);
+            setError("");
+          }
+        })
+        .catch((e) => {
+          if (sequence === previewSequence.current) fail(e);
+        });
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      ++previewSequence.current;
+    };
+  }, [quoteFields]);
   function quoteChange(p: Partial<QuotationInput>) {
+    ++previewSequence.current;
     setQuoteInput({ ...quoteInput!, ...p });
-    setQuotePreview(undefined);
+    setQuotePreview((old) => (old ? { ...old, fingerprint: "" } : old));
     setSavedQuote(undefined);
     setKey(crypto.randomUUID());
   }
   function changeQuotationDiscount(value: string) {
+    ++previewSequence.current;
     if (!quoteInput || !quotePreview) return;
     setQuoteInput({ ...quoteInput, discount: value });
     setKey(crypto.randomUUID());
@@ -572,8 +618,10 @@ export function Commercial({
     )!.amount;
     const oldNet = footer.find((r) => r.label === "Net Total")!.amount;
     const total = new Decimal(oldDiscount).add(oldNet);
+    const normalized = value.trim() || "0";
     const valid =
-      /^\d{1,12}(\.\d{1,2})?$/.test(value) && new Decimal(value).lte(total);
+      /^\d{1,12}(\.\d{1,2})?$/.test(normalized) &&
+      new Decimal(normalized).lte(total);
     setQuotePreview({
       fingerprint: "",
       snapshot: {
@@ -583,9 +631,9 @@ export function Commercial({
               ...r,
               amount:
                 r.label === "Special Discount"
-                  ? new Decimal(value).toFixed(2)
+                  ? new Decimal(normalized).toFixed(2)
                   : r.label === "Net Total"
-                    ? total.minus(value).toFixed(2)
+                    ? total.minus(normalized).toFixed(2)
                     : r.amount,
             }))
           : footer,
@@ -1093,15 +1141,40 @@ export function Commercial({
           >
             Save quotation version
           </button>
+          <button
+            className="primary"
+            disabled={busy || !quotePreview.fingerprint}
+            onClick={() => void saveQuote(true)}
+          >
+            Save and send for approval
+          </button>
         </>
       )}
       {savedQuote && (
         <>
-          <QuotationView
-            snapshot={savedQuote.snapshot}
-            number={savedQuote.number}
-            pdfUrl={`/api/commercial/quotations/${savedQuote.id}/quotation.pdf`}
+          <QuotationWorkflow
+            key={savedQuote.id}
+            session={session}
+            quotation={savedQuote}
+            onChange={setSavedQuote}
+            renderPreview={(snapshot, discount, onDiscount) => (
+              <QuotationView
+                snapshot={snapshot}
+                number={savedQuote.number}
+                pdfUrl={`/api/commercial/quotations/${savedQuote.id}/quotation.pdf`}
+                discount={discount}
+                onDiscount={onDiscount}
+              />
+            )}
           />
+          {manager && (
+            <a
+              href={`/api/commercial/quotations/${savedQuote.id}/comparison.pdf`}
+              download
+            >
+              Download all six quotation formats (review PDF)
+            </a>
+          )}
           {savedQuote.snapshot.revision && (
             <p>
               {savedQuote.snapshot.revision.origin} revision ·{" "}

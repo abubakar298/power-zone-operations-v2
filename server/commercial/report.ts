@@ -16,9 +16,13 @@ const money = (v: string) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number(v));
-export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
-  const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true }),
-    margin = 14;
+function appendQuotation(
+  pdf: jsPDF,
+  s: QuotationSnapshot,
+  number?: string,
+  label?: string,
+) {
+  const margin = 14;
   pdf.setProperties({
     title: number ?? "Quotation preview",
     author: "Power Zone Engineering & Services (Pvt) Limited",
@@ -30,6 +34,10 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
   drawReportLogo(pdf);
   pdf.setFontSize(9);
   pdf.setFont("helvetica", "normal");
+  if (label) {
+    pdf.setFontSize(7);
+    pdf.text(text(label), margin, 32);
+  }
 
   pdf.setTextColor(40, 40, 45);
   pdf.setFontSize(12);
@@ -149,6 +157,31 @@ export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
     styles: { fontSize: 7.5, cellPadding: 0.7, overflow: "linebreak" },
     rowPageBreak: "avoid",
   });
+}
+export function buildQuotationPdf(s: QuotationSnapshot, number?: string) {
+  const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
+  appendQuotation(pdf, s, number);
   drawReportFooter(pdf, text(number ?? "Draft quotation"));
+  return Buffer.from(pdf.output("arraybuffer"));
+}
+export function buildQuotationComparisonPdf(
+  variants: { snapshot: QuotationSnapshot; label: string }[],
+  sourceNumber: string,
+) {
+  const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
+  variants.forEach((v, i) => {
+    if (i) pdf.addPage();
+    appendQuotation(
+      pdf,
+      v.snapshot,
+      sourceNumber,
+      `REVIEW PREVIEW ${i + 1}/6 - ${v.label}`,
+    );
+  });
+  pdf.setProperties({
+    title: `${sourceNumber} - six quotation formats`,
+    subject: "Comparison previews only; saved quotation unchanged.",
+  });
+  drawReportFooter(pdf, text(`${sourceNumber} - format review only`));
   return Buffer.from(pdf.output("arraybuffer"));
 }

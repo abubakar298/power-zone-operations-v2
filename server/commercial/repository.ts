@@ -1,3 +1,5 @@
+import { Decimal } from "decimal.js";
+import { allocateDiscount } from "../orders/allocation.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { transaction } from "../db/transaction.js";
@@ -556,12 +558,152 @@ export class CommercialRepository {
   }
   async quotationGet(id: string) {
     const row = (
-      await this.pool.query("SELECT * FROM quotation_versions WHERE id=$1", [
-        id,
-      ])
+      await this.pool.query(
+        "SELECT q.*, (SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS workflow_status, NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS workflow_latest FROM quotation_versions q WHERE q.id=$1",
+        [id],
+      )
     ).rows[0];
     if (!row) throw new HttpError(404, "Quotation not found.");
     return row;
+  }
+  async quotationVariants(actor: string, id: string) {
+    await this.manager(this.pool, actor);
+    const q = await this.quotationGet(id);
+    const p = await this.pricingGet(actor, q.pricing_id);
+    const b = (
+      await this.pool.query("SELECT snapshot FROM boq_revisions WHERE id=$1", [
+        q.boq_revision_id,
+      ])
+    ).rows[0];
+    const extra = await this.additionalInput(actor, id);
+    const variants = [];
+    for (const presentation of [
+      "No Breakup",
+      "Basic Breakup",
+      "Full Breakup",
+    ] as const) {
+      for (const taxMode of [
+        "Tax Included",
+        "Show Sales Tax Separately",
+      ] as const) {
+        if (extra && presentation !== "Full Breakup")
+          throw new HttpError(
+            409,
+            "This legacy quotation has additional scope outside its approved BOQ; revise costing before comparing all formats.",
+          );
+        const snapshot = quote(
+          {
+            ...p.snapshot,
+            input: { ...p.snapshot.input, presentation, taxMode },
+          },
+          b.snapshot,
+          { pricingId: p.id, ...q.snapshot.input, additionalItem: extra },
+        );
+        const used = new Set<number>();
+        snapshot.lines.forEach((line) => {
+          const i = q.snapshot.lines.findIndex(
+            (original: any, index: number) =>
+              !used.has(index) &&
+              original.group === line.group &&
+              original.qty === line.qty &&
+              original.unit === line.unit,
+          );
+          if (i >= 0) {
+            line.description = q.snapshot.lines[i].description;
+            used.add(i);
+          }
+        });
+        snapshot.customer = q.snapshot.customer;
+        snapshot.notes = q.snapshot.notes;
+        snapshot.terms = q.snapshot.terms;
+        snapshot.subject = q.snapshot.subject;
+        if (snapshot.footer.at(-1)!.amount !== q.snapshot.footer.at(-1).amount)
+          throw new HttpError(
+            422,
+            "Comparison payable differs from saved quotation.",
+          );
+        variants.push({ snapshot, label: `${presentation} / ${taxMode}` });
+      }
+    }
+    return { number: q.number, variants };
+  }
+  async discountReview(actor: string, id: string, discount: string) {
+    await this.manager(this.pool, actor, false);
+    const q = await this.quotationGet(id);
+    const p = await this.pricingGet(actor, q.pricing_id);
+    const b = (
+      await this.pool.query("SELECT snapshot FROM boq_revisions WHERE id=$1", [
+        q.boq_revision_id,
+      ])
+    ).rows[0];
+    const extra = await this.additionalInput(actor, id);
+    const detailed = quote(
+      {
+        ...p.snapshot,
+        input: {
+          ...p.snapshot.input,
+          presentation: "Full Breakup",
+          taxMode: "Show Sales Tax Separately",
+        },
+      },
+      b.snapshot,
+      {
+        pricingId: p.id,
+        ...q.snapshot.input,
+        discount: "0",
+        additionalItem: extra,
+      },
+    );
+    const rows = detailed.lines.map((l, i) => ({
+      description: l.description,
+      qty: l.qty,
+      unit: l.unit,
+      group: l.group,
+      beforeTax: l.amount!,
+      taxRate:
+        extra && i === detailed.lines.length - 1
+          ? extra.taxRate
+          : p.snapshot.rows.find((r: any) => r.key === l.group).taxRate,
+    }));
+    const amount = (label: string) =>
+      detailed.footer.find((r) => r.label === label)!.amount;
+    const total = amount("Net Total");
+    const cost = new Decimal(p.snapshot.cost).add(extra?.cost ?? "0");
+    const included = p.snapshot.input.taxMode === "Tax Included";
+    const metrics = (d: string) => {
+      const allocation = allocateDiscount(
+        rows,
+        amount("Subtotal Before Tax"),
+        amount("SOLAR PANEL SALES TAX @10%"),
+        amount("SALES TAX ON OTHER ITEMS @18%"),
+        d,
+        new Decimal(total).minus(d).toFixed(2),
+      );
+      const revenue = new Decimal(
+        included ? allocation.total : allocation.subtotal,
+      );
+      const profit = revenue.minus(cost);
+      return {
+        payable: allocation.total,
+        revenue: revenue.toFixed(2),
+        profit: profit.toFixed(2),
+        profitPercent: cost.isZero()
+          ? null
+          : profit.div(cost).mul(100).toFixed(2),
+        marginPercent: revenue.isZero()
+          ? null
+          : profit.div(revenue).mul(100).toFixed(2),
+      };
+    };
+    return {
+      cost: cost.toFixed(2),
+      basis: included
+        ? "Tax-inclusive selling values"
+        : "Revenue excluding GST",
+      original: metrics(q.snapshot.input.discount ?? "0"),
+      proposed: metrics(discount),
+      discount,
+    };
   }
   async additionalInput(actor: string, id: string) {
     await this.manager(this.pool, actor);

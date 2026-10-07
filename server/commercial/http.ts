@@ -4,7 +4,7 @@ import { equalSecrets } from "../auth/crypto.js";
 import { HttpError } from "../http/errors.js";
 import { pricingSchema, quotationSchema } from "./schema.js";
 import { CommercialRepository } from "./repository.js";
-import { buildQuotationPdf } from "./report.js";
+import { buildQuotationPdf, buildQuotationComparisonPdf } from "./report.js";
 export function commercialHttp(
   repo: CommercialRepository,
   requireSession: RequestHandler,
@@ -146,6 +146,21 @@ export function commercialHttp(
       })
       .send(buildQuotationPdf(p.snapshot));
   });
+  r.post("/quotations/:id/discount-review", async (req, res) => {
+    const v = parse(
+      z
+        .object({ discount: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/) })
+        .strict(),
+      req.body,
+    );
+    res.json(
+      await repo.discountReview(
+        req.authSession!.user.id,
+        id(req.params.id),
+        v.discount,
+      ),
+    );
+  });
   r.get("/quotations/:id/copy", async (req, res) => {
     const row = await repo.quotationGet(id(req.params.id));
     await repo.pricingGet(req.authSession!.user.id, row.pricing_id);
@@ -167,6 +182,21 @@ export function commercialHttp(
         )
         .map((l: any) => l.description),
     });
+  });
+  r.get("/quotations/:id/comparison.pdf", async (req, res) => {
+    const comparison = await repo.quotationVariants(
+      req.authSession!.user.id,
+      id(req.params.id),
+    );
+    res
+      .set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${comparison.number}-all-formats.pdf"`,
+        "Cache-Control": "private, no-store",
+      })
+      .send(
+        buildQuotationComparisonPdf(comparison.variants, comparison.number),
+      );
   });
   r.get("/quotations/:id/quotation.pdf", async (req, res) => {
     const q = await repo.quotationGet(id(req.params.id));

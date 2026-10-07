@@ -408,6 +408,19 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(inlineDiscount).toHaveClass("pdf-inline-discount");
   await inlineDiscount.fill("1000.50");
   await expect(page.locator(".pdf-inline-net")).toHaveText("8,823,826.43");
+  await inlineDiscount.fill("");
+  await expect(page.locator(".pdf-inline-net")).toHaveText("8,824,826.93");
+  const description = page.locator(".quote-description textarea").first();
+  const originalDescription = await description.inputValue();
+  await description.fill(originalDescription + " - reviewed wording");
+  await expect(
+    page.locator(".quotation-pdf-pages canvas").first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Save quotation version", exact: true }),
+  ).toBeEnabled();
+  await inlineDiscount.fill("1000.50");
+  await expect(page.locator(".pdf-inline-net")).toHaveText("8,823,826.43");
   await expect(
     page.getByText("Net Total: PKR 8,823,826.43", { exact: true }),
   ).toBeVisible();
@@ -1579,4 +1592,211 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
   } finally {
     await manager.close();
   }
+});
+
+test("quotation page saves and submits, management previews discount and requests revision in place", async ({
+  page,
+}) => {
+  const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? 3180}`;
+  const login = await page.request.post("/api/auth/login", {
+    headers: { Origin: origin },
+    data: {
+      email: "admin@example.test",
+      password: "browser-test-passphrase-298",
+    },
+  });
+  expect(login.ok()).toBe(true);
+  const session = await login.json();
+  const headers = { Origin: origin, "X-CSRF-Token": session.csrfToken };
+  const pricingList = await (
+    await page.request.get("/api/commercial/pricing")
+  ).json();
+  const source = await (
+    await page.request.get(
+      `/api/commercial/pricing/${pricingList.pricing[0].id}`,
+    )
+  ).json();
+  async function newPricing() {
+    const quotes = await (
+      await page.request.get("/api/commercial/quotations")
+    ).json();
+    const latest = quotes.quotations.find(
+      (q: any) => q.boq_revision_id === source.boq_revision_id,
+    );
+    let revisionRequestId;
+    if (latest) {
+      const revision = await page.request.post(
+        "/api/commercial/revision-requests",
+        {
+          headers,
+          data: {
+            sourceQuotationId: latest.id,
+            origin: "Internal management",
+            costingChange: false,
+            reason: "Browser quotation review regression",
+            requestedBy: "Browser manager",
+            requestKey: crypto.randomUUID(),
+          },
+        },
+      );
+      expect(revision.ok()).toBe(true);
+      revisionRequestId = (await revision.json()).id;
+    }
+    const input = { ...source.snapshot.input, revisionRequestId };
+    const pv = await page.request.post("/api/commercial/pricing/preview", {
+      headers,
+      data: input,
+    });
+    expect(pv.ok()).toBe(true);
+    const saved = await page.request.post("/api/commercial/pricing", {
+      headers,
+      data: {
+        ...input,
+        fingerprint: (await pv.json()).fingerprint,
+        requestKey: crypto.randomUUID(),
+      },
+    });
+    expect(saved.ok()).toBe(true);
+    return saved.json();
+  }
+  const price = await newPricing();
+  await page.goto("/dashboard");
+  await page
+    .getByRole("button", { name: "Commercial pricing", exact: true })
+    .click();
+  await page.getByRole("button", { name: new RegExp(price.number) }).click();
+  await page
+    .getByRole("button", { name: "Prepare quotation", exact: true })
+    .click();
+  await expect(
+    page.locator(".quotation-pdf-pages canvas").first(),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Save and send for approval", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Quotation workflow · Submitted" }),
+  ).toBeVisible();
+  const link = page.getByRole("link", {
+    name: "Download quotation PDF",
+    exact: true,
+  });
+  const href = (await link.getAttribute("href"))!;
+  const id = href.split("/").at(-2)!;
+  const saved = await (
+    await page.request.get(`/api/commercial/quotations/${id}`)
+  ).json();
+  const discount = page.getByLabel("Quotation discount (PKR)", { exact: true });
+  await expect(discount).toBeVisible();
+  const initial = Number(saved.snapshot.input.discount ?? 0);
+  const originalNet = Number(saved.snapshot.footer.at(-1).amount);
+  await discount.fill(String(initial + 1000));
+  await expect(page.locator(".pdf-inline-net")).toHaveText(
+    (originalNet - 1000).toLocaleString("en-PK", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }),
+  );
+  await expect(
+    page.getByRole("row", { name: /Profit % on cost/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Approve quotation", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("Request revision");
+  await discount.fill("");
+  await expect(page.locator(".pdf-inline-net")).toHaveText(
+    (originalNet + initial).toLocaleString("en-PK", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }),
+  );
+  await page
+    .getByLabel("Review comments", { exact: true })
+    .fill("Please apply the reviewed discount instruction.");
+  await page
+    .getByRole("button", { name: "Request revision", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Confirm revision request", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Quotation workflow · Changes requested",
+    }),
+  ).toBeVisible();
+  expect(
+    (await (await page.request.get(`/api/commercial/quotations/${id}`)).json())
+      .snapshot,
+  ).toEqual(saved.snapshot);
+  // Dashboard feedback uses an application form and supports cancellation.
+  const next = await newPricing();
+  const qi = {
+    pricingId: next.id,
+    revisionRequestId: next.snapshot.input.revisionRequestId,
+    quotedDate: "2026-10-07",
+    validity: "7 Days",
+    proposedBy: "Browser review test",
+    discount: "0",
+  };
+  const qp = await (
+    await page.request.post("/api/commercial/quotations/preview", {
+      headers,
+      data: qi,
+    })
+  ).json();
+  const q = await (
+    await page.request.post("/api/commercial/quotations", {
+      headers,
+      data: {
+        ...qi,
+        fingerprint: qp.fingerprint,
+        requestKey: crypto.randomUUID(),
+      },
+    })
+  ).json();
+  expect(
+    (
+      await page.request.post("/api/coordinator/events", {
+        headers,
+        data: { quotationId: q.id, kind: "Submitted" },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await page.getByRole("button", { name: /Quotation approval/ }).click();
+  const row = page.getByRole("row", { name: new RegExp(q.number) });
+  await row
+    .getByRole("button", { name: "Request revision", exact: true })
+    .click();
+  await page
+    .getByLabel("Revision feedback", { exact: true })
+    .fill("Revise the quotation wording.");
+  await page
+    .getByRole("button", { name: "Cancel revision request", exact: true })
+    .click();
+  expect(
+    (
+      await (
+        await page.request.get(`/api/commercial/quotations/${q.id}`)
+      ).json()
+    ).workflow_status,
+  ).toBe("Submitted");
+  await row
+    .getByRole("button", { name: "Request revision", exact: true })
+    .click();
+  await page
+    .getByLabel("Revision feedback", { exact: true })
+    .fill("Revise the quotation wording.");
+  await page
+    .getByRole("button", { name: "Confirm revision request", exact: true })
+    .click();
+  await expect(row).toHaveCount(0);
+  expect(
+    (
+      await (
+        await page.request.get(`/api/commercial/quotations/${q.id}`)
+      ).json()
+    ).workflow_status,
+  ).toBe("Changes requested");
 });

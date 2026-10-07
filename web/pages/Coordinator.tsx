@@ -75,10 +75,17 @@ export function Coordinator({
       (!overdueOnly || overdue(t)) &&
       (!approvalsOnly || t.responsibility === "Management"),
   );
-  const action = async (t: any, kind: string) => {
+  const [feedbackTask, setFeedbackTask] = useState<any>();
+  const [feedback, setFeedback] = useState("");
+  const action = async (t: any, kind: string, suppliedNotes?: string) => {
+    if (kind === "Changes requested" && suppliedNotes === undefined) {
+      setFeedbackTask(t);
+      setFeedback("");
+      return;
+    }
     const notes =
       kind === "Changes requested"
-        ? (window.prompt("Enter revision feedback") ?? "")
+        ? (suppliedNotes ?? "")
         : kind === "PO received"
           ? (window.prompt(
               "Enter PO / approval reference. This records receipt; upload evidence in Customer PO & IPO.",
@@ -105,6 +112,7 @@ export function Coordinator({
         body: { quotationId: t.id, kind, notes },
         csrf: session.csrfToken,
       });
+      setFeedbackTask(undefined);
       setTick((v) => v + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to move document.");
@@ -114,6 +122,37 @@ export function Coordinator({
   };
   return (
     <section className="coordinator-panel">
+      {feedbackTask && (
+        <form
+          aria-label="Request quotation revision"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void action(feedbackTask, "Changes requested", feedback);
+          }}
+        >
+          <h3>Request revision · {feedbackTask.reference}</h3>
+          <label>
+            Revision feedback
+            <textarea
+              required
+              maxLength={2000}
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+            />
+          </label>
+          <button type="submit" disabled={busy || !feedback.trim()}>
+            Confirm revision request
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setFeedbackTask(undefined)}
+          >
+            Cancel revision request
+          </button>
+        </form>
+      )}
+
       <div className="coordination-heading">
         <div>
           <h2>

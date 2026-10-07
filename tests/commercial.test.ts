@@ -1536,3 +1536,74 @@ test("survey aging starts at receipt, excludes management waiting and never rese
     changed.preparation_minutes >= 15 && changed.preparation_minutes < 15.1,
   );
 });
+
+test("discount review and six-format export are read-only and management profitability is protected", async () => {
+  const original = (await get(`/quotations/${issued.id}`).expect(200)).body;
+  const before = await db.pool.query(
+    "SELECT (SELECT count(*) FROM quotation_versions) AS quotes,(SELECT count(*) FROM coordination_events) AS events",
+  );
+  await post(
+    `/quotations/${issued.id}/discount-review`,
+    { discount: "1000" },
+    true,
+  ).expect(403);
+  await post(`/quotations/${issued.id}/discount-review`, {
+    discount: "-1",
+  }).expect(400);
+  await post(`/quotations/${issued.id}/discount-review`, {
+    discount: "999999999999",
+  }).expect(422);
+  const review = (
+    await post(`/quotations/${issued.id}/discount-review`, {
+      discount: "1000",
+    }).expect(200)
+  ).body;
+  assert.equal(
+    new Decimal(review.original.payable)
+      .minus(review.proposed.payable)
+      .toFixed(2),
+    "1000.00",
+  );
+  assert.ok(new Decimal(review.original.profit).gt(review.proposed.profit));
+  assert.ok(
+    new Decimal(review.original.profitPercent).gt(
+      review.proposed.profitPercent,
+    ),
+  );
+  const reset = (
+    await post(`/quotations/${issued.id}/discount-review`, {
+      discount: "0",
+    }).expect(200)
+  ).body;
+  assert.equal(reset.proposed.payable, reset.original.payable);
+  const { CommercialRepository } =
+    await import("../server/commercial/repository.js");
+  const comparison = await new CommercialRepository(db.pool).quotationVariants(
+    adminId,
+    issued.id,
+  );
+  assert.equal(comparison.variants.length, 6);
+  assert.equal(new Set(comparison.variants.map((v) => v.label)).size, 6);
+  for (const v of comparison.variants)
+    assert.equal(
+      v.snapshot.footer.at(-1)!.amount,
+      original.snapshot.footer.at(-1).amount,
+    );
+  const pdf = await get(`/quotations/${issued.id}/comparison.pdf`)
+    .expect(200)
+    .expect("Content-Type", /application\/pdf/);
+  assert.ok(pdf.body.length > 10000);
+  await get(`/quotations/${issued.id}/comparison.pdf`, true).expect(403);
+  assert.deepEqual(
+    (await get(`/quotations/${issued.id}`).expect(200)).body.snapshot,
+    original.snapshot,
+  );
+  assert.deepEqual(
+    (
+      await db.pool.query(
+        "SELECT (SELECT count(*) FROM quotation_versions) AS quotes,(SELECT count(*) FROM coordination_events) AS events",
+      )
+    ).rows,
+    before.rows,
+  );
+});
