@@ -29,6 +29,10 @@ export const surveySchema = z
     earth25: quantity,
     earth6: quantity,
     earth10: quantity,
+    bessId: z
+      .string()
+      .regex(/^BESS-\d+-\d+$/)
+      .optional(),
     inverter: z.string().min(1).max(30),
     batteryKwh: z.number().int().min(0).max(120),
     smartMeter: z.boolean(),

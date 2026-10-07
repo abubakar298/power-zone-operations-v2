@@ -1,3 +1,4 @@
+import { BessSelector } from "../components/BessSelector.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, type Session } from "../api.js";
 import { confirmTransition } from "../confirm.js";
@@ -98,6 +99,8 @@ export function Design({ session }: { session: Session }) {
           ? Number(value)
           : value;
     }
+    if (f.get("bessId")) v.bessId = f.get("bessId");
+    v.batteryKwh = Number(f.get("batteryKwh"));
     for (const key of ["structure", "inverter"])
       if (f.get(key)) v[key] = f.get(key);
     for (const key of ["smartMeter", "genset"])
@@ -339,35 +342,39 @@ export function Design({ session }: { session: Session }) {
             <fieldset disabled={busy || locked}>
               <legend>2 · Technical requirements</legend>
               <div className="survey-grid">
-                {Object.entries(quantities).map(([key, label]) => (
-                  <label key={key}>
-                    {label}
-                    <input
-                      type="number"
-                      aria-label={label}
-                      name={key}
-                      required
-                      min={
-                        key === "panelQty"
-                          ? 1
-                          : key === "panelWattage"
-                            ? 0.0001
-                            : 0
-                      }
-                      max={
-                        key === "batteryKwh"
-                          ? 120
-                          : key === "panelQty"
-                            ? 1000000
-                            : 99999999
-                      }
-                      step={
-                        ["panelQty", "batteryKwh"].includes(key) ? 1 : 0.0001
-                      }
-                      defaultValue={initial[key] ?? (key.startsWith("ac") ? "0" : "")}
-                    />
-                  </label>
-                ))}
+                {Object.entries(quantities)
+                  .filter(([key]) => key !== "batteryKwh")
+                  .map(([key, label]) => (
+                    <label key={key}>
+                      {label}
+                      <input
+                        type="number"
+                        aria-label={label}
+                        name={key}
+                        required
+                        min={
+                          key === "panelQty"
+                            ? 1
+                            : key === "panelWattage"
+                              ? 0.0001
+                              : 0
+                        }
+                        max={
+                          key === "batteryKwh"
+                            ? 120
+                            : key === "panelQty"
+                              ? 1000000
+                              : 99999999
+                        }
+                        step={
+                          ["panelQty", "batteryKwh"].includes(key) ? 1 : 0.0001
+                        }
+                        defaultValue={
+                          initial[key] ?? (key.startsWith("ac") ? "0" : "")
+                        }
+                      />
+                    </label>
+                  ))}
                 <label>
                   Structure
                   <select
@@ -382,20 +389,7 @@ export function Design({ session }: { session: Session }) {
                     ))}
                   </select>
                 </label>
-                <label>
-                  Inverter configuration
-                  <select
-                    aria-label="Inverter configuration"
-                    name="inverter"
-                    required
-                    defaultValue={initial.inverter ?? ""}
-                  >
-                    <option value="">Select configuration</option>
-                    {references.inverters.map((v: any) => (
-                      <option key={v.configuration}>{v.configuration}</option>
-                    ))}
-                  </select>
-                </label>
+                <BessSelector initial={initial} />
                 {["smartMeter", "genset"].map((key) => (
                   <label key={key}>
                     {key === "smartMeter"

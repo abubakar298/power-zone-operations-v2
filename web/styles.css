@@ -98,3 +98,5 @@
 .backup-form input { width: 100%; box-sizing: border-box; padding: .7rem; border: 1px solid #ddd9eb; border-radius: 8px; }
 .backup-form button { width: fit-content; padding: .8rem 1rem; border-radius: 9px; background: #6c5ce7; color: white; border: 0; }
 @media (max-width: 760px) { .backup-form { grid-template-columns: 1fr; } .backup-form button { width: 100%; } }
+
+.revision-confirmation{border:1px solid #dfd7eb;margin:auto;color:#30253c}.revision-confirmation::backdrop{background:#30253c66}.revision-confirmation .dialog-actions{display:flex;justify-content:flex-end;gap:12px;margin-top:24px}

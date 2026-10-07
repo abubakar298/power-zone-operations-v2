@@ -59,7 +59,10 @@ before(async () => {
     panelWattage: "645",
     structure: "Elevated",
     dcMetres: "360",
-    acInverter16: "15", acInverter25: "0", acPanel16: "0", acPanel25: "20",
+    acInverter16: "15",
+    acInverter25: "0",
+    acPanel16: "0",
+    acPanel25: "20",
     earth25: "20",
     earth6: "90",
     earth10: "90",
@@ -491,17 +494,119 @@ test("quick quotation scope uses calculated cable quantities and includes the ad
 });
 
 test("surveyed AC termination lengths drive costing while quick BOQs retain fixed allowances", () => {
-  const measured = {...survey,acInverter16:"12.5",acPanel16:"7.5",acInverter25:"3",acPanel25:"27"};
-  const result=calculate(measured,masters);
-  for(const [key,qty] of [["16mm² 4C AC Cable","20"],["25mm² 4C AC Cable","30"]]) {
-    const line=result.lines.find(l=>l.key===key)!;
-    assert.equal(line.qty,qty);
-    assert.equal(line.total,new Decimal(line.rate).mul(qty).toString());
+  const measured = {
+    ...survey,
+    acInverter16: "12.5",
+    acPanel16: "7.5",
+    acInverter25: "3",
+    acPanel25: "27",
+  };
+  const result = calculate(measured, masters);
+  for (const [key, qty] of [
+    ["16mm² 4C AC Cable", "20"],
+    ["25mm² 4C AC Cable", "30"],
+  ]) {
+    const line = result.lines.find((l) => l.key === key)!;
+    assert.equal(line.qty, qty);
+    assert.equal(line.total, new Decimal(line.rate).mul(qty).toString());
   }
-  const zero=calculate({...measured,acInverter16:"0",acPanel16:"0",acInverter25:"0",acPanel25:"0"},masters);
-  assert.ok(zero.lines.filter(l=>l.key.includes("4C AC Cable")).every(l=>l.qty==="0"));
-  const quick=calculate({...measured,sourceMode:"General quotation"},masters);
-  assert.equal(quick.lines.find(l=>l.key==="16mm² 4C AC Cable")?.qty,"15");
-  assert.equal(quick.lines.find(l=>l.key==="25mm² 4C AC Cable")?.qty,"20");
-  assert.equal(surveySchema.safeParse({...measured,acPanel16:"-1"}).success,false);
+  const zero = calculate(
+    {
+      ...measured,
+      acInverter16: "0",
+      acPanel16: "0",
+      acInverter25: "0",
+      acPanel25: "0",
+    },
+    masters,
+  );
+  assert.ok(
+    zero.lines
+      .filter((l) => l.key.includes("4C AC Cable"))
+      .every((l) => l.qty === "0"),
+  );
+  const quick = calculate(
+    { ...measured, sourceMode: "General quotation" },
+    masters,
+  );
+  assert.equal(
+    quick.lines.find((l) => l.key === "16mm² 4C AC Cable")?.qty,
+    "15",
+  );
+  assert.equal(
+    quick.lines.find((l) => l.key === "25mm² 4C AC Cable")?.qty,
+    "20",
+  );
+  assert.equal(
+    surveySchema.safeParse({ ...measured, acPanel16: "-1" }).success,
+    false,
+  );
+});
+
+test("HV BESS IDs derive inverter quantities and BMS per inverter", async () => {
+  const { bessConfigurations } = await import("../server/boq/bess.js");
+  assert.equal(bessConfigurations.length, 42);
+  for (const b of bessConfigurations) {
+    const result = calculate(
+      {
+        ...survey,
+        bessId: b.id,
+        inverter: b.inverter,
+        batteryKwh: b.batteryKwh,
+      },
+      masters,
+    );
+    assert.equal(
+      result.engineering.batteryModules,
+      String(b.batteryModules),
+      b.id,
+    );
+    assert.equal(result.engineering.bms, String(b.bmsQty), b.id);
+    assert.equal(
+      result.lines.find((l) => l.key.startsWith("HYB-"))?.qty,
+      String(b.inverterQty),
+      b.id,
+    );
+  }
+  for (const [capacity, bms] of [
+    [60, 4],
+    [80, 4],
+    [120, 6],
+  ]) {
+    const result = calculate(
+      {
+        ...survey,
+        inverter: "2×12 kW",
+        batteryKwh: capacity,
+        bessId: `BESS-24-${capacity}`,
+      },
+      masters,
+    );
+    assert.equal(result.engineering.bms, String(bms));
+  }
+  assert.throws(
+    () => calculate({ ...survey, bessId: "BESS-6-20" }, masters),
+    /supported HV/,
+  );
+  assert.throws(
+    () => calculate({ ...survey, bessId: "BESS-24-30" }, masters),
+    /does not match/,
+  );
+  const dual = calculate(
+    {
+      ...survey,
+      inverter: "2×12 kW",
+      batteryKwh: 30,
+      bessId: "BESS-24-30",
+      sourceMode: "General quotation",
+    },
+    masters,
+  );
+  for (const [key, qty] of [
+    ["63A 4P MCB", "4"],
+    ["100A 4P MCCB", "2"],
+    ["16mm² 4C AC Cable", "15"],
+    ["25mm² 4C AC Cable", "20"],
+  ])
+    assert.equal(dual.lines.find((l) => l.key === key)?.qty, qty);
 });

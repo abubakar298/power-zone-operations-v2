@@ -1,3 +1,4 @@
+import { BessSelector } from "../components/BessSelector.js";
 import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js";
 import { confirmTransition } from "../confirm.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -211,15 +212,18 @@ export function Boqs({
       panelWattage: f.get("panelWattage"),
       structure: f.get("structure"),
       dcMetres: sourceMode === "General quotation" ? "0" : f.get("dcMetres"),
-      acInverter16: sourceMode === "General quotation" ? "0" : f.get("acInverter16"),
-      acInverter25: sourceMode === "General quotation" ? "0" : f.get("acInverter25"),
+      acInverter16:
+        sourceMode === "General quotation" ? "0" : f.get("acInverter16"),
+      acInverter25:
+        sourceMode === "General quotation" ? "0" : f.get("acInverter25"),
       acPanel16: sourceMode === "General quotation" ? "0" : f.get("acPanel16"),
       acPanel25: sourceMode === "General quotation" ? "0" : f.get("acPanel25"),
       earth25: sourceMode === "General quotation" ? "0" : f.get("earth25"),
       earth6: sourceMode === "General quotation" ? "0" : f.get("earth6"),
       earth10: sourceMode === "General quotation" ? "0" : f.get("earth10"),
-      inverter: f.get("inverter"),
-      batteryKwh: Number(f.get("batteryKwh")),
+      bessId: f.get("bessId") || undefined,
+      inverter: f.get("inverter") || undefined,
+      batteryKwh: f.get("batteryKwh") ? Number(f.get("batteryKwh")) : undefined,
       smartMeter: f.get("smartMeter") === "yes",
       genset: f.get("genset") === "yes",
       brands: Object.fromEntries(
@@ -1347,10 +1351,20 @@ export function Boqs({
               </legend>
               <div className="survey-grid">
                 {Object.entries(quantities)
+                  .filter(([k]) => k !== "batteryKwh")
                   .filter(
                     ([k]) =>
                       sourceMode !== "General quotation" ||
-                      !["dcMetres", "earth25", "earth6", "earth10", "acInverter16", "acInverter25", "acPanel16", "acPanel25"].includes(k),
+                      ![
+                        "dcMetres",
+                        "earth25",
+                        "earth6",
+                        "earth10",
+                        "acInverter16",
+                        "acInverter25",
+                        "acPanel16",
+                        "acPanel25",
+                      ].includes(k),
                   )
                   .map(([k, label]) => (
                     <label key={k}>
@@ -1381,7 +1395,8 @@ export function Boqs({
                         }
                         defaultValue={
                           initial[k] ??
-                          (k.startsWith("earth") || k.startsWith("ac") ||
+                          (k.startsWith("earth") ||
+                          k.startsWith("ac") ||
                           k === "dcMetres" ||
                           k === "batteryKwh"
                             ? "0"
@@ -1402,19 +1417,7 @@ export function Boqs({
                     ))}
                   </select>
                 </label>
-                <label>
-                  Inverter configuration
-                  <select
-                    aria-label="Inverter configuration"
-                    name="inverter"
-                    value={inverter}
-                    onChange={(e) => setInverter(e.target.value)}
-                  >
-                    {masters.inverters.map((i: any) => (
-                      <option key={i.configuration}>{i.configuration}</option>
-                    ))}
-                  </select>
-                </label>
+                <BessSelector initial={initial} onChange={setInverter} />
                 <label>
                   Extra smart meter
                   <select

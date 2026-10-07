@@ -1,4 +1,4 @@
-import { confirmTransition } from "../confirm.js";
+import { confirmTransition, confirmRevision } from "../confirm.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
 export type CoordinatorTarget =
@@ -94,7 +94,11 @@ export function Coordinator({
     if (["Changes requested", "PO received"].includes(kind) && !notes.trim())
       return;
     if (
-      !confirmTransition(
+      !(await (
+        kind === "Changes requested"
+          ? confirmRevision
+          : async (a: string, d: string) => confirmTransition(a, d)
+      )(
         kind === "Submitted"
           ? "Send quotation for approval"
           : kind === "Approved"
@@ -103,7 +107,7 @@ export function Coordinator({
               ? "Record sale confirmation received"
               : "Request quotation revision",
         `${t.reference ?? "This quotation"} will move to its next workflow stage. ${kind === "PO received" ? "Sale evidence still needs to be uploaded for IPO approval." : ""}`,
-      )
+      ))
     )
       return;
     setBusy(true);
@@ -135,6 +139,7 @@ export function Coordinator({
           <label>
             Revision feedback
             <textarea
+              aria-label="Revision feedback"
               required
               maxLength={2000}
               value={feedback}

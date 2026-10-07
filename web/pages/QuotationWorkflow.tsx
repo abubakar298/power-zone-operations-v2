@@ -2,7 +2,7 @@ import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js"
 import { Decimal } from "decimal.js";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, type Session } from "../api.js";
-import { confirmTransition } from "../confirm.js";
+import { confirmTransition, confirmRevision } from "../confirm.js";
 import type { QuotationSnapshot } from "../../server/commercial/engine.js";
 const money = (v: string) =>
   Number(v).toLocaleString("en-PK", {
@@ -83,14 +83,18 @@ export function QuotationWorkflow({
       return;
     }
     if (
-      !confirmTransition(
+      !(await (
+        kind === "Changes requested"
+          ? confirmRevision
+          : async (a: string, d: string) => confirmTransition(a, d)
+      )(
         kind === "Approved"
           ? "Approve quotation"
           : kind === "Submitted"
             ? "Send quotation for approval"
             : "Request quotation revision",
         `${q.number} will move to the next workflow stage. The saved quotation stays unchanged.`,
-      )
+      ))
     )
       return;
     setBusy(true);
@@ -220,6 +224,7 @@ export function QuotationWorkflow({
               <label>
                 Review comments
                 <textarea
+                  aria-label="Review comments"
                   maxLength={1700}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -247,7 +252,13 @@ export function QuotationWorkflow({
                     discount will be included in the revision feedback.
                   </p>
                   <button
-                    disabled={busy || !notes.trim() || calculating || !metrics}
+                    disabled={
+                      busy ||
+                      !notes.trim() ||
+                      (Number(discount.trim() || 0) !==
+                        Number(q.snapshot.input.discount ?? 0) &&
+                        (calculating || !metrics))
+                    }
                   >
                     Confirm revision request
                   </button>

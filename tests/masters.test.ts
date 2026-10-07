@@ -68,7 +68,11 @@ test("reviewed import preserves all IDs, names, codes, site zeros, rates, status
   assert.equal(body.brands.length, 25);
   assert.equal(body.rates.length, 33);
   assert.equal(body.rules.length, 21);
-  assert.equal(body.inverters.length, 6);
+  assert.equal(body.inverters.length, 7);
+  assert.equal(
+    body.inverters.find((i: any) => i.configuration === "2×12 kW").quantity,
+    2,
+  );
   for (const c of source.customers) {
     const imported = body.customers.find((r: { id: number }) => r.id === c.id);
     assert.equal(imported.name, c.name);

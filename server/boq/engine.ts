@@ -1,3 +1,4 @@
+import { findBess, BESS_RULE_VERSION } from "./bess.js";
 import { Decimal } from "decimal.js";
 import { HttpError } from "../http/errors.js";
 import { generalAllowances, GENERAL_ALLOWANCE_VERSION } from "./general.js";
@@ -81,6 +82,15 @@ export function calculate(s: Survey, m: Masters) {
     (c) => c.id === s.customerId && c.status === "Active",
   );
   if (!customer) throw new HttpError(400, "Select an active customer.");
+  if (s.bessId) {
+    const bess = findBess(s.bessId);
+    if (!bess) throw new HttpError(400, "Select a supported HV BESS ID.");
+    if (s.inverter !== bess.inverter || s.batteryKwh !== bess.batteryKwh)
+      throw new HttpError(
+        400,
+        "BESS ID does not match the inverter and battery configuration.",
+      );
+  }
   const config = m.inverters.find((i) => i.configuration === s.inverter);
   if (!config)
     throw new HttpError(400, "Select a supported inverter configuration.");
@@ -129,6 +139,7 @@ export function calculate(s: Survey, m: Masters) {
     modules = new Decimal(s.batteryKwh).div(rule(6));
   if (
     !modules.isInteger() ||
+    !modules.div(config.quantity).isInteger() ||
     new Decimal(s.batteryKwh).gt(rule(8).mul(config.quantity))
   )
     throw new HttpError(
@@ -144,7 +155,7 @@ export function calculate(s: Survey, m: Masters) {
       1,
       1 + Math.ceil(Math.max(0, s.panelQty - rnum(4)) / rnum(5)),
     ),
-    bms = modules.div(rule(7)).ceil();
+    bms = modules.div(config.quantity).div(rule(7)).ceil().mul(config.quantity);
   const lines: CostLine[] = [],
     warnings: string[] = [];
   function add(
@@ -297,6 +308,8 @@ export function calculate(s: Survey, m: Masters) {
       strings,
       batteryModules: modules.toString(),
       bms: bms.toString(),
+      bmsRuleVersion: BESS_RULE_VERSION,
+      bmsPerInverter: bms.div(config.quantity).toString(),
       batteryPerInverter: new Decimal(s.batteryKwh)
         .div(config.quantity)
         .toString(),

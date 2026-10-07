@@ -119,18 +119,19 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page.getByLabel("Panel quantity", { exact: true }).fill("60");
   await page.getByLabel("Panel wattage (W)", { exact: true }).fill("645");
   await page.getByLabel("6mm² DC cable total (m)", { exact: true }).fill("360");
-  await page.getByLabel("Inverter termination · 16 mm² 4-core (m)", {exact:true}).fill("15");
-  await page.getByLabel("Panel termination · 25 mm² 4-core (m)", {exact:true}).fill("20");
+  await page
+    .getByLabel("Inverter termination · 16 mm² 4-core (m)", { exact: true })
+    .fill("15");
+  await page
+    .getByLabel("Panel termination · 25 mm² 4-core (m)", { exact: true })
+    .fill("20");
   await page.getByLabel("2.5mm² earth cable (m)", { exact: true }).fill("20");
   await page.getByLabel("6mm² earth cable (m)", { exact: true }).fill("90");
   await page.getByLabel("10mm² earth cable (m)", { exact: true }).fill("90");
-  await page
-    .getByLabel("Total battery capacity (kWh)", { exact: true })
-    .fill("40");
   await page.getByLabel("Structure", { exact: true }).selectOption("Elevated");
   await page
-    .getByLabel("Inverter configuration", { exact: true })
-    .selectOption("2×15 kW");
+    .getByLabel("BESS configuration", { exact: true })
+    .selectOption("BESS-30-40");
   await page
     .getByLabel("Extra smart meter", { exact: true })
     .selectOption("yes");
@@ -426,11 +427,21 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(page.locator(".pdf-inline-net")).toHaveText("8,824,826.93");
   const description = page.locator(".quote-description textarea").first();
   const originalDescription = await description.inputValue();
-  const invalidPreview=page.waitForResponse(r=>r.url().endsWith("/api/commercial/quotations/preview") && !!r.request().postData()?.includes('"descriptions":[""'));
+  const invalidPreview = page.waitForResponse(
+    (r) =>
+      r.url().endsWith("/api/commercial/quotations/preview") &&
+      !!r.request().postData()?.includes('"descriptions":[""'),
+  );
   await description.fill("");
   expect((await invalidPreview).ok()).toBe(false);
-  await expect(page.locator(".quotation-pdf-pages canvas").first()).toBeVisible();
-  const updatedPdf=page.waitForResponse(r=>r.url().endsWith("/api/commercial/quotations/preview.pdf") && !!r.request().postData()?.includes("reviewed wording"));
+  await expect(
+    page.locator(".quotation-pdf-pages canvas").first(),
+  ).toBeVisible();
+  const updatedPdf = page.waitForResponse(
+    (r) =>
+      r.url().endsWith("/api/commercial/quotations/preview.pdf") &&
+      !!r.request().postData()?.includes("reviewed wording"),
+  );
   await description.fill(originalDescription + " - reviewed wording");
   expect((await updatedPdf).ok()).toBe(true);
   await expect(
@@ -476,6 +487,10 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Start revision", exact: true })
     .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirm and send", exact: true })
+    .click();
   await expect(
     page.locator(".quote-description textarea").first(),
   ).toHaveAttribute("readonly", "");
@@ -499,6 +514,10 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page.getByLabel("Requires costing change").selectOption("yes");
   await page
     .getByRole("button", { name: "Start revision", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirm and send", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Revise survey & BOQ", exact: true }),
@@ -580,6 +599,10 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Start revision", exact: true })
     .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirm and send", exact: true })
+    .click();
   await expect(page.locator(".quote-description")).toHaveCount(17);
   await expect(
     page.locator(".quote-description textarea").last(),
@@ -629,8 +652,12 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByLabel("Delivery address", { exact: true }),
   ).toHaveCount(0);
   await expect(page.getByLabel("Customer NTN", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Sales source",{exact:true}).selectOption("Existing customer");
-  await expect(page.getByLabel("Sales source",{exact:true})).toHaveValue("Existing customer");
+  await page
+    .getByLabel("Sales source", { exact: true })
+    .selectOption("Existing customer");
+  await expect(page.getByLabel("Sales source", { exact: true })).toHaveValue(
+    "Existing customer",
+  );
   await page.getByLabel("Sale confirmation type").selectOption("Customer PO");
   const poFile = new jsPDF();
   poFile.text(
@@ -669,7 +696,9 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByLabel("Customer PO reference", { exact: true })
     .fill("BROWSER-PO-001");
-  await page.getByLabel("Customer / company name on invoice").fill("PZES (Pvt) Ltd.");
+  await page
+    .getByLabel("Customer / company name on invoice")
+    .fill("PZES (Pvt) Ltd.");
   await page
     .getByLabel("Approval evidence / verbal confirmation details")
     .fill("Customer PO received against this exact quotation.");
@@ -1163,11 +1192,14 @@ test("management bucket opens a coordinator costing review and isolates approval
   await page.getByLabel("Panel quantity", { exact: true }).fill("60");
   await page.getByLabel("Panel wattage (W)", { exact: true }).fill("645");
   await page
-    .getByLabel("Inverter configuration", { exact: true })
-    .selectOption("2×15 kW");
-  await page
-    .getByLabel("Total battery capacity (kWh)", { exact: true })
-    .fill("40");
+    .getByLabel("BESS configuration", { exact: true })
+    .selectOption("BESS-24-60");
+  await expect(
+    page.getByText(
+      "2 × 12 kW inverter · 12 × 5 kWh battery modules · 4 BMS · HV",
+      { exact: true },
+    ),
+  ).toBeVisible();
   for (const [field, label] of [
     ["Solar Panel brand", "Any of the Above"],
     ["Inverter brand", "Chint Power"],
@@ -1774,6 +1806,10 @@ test("quotation page saves and submits, management previews discount and request
   await page
     .getByRole("button", { name: "Confirm revision request", exact: true })
     .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirm and send", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", {
       name: "Quotation workflow · Changes requested",
@@ -1823,6 +1859,42 @@ test("quotation page saves and submits, management previews discount and request
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   await page.getByRole("button", { name: /Quotation approval/ }).click();
   const row = page.getByRole("row", { name: new RegExp(q.number) });
+  // Revision remarks must remain sendable even if the optional profit preview fails.
+  await page.route("**/discount-review", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        message: "Profit preview temporarily unavailable",
+      }),
+    }),
+  );
+  await row.getByRole("button", { name: "Open workflow", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Profit preview temporarily unavailable",
+  );
+  await page
+    .getByLabel("Review comments", { exact: true })
+    .fill("Please revise the inverter configuration.");
+  await page
+    .getByRole("button", { name: "Request revision", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Confirm revision request", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Confirm revision request", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  await expect(page.getByLabel("Review comments", { exact: true })).toHaveValue(
+    "Please revise the inverter configuration.",
+  );
+  await page.unroute("**/discount-review");
+  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await page.getByRole("button", { name: /Quotation approval/ }).click();
   await row
     .getByRole("button", { name: "Request revision", exact: true })
     .click();
@@ -1847,6 +1919,21 @@ test("quotation page saves and submits, management previews discount and request
     .fill("Revise the quotation wording.");
   await page
     .getByRole("button", { name: "Confirm revision request", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  await expect(row).toHaveCount(1);
+  await expect(
+    page.getByLabel("Revision feedback", { exact: true }),
+  ).toHaveValue("Revise the quotation wording.");
+  await page
+    .getByRole("button", { name: "Confirm revision request", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirm and send", exact: true })
     .click();
   await expect(row).toHaveCount(0);
   expect(
@@ -1990,14 +2077,13 @@ test("Design uploads a physical survey, sends technical requirements without bra
     "2.5mm² earth cable (m)": "20",
     "6mm² earth cable (m)": "30",
     "10mm² earth cable (m)": "30",
-    "Total battery capacity (kWh)": "15",
   };
   for (const [name, value] of Object.entries(values))
     await page.getByLabel(name, { exact: true }).fill(value);
   await page.getByLabel("Structure", { exact: true }).selectOption("L1");
   await page
-    .getByLabel("Inverter configuration", { exact: true })
-    .selectOption("10 kW");
+    .getByLabel("BESS configuration", { exact: true })
+    .selectOption("BESS-10-15");
   await page
     .getByLabel("Extra smart meter", { exact: true })
     .selectOption("no");

@@ -1,5 +1,5 @@
 import { QuotationWorkflow } from "./QuotationWorkflow.js";
-import { confirmTransition } from "../confirm.js";
+import { confirmTransition, confirmRevision } from "../confirm.js";
 import { createPortal } from "react-dom";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { Decimal } from "decimal.js";
@@ -525,7 +525,10 @@ export function Commercial({
         body: { ...quoteInput, discount: quoteInput.discount?.trim() || "0" },
         csrf: session.csrfToken,
       });
-      if (sequence === previewSequence.current) { setQuotePreview(result); setQuotePdfInput(quoteInput); }
+      if (sequence === previewSequence.current) {
+        setQuotePreview(result);
+        setQuotePdfInput(quoteInput);
+      }
     });
   }
   async function saveQuote(submit = false) {
@@ -1203,14 +1206,14 @@ export function Commercial({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (
-                  !confirmTransition(
-                    "Start quotation revision",
-                    "A separate revision will be created. The existing approved costing and quotation remain unchanged.",
-                  )
-                )
-                  return;
                 void action(async () => {
+                  if (
+                    !(await confirmRevision(
+                      "Start quotation revision",
+                      "A separate revision will be created. The existing approved costing and quotation remain unchanged.",
+                    ))
+                  )
+                    return;
                   const r = await api<any>("/commercial/revision-requests", {
                     body: {
                       sourceQuotationId: savedQuote.id,

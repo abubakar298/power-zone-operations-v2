@@ -1,3 +1,4 @@
+import { findBess } from "../boq/bess.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { Decimal } from "decimal.js";
@@ -165,6 +166,18 @@ export class DesignRepository {
         )
       ).rowCount;
       if (!customer) throw new HttpError(400, "Select an active customer.");
+      if (inputs.bessId) {
+        const bess = findBess(inputs.bessId);
+        if (
+          !bess ||
+          bess.inverter !== inputs.inverter ||
+          bess.batteryKwh !== inputs.batteryKwh
+        )
+          throw new HttpError(
+            400,
+            "Select a supported HV BESS ID matching the inverter and battery configuration.",
+          );
+      }
       const inverter = (
         await c.query(
           "SELECT quantity FROM inverter_configurations WHERE configuration=$1",
@@ -188,7 +201,10 @@ export class DesignRepository {
       )
         throw new HttpError(422, "Battery rules are not configured.");
       if (
-        !new Decimal(inputs.batteryKwh).div(rule(6)).isInteger() ||
+        !new Decimal(inputs.batteryKwh)
+          .div(rule(6))
+          .div(inverter.quantity)
+          .isInteger() ||
         new Decimal(inputs.batteryKwh).gt(
           new Decimal(rule(8)).mul(inverter.quantity),
         )
