@@ -1,8 +1,14 @@
 import type { Pool } from "pg";
 
 export const testArchiveKey = "owner-confirmed-test-workflow-2026-10-07";
-// Fixed before the owner begins the clean end-to-end test. Never roll forward.
-const cutoff = "2026-10-07T06:52:51Z";
+// Each owner-authorized cleanup has a separate immutable key and fixed cutoff.
+// Never roll an existing cutoff forward or reuse its key for another batch.
+export const completedSampleArchiveKey =
+  "owner-confirmed-completed-samples-2026-10-07-115531";
+const requests: Record<string, string> = {
+  [testArchiveKey]: "2026-10-07T06:52:51Z",
+  [completedSampleArchiveKey]: "2026-10-07T11:55:31Z",
+};
 const tables = [
   "design_survey_handoffs",
   "design_surveys",
@@ -43,7 +49,8 @@ export async function archiveConfirmedTestWorkflow(
   pool: Pool,
   requested?: string,
 ) {
-  if (requested !== testArchiveKey) return;
+  const cutoff = requested && requests[requested];
+  if (!requested || !cutoff) return;
   const c = await pool.connect();
   try {
     await c.query("BEGIN");
@@ -51,7 +58,7 @@ export async function archiveConfirmedTestWorkflow(
     await c.query("SELECT pg_advisory_xact_lock(742019021)");
     const existing = (
       await c.query("SELECT counts FROM test_workflow_archives WHERE key=$1", [
-        testArchiveKey,
+        requested,
       ])
     ).rows[0];
     if (existing) {
@@ -90,7 +97,7 @@ export async function archiveConfirmedTestWorkflow(
     }
     await c.query(
       "INSERT INTO test_workflow_archives(key,cutoff,counts,records) VALUES($1,$2,$3,$4)",
-      [testArchiveKey, cutoff, counts, records],
+      [requested, cutoff, counts, records],
     );
     // Explicit tables only, no CASCADE and no disabled immutability triggers.
     // TRUNCATE is confined to the archived test dataset, under the same locks.

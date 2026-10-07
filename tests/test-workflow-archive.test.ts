@@ -5,6 +5,7 @@ import { testDatabase } from "./database.js";
 import {
   archiveConfirmedTestWorkflow,
   testArchiveKey,
+  completedSampleArchiveKey,
 } from "../server/maintenance/archive-test-workflow.js";
 
 test("operator test archive is recoverable, atomic, cutoff guarded and preserves master data and new work on retry", async () => {
@@ -91,7 +92,7 @@ test("operator test archive is recoverable, atomic, cutoff guarded and preserves
       1,
     );
     await db.pool.query(
-      "INSERT INTO survey_drafts(id,owner_id,inputs) VALUES($1,$2,'{}')",
+      "INSERT INTO survey_drafts(id,owner_id,inputs,created_at) VALUES($1,$2,'{}','2026-10-07T11:00:00Z')",
       [newer, user],
     );
     await archiveConfirmedTestWorkflow(db.pool, testArchiveKey);
@@ -99,6 +100,18 @@ test("operator test archive is recoverable, atomic, cutoff guarded and preserves
       (await db.pool.query("SELECT id FROM survey_drafts")).rows[0].id,
       newer,
     );
+    // A separately authorized second batch archives the completed test, without
+    // changing the first archive or letting retries erase future work.
+    const second = await archiveConfirmedTestWorkflow(db.pool, completedSampleArchiveKey);
+    assert.equal(second.survey_drafts, 1);
+    assert.equal((await db.pool.query("SELECT count(*)::int AS n FROM test_workflow_archives")).rows[0].n, 2);
+    assert.equal((await db.pool.query("SELECT count(*)::int AS n FROM survey_drafts")).rows[0].n, 0);
+    const future = randomUUID();
+    await db.pool.query("INSERT INTO survey_drafts(id,owner_id,inputs,created_at) VALUES($1,$2,'{}','2026-10-07T12:00:00Z')", [future,user]);
+    await archiveConfirmedTestWorkflow(db.pool, completedSampleArchiveKey);
+    assert.equal((await db.pool.query("SELECT id FROM survey_drafts")).rows[0].id, future);
+    assert.deepEqual((await db.pool.query("SELECT (SELECT count(*) FROM customers)::int AS customers,(SELECT count(*) FROM sites)::int AS sites,(SELECT count(*) FROM rate_versions)::int AS rates")).rows[0],masters);
+
   } finally {
     await db.close();
   }
