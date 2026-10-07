@@ -240,7 +240,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("heading", { name: "Costing preview", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("PKR 6,456,786", { exact: true })).toBeVisible();
+  await expect(page.getByText("PKR 6,456,786.00", { exact: true })).toBeVisible();
   const pdfDownload = page.waitForEvent("download");
   await page
     .getByRole("link", { name: "Download costing PDF", exact: true })
@@ -310,7 +310,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("heading", { name: "BAFL-05850-001-R0", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("PKR 6,456,786", { exact: true })).toBeVisible();
+  await expect(page.getByText("PKR 6,456,786.00", { exact: true })).toBeVisible();
   const savedPdfDownload = page.waitForEvent("download");
   await page
     .getByRole("link", { name: "Download costing PDF", exact: true })
@@ -390,7 +390,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
       exact: true,
     })
     .click();
-  await expect(page.getByText("PKR 6,456,786", { exact: true })).toBeVisible();
+  await expect(page.getByText("PKR 6,456,786.00", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Create revision draft", exact: true }),
   ).toBeDisabled();

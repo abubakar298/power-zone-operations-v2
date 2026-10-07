@@ -95,7 +95,7 @@ Resend domain verification/API credentials and Render email configuration are no
 
 ## Git checkpoint
 
-Repository: abubakar298/power-zone-operations-v2. Verified remote production branch: milestone-5/commercial-quotations, HEAD de49d7a3efd7aaeb8d6ea9e271eb9a8105d9fd20. The local source directory has no .git metadata, so a clean git working-tree claim would be false. Candidate code is published on `hardening/production-release-candidate` at `20fc2dbfadc24955ba5c83320e33c5f2cf0ff42d`, in draft PR #6; it is not deployed. Preserve the unrelated pre-existing tests/orders.test.ts import edit. Release publication must use an explicit reviewed file list on a separate candidate branch; do not upload .local logs, credentials, databases or generated artifacts.
+Repository: abubakar298/power-zone-operations-v2. Verified remote production branch: milestone-5/commercial-quotations, HEAD de49d7a3efd7aaeb8d6ea9e271eb9a8105d9fd20. The local source directory has no .git metadata, so a clean git working-tree claim would be false. Candidate code is published on `hardening/production-release-candidate` in draft PR #6 (the final branch head is the release reference); it is not deployed. Preserve the unrelated pre-existing tests/orders.test.ts import edit. Release publication must use an explicit reviewed file list on a separate candidate branch; do not upload .local logs, credentials, databases or generated artifacts.
 
 ## Remaining priorities and recommendation
 
@@ -107,11 +107,11 @@ P2: paginated collections and query-index review as volume grows; richer structu
 
 No application is hack-proof. This is a tested local candidate, not proof of complete production security or complete planned product scope.
 
-**DEPLOYABLE AFTER THESE SPECIFIC FIXES / RELEASE GATES.** Keep production unchanged until candidate publication/CI and recovery/release checks are resolved. The implemented coordination scope can then enter a controlled pilot; full inventory, procurement, site operations and accounting should not be advertised as finished.
+**B. READY FOR CONTROLLED PILOT ONLY — DEPLOYABLE AFTER THESE SPECIFIC FIXES / RELEASE GATES.** Keep production unchanged until candidate publication/CI and recovery/release checks are resolved. The implemented coordination scope can then enter a controlled pilot; full inventory, procurement, site operations and accounting should not be advertised as finished.
 
 ## Publication evidence
 
-Draft review: https://github.com/abubakar298/power-zone-operations-v2/pull/6. The code candidate is 20fc2dbfadc24955ba5c83320e33c5f2cf0ff42d; subsequent documentation-only commits do not change tested application behavior. CI was dispatched for this separate branch. Production branch remains untouched. The immediately preceding production commit adds validated Rafiq email sender display configuration; its parent is 74618e19ff62578b2e0eb1fa45173f7bbdea1907. See the route inventory alongside this report for implemented router paths.
+Draft review: https://github.com/abubakar298/power-zone-operations-v2/pull/6. The security candidate began at 20fc2dbfadc24955ba5c83320e33c5f2cf0ff42d; decimal display changes were added in d838bc1de0dd8cabb8ce09b67de53f6e8f7cdc87. The final head is recorded in the PR. CI was dispatched for this separate branch. Production branch remains untouched. The browser costing assertions were updated from whole PKR to the intended two-decimal display; reference values themselves are unchanged. The immediately preceding production commit adds validated Rafiq email sender display configuration; its parent is 74618e19ff62578b2e0eb1fa45173f7bbdea1907. See the route inventory alongside this report for implemented router paths.
 
 ## Additional engineering limitations
 
@@ -123,3 +123,5 @@ Draft review: https://github.com/abubakar298/power-zone-operations-v2/pull/6. Th
 - File signatures/size/access controls are implemented; malicious-file scanning and an independent penetration test are not provided.
 - Long descriptions and arbitrary customer/address lengths need continued PDF visual acceptance. No approved document wording or branding was changed in this pass.
 - Audit actions retain actor/time and entity identifiers in action strings; an external append-only audit sink and structured entity columns remain future hardening.
+
+Browser fixtures currently share setup across scenarios, so a failure in initial setup can cause dependent scenario failures. The suite runs serially; future test isolation should remove this dependency.
