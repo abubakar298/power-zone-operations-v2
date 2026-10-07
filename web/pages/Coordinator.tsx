@@ -124,6 +124,7 @@ export function Coordinator({
     <section className="coordinator-panel">
       {feedbackTask && (
         <form
+          className="survey-form"
           aria-label="Request quotation revision"
           onSubmit={(e) => {
             e.preventDefault();

@@ -1169,6 +1169,7 @@ export function Commercial({
           />
           {manager && (
             <a
+              className="quote-format-download"
               href={`/api/commercial/quotations/${savedQuote.id}/comparison.pdf`}
               download
             >

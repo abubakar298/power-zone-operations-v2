@@ -140,7 +140,10 @@ export function QuotationWorkflow({
         manager ? discount : undefined,
         manager ? setDiscount : undefined,
       )}
-      <section aria-label="Quotation review actions">
+      <section
+        className="quotation-review-panel"
+        aria-label="Quotation review actions"
+      >
         <h3>
           Quotation workflow ·{" "}
           {q.workflow_status ?? "Ready for approval submission"}
