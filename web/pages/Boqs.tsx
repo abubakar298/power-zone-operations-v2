@@ -47,6 +47,7 @@ export function Boqs({
     [currentReview, setCurrentReview] = useState<any>(),
     [reviewComments, setReviewComments] = useState(""),
     [instructions, setInstructions] = useState(blankInstructions),
+    [changeQuotationSettings, setChangeQuotationSettings] = useState(false),
     [approvalEvidence, setApprovalEvidence] = useState<
       { id: string; filename: string }[]
     >([]),
@@ -271,7 +272,10 @@ export function Boqs({
     setBusy(true);
     setError("");
     try {
-      setCurrentReview(await api(`/boqs/reviews/${id}`));
+      const review = await api<any>(`/boqs/reviews/${id}`);
+      setCurrentReview(review);
+      setInstructions(review.previous_instructions ?? blankInstructions());
+      setChangeQuotationSettings(false);
       setReviewComments("");
       setView("review");
     } catch (e) {
@@ -741,10 +745,18 @@ export function Boqs({
             {currentReview.status === "Awaiting review" &&
               ["Admin", "Management"].includes(session.user.role) && (
                 <div className="review-actions">
+                  {currentReview.previous_instructions && <label>
+                    <input type="checkbox" checked={changeQuotationSettings}
+                      onChange={(e) => {
+                        setChangeQuotationSettings(e.target.checked);
+                        if (!e.target.checked) setInstructions(currentReview.previous_instructions);
+                      }} /> Change quotation settings
+                    <span> Previous quotation instructions are retained unless you enable changes.</span>
+                  </label>}
                   <ApprovalInstructions
                     value={instructions}
                     onChange={setInstructions}
-                    disabled={busy}
+                    disabled={busy || (!!currentReview.previous_instructions && !changeQuotationSettings)}
                   />
                   <label>
                     Review comments
@@ -806,10 +818,18 @@ export function Boqs({
                       onChange={(e) => setExternalApprover(e.target.value)}
                     />
                   </label>
+                  {currentReview.previous_instructions && <label>
+                    <input type="checkbox" checked={changeQuotationSettings}
+                      onChange={(e) => {
+                        setChangeQuotationSettings(e.target.checked);
+                        if (!e.target.checked) setInstructions(currentReview.previous_instructions);
+                      }} /> Change quotation settings
+                    <span> Previous quotation instructions are retained unless you enable changes.</span>
+                  </label>}
                   <ApprovalInstructions
                     value={instructions}
                     onChange={setInstructions}
-                    disabled={busy}
+                    disabled={busy || (!!currentReview.previous_instructions && !changeQuotationSettings)}
                   />
                   <label>
                     Approval screenshots

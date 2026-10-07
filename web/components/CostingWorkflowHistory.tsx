@@ -24,12 +24,14 @@ export function CostingWorkflowHistory({ review }: { review: any }) {
         has its own costing decision.
       </p>
       <div className="table-scroll">
-        <table className="master-table" style={{ minWidth: 760 }} aria-label="Document workflow history">
+        <table className="master-table" style={{ minWidth: 960 }} aria-label="Document workflow history">
           <thead>
             <tr>
               <th scope="col">Document / stage</th>
               <th scope="col">Date</th>
               <th scope="col">Status</th>
+              <th scope="col">Quotation number</th>
+              <th scope="col" className="numeric">Quoted amount (PKR)</th>
               <th scope="col">Survey / revision details</th>
               <th scope="col" className="numeric">
                 Budgeted cost (PKR)
@@ -47,7 +49,7 @@ export function CostingWorkflowHistory({ review }: { review: any }) {
                   {b.number}
                 </td>
                 <td>{new Date(b.created_at).toLocaleString()}</td>
-                <td>Approved</td>
+                <td>Approved</td><td>—</td><td className="numeric">—</td>
                 <td>
                   {b.survey_type === "General quotation"
                     ? "Quick BOQ · no survey"
@@ -73,6 +75,8 @@ export function CostingWorkflowHistory({ review }: { review: any }) {
                       ? "Awaiting quotation approval"
                       : q.status}
                   </td>
+                  <td>{q.number}</td>
+                  <td className="numeric">{q.net_total != null ? amount(q.net_total) : "—"}</td>
                   <td>Based on {b.number}</td>
                   <td className="numeric">{amount(b.budgeted_cost)}</td>
                 </tr>
@@ -84,7 +88,7 @@ export function CostingWorkflowHistory({ review }: { review: any }) {
                 {context?.source_quotation && <p>{context.source_quotation}</p>}
               </td>
               <td>—</td>
-              <td>Revision requested</td>
+              <td>Revision requested</td><td>{context?.source_quotation ?? "—"}</td><td className="numeric">—</td>
               <td>
                 <strong>
                   {context?.origin ??
@@ -109,7 +113,7 @@ export function CostingWorkflowHistory({ review }: { review: any }) {
                 Draft version {review.draft_version}
               </td>
               <td>{new Date(review.created_at).toLocaleString()}</td>
-              <td>{review.status}</td>
+              <td>{review.status}</td><td>Not yet prepared</td><td className="numeric">—</td>
               <td>
                 {difference && (
                   <span>

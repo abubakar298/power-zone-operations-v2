@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { transaction } from "../db/transaction.js";
 import { HttpError } from "../http/errors.js";
 import { MastersRepository } from "../masters/repository.js";
-import type { ApprovalInstructions } from "./instructions.js";
+import { instructionsSchema, type ApprovalInstructions } from "./instructions.js";
 import { calculate } from "./engine.js";
 import { surveySchema } from "./schema.js";
 import { type BoqRepository, fingerprint } from "./repository.js";
@@ -78,6 +78,16 @@ export class ReviewRepository {
           [row.draft_id],
         )
       ).rows[0]?.revision_origin ?? null;
+    const previousSettings = row.base_revision_id ? (await this.pool.query(
+      `SELECT COALESCE(
+        (SELECT instructions FROM costing_approval_instructions WHERE revision_id=$1),
+        (SELECT p.snapshot->'input' FROM commercial_pricing_versions p WHERE p.boq_revision_id=$1 ORDER BY p.version DESC LIMIT 1)
+      ) AS settings`, [row.base_revision_id],
+    )).rows[0]?.settings : null;
+    row.previous_instructions = previousSettings ? instructionsSchema.parse({
+      presentation: previousSettings.presentation, taxMode: previousSettings.taxMode,
+      markups: previousSettings.markups, notes: previousSettings.notes ?? "",
+    }) : null;
     row.approval = (
       await this.pool.query(
         "SELECT a.*,u.display_name AS recorded_by_name FROM costing_approval_instructions a JOIN users u ON u.id=a.recorded_by WHERE submission_id=$1",
