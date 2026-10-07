@@ -79,7 +79,7 @@ Department boundaries are enforced server-side, including PDFs and attachments. 
 
 The authorization matrix checks legitimate owner/management access, another Coordinator guessing IDs, unauthorized departments, anonymous callers, body-reference substitution, collection leaks, uploads, BOQ history/PDF, pricing/quote PDF and IPO/handoffs. Existing repository action checks still enforce approval authority. These are comprehensive automated checks for the affected surfaces, not an independent penetration-test certification.
 
-Final local results: **91 backend tests passed, zero failed; eight browser tests passed; three Python backup-client tests passed; production build/typecheck passed**. Test areas include auth/session restart/logout/mobile, masters, BOQ review/revisions, commercial pricing and tax formats, IPO/PT rounding, approvals/evidence, imports, department queues, Design uploads, backups and training/archive safeguards. Browser tests exercise the Coordinator-to-Operations flow and management revisions. Arbitrary attachment contents, every user/browser combination, live email delivery and a real production restore still require acceptance.
+Final local results: **91 backend tests passed, zero failed; eight browser tests passed; three Python backup-client tests passed; production build/typecheck passed; production dependency audit reports zero vulnerabilities**. Test areas include auth/session restart/logout/mobile, masters, BOQ review/revisions, commercial pricing and tax formats, IPO/PT rounding, approvals/evidence, imports, department queues, Design uploads, backups and training/archive safeguards. Browser tests exercise the Coordinator-to-Operations flow and management revisions. Arbitrary attachment contents, every user/browser combination, live email delivery and a real production restore still require acceptance.
 
 Initial application JS reduced from about 559 KB to 248 KB (about 169 KB to 77 KB compressed); PDF/OCR functionality remains loaded on demand. Response support IDs avoid exposing request bodies or private values. Connection failures do not automatically retry mutations.
 
@@ -95,7 +95,7 @@ Resend domain verification/API credentials and Render email configuration are no
 
 ## Git checkpoint
 
-Repository: abubakar298/power-zone-operations-v2. Verified remote production branch: milestone-5/commercial-quotations, HEAD de49d7a3efd7aaeb8d6ea9e271eb9a8105d9fd20. The local source directory has no .git metadata, so a clean git working-tree claim would be false. Candidate edits are local and not deployed. Preserve the unrelated pre-existing tests/orders.test.ts import edit. Release publication must use an explicit reviewed file list on a separate candidate branch; do not upload .local logs, credentials, databases or generated artifacts.
+Repository: abubakar298/power-zone-operations-v2. Verified remote production branch: milestone-5/commercial-quotations, HEAD de49d7a3efd7aaeb8d6ea9e271eb9a8105d9fd20. The local source directory has no .git metadata, so a clean git working-tree claim would be false. Candidate code is published on `hardening/production-release-candidate` at `20fc2dbfadc24955ba5c83320e33c5f2cf0ff42d`, in draft PR #6; it is not deployed. Preserve the unrelated pre-existing tests/orders.test.ts import edit. Release publication must use an explicit reviewed file list on a separate candidate branch; do not upload .local logs, credentials, databases or generated artifacts.
 
 ## Remaining priorities and recommendation
 
@@ -108,3 +108,7 @@ P2: paginated collections and query-index review as volume grows; richer structu
 No application is hack-proof. This is a tested local candidate, not proof of complete production security or complete planned product scope.
 
 **DEPLOYABLE AFTER THESE SPECIFIC FIXES / RELEASE GATES.** Keep production unchanged until candidate publication/CI and recovery/release checks are resolved. The implemented coordination scope can then enter a controlled pilot; full inventory, procurement, site operations and accounting should not be advertised as finished.
+
+## Publication evidence
+
+Draft review: https://github.com/abubakar298/power-zone-operations-v2/pull/6. The code candidate is 20fc2dbfadc24955ba5c83320e33c5f2cf0ff42d; subsequent documentation-only commits do not change tested application behavior. CI was dispatched for this separate branch. Production branch remains untouched. The immediately preceding production commit adds validated Rafiq email sender display configuration; its parent is 74618e19ff62578b2e0eb1fa45173f7bbdea1907. See the route inventory alongside this report for implemented router paths.
