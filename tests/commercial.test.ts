@@ -1607,3 +1607,30 @@ test("discount review and six-format export are read-only and management profita
     before.rows,
   );
 });
+
+test("quotation-linked BOQ revisions move between coordinator revision and management costing buckets", async () => {
+  const { CoordinatorRepository } = await import("../server/coordinator/repository.js");
+  const repo = new CoordinatorRepository(db.pool);
+  const draft = randomUUID(), revisionRequest = randomUUID(), first = randomUUID(), second = randomUUID();
+  const requester = (await db.pool.query("SELECT id FROM users WHERE id<>$1 LIMIT 1", [adminId])).rows[0].id;
+  await db.pool.query("INSERT INTO survey_drafts(id,owner_id,inputs,base_revision_id,revision_reason) VALUES($1,$2,$3,$4,'Reduce solar capacity')", [draft, adminId, { siteName: "Revision bucket test" }, boq.id]);
+  await db.pool.query("INSERT INTO quotation_revision_requests(id,source_quotation_id,origin,costing_change,reason,requested_by,created_by,draft_id,request_key) VALUES($1,$2,'Internal management',true,'Reduce solar capacity','Director',$3,$4,$5)", [revisionRequest, issued.id, requester, draft, randomUUID()]);
+  const task = async (team = false) => (await repo.overview(adminId, team)).tasks.filter((t: any) => t.request_id === revisionRequest || t.draft_id === draft);
+  let tasks = await task();
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0].stage, "Revision required");
+  await db.pool.query("INSERT INTO boq_review_submissions(id,draft_id,draft_version,snapshot,fingerprint,submitted_by) VALUES($1,$2,1,'{}','revision-bucket-1',$3)", [first, draft, adminId]);
+  for (const team of [false, true]) {
+    tasks = await task(team);
+    assert.equal(tasks.length, 1);
+    assert.equal(tasks[0].stage, "Costing review");
+    assert.equal(tasks[0].responsibility, "Management");
+    assert.equal(tasks[0].target, "boqs");
+    assert.equal(tasks[0].draft_id, draft);
+  }
+  await db.pool.query("INSERT INTO boq_review_decisions(submission_id,outcome,comments,reviewed_by) VALUES($1,'Changes requested','Check panel quantity',$2)", [first, adminId]);
+  assert.equal((await task())[0].stage, "Revision required");
+  await db.pool.query("INSERT INTO boq_review_submissions(id,draft_id,draft_version,snapshot,fingerprint,submitted_by) VALUES($1,$2,2,'{}','revision-bucket-2',$3)", [second, draft, adminId]);
+  assert.equal((await task())[0].stage, "Costing review");
+  assert.equal((await db.pool.query("SELECT outcome FROM boq_review_decisions WHERE submission_id=$1", [first])).rows[0].outcome, "Changes requested");
+});

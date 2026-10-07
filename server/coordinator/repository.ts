@@ -14,7 +14,7 @@ export class CoordinatorRepository {
  UNION ALL
  SELECT p.id,'Quotation',p.number,p.snapshot->>'siteName','Pricing saved: prepare quotation',p.created_at,'quotes',NULL,p.boq_revision_id,NULL,NULL FROM commercial_pricing_versions p WHERE ($2 OR p.created_by=$1) AND NOT EXISTS(SELECT 1 FROM commercial_pricing_versions n WHERE n.boq_revision_id=p.boq_revision_id AND n.version>p.version) AND NOT EXISTS(SELECT 1 FROM quotation_versions q WHERE q.pricing_id=p.id)
  UNION ALL
- SELECT r.id,'Quotation revision',q.number,q.snapshot->>'siteName',CASE WHEN r.costing_change AND f.revision_id IS NULL THEN 'BOQ revision required' ELSE 'Commercial revision required' END,r.created_at,CASE WHEN r.costing_change AND f.revision_id IS NULL THEN 'boqs' ELSE 'pricing' END,CASE WHEN f.revision_id IS NULL THEN r.draft_id ELSE NULL END,COALESCE(f.revision_id,q.boq_revision_id),NULL,r.id FROM quotation_revision_requests r JOIN quotation_versions q ON q.id=r.source_quotation_id LEFT JOIN boq_draft_finalizations f ON f.draft_id=r.draft_id WHERE ($2 OR r.created_by=$1) AND NOT EXISTS(SELECT 1 FROM quotation_revision_links l WHERE l.request_id=r.id)
+ SELECT r.id,'Quotation revision',q.number,q.snapshot->>'siteName',CASE WHEN r.costing_change AND f.revision_id IS NULL AND review.id IS NOT NULL AND review.outcome IS NULL THEN 'Awaiting review' WHEN r.costing_change AND f.revision_id IS NULL THEN 'BOQ revision required' ELSE 'Commercial revision required' END,COALESCE(review.decision_at,review.created_at,r.created_at),CASE WHEN r.costing_change AND f.revision_id IS NULL THEN 'boqs' ELSE 'pricing' END,CASE WHEN f.revision_id IS NULL THEN r.draft_id ELSE NULL END,COALESCE(f.revision_id,q.boq_revision_id),NULL,r.id FROM quotation_revision_requests r JOIN quotation_versions q ON q.id=r.source_quotation_id LEFT JOIN boq_draft_finalizations f ON f.draft_id=r.draft_id LEFT JOIN survey_drafts d ON d.id=r.draft_id LEFT JOIN LATERAL (SELECT s.id,s.created_at,v.outcome,v.created_at AS decision_at FROM boq_review_submissions s LEFT JOIN boq_review_decisions v ON v.submission_id=s.id WHERE s.draft_id=r.draft_id ORDER BY s.draft_version DESC LIMIT 1) review ON true WHERE ($2 OR r.created_by=$1 OR d.owner_id=$1 OR q.created_by=$1) AND NOT EXISTS(SELECT 1 FROM quotation_revision_links l WHERE l.request_id=r.id)
  UNION ALL
  SELECT q.id,'Sale confirmation',q.number,q.snapshot->>'siteName',CASE WHEN e.kind='PO received' THEN 'PO received: prepare IPO' WHEN e.kind='Submitted' THEN 'Awaiting quotation approval' WHEN e.kind='Changes requested' THEN 'Quotation changes requested' WHEN e.kind='Approved' THEN 'Awaiting PO / sale confirmation' ELSE 'Quotation ready: submit for approval' END,COALESCE(e.created_at,q.created_at),'orders',NULL,q.boq_revision_id,NULL,NULL FROM quotation_versions q LEFT JOIN LATERAL(SELECT kind,created_at FROM coordination_events WHERE quotation_id=q.id ORDER BY created_at DESC,id DESC LIMIT 1)e ON true WHERE ($2 OR q.created_by=$1) AND NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AND NOT EXISTS(SELECT 1 FROM customer_purchase_orders p WHERE p.quotation_id=q.id) AND NOT EXISTS(SELECT 1 FROM ipo_submissions s WHERE s.input->>'quotationId'=q.id::text) AND NOT EXISTS(SELECT 1 FROM quotation_revision_requests r WHERE r.source_quotation_id=q.id)
  UNION ALL
@@ -46,7 +46,9 @@ export class CoordinatorRepository {
         : t.kind === "Commercial pricing" || t.kind === "Quotation"
           ? "Quotation preparation"
           : t.kind === "Quotation revision"
-            ? "Revision required"
+            ? t.status === "Awaiting review"
+              ? "Costing review"
+              : "Revision required"
             : t.kind === "IPO evidence"
               ? "IPO approval"
               : t.kind === "Operations issuance"
