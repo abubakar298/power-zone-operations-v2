@@ -148,6 +148,12 @@ export function QuotationWorkflow({
           Quotation workflow ·{" "}
           {q.workflow_status ?? "Ready for approval submission"}
         </h3>
+        {q.workflow_notes && (
+          <aside aria-label="Latest quotation feedback">
+            <strong>Latest review feedback</strong>
+            <p style={{ whiteSpace: "pre-wrap" }}>{q.workflow_notes}</p>
+          </aside>
+        )}
         {manager && (
           <div aria-label="Discount and profitability preview">
             <p>

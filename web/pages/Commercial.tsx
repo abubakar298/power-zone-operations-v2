@@ -1189,7 +1189,7 @@ export function Commercial({
               disabled={busy}
               onClick={() => {
                 setRevisionDialog(true);
-                setRevisionReason("");
+                setRevisionReason(savedQuote.workflow_notes ?? "");
                 setCostingChoice("");
               }}
             >

@@ -559,7 +559,7 @@ export class CommercialRepository {
   async quotationGet(id: string) {
     const row = (
       await this.pool.query(
-        "SELECT q.*, (SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS workflow_status, NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS workflow_latest FROM quotation_versions q WHERE q.id=$1",
+        "SELECT q.*, (SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS workflow_status, (SELECT e.notes FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS workflow_notes, NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS workflow_latest FROM quotation_versions q WHERE q.id=$1",
         [id],
       )
     ).rows[0];

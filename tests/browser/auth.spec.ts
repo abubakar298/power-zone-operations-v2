@@ -1725,6 +1725,9 @@ test("quotation page saves and submits, management previews discount and request
       name: "Quotation workflow · Changes requested",
     }),
   ).toBeVisible();
+  await expect(page.getByLabel("Latest quotation feedback")).toContainText(
+    "Please apply the reviewed discount instruction.",
+  );
   expect(
     (await (await page.request.get(`/api/commercial/quotations/${id}`)).json())
       .snapshot,
@@ -1799,4 +1802,55 @@ test("quotation page saves and submits, management previews discount and request
       ).json()
     ).workflow_status,
   ).toBe("Changes requested");
+  const approvalPrice = await newPricing();
+  const approvalInput = {
+    ...qi,
+    pricingId: approvalPrice.id,
+    revisionRequestId: approvalPrice.snapshot.input.revisionRequestId,
+  };
+  const ap = await (
+    await page.request.post("/api/commercial/quotations/preview", {
+      headers,
+      data: approvalInput,
+    })
+  ).json();
+  const aq = await (
+    await page.request.post("/api/commercial/quotations", {
+      headers,
+      data: {
+        ...approvalInput,
+        fingerprint: ap.fingerprint,
+        requestKey: crypto.randomUUID(),
+      },
+    })
+  ).json();
+  expect(
+    (
+      await page.request.post("/api/coordinator/events", {
+        headers,
+        data: { quotationId: aq.id, kind: "Submitted" },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.getByRole("button", { name: "Quotations", exact: true }).click();
+  await page.getByRole("button", { name: new RegExp(aq.number) }).click();
+  await expect(
+    page.getByRole("button", { name: "Approve quotation", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByLabel("Review comments", { exact: true })
+    .fill("Approved after reviewing the saved quotation.");
+  await page
+    .getByRole("button", { name: "Approve quotation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Quotation workflow · Approved" }),
+  ).toBeVisible();
+  expect(
+    (
+      await (
+        await page.request.get(`/api/commercial/quotations/${aq.id}`)
+      ).json()
+    ).workflow_status,
+  ).toBe("Approved");
 });
