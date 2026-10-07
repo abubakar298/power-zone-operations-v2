@@ -10,6 +10,8 @@ type RecordRow = {
   division?: any;
   quotationType?: any;
   created_at: string;
+  received_at?: string;
+  sent_by?: string;
   stage_since: string;
   stage: string;
   version: number;
@@ -22,7 +24,7 @@ const stages = {
     "Ready for dispatch",
     "Dispatched",
   ],
-  Accounts: ["New IPOs", "Review in progress", "Awaiting documents"],
+  Accounts: ["Received IPOs", "Review in progress", "Awaiting documents"],
 };
 const age = (date: string) => {
   const minutes = Math.max(
@@ -231,6 +233,12 @@ export function Departments({
             <strong>Quotation type:</strong>{" "}
             {quotationTypeLabel(selected.quotationType ?? selected.snapshot)}
           </p>
+          {!inventory && selected.received_at && (
+            <p>
+              Received from {selected.sent_by} ·{" "}
+              {new Date(selected.received_at).toLocaleString()}
+            </p>
+          )}
           {inventory ? (
             <>
               <p>
@@ -356,6 +364,12 @@ export function Departments({
               <label>
                 Next stage
                 <select name="stage">
+                  {!inventory && selected.received_at && (
+                    <p>
+                      Received from {selected.sent_by} ·{" "}
+                      {new Date(selected.received_at).toLocaleString()}
+                    </p>
+                  )}
                   {inventory ? (
                     <option>{next}</option>
                   ) : (

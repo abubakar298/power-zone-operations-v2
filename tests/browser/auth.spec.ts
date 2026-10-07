@@ -340,10 +340,18 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Submit for review", exact: true })
     .click();
-  await expect(page.getByLabel("Approval Solar markup %", { exact: true })).toBeDisabled();
-  await expect(page.getByLabel("Approval Solar markup %", { exact: true })).toHaveValue("20");
-  await page.getByRole("checkbox", { name: /Change quotation settings/ }).check();
-  await expect(page.getByLabel("Approval Solar markup %", { exact: true })).toBeEnabled();
+  await expect(
+    page.getByLabel("Approval Solar markup %", { exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByLabel("Approval Solar markup %", { exact: true }),
+  ).toHaveValue("20");
+  await page
+    .getByRole("checkbox", { name: /Change quotation settings/ })
+    .check();
+  await expect(
+    page.getByLabel("Approval Solar markup %", { exact: true }),
+  ).toBeEnabled();
   for (const [label, value] of [
     ["Solar", "20"],
     ["Structure", "20"],
@@ -500,10 +508,18 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Submit for review", exact: true })
     .click();
-  await expect(page.getByLabel("Approval Solar markup %", { exact: true })).toBeDisabled();
-  await expect(page.getByLabel("Approval Solar markup %", { exact: true })).toHaveValue("20");
-  await page.getByRole("checkbox", { name: /Change quotation settings/ }).check();
-  await expect(page.getByLabel("Approval Solar markup %", { exact: true })).toBeEnabled();
+  await expect(
+    page.getByLabel("Approval Solar markup %", { exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByLabel("Approval Solar markup %", { exact: true }),
+  ).toHaveValue("20");
+  await page
+    .getByRole("checkbox", { name: /Change quotation settings/ })
+    .check();
+  await expect(
+    page.getByLabel("Approval Solar markup %", { exact: true }),
+  ).toBeEnabled();
   for (const [label, value] of [
     ["Solar", "20"],
     ["Structure", "20"],
@@ -673,6 +689,15 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("heading", { name: "IPO-000001 · Saved IPO" }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Send IPO to Accounts", exact: true })
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Sent to Accounts by" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Send IPO to Accounts", exact: true }),
+  ).toHaveCount(0);
   const downloadPromise = page.waitForEvent("download");
   await page
     .getByRole("button", { name: "Download IPO & Peachtree PDF" })
@@ -1685,6 +1710,12 @@ test("quotation page saves and submits, management previews discount and request
   await expect(
     page.getByRole("heading", { name: "Quotation workflow · Submitted" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("table", { name: "Document workflow history", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("row").filter({ hasText: "Quotation under review" }),
+  ).toContainText("Awaiting quotation approval");
   const link = page.getByRole("link", {
     name: "Download quotation PDF",
     exact: true,

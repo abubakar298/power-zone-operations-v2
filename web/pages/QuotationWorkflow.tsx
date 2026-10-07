@@ -1,3 +1,4 @@
+import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js";
 import { Decimal } from "decimal.js";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, type Session } from "../api.js";
@@ -140,6 +141,7 @@ export function QuotationWorkflow({
         manager ? discount : undefined,
         manager ? setDiscount : undefined,
       )}
+      <CostingWorkflowHistory review={q} quotation={q} />
       <section
         className="quotation-review-panel"
         aria-label="Quotation review actions"

@@ -126,6 +126,7 @@ test("Combined IPO packs retain accepted amounts, show sale type across all six 
       (await departments.portal(admin, "Inventory")).records[0].quotationType,
       row.quotationType,
     );
+    await repo.sendToAccounts(admin, row.id);
     assert.deepEqual(
       (await departments.portal(admin, "Accounts")).records.find(
         (r: any) => r.id === row.id,
@@ -148,6 +149,19 @@ test("Combined IPO packs retain accepted amounts, show sale type across all six 
       .send({ email: `${admin}@example.test`, password })
       .expect(200);
     const cookie = login.headers["set-cookie"][0].split(";")[0];
+    await request(app)
+      .post(`/api/orders/${row.id}/accounts-handoff`)
+      .set("Cookie", cookie)
+      .set("Origin", origin)
+      .send({})
+      .expect(403);
+    await request(app)
+      .post(`/api/orders/${row.id}/accounts-handoff`)
+      .set("Cookie", cookie)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", login.body.csrfToken)
+      .send({})
+      .expect(201);
     const response = await request(app)
       .get(`/api/orders/${row.id}/ipo.pdf`)
       .set("Cookie", cookie)

@@ -1,3 +1,4 @@
+import { OrdersRepository } from "../server/orders/repository.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -66,8 +67,68 @@ test("Department queues enforce roles, ordered Inventory progress, concurrency, 
     assert.equal(portal.records.length, 1);
     assert.equal(portal.records[0].stage, "Received BOQs");
     assert.deepEqual(portal.records[0].snapshot.items, store.snapshot.items);
+    const orders = new OrdersRepository(db.pool);
+    assert.equal((await repo.portal(accounts, "Accounts")).records.length, 0);
+    await assert.rejects(
+      repo.checkpoint(accounts, "Accounts", {
+        id: source.ipoId,
+        version: 0,
+        stage: "Review in progress",
+        notes: "Premature",
+        requestKey: randomUUID(),
+      }),
+      /not been sent/,
+    );
+    await assert.rejects(
+      orders.sendToAccounts(inventory, source.ipoId),
+      /access required/,
+    );
+    await assert.rejects(
+      orders.sendToAccounts(admin, randomUUID()),
+      /not found/,
+    );
+    const otherCoord = randomUUID();
+    await db.pool.query(
+      "INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,'Other coordinator',$3,'Coordinator')",
+      [otherCoord, `${otherCoord}@example.test`, hash],
+    );
+    await assert.rejects(
+      orders.sendToAccounts(otherCoord, source.ipoId),
+      /own IPOs/,
+    );
+    for (const ipo of before) await orders.sendToAccounts(admin, ipo.id);
+    const [sentA, sentB] = await Promise.all([
+      orders.sendToAccounts(coord, source.ipoId),
+      orders.sendToAccounts(coord, source.ipoId),
+    ]);
+    assert.equal(sentA.id, sentB.id);
+    assert.equal(
+      (await orders.get(source.ipoId)).accounts_handoff.created_by,
+      admin,
+    );
+    assert.equal(
+      (
+        await db.pool.query(
+          "SELECT count(*)::int AS n FROM ipo_accounts_handoffs WHERE ipo_id=$1",
+          [source.ipoId],
+        )
+      ).rows[0].n,
+      1,
+    );
+    await assert.rejects(
+      db.pool.query(
+        "UPDATE ipo_accounts_handoffs SET created_by=$1 WHERE id=$2",
+        [coord, sentA.id],
+      ),
+      /immutable/i,
+    );
     const accountsPortal = await repo.portal(accounts, "Accounts");
     assert.equal(accountsPortal.records.length, 2);
+    assert.ok(
+      accountsPortal.records.every(
+        (r: any) => r.stage === "Received IPOs" && r.received_at && r.sent_by,
+      ),
+    );
     assert.equal(accountsPortal.records[0].division.phases.length, 6);
     await assert.rejects(repo.portal(coord, "Inventory"), /Inventory access/);
     await assert.rejects(repo.portal(inventory, "Accounts"), /Accounts access/);

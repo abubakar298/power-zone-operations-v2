@@ -394,6 +394,51 @@ export class OrdersRepository {
     const types = await this.quotationTypes(rows.map((r) => r.id));
     return rows.map((r) => ({ ...r, quotationType: types.get(r.id) }));
   }
+  async sendToAccounts(actor: string, id: string) {
+    return transaction(this.pool, async (c) => {
+      const user = (
+        await c.query("SELECT active,role FROM users WHERE id=$1 FOR SHARE", [
+          actor,
+        ])
+      ).rows[0];
+      if (!user?.active) throw new HttpError(401, "Your access has ended.");
+      if (!["Admin", "Management", "Coordinator"].includes(user.role))
+        throw new HttpError(403, "Coordinator or management access required.");
+      const ipo = (
+        await c.query(
+          "SELECT i.*,s.created_by AS prepared_by FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE i.id=$1 FOR UPDATE OF i",
+          [id],
+        )
+      ).rows[0];
+      if (!ipo) throw new HttpError(404, "Approved IPO not found.");
+      if (
+        user.role === "Coordinator" &&
+        ipo.prepared_by !== actor &&
+        ipo.created_by !== actor
+      )
+        throw new HttpError(
+          403,
+          "You can send only your own IPOs to Accounts.",
+        );
+      const existing = (
+        await c.query("SELECT * FROM ipo_accounts_handoffs WHERE ipo_id=$1", [
+          id,
+        ])
+      ).rows[0];
+      if (existing) return existing;
+      const row = (
+        await c.query(
+          "INSERT INTO ipo_accounts_handoffs(id,ipo_id,created_by) VALUES($1,$2,$3) RETURNING *",
+          [randomUUID(), id, actor],
+        )
+      ).rows[0];
+      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
+        actor,
+        `ipo.accounts.sent:${id}`,
+      ]);
+      return row;
+    });
+  }
   async get(id: string) {
     const row = (
       await this.pool.query(
@@ -405,6 +450,13 @@ export class OrdersRepository {
     return {
       ...row,
       quotationType: (await this.quotationTypes([row.id])).get(row.id),
+      accounts_handoff:
+        (
+          await this.pool.query(
+            "SELECT h.*,u.display_name AS sent_by FROM ipo_accounts_handoffs h JOIN users u ON u.id=h.created_by WHERE h.ipo_id=$1",
+            [id],
+          )
+        ).rows[0] ?? null,
     };
   }
   async peachtree(id: string) {

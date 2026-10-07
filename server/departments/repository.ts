@@ -40,8 +40,8 @@ export class DepartmentRepository {
       key = inventory ? "store_issuance_id" : "ipo_id";
     const rows = (
       await this.pool.query(
-        `SELECT s.id,s.number,s.snapshot,s.created_at,${inventory ? "o.ipo_id," : ""}COALESCE(c.stage,$1) AS stage,COALESCE(c.version,0) AS version,COALESCE(c.created_at,s.created_at) AS stage_since,c.notes FROM ${table} s ${inventory ? "JOIN operations_boq_issuances o ON o.id=s.issuance_id" : ""} LEFT JOIN LATERAL(SELECT * FROM department_checkpoints WHERE ${key}=s.id ORDER BY version DESC LIMIT 1)c ON true ORDER BY s.created_at DESC LIMIT 500`,
-        [inventory ? "Received BOQs" : "New IPOs"],
+        `SELECT s.id,s.number,s.snapshot,s.created_at,${inventory ? "o.ipo_id," : "h.created_at AS received_at,(SELECT display_name FROM users WHERE id=h.created_by) AS sent_by,"}COALESCE(c.stage,$1) AS stage,COALESCE(c.version,0) AS version,COALESCE(c.created_at,${inventory ? "s.created_at" : "h.created_at"}) AS stage_since,c.notes FROM ${table} s ${inventory ? "JOIN operations_boq_issuances o ON o.id=s.issuance_id" : "JOIN ipo_accounts_handoffs h ON h.ipo_id=s.id"} LEFT JOIN LATERAL(SELECT * FROM department_checkpoints WHERE ${key}=s.id ORDER BY version DESC LIMIT 1)c ON true ORDER BY s.created_at DESC LIMIT 500`,
+        [inventory ? "Received BOQs" : "Received IPOs"],
       )
     ).rows;
     const orders = new OrdersRepository(this.pool);
@@ -79,6 +79,15 @@ export class DepartmentRepository {
         ])
       ).rows[0];
       if (!source) throw new HttpError(404, "Source document not found.");
+      if (
+        !inventory &&
+        !(
+          await c.query("SELECT 1 FROM ipo_accounts_handoffs WHERE ipo_id=$1", [
+            input.id,
+          ])
+        ).rowCount
+      )
+        throw new HttpError(409, "This IPO has not been sent to Accounts.");
       const replay = (
         await c.query(
           "SELECT * FROM department_checkpoints WHERE request_key=$1",

@@ -1,9 +1,13 @@
+import { workflowHistory } from "./workflow-history.js";
 import type { Pool, PoolClient } from "pg";
 import { randomUUID } from "node:crypto";
 import { transaction } from "../db/transaction.js";
 import { HttpError } from "../http/errors.js";
 import { MastersRepository } from "../masters/repository.js";
-import { instructionsSchema, type ApprovalInstructions } from "./instructions.js";
+import {
+  instructionsSchema,
+  type ApprovalInstructions,
+} from "./instructions.js";
 import { calculate } from "./engine.js";
 import { surveySchema } from "./schema.js";
 import { type BoqRepository, fingerprint } from "./repository.js";
@@ -37,30 +41,8 @@ export class ReviewRepository {
       )
     ).rows[0];
     if (!row) throw new HttpError(404, "Review not found.");
-    // History comes from immutable BOQ/quotation snapshots, never current masters.
     row.workflow_history = row.base_revision_id
-      ? (
-          await this.pool.query(
-            `WITH RECURSIVE lineage AS (
-            SELECT b.*,ARRAY[b.id] AS visited FROM boq_revisions b WHERE b.id=$1
-            UNION ALL
-            SELECT b.*,l.visited || b.id FROM lineage l
-            JOIN boq_draft_finalizations f ON f.revision_id=l.id
-            JOIN survey_drafts d ON d.id=f.draft_id
-            JOIN boq_revisions b ON b.id=d.base_revision_id
-            WHERE NOT b.id=ANY(l.visited)
-          ) SELECT l.id,l.number,l.revision,l.created_at,l.revision_reason,l.revision_origin,
-            l.snapshot->>'total' AS budgeted_cost,
-            COALESCE(l.snapshot->'survey'->>'sourceMode','Survey') AS survey_type,
-            COALESCE((SELECT jsonb_agg(jsonb_build_object(
-              'id',q.id,'number',q.number,'quoted_at',q.created_at,
-              'net_total',(SELECT entry->>'amount' FROM jsonb_array_elements(q.snapshot->'footer') entry WHERE entry->>'label'='Net Total' LIMIT 1),
-              'status',COALESCE((SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1),'Not submitted')
-            ) ORDER BY q.version) FROM quotation_versions q WHERE q.boq_revision_id=l.id),'[]'::jsonb) AS quotations
-          FROM lineage l ORDER BY l.revision,l.created_at`,
-            [row.base_revision_id],
-          )
-        ).rows
+      ? await workflowHistory(this.pool, row.base_revision_id)
       : [];
     row.revision_context =
       (
@@ -78,16 +60,25 @@ export class ReviewRepository {
           [row.draft_id],
         )
       ).rows[0]?.revision_origin ?? null;
-    const previousSettings = row.base_revision_id ? (await this.pool.query(
-      `SELECT COALESCE(
+    const previousSettings = row.base_revision_id
+      ? (
+          await this.pool.query(
+            `SELECT COALESCE(
         (SELECT instructions FROM costing_approval_instructions WHERE revision_id=$1),
         (SELECT p.snapshot->'input' FROM commercial_pricing_versions p WHERE p.boq_revision_id=$1 ORDER BY p.version DESC LIMIT 1)
-      ) AS settings`, [row.base_revision_id],
-    )).rows[0]?.settings : null;
-    row.previous_instructions = previousSettings ? instructionsSchema.parse({
-      presentation: previousSettings.presentation, taxMode: previousSettings.taxMode,
-      markups: previousSettings.markups, notes: previousSettings.notes ?? "",
-    }) : null;
+      ) AS settings`,
+            [row.base_revision_id],
+          )
+        ).rows[0]?.settings
+      : null;
+    row.previous_instructions = previousSettings
+      ? instructionsSchema.parse({
+          presentation: previousSettings.presentation,
+          taxMode: previousSettings.taxMode,
+          markups: previousSettings.markups,
+          notes: previousSettings.notes ?? "",
+        })
+      : null;
     row.approval = (
       await this.pool.query(
         "SELECT a.*,u.display_name AS recorded_by_name FROM costing_approval_instructions a JOIN users u ON u.id=a.recorded_by WHERE submission_id=$1",

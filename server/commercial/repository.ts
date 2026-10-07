@@ -1,3 +1,4 @@
+import { workflowHistory } from "../boq/workflow-history.js";
 import { Decimal } from "decimal.js";
 import { allocateDiscount } from "../orders/allocation.js";
 import { randomUUID } from "node:crypto";
@@ -564,6 +565,10 @@ export class CommercialRepository {
       )
     ).rows[0];
     if (!row) throw new HttpError(404, "Quotation not found.");
+    row.workflow_history = await workflowHistory(
+      this.pool,
+      row.boq_revision_id,
+    );
     return row;
   }
   async quotationVariants(actor: string, id: string) {

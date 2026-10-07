@@ -39,6 +39,16 @@ export function ordersHttp(
     return v.data;
   };
   r.get("/", async (_req, res) => res.json({ orders: await repo.list() }));
+  r.post("/:id/accounts-handoff", async (req, res) => {
+    res
+      .status(201)
+      .json(
+        await repo.sendToAccounts(
+          req.authSession!.user.id,
+          parse(z.uuid(), req.params.id),
+        ),
+      );
+  });
   r.get("/quotation-defaults/:id", async (req, res) =>
     res.json(await repo.defaults(parse(z.uuid(), req.params.id))),
   );

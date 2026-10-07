@@ -583,6 +583,38 @@ export function Orders({
                 ? "Download IPO & Peachtree PDF"
                 : "Download IPO & Peachtree preview"}
             </button>
+            {saved &&
+              ["Admin", "Management", "Coordinator"].includes(
+                session.user.role,
+              ) &&
+              (saved.accounts_handoff ? (
+                <p role="status">
+                  Sent to Accounts by {saved.accounts_handoff.sent_by} ·{" "}
+                  {new Date(saved.accounts_handoff.created_at).toLocaleString()}
+                </p>
+              ) : (
+                <button
+                  disabled={busy}
+                  onClick={() => {
+                    if (
+                      !confirmTransition(
+                        "Send IPO to Accounts",
+                        `${saved.number} and its Peachtree division will appear in the Accounts Received IPOs bucket as one PDF document.`,
+                      )
+                    )
+                      return;
+                    void act(async () => {
+                      await api(`/orders/${saved.id}/accounts-handoff`, {
+                        body: {},
+                        csrf: session.csrfToken,
+                      });
+                      setSaved(await api(`/orders/${saved.id}`));
+                    });
+                  }}
+                >
+                  Send IPO to Accounts
+                </button>
+              ))}
             {snapshot.document && (
               <a
                 href={`/api/orders/documents/${snapshot.document.id}`}
