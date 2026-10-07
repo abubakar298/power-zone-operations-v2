@@ -1,3 +1,8 @@
+import {
+  validateExternal,
+  recordExternal,
+  type ExternalEvidence,
+} from "../approvals/external.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { Decimal } from "decimal.js";
@@ -227,13 +232,31 @@ export class OrdersRepository {
       )
     ).rows;
   }
-  async approve(actor: string, id: string, key: string) {
-    await new CommercialRepository(this.pool).manager(this.pool, actor, false);
+  async approve(
+    actor: string,
+    id: string,
+    key: string,
+    external?: ExternalEvidence,
+  ) {
+    if (!external)
+      await new CommercialRepository(this.pool).manager(
+        this.pool,
+        actor,
+        false,
+      );
     const s = (
       await this.pool.query("SELECT * FROM ipo_submissions WHERE id=$1", [id])
     ).rows[0];
     if (!s) throw new HttpError(404, "IPO submission not found.");
-    return this.save(actor, s.input, s.fingerprint, key, s.created_by, s.id);
+    return this.save(
+      actor,
+      s.input,
+      s.fingerprint,
+      key,
+      s.created_by,
+      s.id,
+      external,
+    );
   }
   async save(
     actor: string,
@@ -242,10 +265,25 @@ export class OrdersRepository {
     key: string,
     owner = actor,
     submissionId?: string,
+    external?: ExternalEvidence,
   ) {
     return transaction(this.pool, async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(742019004)");
-      await new CommercialRepository(this.pool).manager(c, actor, false);
+      if (external) {
+        const submission = (
+          await c.query("SELECT * FROM ipo_submissions WHERE id=$1", [
+            submissionId,
+          ])
+        ).rows[0];
+        if (
+          !submission ||
+          submission.created_by !== owner ||
+          submission.fingerprint !== expected ||
+          fingerprint(submission.input) !== fingerprint(input)
+        )
+          throw new HttpError(409, "Choose the exact submitted IPO.");
+        await validateExternal(c, actor, owner, external);
+      } else await new CommercialRepository(this.pool).manager(c, actor, false);
       const replay = (
         await c.query(
           "SELECT * FROM internal_purchase_orders WHERE request_key=$1",
@@ -362,6 +400,8 @@ export class OrdersRepository {
             number,
             {
               ...preview.snapshot,
+              approvalChannel: external ? external.channel : "In app",
+              claimedApprover: external?.approver,
               checkedBy: (
                 await c.query("SELECT display_name FROM users WHERE id=$1", [
                   actor,
@@ -383,6 +423,8 @@ export class OrdersRepository {
         actor,
         `ipo.issue:${id}:quotation:${input.quotationId}:po:${poId}`,
       ]);
+      if (external)
+        await recordExternal(c, actor, null, submissionId!, external);
       return row;
     });
   }
@@ -451,6 +493,13 @@ export class OrdersRepository {
     return {
       ...row,
       quotationType: (await this.quotationTypes([row.id])).get(row.id),
+      external_approval:
+        (
+          await this.pool.query(
+            "SELECT a.*, (SELECT jsonb_agg(jsonb_build_object('id',u.id,'filename',u.filename)) FROM external_document_approval_files f JOIN survey_uploads u ON u.id=f.upload_id WHERE f.approval_id=a.id) AS evidence FROM external_document_approvals a WHERE a.submission_id=$1",
+            [row.submission_id],
+          )
+        ).rows[0] ?? null,
       accounts_handoff:
         (
           await this.pool.query(

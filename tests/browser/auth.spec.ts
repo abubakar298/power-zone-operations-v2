@@ -1616,12 +1616,85 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
         s.quotation_id === quote.id || s.input?.quotationId === quote.id,
     );
     expect(submission).toBeTruthy();
-    const approved = await manager.request.post(
-      `${origin}/api/orders/submissions/${submission.id}/approve`,
-      { headers: mh, data: { requestKey: crypto.randomUUID() } },
+    await page
+      .getByRole("button", {
+        name: "Prepare PDF for WhatsApp / sharing",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByRole("button", {
+        name: "Share PDF / download for WhatsApp",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "canShare", {
+        configurable: true,
+        value: () => true,
+      });
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        value: async (data: ShareData) => {
+          if (data.files?.[0]?.type !== "application/pdf")
+            throw new Error("Expected PDF file");
+          throw new DOMException("Cancelled", "AbortError");
+        },
+      });
+    });
+    await page
+      .getByRole("button", {
+        name: "Share PDF / download for WhatsApp",
+        exact: true,
+      })
+      .click();
+    await expect(page.getByRole("status")).toContainText("Sharing cancelled");
+    await page.evaluate(() =>
+      Object.defineProperty(navigator, "canShare", {
+        configurable: true,
+        value: () => false,
+      }),
     );
-    expect(approved.ok()).toBe(true);
-    const ipo = await approved.json();
+    const download = page.waitForEvent("download");
+    await page
+      .getByRole("button", {
+        name: "Share PDF / download for WhatsApp",
+        exact: true,
+      })
+      .click();
+    expect((await download).suggestedFilename()).toContain("IPO-and-Peachtree");
+    await page
+      .getByText("Record WhatsApp / verbal approval", { exact: true })
+      .click();
+    await page
+      .getByLabel("Approval method", { exact: true })
+      .selectOption("Verbal");
+    await page
+      .getByLabel("Approver name", { exact: true })
+      .fill("Director test");
+    await page
+      .getByLabel("Approval remarks", { exact: true })
+      .fill("Exact submitted IPO approved verbally for isolated testing.");
+    await page
+      .getByLabel(
+        "I confirm this evidence approves this exact document without changes.",
+      )
+      .check();
+    await page
+      .getByRole("button", { name: "Record approval & continue", exact: true })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm and send", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: /IPO-.*Saved IPO/ }),
+    ).toBeVisible();
+    const ipoRows = await (await page.request.get("/api/orders")).json();
+    const ipo = ipoRows.orders.find(
+      (o: any) => o.quotation_number === quote.number,
+    );
+    expect(ipo).toBeTruthy();
     await page.reload();
     await page
       .getByRole("button", { name: /Operations & Accounts Handoff/ })
@@ -2278,10 +2351,25 @@ test("Admin downloads an encrypted recovery backup and clears passphrases after 
     .fill("browser-test-passphrase-298");
   await panel
     .getByLabel("Backup encryption passphrase", { exact: true })
-    .fill("browser-isolated-backup-phrase-298");
+    .fill("ABCdef1234567890!");
   await panel
     .getByLabel("Confirm backup passphrase", { exact: true })
-    .fill("browser-isolated-backup-phrase-298");
+    .fill("ABCdef1234567890!");
+  await expect(
+    panel.getByText("Backup passphrase: 17 characters · minimum 16"),
+  ).toBeVisible();
+  await panel
+    .getByLabel("Confirm backup passphrase", { exact: true })
+    .fill("ABCdef1234567");
+  await panel
+    .getByRole("button", { name: "Download encrypted backup", exact: true })
+    .click();
+  await expect(panel.getByRole("alert")).toContainText(
+    "Confirm backup passphrase has 13 characters",
+  );
+  await panel
+    .getByLabel("Confirm backup passphrase", { exact: true })
+    .fill("ABCdef1234567890!");
   const pending = page.waitForEvent("download");
   await panel
     .getByRole("button", { name: "Download encrypted backup", exact: true })
@@ -2291,7 +2379,7 @@ test("Admin downloads an encrypted recovery backup and clears passphrases after 
   const { decodeBackup } = await import("../../server/backups/archive.js");
   const records = await decodeBackup(
     (await download.path())!,
-    "browser-isolated-backup-phrase-298",
+    "ABCdef1234567890!",
   );
   expect(JSON.parse(records[0]).format).toBe("power-zone-database-v1");
   expect(records.some((r) => r.includes('"table":"quotation_versions"'))).toBe(

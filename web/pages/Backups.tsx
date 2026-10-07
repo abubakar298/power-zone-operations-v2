@@ -15,10 +15,30 @@ export function Backups({ session }: { session: Session }) {
   useEffect(() => {
     void refresh();
   }, []);
-  async function download(event: FormEvent) {
+  async function download(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    const password = String(fields.get("password") ?? "");
+    const passphrase = String(fields.get("passphrase") ?? "");
+    const confirm = String(fields.get("passphraseConfirmation") ?? "");
     setError("");
     setMessage("");
+    if (!password) {
+      setError("Enter your current administrator password.");
+      return;
+    }
+    if (passphrase.length < 16 || passphrase.length > 128) {
+      setError(
+        `Backup encryption passphrase has ${passphrase.length} characters. Enter 16–128 characters.`,
+      );
+      return;
+    }
+    if (confirm.length < 16 || confirm.length > 128) {
+      setError(
+        `Confirm backup passphrase has ${confirm.length} characters. Enter the same 16–128 character passphrase again.`,
+      );
+      return;
+    }
     if (passphrase !== confirm) {
       setError("Backup passphrases do not match.");
       return;
@@ -90,10 +110,11 @@ export function Backups({ session }: { session: Session }) {
       </p>
       {error && <p role="alert">{error}</p>}
       {message && <p role="status">{message}</p>}
-      <form onSubmit={download} className="backup-form">
+      <form noValidate onSubmit={download} className="backup-form">
         <label>
           Current administrator password
           <input
+            name="password"
             aria-label="Backup administrator password"
             type="password"
             autoComplete="current-password"
@@ -106,6 +127,7 @@ export function Backups({ session }: { session: Session }) {
         <label>
           Backup encryption passphrase
           <input
+            name="passphrase"
             aria-label="Backup encryption passphrase"
             type="password"
             autoComplete="new-password"
@@ -115,10 +137,14 @@ export function Backups({ session }: { session: Session }) {
             value={passphrase}
             onChange={(e) => setPassphrase(e.target.value)}
           />
+          <small aria-live="polite">
+            Backup passphrase: {passphrase.length} characters · minimum 16
+          </small>
         </label>
         <label>
           Confirm backup passphrase
           <input
+            name="passphraseConfirmation"
             aria-label="Confirm backup passphrase"
             type="password"
             autoComplete="new-password"
@@ -128,6 +154,12 @@ export function Backups({ session }: { session: Session }) {
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
+          <small aria-live="polite">
+            Confirmation: {confirm.length} characters ·{" "}
+            {confirm === passphrase && confirm.length > 0
+              ? "matches"
+              : "must match the backup passphrase"}
+          </small>
         </label>
         <button type="submit" disabled={busy}>
           {busy ? "Preparing encrypted backup…" : "Download encrypted backup"}

@@ -1,3 +1,8 @@
+import {
+  validateExternal,
+  recordExternal,
+  type ExternalEvidence,
+} from "../approvals/external.js";
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../http/errors.js";
 import type { Pool } from "pg";
@@ -155,7 +160,13 @@ export class CoordinatorRepository {
       scope: team ? "team" : "mine",
     };
   }
-  async event(actor: string, quotationId: string, kind: string, notes: string) {
+  async event(
+    actor: string,
+    quotationId: string,
+    kind: string,
+    notes: string,
+    external?: ExternalEvidence,
+  ) {
     const c = await this.pool.connect();
     try {
       await c.query("BEGIN");
@@ -173,11 +184,20 @@ export class CoordinatorRepository {
       const management = ["Admin", "Management"].includes(u.role);
       if (!management && q.created_by !== actor)
         throw new HttpError(403, "Choose your own quotation.");
-      if (["Approved", "Changes requested"].includes(kind) && !management)
+      if (
+        ["Approved", "Changes requested"].includes(kind) &&
+        !management &&
+        !external
+      )
         throw new HttpError(
           403,
           "Quotation decisions require management access.",
         );
+      if (external) {
+        if (kind !== "Approved")
+          throw new HttpError(400, "External evidence records approval only.");
+        await validateExternal(c, actor, q.created_by, external);
+      }
       const previous = (
         await c.query(
           "SELECT * FROM coordination_events WHERE quotation_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1",
@@ -185,6 +205,8 @@ export class CoordinatorRepository {
         )
       ).rows[0];
       if (previous?.kind === kind) {
+        if (external)
+          throw new HttpError(409, "This quotation already has a decision.");
         await c.query("COMMIT");
         return previous;
       }
@@ -213,6 +235,7 @@ export class CoordinatorRepository {
           [randomUUID(), quotationId, kind, notes, actor],
         )
       ).rows[0];
+      if (external) await recordExternal(c, actor, quotationId, null, external);
       await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
         actor,
         `coordination.${kind}`,

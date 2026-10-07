@@ -10,6 +10,8 @@ const requests: Record<string, string> = {
   [completedSampleArchiveKey]: "2026-10-07T11:55:31Z",
 };
 const tables = [
+  "external_document_approval_files",
+  "external_document_approvals",
   "design_survey_handoffs",
   "design_surveys",
   "ipo_accounts_handoffs",

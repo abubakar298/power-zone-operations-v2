@@ -1,3 +1,4 @@
+import { SharePdf } from "../components/SharePdf.js";
 import { QuotationWorkflow } from "./QuotationWorkflow.js";
 import { confirmTransition, confirmRevision } from "../confirm.js";
 import { createPortal } from "react-dom";
@@ -173,9 +174,12 @@ export function QuotationView({
       <div className="panel-heading">
         <h2>{number ?? "Quotation preview"}</h2>
         {pdfUrl && (
-          <a className="dark-button" href={pdfUrl} download>
-            Download quotation PDF
-          </a>
+          <>
+            <a className="dark-button" href={pdfUrl} download>
+              Download quotation PDF
+            </a>
+            <SharePdf url={pdfUrl} filename={`${number ?? "Quotation"}.pdf`} />
+          </>
         )}
       </div>
       {pdfError && <p role="alert">{pdfError}</p>}

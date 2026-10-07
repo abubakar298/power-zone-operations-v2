@@ -1,3 +1,5 @@
+import { ExternalApproval } from "../components/ExternalApproval.js";
+import { SharePdf } from "../components/SharePdf.js";
 import { Operations } from "./Operations.js";
 import { confirmTransition } from "../confirm.js";
 import { quotationTypeLabel } from "../../server/orders/sale-type.js";
@@ -237,6 +239,21 @@ export function Orders({
   const view = snapshot ? ipoPresentation(snapshot) : undefined;
   return (
     <div className="orders-module">
+      {saved?.external_approval && (
+        <section aria-label="Recorded external approval">
+          <strong>External approval recorded</strong>
+          <p>
+            Method: {saved.external_approval.channel} · Approver:{" "}
+            {saved.external_approval.approver} ·{" "}
+            {saved.external_approval.comments}
+          </p>
+          {saved.external_approval.evidence?.map((e: any) => (
+            <p key={e.id}>
+              <a href={`/api/boqs/uploads/${e.id}`}>{e.filename}</a>
+            </p>
+          ))}
+        </section>
+      )}
       {error && (
         <p className="form-error" role="alert">
           {error}
@@ -588,6 +605,18 @@ export function Orders({
                 Approve evidence & save IPO
               </button>
             )}
+            {!saved && review && session.user.role === "Coordinator" && (
+              <ExternalApproval
+                key={review.id}
+                session={session}
+                endpoint={`/orders/submissions/${review.id}/external-approval`}
+                onApproved={async (row) => {
+                  setSaved(await api(`/orders/${row.id}`));
+                  setReview(undefined);
+                  await load();
+                }}
+              />
+            )}
             {!saved && !manager && (
               <p>
                 Admin or Management must approve the sale evidence before an IPO
@@ -636,6 +665,16 @@ export function Orders({
                 ? "Download IPO & Peachtree PDF"
                 : "Download IPO & Peachtree preview"}
             </button>
+            {(saved || review) && (
+              <SharePdf
+                url={
+                  saved
+                    ? `/api/orders/${saved.id}/ipo.pdf`
+                    : `/api/orders/submissions/${review.id}/preview.pdf`
+                }
+                filename={`${saved?.number ?? "IPO-approval"}-IPO-and-Peachtree.pdf`}
+              />
+            )}
             {saved &&
               ["Admin", "Management", "Coordinator"].includes(
                 session.user.role,

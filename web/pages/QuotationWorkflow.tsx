@@ -1,3 +1,5 @@
+import { SharePdf } from "../components/SharePdf.js";
+import { ExternalApproval } from "../components/ExternalApproval.js";
 import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js";
 import { Decimal } from "decimal.js";
 import { useEffect, useState, type ReactNode } from "react";
@@ -144,6 +146,20 @@ export function QuotationWorkflow({
       : q.snapshot;
   return (
     <>
+      {q.external_approval && (
+        <section aria-label="Recorded external approval">
+          <strong>External approval recorded</strong>
+          <p>
+            Method: {q.external_approval.channel} · Approver:{" "}
+            {q.external_approval.approver} · {q.external_approval.comments}
+          </p>
+          {q.external_approval.evidence?.map((e: any) => (
+            <p key={e.id}>
+              <a href={`/api/boqs/uploads/${e.id}`}>{e.filename}</a>
+            </p>
+          ))}
+        </section>
+      )}
       {renderPreview(
         snapshot,
         manager ? discount : undefined,
@@ -221,6 +237,25 @@ export function QuotationWorkflow({
               Send for approval
             </button>
           )}
+        {q.workflow_latest !== false &&
+          q.workflow_status === "Submitted" &&
+          author &&
+          session.user.role === "Coordinator" && (
+            <ExternalApproval
+              key={q.id}
+              session={session}
+              endpoint={`/coordinator/quotations/${q.id}/external-approval`}
+              onApproved={async () =>
+                onChange(await api(`/commercial/quotations/${q.id}`))
+              }
+            />
+          )}
+        {q.workflow_status === "Submitted" && (manager || author) && (
+          <SharePdf
+            url={`/api/commercial/quotations/${q.id}/quotation.pdf`}
+            filename={`${q.number}.pdf`}
+          />
+        )}
         {q.workflow_latest !== false &&
           q.workflow_status === "Submitted" &&
           manager && (

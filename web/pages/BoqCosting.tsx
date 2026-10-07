@@ -1,3 +1,4 @@
+import { SharePdf } from "../components/SharePdf.js";
 import type { BoqSnapshot } from "../../server/boq/engine.js";
 const format = (v: string | number, decimals = 0) =>
   new Intl.NumberFormat("en-PK", {
@@ -22,6 +23,7 @@ export function BoqCosting({
         <a className="dark-button" href={pdfUrl} download>
           Download costing PDF
         </a>
+        <SharePdf url={pdfUrl} filename={`${number ?? "BOQ"}-costing.pdf`} />
       </div>
       <p>
         {s.customer.name} · {s.survey.siteName} · Site code {s.survey.siteCode}{" "}

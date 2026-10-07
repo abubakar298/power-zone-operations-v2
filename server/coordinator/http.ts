@@ -1,3 +1,4 @@
+import { externalEvidenceSchema } from "../approvals/external.js";
 import { z } from "zod";
 import { equalSecrets } from "../auth/crypto.js";
 import { Router, type RequestHandler } from "express";
@@ -32,6 +33,29 @@ export function coordinatorHttp(
     )
       throw new HttpError(403, "Team overview requires management access.");
     res.json(await repo.overview(req.authSession!.user.id, scope === "team"));
+  });
+  r.post("/quotations/:id/external-approval", async (req, res) => {
+    if (
+      !equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken)
+    )
+      throw new HttpError(403, "Refresh and try again.");
+    const v = externalEvidenceSchema.safeParse(req.body);
+    if (!v.success || !z.uuid().safeParse(req.params.id).success)
+      throw new HttpError(
+        400,
+        "Attach approval screenshots, approver and confirmation.",
+      );
+    res
+      .status(201)
+      .json(
+        await repo.event(
+          req.authSession!.user.id,
+          String(req.params.id),
+          "Approved",
+          v.data.comments,
+          v.data,
+        ),
+      );
   });
   r.post("/events", async (req, res) => {
     if (

@@ -565,6 +565,13 @@ export class CommercialRepository {
       )
     ).rows[0];
     if (!row) throw new HttpError(404, "Quotation not found.");
+    row.external_approval =
+      (
+        await this.pool.query(
+          "SELECT a.*, (SELECT jsonb_agg(jsonb_build_object('id',u.id,'filename',u.filename)) FROM external_document_approval_files f JOIN survey_uploads u ON u.id=f.upload_id WHERE f.approval_id=a.id) AS evidence FROM external_document_approvals a WHERE a.quotation_id=$1",
+          [id],
+        )
+      ).rows[0] ?? null;
     row.workflow_history = await workflowHistory(
       this.pool,
       row.boq_revision_id,

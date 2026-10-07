@@ -1740,3 +1740,140 @@ test("quotation-linked BOQ revisions move between coordinator revision and manag
     "Changes requested",
   );
 });
+
+test("external chat approvals require owned screenshots and exact submitted versions, and retain immutable evidence", async () => {
+  const actor = (
+    await db.pool.query(
+      "SELECT id FROM users WHERE email='direct-atif@example.test'",
+    )
+  ).rows[0].id;
+  const login = await request(app)
+    .post("/api/auth/login")
+    .set("Origin", origin)
+    .send({
+      email: "direct-atif@example.test",
+      password: "direct-atif-test-passphrase",
+    })
+    .expect(200);
+  const ck = login.headers["set-cookie"][0].split(";")[0],
+    token = login.body.csrfToken;
+  const post = (url: string, body: any) =>
+    request(app)
+      .post(url)
+      .set("Origin", origin)
+      .set("Cookie", ck)
+      .set("X-CSRF-Token", token)
+      .send(body);
+  const qid = randomUUID();
+  const ver =
+    Number(
+      (
+        await db.pool.query(
+          "SELECT max(version) AS v FROM quotation_versions WHERE boq_revision_id=$1",
+          [issued.boq_revision_id],
+        )
+      ).rows[0].v,
+    ) + 1;
+  await db.pool.query(
+    "INSERT INTO quotation_versions(id,pricing_id,boq_revision_id,version,number,snapshot,fingerprint,request_key,created_by) SELECT $1,pricing_id,boq_revision_id,$2,$3,snapshot,fingerprint,$4,$5 FROM quotation_versions WHERE id=$6",
+    [qid, ver, "EXTERNAL-CHAT-TEST", randomUUID(), actor, issued.id],
+  );
+  const endpoint = `/api/coordinator/quotations/${qid}/external-approval`;
+  const evidence = {
+    approver: "Director",
+    comments: "Exact test version approved on WhatsApp",
+    evidenceIds: [randomUUID()],
+    confirmed: true,
+  };
+  await post(endpoint, evidence).expect(403);
+  const upload = (
+    await post("/api/survey-uploads", {
+      filename: "approval.png",
+      mime: "image/png",
+      base64: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]).toString(
+        "base64",
+      ),
+    }).expect(201)
+  ).body;
+  evidence.evidenceIds = [upload.id];
+  await post(endpoint, evidence).expect(409); // Approval cannot precede submission.
+  await post("/api/coordinator/events", {
+    quotationId: qid,
+    kind: "Submitted",
+    notes: "",
+  }).expect(201);
+  await post("/api/coordinator/events", {
+    quotationId: qid,
+    kind: "Approved",
+    notes: "",
+  }).expect(403); // Ordinary manager approval stays protected.
+  await post(endpoint, { ...evidence, confirmed: false }).expect(400);
+  await post(endpoint, { ...evidence, evidenceIds: [] }).expect(400);
+  await post(endpoint, evidence).expect(201);
+  await post(endpoint, evidence).expect(409);
+  const read = (
+    await request(app)
+      .get(`/api/commercial/quotations/${qid}`)
+      .set("Cookie", ck)
+      .expect(200)
+  ).body;
+  assert.equal(read.workflow_status, "Approved");
+  assert.equal(read.external_approval.approver, "Director");
+  assert.equal(read.external_approval.evidence[0].id, upload.id);
+  await request(app)
+    .get(`/api/boqs/uploads/${upload.id}`)
+    .set("Cookie", cookie)
+    .expect(200);
+  await assert.rejects(
+    db.pool.query(
+      "UPDATE external_document_approvals SET approver='changed' WHERE quotation_id=$1",
+      [qid],
+    ),
+    /immutable/i,
+  );
+  const oldInput = (
+    await db.pool.query("SELECT input FROM ipo_submissions LIMIT 1")
+  ).rows[0].input;
+  const input = {
+    ...oldInput,
+    quotationId: qid,
+    poNumber: "EXTERNAL-IPO-TEST",
+  };
+  const preview = (await post("/api/orders/preview", input).expect(200)).body;
+  const submission = (
+    await post("/api/orders/submissions", {
+      input,
+      fingerprint: preview.fingerprint,
+      requestKey: randomUUID(),
+    }).expect(201)
+  ).body;
+  const ipoEndpoint = `/api/orders/submissions/${submission.id}/external-approval`;
+  await post(ipoEndpoint, {
+    ...evidence,
+    evidenceIds: [randomUUID()],
+    requestKey: randomUUID(),
+  }).expect(403);
+  await post(`/api/orders/submissions/${submission.id}/approve`, {
+    requestKey: randomUUID(),
+  }).expect(403);
+  const ipo = (
+    await post(ipoEndpoint, { ...evidence, requestKey: randomUUID() }).expect(
+      201,
+    )
+  ).body;
+  assert.equal(ipo.snapshot.approvalChannel, "WhatsApp");
+  assert.equal(ipo.snapshot.claimedApprover, "Director");
+  assert.equal(
+    ipo.snapshot.allocation.total,
+    preview.snapshot.allocation.total,
+  );
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT count(*)::int AS n FROM external_document_approvals WHERE submission_id=$1",
+        [submission.id],
+      )
+    ).rows[0].n,
+    1,
+  );
+});

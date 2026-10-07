@@ -1,3 +1,4 @@
+import { externalEvidenceObject } from "../approvals/external.js";
 import { Router, type RequestHandler } from "express";
 import { z } from "zod";
 import { equalSecrets } from "../auth/crypto.js";
@@ -90,6 +91,24 @@ export function ordersHttp(
           v.input,
           v.fingerprint,
           v.requestKey,
+        ),
+      );
+  });
+  r.post("/submissions/:id/external-approval", async (req, res) => {
+    const v = parse(
+      externalEvidenceObject
+        .extend({ requestKey: z.uuid() })
+        .refine((v) => v.channel === "Verbal" || v.evidenceIds.length > 0),
+      req.body,
+    );
+    res
+      .status(201)
+      .json(
+        await repo.approve(
+          req.authSession!.user.id,
+          parse(z.uuid(), req.params.id),
+          v.requestKey,
+          v,
         ),
       );
   });
