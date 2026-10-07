@@ -1,9 +1,5 @@
+import { money as amount } from "../numbers.js";
 import { Decimal } from "decimal.js";
-const amount = (value: string) =>
-  new Decimal(value).toNumber().toLocaleString("en-PK", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 export function CostingWorkflowHistory({
   review,
   quotation,

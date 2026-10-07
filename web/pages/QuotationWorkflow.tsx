@@ -1,3 +1,4 @@
+import { money } from "../numbers.js";
 import { SharePdf } from "../components/SharePdf.js";
 import { ExternalApproval } from "../components/ExternalApproval.js";
 import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js";
@@ -6,11 +7,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api, type Session } from "../api.js";
 import { confirmTransition, confirmRevision } from "../confirm.js";
 import type { QuotationSnapshot } from "../../server/commercial/engine.js";
-const money = (v: string) =>
-  Number(v).toLocaleString("en-PK", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 export function QuotationWorkflow({
   session,
   quotation: q,

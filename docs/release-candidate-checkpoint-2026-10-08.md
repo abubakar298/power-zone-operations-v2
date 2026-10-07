@@ -6,7 +6,7 @@ This report describes the local hardening candidate, not a deployment. Productio
 
 The implemented solar coordination workflow is in production hardening: Design survey or Quick BOQ → costing approval → commercial pricing → quotation/revision → sale confirmation → IPO/Peachtree → Accounts and Operations handoff. Department dashboards beyond coordination are foundations, not complete departmental systems.
 
-Last completed candidate work: centralized server authorization, ownership-scoped collections/documents/downloads, positive and negative access tests, historical workbook regression fixtures, response timeout/error handling, lazy workspace loading and a workspace recovery screen. Next work is controlled candidate publication/CI and production release acceptance. Email activation remains separate.
+Last completed candidate work: centralized server authorization, ownership-scoped collections/documents/downloads, positive and negative access tests, historical workbook regression fixtures, response timeout/error handling, lazy workspace loading and a workspace recovery screen, and decimal-safe currency presentation. Next work is controlled candidate publication/CI and production release acceptance. Email activation remains separate.
 
 Planning estimates, not measured coverage: core coordination workflow about 90%; full described multi-department product about 55%. Future inventory movements, procurement, site/QC execution, actual accounting integration and executive closing substantially increase the remaining scope.
 
@@ -79,9 +79,9 @@ Department boundaries are enforced server-side, including PDFs and attachments. 
 
 The authorization matrix checks legitimate owner/management access, another Coordinator guessing IDs, unauthorized departments, anonymous callers, body-reference substitution, collection leaks, uploads, BOQ history/PDF, pricing/quote PDF and IPO/handoffs. Existing repository action checks still enforce approval authority. These are comprehensive automated checks for the affected surfaces, not an independent penetration-test certification.
 
-Final local results: **91 backend tests passed, zero failed; eight browser tests passed; three Python backup-client tests passed; production build/typecheck passed; production dependency audit reports zero vulnerabilities**. Test areas include auth/session restart/logout/mobile, masters, BOQ review/revisions, commercial pricing and tax formats, IPO/PT rounding, approvals/evidence, imports, department queues, Design uploads, backups and training/archive safeguards. Browser tests exercise the Coordinator-to-Operations flow and management revisions. Arbitrary attachment contents, every user/browser combination, live email delivery and a real production restore still require acceptance.
+Final local results: **93 backend tests passed, zero failed; eight browser tests passed; three Python backup-client tests passed; production build/typecheck passed; production dependency audit reports zero vulnerabilities**. Test areas include auth/session restart/logout/mobile, masters, BOQ review/revisions, commercial pricing and tax formats, IPO/PT rounding, approvals/evidence, imports, department queues, Design uploads, backups and training/archive safeguards. Browser tests exercise the Coordinator-to-Operations flow and management revisions. Arbitrary attachment contents, every user/browser combination, live email delivery and a real production restore still require acceptance.
 
-Initial application JS reduced from about 559 KB to 248 KB (about 169 KB to 77 KB compressed); PDF/OCR functionality remains loaded on demand. Response support IDs avoid exposing request bodies or private values. Connection failures do not automatically retry mutations.
+Initial application JS reduced from about 559 KB to 248 KB (about 169 KB to 77 KB compressed); PDF/OCR functionality remains loaded on demand. Currency displays now share a decimal-safe formatter, including BOQ review/history, quotation/pricing, IPO, department and Director views; zero, missing and invalid amounts are distinct. BOQ monetary summaries show cents instead of silently hiding fractional amounts. Stored calculations and PDFs are unchanged. Response support IDs avoid exposing request bodies or private values. Connection failures do not automatically retry mutations.
 
 ## Deployment and recovery
 
@@ -112,3 +112,14 @@ No application is hack-proof. This is a tested local candidate, not proof of com
 ## Publication evidence
 
 Draft review: https://github.com/abubakar298/power-zone-operations-v2/pull/6. The code candidate is 20fc2dbfadc24955ba5c83320e33c5f2cf0ff42d; subsequent documentation-only commits do not change tested application behavior. CI was dispatched for this separate branch. Production branch remains untouched. The immediately preceding production commit adds validated Rafiq email sender display configuration; its parent is 74618e19ff62578b2e0eb1fa45173f7bbdea1907. See the route inventory alongside this report for implemented router paths.
+
+## Additional engineering limitations
+
+- Director actual cost/profit/variance remain unavailable until accounting integration; closing requests currently have no implemented feed. These are not live accounting comparisons.
+- Account department phase enrichment performs per-record queries; bounded pilot queues are acceptable, but this should be batched and indexed before large-scale usage.
+- Several UI data models still use broad TypeScript any types. Security decisions use server session/role checks and parameterized queries; replacing all UI models is deferred rather than a broad rewrite.
+- Workspace tabs are application state rather than independent deep-link routes. Reloading can return to the dashboard; saved data persists, unsaved forms are not guaranteed to survive reload.
+- Screen dates generally follow the device locale/timezone. KPI clocks use stored timestamps; after-hours/business-calendar exclusions are not implemented beyond the approved management-wait exclusion.
+- File signatures/size/access controls are implemented; malicious-file scanning and an independent penetration test are not provided.
+- Long descriptions and arbitrary customer/address lengths need continued PDF visual acceptance. No approved document wording or branding was changed in this pass.
+- Audit actions retain actor/time and entity identifiers in action strings; an external append-only audit sink and structured entity columns remain future hardening.

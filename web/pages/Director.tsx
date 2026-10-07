@@ -1,13 +1,7 @@
+import { money } from "../numbers.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
 import { Coordinator } from "./Coordinator.js";
-const money = (v: string | null) =>
-  v === null
-    ? "Not entered"
-    : new Intl.NumberFormat("en-PK", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(Number(v));
 export function Director({
   session,
   onOpen,

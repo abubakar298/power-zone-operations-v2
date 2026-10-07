@@ -1,10 +1,6 @@
+import { decimalDisplay as format } from "../numbers.js";
 import { SharePdf } from "../components/SharePdf.js";
 import type { BoqSnapshot } from "../../server/boq/engine.js";
-const format = (v: string | number, decimals = 0) =>
-  new Intl.NumberFormat("en-PK", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(Number(v));
 export function BoqCosting({
   snapshot: s,
   number,
@@ -38,14 +34,14 @@ export function BoqCosting({
           <span>Solution ID</span>
           <strong>{s.engineering.solutionId}</strong>
           <p>
-            {format(s.engineering.batteryModules)} battery modules ·{" "}
-            {format(s.engineering.bms)} BMS · {format(s.engineering.strings)}{" "}
+            {format(s.engineering.batteryModules, 0)} battery modules ·{" "}
+            {format(s.engineering.bms, 0)} BMS · {format(s.engineering.strings, 0)}{" "}
             strings
           </p>
         </div>
         <div className="summary-card">
           <span>Budgeted project cost</span>
-          <strong>PKR {format(s.total)}</strong>
+          <strong>PKR {format(s.total, 2)}</strong>
           <p>PKR {format(s.perWatt, 2)} / W</p>
         </div>
       </div>
@@ -70,13 +66,13 @@ export function BoqCosting({
           {s.summary.map((x) => (
             <tr key={x.name}>
               <td>{x.name}</td>
-              <td className="numeric">{format(x.cost)}</td>
+              <td className="numeric">{format(x.cost, 2)}</td>
               <td className="numeric">{format(x.perWatt, 2)}</td>
             </tr>
           ))}
           <tr>
             <th>TOTAL PROJECT COST</th>
-            <th className="numeric">{format(s.total)}</th>
+            <th className="numeric">{format(s.total, 2)}</th>
             <th className="numeric">{format(s.perWatt, 2)}</th>
           </tr>
         </tbody>
@@ -94,7 +90,7 @@ export function BoqCosting({
           {s.epc.map((x) => (
             <tr key={x.name}>
               <td>{x.name}</td>
-              <td className="numeric">{format(x.cost)}</td>
+              <td className="numeric">{format(x.cost, 2)}</td>
               <td className="numeric">{format(x.perWatt, 2)}</td>
             </tr>
           ))}
@@ -138,7 +134,7 @@ export function BoqCosting({
                 <td className="numeric">
                   {format(l.rate, Number(l.rate) % 1 ? 4 : 0)}
                 </td>
-                <td className="numeric">{format(l.total)}</td>
+                <td className="numeric">{format(l.total, 2)}</td>
               </tr>
             ))}
           </tbody>

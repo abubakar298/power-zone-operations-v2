@@ -1,3 +1,4 @@
+import { money } from "../numbers.js";
 import { ExternalApproval } from "../components/ExternalApproval.js";
 import { SharePdf } from "../components/SharePdf.js";
 import { Operations } from "./Operations.js";
@@ -30,11 +31,6 @@ const fields: [keyof OrderInput, string][] = [
   ["remarks", "Remarks"],
   ["evidenceNotes", "Approval evidence / verbal confirmation details"],
 ];
-const money = (v: string) =>
-  Number(v).toLocaleString("en-PK", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 export function Orders({
   session,
   onOperations,

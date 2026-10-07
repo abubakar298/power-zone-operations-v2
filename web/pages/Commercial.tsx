@@ -1,3 +1,4 @@
+import { money } from "../numbers.js";
 import { SharePdf } from "../components/SharePdf.js";
 import { QuotationWorkflow } from "./QuotationWorkflow.js";
 import { confirmTransition, confirmRevision } from "../confirm.js";
@@ -14,11 +15,6 @@ import type {
   PricingSnapshot,
   QuotationSnapshot,
 } from "../../server/commercial/engine.js";
-const money = (v: string) =>
-  new Intl.NumberFormat("en-PK", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(v));
 const defaults = (name: string, id = ""): PricingInput => ({
   boqRevisionId: id,
   presentation: "No Breakup",

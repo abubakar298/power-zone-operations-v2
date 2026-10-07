@@ -1,3 +1,4 @@
+import { money } from "../numbers.js";
 import { confirmTransition } from "../confirm.js";
 import { quotationTypeLabel } from "../../server/orders/sale-type.js";
 import { useEffect, useState } from "react";
@@ -326,10 +327,7 @@ export function Departments({
                         <tr key={p.name}>
                           <td>{p.name}</td>
                           <td>
-                            {Number(p.amount).toLocaleString("en-PK", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
+                            {money(p.amount)}
                           </td>
                         </tr>
                       ))}

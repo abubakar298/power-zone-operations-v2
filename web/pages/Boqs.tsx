@@ -1,3 +1,4 @@
+import { money } from "../numbers.js";
 import { BessSelector } from "../components/BessSelector.js";
 import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js";
 import { confirmTransition } from "../confirm.js";
@@ -650,7 +651,7 @@ export function Boqs({
                           <span className="master-status">{r.status}</span>
                         </td>
                         <td className="numeric">
-                          {Number(r.total).toLocaleString("en-PK")}
+                          {money(r.total)}
                         </td>
                         <td>
                           <button
@@ -720,9 +721,7 @@ export function Boqs({
                           {r.site}
                         </td>
                         <td className="numeric">
-                          {Number(r.total).toLocaleString("en-PK", {
-                            maximumFractionDigits: 0,
-                          })}
+                          {money(r.total)}
                         </td>
                         <td>{new Date(r.created_at).toLocaleString()}</td>
                       </tr>
