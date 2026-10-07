@@ -16,6 +16,7 @@ test("Admin encrypted backup restores all business records and upload bytes to a
   const db = await testDatabase(),
     directory = await mkdtemp(join(tmpdir(), "pz-restore-test-"));
   let restored: pg.Pool | undefined;
+  let closing = false;
   try {
     const admin = randomUUID(),
       coord = randomUUID(),
@@ -138,6 +139,11 @@ test("Admin encrypted backup restores all business records and upload bytes to a
     const url = new URL(db.url);
     url.pathname = "/backup_recovery_test";
     restored = new pg.Pool({ connectionString: url.toString(), max: 3 });
+    // PostgreSQL can notify idle recovery connections during fixture shutdown.
+    // Ignore only that expected shutdown signal; surface every runtime error.
+    restored.on("error", (error: Error & { code?: string }) => {
+      if (!(closing && error.code === "57P01")) throw error;
+    });
     const result = await restoreBackup(restored, path, phrase);
     assert.equal(result.tables, before.rowCount);
     for (const { tablename } of before.rows) {
@@ -214,6 +220,7 @@ test("Admin encrypted backup restores all business records and upload bytes to a
       1,
     );
   } finally {
+    closing = true;
     await restored?.end();
     await db.close();
     await rm(directory, { recursive: true, force: true });
