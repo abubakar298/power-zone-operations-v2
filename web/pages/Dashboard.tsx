@@ -1,3 +1,4 @@
+import { Design } from "./Design.js";
 import { Departments } from "./Departments.js";
 import { Director } from "./Director.js";
 import { Coordinator } from "./Coordinator.js";
@@ -39,6 +40,7 @@ export function Dashboard({
     | "operations"
     | "inventory"
     | "finance"
+    | "design"
     | "orders"
   >("dashboard");
   useEffect(() => {
@@ -111,6 +113,7 @@ export function Dashboard({
       | "operations"
       | "inventory"
       | "finance"
+      | "design"
       | "orders",
     task?: any,
   ) {
@@ -155,14 +158,16 @@ export function Dashboard({
               <Icon name="account" />
               My account
             </button>
-            <button
-              className={view === "masters" ? "nav-active" : ""}
-              aria-current={view === "masters" ? "page" : undefined}
-              onClick={() => navigate("masters")}
-            >
-              <Icon name="users" />
-              Master data
-            </button>
+            {session.user.role !== "Design" && (
+              <button
+                className={view === "masters" ? "nav-active" : ""}
+                aria-current={view === "masters" ? "page" : undefined}
+                onClick={() => navigate("masters")}
+              >
+                <Icon name="users" />
+                Master data
+              </button>
+            )}
           </nav>
           {session.user.role === "Admin" && (
             <button
@@ -182,7 +187,7 @@ export function Dashboard({
               <span>Customers & sites</span>
               <small>Ready</small>
             </div>
-            {!["Operations", "Inventory", "Accounts"].includes(
+            {!["Operations", "Inventory", "Accounts", "Design"].includes(
               session.user.role,
             ) && (
               <>
@@ -220,16 +225,29 @@ export function Dashboard({
                 </button>
               </>
             )}
-            <button
-              className={view === "operations" ? "nav-active" : ""}
-              onClick={() => {
-                setOperationsIpoId(undefined);
-                navigate("operations");
-              }}
-            >
-              <Icon name="file" />
-              BOQ to Operations
-            </button>
+            {["Admin", "Management", "Design"].includes(session.user.role) && (
+              <button
+                className={view === "design" ? "nav-active" : ""}
+                onClick={() => navigate("design")}
+              >
+                <Icon name="file" />
+                Design workspace
+              </button>
+            )}
+            {session.user.role !== "Design" && (
+              <>
+                <button
+                  className={view === "operations" ? "nav-active" : ""}
+                  onClick={() => {
+                    setOperationsIpoId(undefined);
+                    navigate("operations");
+                  }}
+                >
+                  <Icon name="file" />
+                  BOQ to Operations
+                </button>
+              </>
+            )}
             {["Admin", "Management", "Inventory"].includes(
               session.user.role,
             ) && (
@@ -271,25 +289,27 @@ export function Dashboard({
             <strong>
               {view === "dashboard"
                 ? "Dashboard"
-                : view === "masters"
-                  ? "Master data"
-                  : view === "team"
-                    ? "Team access"
-                    : view === "boqs"
-                      ? "Survey & BOQ"
-                      : view === "pricing"
-                        ? "Commercial pricing"
-                        : view === "quotes"
-                          ? "Quotations"
-                          : view === "operations"
-                            ? "BOQ to Operations"
-                            : view === "orders"
-                              ? "Customer PO & IPO"
-                              : view === "inventory"
-                                ? "Inventory workspace"
-                                : view === "finance"
-                                  ? "Accounts workspace"
-                                  : "My account"}
+                : view === "design"
+                  ? "Design workspace"
+                  : view === "masters"
+                    ? "Master data"
+                    : view === "team"
+                      ? "Team access"
+                      : view === "boqs"
+                        ? "Survey & BOQ"
+                        : view === "pricing"
+                          ? "Commercial pricing"
+                          : view === "quotes"
+                            ? "Quotations"
+                            : view === "operations"
+                              ? "BOQ to Operations"
+                              : view === "orders"
+                                ? "Customer PO & IPO"
+                                : view === "inventory"
+                                  ? "Inventory workspace"
+                                  : view === "finance"
+                                    ? "Accounts workspace"
+                                    : "My account"}
             </strong>
           </span>
           <div className="account">
@@ -329,56 +349,62 @@ export function Dashboard({
               <h1>
                 {view === "dashboard"
                   ? `Welcome, ${session.user.displayName}.`
-                  : view === "masters"
-                    ? "Master data"
-                    : view === "team"
-                      ? "Team access"
-                      : view === "boqs"
-                        ? "Survey & BOQ"
-                        : view === "pricing"
-                          ? "Commercial pricing"
-                          : view === "quotes"
-                            ? "Quotations"
-                            : view === "operations"
-                              ? "Operations delivery portal"
-                              : view === "orders"
-                                ? "Customer PO & IPO"
-                                : view === "inventory"
-                                  ? "Inventory workspace"
-                                  : view === "finance"
-                                    ? "Accounts workspace"
-                                    : "My account"}
+                  : view === "design"
+                    ? "Design workspace"
+                    : view === "masters"
+                      ? "Master data"
+                      : view === "team"
+                        ? "Team access"
+                        : view === "boqs"
+                          ? "Survey & BOQ"
+                          : view === "pricing"
+                            ? "Commercial pricing"
+                            : view === "quotes"
+                              ? "Quotations"
+                              : view === "operations"
+                                ? "Operations delivery portal"
+                                : view === "orders"
+                                  ? "Customer PO & IPO"
+                                  : view === "inventory"
+                                    ? "Inventory workspace"
+                                    : view === "finance"
+                                      ? "Accounts workspace"
+                                      : "My account"}
               </h1>
               <p className="dashboard-intro">
                 {view === "dashboard"
-                  ? session.user.role === "Inventory"
-                    ? "Prepare stock requirements and track Store dispatch work."
-                    : session.user.role === "Accounts"
-                      ? "Review IPOs and collect supporting documents for accounting."
-                      : session.user.role === "Operations"
-                        ? "Plan delivery and issue received BOQs to Store."
-                        : ["Admin", "Management"].includes(session.user.role)
-                          ? "Review approvals and track customer/site budgets."
-                          : "Pending coordination work and recent completed activity."
-                  : view === "masters"
-                    ? "Your customers, sites and approved reference data."
-                    : view === "boqs"
-                      ? "Turn survey information into a reviewed BOQ and project costing."
-                      : view === "pricing"
-                        ? "Set markup and selling price against an approved BOQ."
-                        : view === "quotes"
-                          ? "Prepare and share immutable customer quotation versions."
-                          : view === "team"
-                            ? "Invite and manage authorised team members."
-                            : view === "operations"
-                              ? "Send approved site requirements to Operations after IPO creation."
-                              : view === "orders"
-                                ? "Turn an accepted quotation and customer PO into an internal purchase order."
-                                : view === "inventory"
-                                  ? "Stock preparation and dispatch document queues."
-                                  : view === "finance"
-                                    ? "IPO review and supporting-document queues."
-                                    : "Your identity and access to the Power Zone workspace."}
+                  ? session.user.role === "Design"
+                    ? "Prepare technical surveys and send them to Coordination."
+                    : session.user.role === "Inventory"
+                      ? "Prepare stock requirements and track Store dispatch work."
+                      : session.user.role === "Accounts"
+                        ? "Review IPOs and collect supporting documents for accounting."
+                        : session.user.role === "Operations"
+                          ? "Plan delivery and issue received BOQs to Store."
+                          : ["Admin", "Management"].includes(session.user.role)
+                            ? "Review approvals and track customer/site budgets."
+                            : "Pending coordination work and recent completed activity."
+                  : view === "design"
+                    ? "Design workspace"
+                    : view === "masters"
+                      ? "Your customers, sites and approved reference data."
+                      : view === "boqs"
+                        ? "Turn survey information into a reviewed BOQ and project costing."
+                        : view === "pricing"
+                          ? "Set markup and selling price against an approved BOQ."
+                          : view === "quotes"
+                            ? "Prepare and share immutable customer quotation versions."
+                            : view === "team"
+                              ? "Invite and manage authorised team members."
+                              : view === "operations"
+                                ? "Send approved site requirements to Operations after IPO creation."
+                                : view === "orders"
+                                  ? "Turn an accepted quotation and customer PO into an internal purchase order."
+                                  : view === "inventory"
+                                    ? "Stock preparation and dispatch document queues."
+                                    : view === "finance"
+                                      ? "IPO review and supporting-document queues."
+                                      : "Your identity and access to the Power Zone workspace."}
               </p>
             </div>
             <button className="dark-button" onClick={logout} disabled={busy}>
@@ -390,6 +416,10 @@ export function Dashboard({
             <p className="form-error" role="alert">
               {error}
             </p>
+          )}
+          {(view === "design" ||
+            (view === "dashboard" && session.user.role === "Design")) && (
+            <Design session={session} />
           )}
           {(view === "inventory" ||
             (view === "dashboard" && session.user.role === "Inventory")) && (
@@ -403,7 +433,7 @@ export function Dashboard({
             <Operations session={session} portal />
           )}
           {view === "dashboard" &&
-            !["Operations", "Inventory", "Accounts"].includes(
+            !["Operations", "Inventory", "Accounts", "Design"].includes(
               session.user.role,
             ) && (
               <Home

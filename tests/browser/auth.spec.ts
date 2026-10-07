@@ -1893,3 +1893,209 @@ test("quotation page saves and submits, management previews discount and request
     ).workflow_status,
   ).toBe("Approved");
 });
+
+test("Design uploads a physical survey, sends technical requirements without brands, and Atif resumes its costing draft", async ({
+  page,
+}) => {
+  const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? "3180"}`;
+  const adminLogin = await page.request.post("/api/auth/login", {
+    headers: { Origin: origin },
+    data: {
+      email: "admin@example.test",
+      password: "browser-test-passphrase-298",
+    },
+  });
+  expect(adminLogin.ok()).toBe(true);
+  const admin = await adminLogin.json();
+  const create = await page.request.post("/api/accounts/create", {
+    headers: { Origin: origin, "X-CSRF-Token": admin.csrfToken },
+    data: {
+      email: "design-browser@example.test",
+      displayName: "Design survey engineer",
+      role: "Design",
+      password: "browser-test-passphrase-298",
+      newPassword: "browser-design-only-298",
+      confirmPassword: "browser-design-only-298",
+    },
+  });
+  expect(create.status()).toBe(201);
+  const login = await page.request.post("/api/auth/login", {
+    headers: { Origin: origin },
+    data: {
+      email: "design-browser@example.test",
+      password: "browser-design-only-298",
+    },
+  });
+  expect(login.ok()).toBe(true);
+  const refs = await (await page.request.get("/api/design/references")).json();
+  await page.goto("/dashboard");
+  await expect(
+    page.getByRole("heading", { name: "Design workspace", exact: true }),
+  ).toBeVisible();
+  for (const name of [
+    "Master data",
+    "Commercial pricing",
+    "Quotations",
+    "Survey & BOQ",
+    "BOQ to Operations",
+  ])
+    await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
+      0,
+    );
+  expect((await page.request.get("/api/masters")).status()).toBe(403);
+  await page
+    .getByRole("button", { name: "New design survey", exact: true })
+    .click();
+  await page
+    .getByLabel("Site name", { exact: true })
+    .fill("DESIGN workflow site");
+  await page
+    .getByRole("button", { name: "Save survey draft", exact: true })
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Survey draft saved." }),
+  ).toBeVisible();
+  await page.reload();
+  await page
+    .getByRole("row")
+    .filter({ hasText: "DESIGN workflow site" })
+    .getByRole("button", { name: "Open survey" })
+    .click();
+  await page
+    .getByLabel("Customer", { exact: true })
+    .selectOption(String(refs.customers[0].id));
+  await page.getByLabel("Site code", { exact: true }).fill("DSGN-E2E");
+  await page
+    .getByLabel("Location", { exact: true })
+    .fill("Design test location");
+  const values: Record<string, string> = {
+    "Panel quantity": "20",
+    "Panel wattage (W)": "620",
+    "6mm² DC cable total (m)": "100",
+    "2.5mm² earth cable (m)": "20",
+    "6mm² earth cable (m)": "30",
+    "10mm² earth cable (m)": "30",
+    "Total battery capacity (kWh)": "15",
+  };
+  for (const [name, value] of Object.entries(values))
+    await page.getByLabel(name, { exact: true }).fill(value);
+  await page.getByLabel("Structure", { exact: true }).selectOption("L1");
+  await page
+    .getByLabel("Inverter configuration", { exact: true })
+    .selectOption("10 kW");
+  await page
+    .getByLabel("Extra smart meter", { exact: true })
+    .selectOption("no");
+  await page
+    .getByLabel("Genset synchronisation", { exact: true })
+    .selectOption("no");
+  const pdf = new jsPDF();
+  pdf.text("Physical site survey - Design workflow test", 10, 20);
+  await page.locator("input[type=file]").setInputFiles({
+    name: "design-physical-survey.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(pdf.output("arraybuffer")),
+  });
+  await expect(
+    page.getByRole("link", { name: "design-physical-survey.pdf", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Technical notes", { exact: true })
+    .fill("Measured cable routes confirmed by Design.");
+  await page
+    .getByLabel("Coordinator", { exact: true })
+    .selectOption(
+      refs.coordinators.find((u: any) => u.display_name.includes("Atif")).id,
+    );
+  await page
+    .getByLabel(
+      "I checked these technical details against the physical survey form.",
+      { exact: true },
+    )
+    .check();
+  await expect(page.getByLabel(/brand/i)).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/design-survey-entry.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth + 2,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/design-survey-mobile.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1280, height: 720 });
+
+  page.removeAllListeners("dialog");
+  page.once("dialog", async (d) => {
+    expect(d.message()).toContain("Send survey to Coordination");
+    await d.dismiss();
+  });
+  await page
+    .getByRole("button", { name: "Save and send to Coordination", exact: true })
+    .click();
+  expect(
+    (await (await page.request.get("/api/design")).json()).surveys[0].draft_id,
+  ).toBeNull();
+  page.on("dialog", async (d) => {
+    if (d.type() === "confirm") await d.accept();
+  });
+  await page
+    .getByRole("button", { name: "Save and send to Coordination", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Sent survey · Read only" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "Save and send to Coordination",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  const sent = (await (await page.request.get("/api/design")).json())
+    .surveys[0];
+  expect(sent.draft_id).toBeTruthy();
+  const coord = await page.request.post("/api/auth/login", {
+    headers: { Origin: origin },
+    data: {
+      email: "atif-browser@example.test",
+      password: "browser-coordinator-only-298",
+    },
+  });
+  expect(coord.ok()).toBe(true);
+  await page.reload();
+  await page.getByRole("button", { name: /Survey preparation/ }).click();
+  await page
+    .getByRole("row")
+    .filter({ hasText: "DESIGN workflow site" })
+    .getByRole("button", { name: "Open workflow", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Survey received from Design",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Measured cable routes confirmed by Design.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Panel quantity", { exact: true })).toHaveValue(
+    "20",
+  );
+  await expect(
+    page.getByLabel("Solar Panel brand", { exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("link", { name: "design-physical-survey.pdf", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "test-results/design-survey-atif-handoff.png",
+    fullPage: true,
+  });
+});

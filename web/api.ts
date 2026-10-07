@@ -9,7 +9,8 @@ export interface User {
     | "Coordinator"
     | "Operations"
     | "Inventory"
-    | "Accounts";
+    | "Accounts"
+    | "Design";
 }
 export interface Session {
   user: User;

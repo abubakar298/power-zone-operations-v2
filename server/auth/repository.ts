@@ -13,7 +13,8 @@ export interface User {
     | "Coordinator"
     | "Operations"
     | "Inventory"
-    | "Accounts";
+    | "Accounts"
+    | "Design";
 }
 export interface StoredUser extends User {
   password_hash: string;

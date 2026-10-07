@@ -4,6 +4,8 @@ export const testArchiveKey = "owner-confirmed-test-workflow-2026-10-07";
 // Fixed before the owner begins the clean end-to-end test. Never roll forward.
 const cutoff = "2026-10-07T06:52:51Z";
 const tables = [
+  "design_survey_handoffs",
+  "design_surveys",
   "ipo_accounts_handoffs",
   "department_checkpoints",
   "store_boq_issuances",

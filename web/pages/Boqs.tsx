@@ -72,6 +72,7 @@ export function Boqs({
     [preview, setPreview] = useState<{ snapshot: any; fingerprint: string }>(),
     [saved, setSaved] = useState<any>(),
     [suggestions, setSuggestions] = useState<Record<string, string>>({}),
+    [designSource, setDesignSource] = useState<any>(),
     [sourceMode, setSourceMode] = useState("Survey"),
     [pvInput, setPvInput] = useState({ qty: 0, wattage: "0" }),
     [inverter, setInverter] = useState("10 kW");
@@ -129,6 +130,7 @@ export function Boqs({
       .catch(fail);
   }, []);
   function fresh(mode = "Survey") {
+    setDesignSource(undefined);
     setSourceMode(mode);
     setPvInput({ qty: 0, wattage: "0" });
     setView("new");
@@ -151,6 +153,7 @@ export function Boqs({
     setInverter("10 kW");
   }
   function resume(d: any) {
+    setDesignSource(d.design_source);
     setSourceMode(d.inputs.sourceMode ?? "Survey");
     setPvInput({
       qty: d.inputs.panelQty ?? 0,
@@ -168,7 +171,9 @@ export function Boqs({
     setUploads(
       d.inputs.uploadIds.map((id: string, i: number) => ({
         id,
-        filename: `Source document ${i + 1}`,
+        filename:
+          d.design_source?.attachments?.find((a: any) => a.id === id)
+            ?.filename ?? `Source document ${i + 1}`,
       })),
     );
     setOcrText(d.inputs.ocrText ?? "");
@@ -459,6 +464,7 @@ export function Boqs({
     )
       return;
     const original = saved;
+    setDesignSource(undefined);
     fresh(original.snapshot.survey.sourceMode ?? "Survey");
     setPvInput({
       qty: original.snapshot.survey.panelQty,
@@ -745,18 +751,40 @@ export function Boqs({
             {currentReview.status === "Awaiting review" &&
               ["Admin", "Management"].includes(session.user.role) && (
                 <div className="review-actions">
-                  {currentReview.previous_instructions && <label>
-                    <input type="checkbox" style={{ width: "auto", display: "inline-block", marginRight: 8 }} checked={changeQuotationSettings}
-                      onChange={(e) => {
-                        setChangeQuotationSettings(e.target.checked);
-                        if (!e.target.checked) setInstructions(currentReview.previous_instructions);
-                      }} /> Change quotation settings
-                    <span> Previous quotation instructions are retained unless you enable changes.</span>
-                  </label>}
+                  {currentReview.previous_instructions && (
+                    <label>
+                      <input
+                        type="checkbox"
+                        style={{
+                          width: "auto",
+                          display: "inline-block",
+                          marginRight: 8,
+                        }}
+                        checked={changeQuotationSettings}
+                        onChange={(e) => {
+                          setChangeQuotationSettings(e.target.checked);
+                          if (!e.target.checked)
+                            setInstructions(
+                              currentReview.previous_instructions,
+                            );
+                        }}
+                      />{" "}
+                      Change quotation settings
+                      <span>
+                        {" "}
+                        Previous quotation instructions are retained unless you
+                        enable changes.
+                      </span>
+                    </label>
+                  )}
                   <ApprovalInstructions
                     value={instructions}
                     onChange={setInstructions}
-                    disabled={busy || (!!currentReview.previous_instructions && !changeQuotationSettings)}
+                    disabled={
+                      busy ||
+                      (!!currentReview.previous_instructions &&
+                        !changeQuotationSettings)
+                    }
                   />
                   <label>
                     Review comments
@@ -818,18 +846,40 @@ export function Boqs({
                       onChange={(e) => setExternalApprover(e.target.value)}
                     />
                   </label>
-                  {currentReview.previous_instructions && <label>
-                    <input type="checkbox" style={{ width: "auto", display: "inline-block", marginRight: 8 }} checked={changeQuotationSettings}
-                      onChange={(e) => {
-                        setChangeQuotationSettings(e.target.checked);
-                        if (!e.target.checked) setInstructions(currentReview.previous_instructions);
-                      }} /> Change quotation settings
-                    <span> Previous quotation instructions are retained unless you enable changes.</span>
-                  </label>}
+                  {currentReview.previous_instructions && (
+                    <label>
+                      <input
+                        type="checkbox"
+                        style={{
+                          width: "auto",
+                          display: "inline-block",
+                          marginRight: 8,
+                        }}
+                        checked={changeQuotationSettings}
+                        onChange={(e) => {
+                          setChangeQuotationSettings(e.target.checked);
+                          if (!e.target.checked)
+                            setInstructions(
+                              currentReview.previous_instructions,
+                            );
+                        }}
+                      />{" "}
+                      Change quotation settings
+                      <span>
+                        {" "}
+                        Previous quotation instructions are retained unless you
+                        enable changes.
+                      </span>
+                    </label>
+                  )}
                   <ApprovalInstructions
                     value={instructions}
                     onChange={setInstructions}
-                    disabled={busy || (!!currentReview.previous_instructions && !changeQuotationSettings)}
+                    disabled={
+                      busy ||
+                      (!!currentReview.previous_instructions &&
+                        !changeQuotationSettings)
+                    }
                   />
                   <label>
                     Approval screenshots
@@ -1130,6 +1180,21 @@ export function Boqs({
                 wattage. These are allowances, not measured site quantities.
               </p>
             </section>
+          )}
+          {designSource && (
+            <aside className="detail-panel" aria-label="Design survey handoff">
+              <h3>Survey received from Design</h3>
+              <p>
+                {designSource.designer} ·{" "}
+                {new Date(designSource.sent_at).toLocaleString()}
+              </p>
+              {designSource.notes && (
+                <p style={{ whiteSpace: "pre-wrap" }}>{designSource.notes}</p>
+              )}
+              <p>
+                Review the uploaded survey, select brands and prepare costing.
+              </p>
+            </aside>
           )}
           <form
             ref={form}

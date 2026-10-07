@@ -1,3 +1,5 @@
+import { DesignRepository } from "./design/repository.js";
+import { designHttp } from "./design/http.js";
 import { DepartmentRepository } from "./departments/repository.js";
 import { departmentsHttp } from "./departments/http.js";
 import { DirectorRepository } from "./director/repository.js";
@@ -66,6 +68,24 @@ export function createApp(
     new AuthService(new AuthRepository(pool), config),
     config,
   );
+  app.use(
+    [
+      "/api/boqs",
+      "/api/commercial",
+      "/api/orders",
+      "/api/coordinator",
+      "/api/director",
+      "/api/operations",
+      "/api/departments",
+      "/api/masters",
+    ],
+    auth.requireSession,
+    (req, _res, next) => {
+      if (req.authSession!.user.role === "Design")
+        throw new HttpError(403, "Design accounts can access surveys only.");
+      next();
+    },
+  );
   const boqs = new BoqRepository(pool);
   app.use(
     "/api/survey-uploads",
@@ -88,6 +108,11 @@ export function createApp(
     auth.requireSession,
     express.json({ limit: "12mb" }),
     ordersHttp(new OrdersRepository(pool), auth.requireSession),
+  );
+  app.use(
+    "/api/design",
+    express.json({ limit: "128kb" }),
+    designHttp(new DesignRepository(pool), auth.requireSession),
   );
   app.use(express.json({ limit: "8kb" }));
   app.get("/api/health", async (_req, res) => {
