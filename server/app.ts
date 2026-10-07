@@ -1,5 +1,6 @@
 import { DesignRepository } from "./design/repository.js";
 import { backupsHttp } from "./backups/http.js";
+import { backupDevicesHttp } from "./backups/devices.js";
 import { designHttp } from "./design/http.js";
 import { DepartmentRepository } from "./departments/repository.js";
 import { departmentsHttp } from "./departments/http.js";
@@ -127,6 +128,7 @@ export function createApp(
     }
   });
   app.use("/api/auth", auth.router);
+  app.use("/api/backups", backupDevicesHttp(pool, auth.requireSession));
   app.use("/api/backups", backupsHttp(pool, auth.requireSession));
   app.use(
     "/api/accounts",

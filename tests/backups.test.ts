@@ -39,6 +39,10 @@ test("Admin encrypted backup restores all business records and upload bytes to a
       );
     await db.pool.query("UPDATE admin_bootstrap SET completed_at=now()");
     await createDashboardSamples(db.pool, coord, admin);
+    await db.pool.query(
+      "INSERT INTO backup_devices(id,user_id,label,token_hash) VALUES($1,$2,'Mac',$3)",
+      [randomUUID(), admin, "test-device-digest"],
+    );
     const upload = randomUUID(),
       bytes = Buffer.from("%PDF-1.4\nprivate survey source");
     await db.pool.query(
@@ -153,6 +157,7 @@ test("Admin encrypted backup restores all business records and upload bytes to a
           "auth_rate_limits",
           "account_tokens",
           "email_outbox",
+          "backup_devices",
         ].includes(tablename)
       ) {
         assert.equal(

@@ -9,12 +9,24 @@ export function Backups({ session }: { session: Session }) {
     [message, setMessage] = useState(""),
     [error, setError] = useState("");
   const [downloads, setDownloads] = useState<{ created_at: string }[]>([]);
+  const [devices, setDevices] = useState<
+    {
+      id: string;
+      label: string;
+      expires_at: string;
+      revoked_at: string | null;
+      last_used_at: string | null;
+    }[]
+  >([]);
   const refresh = () =>
     api<{ downloads: { created_at: string }[] }>("/backups")
       .then((r) => setDownloads(r.downloads))
       .catch(() => {});
   useEffect(() => {
     void refresh();
+    void api<{ devices: typeof devices }>("/backups/devices")
+      .then((r) => setDevices(r.devices))
+      .catch(() => {});
   }, []);
   async function download(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -162,10 +174,58 @@ export function Backups({ session }: { session: Session }) {
           {busy ? "Preparing encrypted backup…" : "Download encrypted backup"}
         </button>
       </form>
-      <h4>Recently prepared downloads</h4>
+      <h4>Automatic backup devices</h4>
+      <p>
+        Render recovery protects the server independently. An enrolled Mac
+        checks for a daily encrypted download after 2 AM Pakistan time when
+        awake, online, and Codex is running. Device credentials expire after one
+        year and cannot approve or edit business records.
+      </p>
+      {devices
+        .filter((d) => !d.revoked_at)
+        .map((d) => (
+          <div key={d.id}>
+            <strong>{d.label}</strong> · Expires{" "}
+            {new Date(d.expires_at).toLocaleDateString()} · Last prepared{" "}
+            {d.last_used_at
+              ? new Date(d.last_used_at).toLocaleString()
+              : "Not yet"}
+            <button
+              type="button"
+              onClick={async () => {
+                if (
+                  !window.confirm(
+                    "Revoke this device's automatic backup access? Existing downloaded files remain on its disk.",
+                  )
+                )
+                  return;
+                try {
+                  await api(`/backups/devices/${d.id}/revoke`, {
+                    body: {},
+                    csrf: session.csrfToken,
+                  });
+                  setDevices((ds) =>
+                    ds.map((x) =>
+                      x.id === d.id
+                        ? { ...x, revoked_at: new Date().toISOString() }
+                        : x,
+                    ),
+                  );
+                } catch (e) {
+                  setError(
+                    e instanceof Error ? e.message : "Could not revoke device.",
+                  );
+                }
+              }}
+            >
+              Revoke backup access
+            </button>
+          </div>
+        ))}
       <p>
         Preparation time does not confirm that a file was saved to your disk.
       </p>
+      <h4>Recently prepared downloads</h4>
       {downloads.length ? (
         <ul>
           {downloads.map((d, i) => (

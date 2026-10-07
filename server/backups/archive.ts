@@ -16,6 +16,7 @@ import { migrate } from "../db/migrate.js";
 import { createHash } from "node:crypto";
 const magic = Buffer.from("PZBACK01");
 const omitted = new Set([
+  "backup_devices",
   "auth_sessions",
   "auth_rate_limits",
   "account_tokens",
