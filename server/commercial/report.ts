@@ -36,7 +36,7 @@ function appendQuotation(
   pdf.setFont("helvetica", "normal");
   if (label) {
     pdf.setFontSize(7);
-    pdf.text(text(label), margin, 32);
+    pdf.text(text(label), 196, 20, { align: "right" });
   }
 
   pdf.setTextColor(40, 40, 45);
