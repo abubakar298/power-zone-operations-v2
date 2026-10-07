@@ -15,7 +15,7 @@
     "migrate:production": "node dist/server/db/migrate-cli.js",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/browser-tests.mjs",
     "db:local": "tsx scripts/local-db.ts"
   },
   "dependencies": {

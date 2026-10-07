@@ -4,7 +4,7 @@ import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js"
 import { confirmTransition } from "../confirm.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, ApiError, type Session } from "../api.js";
-import { recommendSiteCode } from "../../server/boq/schema.js";
+import { CustomerSiteFields } from "../components/CustomerSiteFields.js";
 import { generalAllowances } from "../../server/boq/general.js";
 import { extractText, surveySuggestions } from "../ocr.js";
 import {
@@ -86,15 +86,6 @@ export function Boqs({
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [createdCustomerId, setCreatedCustomerId] = useState<string>();
   const form = useRef<HTMLFormElement>(null);
-  useEffect(() => {
-    if (!createdCustomerId || !masters) return;
-    const select = form.current?.elements.namedItem("customerId");
-    if (select instanceof HTMLSelectElement) {
-      select.value = createdCustomerId;
-      setPreview(undefined);
-      setCreatedCustomerId(undefined);
-    }
-  }, [masters, createdCustomerId]);
   async function load() {
     try {
       const [m, b, d, r] = await Promise.all([
@@ -138,6 +129,7 @@ export function Boqs({
   }, []);
   function fresh(mode = "Survey") {
     setDesignSource(undefined);
+    setCreatedCustomerId(undefined);
     setSourceMode(mode);
     setPvInput({ qty: 0, wattage: "0" });
     setView("new");
@@ -160,6 +152,7 @@ export function Boqs({
     setInverter("10 kW");
   }
   function resume(d: any) {
+    setCreatedCustomerId(undefined);
     setDesignSource(d.design_source);
     setSourceMode(d.inputs.sourceMode ?? "Survey");
     setPvInput({
@@ -613,7 +606,7 @@ export function Boqs({
             </button>
           </div>
           <p>
-            Create a new site from a survey, review the costing, then save an
+            Select a site or create a new one, review the costing, then save an
             approved immutable R0.
           </p>
           <section className="detail-panel review-workspace">
@@ -650,9 +643,7 @@ export function Boqs({
                         <td>
                           <span className="master-status">{r.status}</span>
                         </td>
-                        <td className="numeric">
-                          {money(r.total)}
-                        </td>
+                        <td className="numeric">{money(r.total)}</td>
                         <td>
                           <button
                             disabled={busy}
@@ -720,9 +711,7 @@ export function Boqs({
                           <br />
                           {r.site}
                         </td>
-                        <td className="numeric">
-                          {money(r.total)}
-                        </td>
+                        <td className="numeric">{money(r.total)}</td>
                         <td>{new Date(r.created_at).toLocaleString()}</td>
                       </tr>
                     ))}
@@ -1076,7 +1065,7 @@ export function Boqs({
           <p>
             {baseRevisionId
               ? "This revision uses the existing customer and site. Approval saves a new immutable revision."
-              : "A new BOQ creates a new site. Its number is issued when the reviewed costing is approved."}
+              : "Select an existing site or create a new one. A BOQ number is issued when the reviewed costing is approved."}
           </p>
           {baseRevisionId && (
             <label className="source-label">
@@ -1225,76 +1214,19 @@ export function Boqs({
             }}
           >
             <fieldset disabled={busy}>
-              <legend>1 · Customer & new site</legend>
+              <legend>1 · Customer & site</legend>
               <div className="survey-grid">
-                <label>
-                  Customer
-                  <select
-                    name="customerId"
-                    aria-label="Customer"
-                    disabled={!!baseRevisionId}
-                    defaultValue={initial.customerId ?? ""}
-                    required
-                  >
-                    <option value="">Select customer</option>
-                    {masters.customers
-                      .filter((c: any) => c.status === "Active")
-                      .map((c: any) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} · {c.short_code}
-                        </option>
-                      ))}
-                  </select>
-                  {!baseRevisionId &&
-                    canWriteMaster(session.user.role, "customers", "new") && (
-                      <button
-                        type="button"
-                        onClick={() => setAddingCustomer(true)}
-                      >
-                        Add customer
-                      </button>
-                    )}
-                </label>
-                <label>
-                  New site name
-                  <input
-                    name="siteName"
-                    aria-label="New site name"
-                    defaultValue={initial.siteName ?? ""}
-                    required
-                    maxLength={200}
-                    onBlur={(e) => {
-                      const code = form.current?.elements.namedItem("siteCode");
-                      if (code instanceof HTMLInputElement && !code.value)
-                        code.value = recommendSiteCode(e.target.value);
-                    }}
-                  />
-                </label>
-                <label>
-                  Site code
-                  <input
-                    name="siteCode"
-                    aria-label="Site code"
-                    readOnly={!!baseRevisionId}
-                    defaultValue={initial.siteCode ?? ""}
-                    required
-                    maxLength={30}
-                    pattern="[A-Za-z0-9_-]+"
-                  />
-                  <small>
-                    Suggested from the site name; you can edit it. Leading zeros
-                    are preserved.
-                  </small>
-                </label>
-                <label>
-                  Location
-                  <input
-                    name="location"
-                    aria-label="Location"
-                    defaultValue={initial.location ?? ""}
-                    maxLength={1000}
-                  />
-                </label>
+                <CustomerSiteFields
+                  masters={masters}
+                  initial={initial}
+                  revision={!!baseRevisionId}
+                  preferredCustomer={createdCustomerId}
+                  onAdd={
+                    canWriteMaster(session.user.role, "customers", "new")
+                      ? () => setAddingCustomer(true)
+                      : undefined
+                  }
+                />
               </div>
             </fieldset>
             {sourceMode === "General quotation" && (

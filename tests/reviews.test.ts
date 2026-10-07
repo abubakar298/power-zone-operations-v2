@@ -60,7 +60,10 @@ before(async () => {
     panelWattage: "645",
     structure: "Elevated",
     dcMetres: "360",
-    acInverter16:"15", acInverter25:"0", acPanel16:"0", acPanel25:"20",
+    acInverter16: "15",
+    acInverter25: "0",
+    acPanel16: "0",
+    acPanel25: "20",
     earth25: "20",
     earth6: "90",
     earth10: "90",
@@ -92,6 +95,71 @@ function post(actor: Actor, path: string, body: object) {
 function get(actor: Actor, path: string) {
   return request(app).get(`/api/boqs${path}`).set("Cookie", actor.cookie);
 }
+test("first approved BOQ reuses an active master site without changing it; duplicates and inactive sites are rejected", async () => {
+  const siteId = 50001;
+  await db.pool.query(
+    "INSERT INTO sites(id,customer_id,name,code,location,status) VALUES($1,3,'Pre-existing site','READY-SITE','Lahore','Active')",
+    [siteId],
+  );
+  const before = (
+    await db.pool.query("SELECT * FROM sites WHERE id=$1", [siteId])
+  ).rows[0];
+  const inputs = {
+    ...survey,
+    siteName: before.name,
+    siteCode: before.code,
+    location: before.location,
+  };
+  const first = await submit(inputs);
+  const saved = (
+    await post(manager, `/reviews/${first.s.id}/decision`, {
+      outcome: "Approved",
+      comments: "Existing site first costing",
+    }).expect(200)
+  ).body.saved;
+  assert.equal(
+    (
+      await db.pool.query("SELECT site_id FROM boqs WHERE id=$1", [
+        saved.boq_id,
+      ])
+    ).rows[0].site_id,
+    siteId,
+  );
+  assert.deepEqual(
+    (await db.pool.query("SELECT * FROM sites WHERE id=$1", [siteId])).rows[0],
+    before,
+  );
+  const duplicate = await submit({ ...inputs, siteCode: "ready-site" });
+  await post(manager, `/reviews/${duplicate.s.id}/decision`, {
+    outcome: "Approved",
+    comments: "",
+  }).expect(409);
+  assert.equal(
+    (
+      await db.pool.query("SELECT count(*) FROM boqs WHERE site_id=$1", [
+        siteId,
+      ])
+    ).rows[0].count,
+    "1",
+  );
+  await db.pool.query(
+    "INSERT INTO sites(id,customer_id,name,code,location,status) VALUES(50002,3,'Inactive site','INACTIVE-SITE','Lahore','Inactive')",
+  );
+  const inactive = await submit({
+    ...survey,
+    siteName: "Inactive site",
+    siteCode: "INACTIVE-SITE",
+  });
+  await post(manager, `/reviews/${inactive.s.id}/decision`, {
+    outcome: "Approved",
+    comments: "",
+  }).expect(409);
+  assert.equal(
+    (await db.pool.query("SELECT count(*) FROM boqs WHERE site_id=50002"))
+      .rows[0].count,
+    "0",
+  );
+});
 async function submit(
   inputs: any,
   baseRevisionId?: string,
