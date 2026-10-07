@@ -647,16 +647,27 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "IPO-000001 · Saved IPO" }),
   ).toBeVisible();
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download IPO PDF" }).click();
+  await page
+    .getByRole("button", { name: "Download IPO & Peachtree PDF" })
+    .click();
   const ipoDownload = await downloadPromise;
-  expect(ipoDownload.suggestedFilename()).toBe("IPO-000001-IPO.pdf");
-  const peachPromise = page.waitForEvent("download");
-  await page.getByRole("link", { name: "Download Peachtree Division" }).click();
-  const peachDownload = await peachPromise;
-  expect(peachDownload.suggestedFilename()).toBe(
-    "IPO-000001-Peachtree-Division.pdf",
+  expect(ipoDownload.suggestedFilename()).toBe(
+    "IPO-000001-IPO-and-Peachtree.pdf",
   );
-  await peachDownload.saveAs("test-results/peachtree-browser.pdf");
+  const ipoFile = await ipoDownload.path();
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const packDocument = await getDocument({
+    data: new Uint8Array(await readFile(ipoFile!)),
+    useSystemFonts: true,
+  }).promise;
+  expect(packDocument.numPages).toBeGreaterThanOrEqual(2);
+  const lastPage = await packDocument.getPage(packDocument.numPages);
+  const packText = (await lastPage.getTextContent()).items
+    .map((i: any) => i.str ?? "")
+    .join(" ");
+  expect(packText).toContain("PEACHTREE DIVISION");
+  expect(packText).toContain("IPO-000001");
+  await packDocument.destroy();
   await ipoDownload.saveAs("test-results/ipo-browser.pdf");
   await page
     .getByRole("button", { name: "Send BOQ to Operations", exact: true })
@@ -678,7 +689,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .getByRole("button", { name: "BOQ to Operations", exact: true })
     .click();
   await expect(
-    page.getByRole("cell", { name: "OPS-BOQ-000001", exact: true }),
+    page.getByRole("cell", { name: /^OPS-BOQ-000001/ }),
   ).toBeVisible();
   await page
     .getByRole("tab", { name: "Operations · Received BOQs", exact: true })
@@ -1319,7 +1330,7 @@ test("Inventory and Accounts roles have dedicated queues, original PDFs and isol
     .first()
     .click();
   await expect(
-    page.getByRole("link", { name: "Download Peachtree division" }),
+    page.getByRole("link", { name: "Download IPO & Peachtree PDF" }),
   ).toBeVisible();
   await page.getByLabel("Next stage").selectOption("Awaiting documents");
   await page

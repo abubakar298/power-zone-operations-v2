@@ -1,3 +1,4 @@
+import { quotationTypeLabel } from "../../server/orders/sale-type.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
 type Department = "Inventory" | "Accounts";
@@ -6,6 +7,7 @@ type RecordRow = {
   number: string;
   snapshot: any;
   division?: any;
+  quotationType?: any;
   created_at: string;
   stage_since: string;
   stage: string;
@@ -180,7 +182,13 @@ export function Departments({
               .filter((r) => r.stage === bucket)
               .map((r) => (
                 <tr key={r.id}>
-                  <td>{r.number}</td>
+                  <td>
+                    {r.number}
+                    <br />
+                    <small>
+                      {quotationTypeLabel(r.quotationType ?? r.snapshot)}
+                    </small>
+                  </td>
                   <td>
                     {r.snapshot.customer?.name ?? "N/A"}
                     <br />
@@ -210,6 +218,10 @@ export function Departments({
           </h3>
           <p>
             {selected.snapshot.customer?.name} · {selected.snapshot.siteName}
+          </p>
+          <p>
+            <strong>Quotation type:</strong>{" "}
+            {quotationTypeLabel(selected.quotationType ?? selected.snapshot)}
           </p>
           {inventory ? (
             <>
@@ -276,15 +288,7 @@ export function Departments({
                   rel="noreferrer"
                   href={`/api/orders/${selected.id}/ipo.pdf`}
                 >
-                  Download IPO
-                </a>{" "}
-                ·{" "}
-                <a
-                  target="_blank"
-                  rel="noreferrer"
-                  href={`/api/orders/${selected.id}/peachtree.pdf`}
-                >
-                  Download Peachtree division
+                  Download IPO &amp; Peachtree PDF
                 </a>
               </p>
               {selected.division && (

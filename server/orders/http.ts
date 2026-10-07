@@ -51,7 +51,15 @@ export function ordersHttp(
       (s) => s.id === id,
     );
     if (!s) throw new HttpError(404, "IPO submission not found.");
-    res.type("application/pdf").send(buildIpoPdf(s.snapshot));
+    res
+      .type("application/pdf")
+      .send(
+        buildIpoPdf(
+          s.snapshot,
+          undefined,
+          await repo.divisionForSnapshot(s.snapshot),
+        ),
+      );
   });
   r.post("/submissions", async (req, res) => {
     const v = parse(
@@ -124,7 +132,10 @@ export function ordersHttp(
     );
     res
       .type("application/pdf")
-      .set("Content-Disposition", 'attachment; filename="DRAFT-IPO.pdf"')
+      .set(
+        "Content-Disposition",
+        'attachment; filename="DRAFT-IPO-and-Peachtree.pdf"',
+      )
       .send(buildIpoPdf(p.snapshot));
   });
   r.post("/documents", async (req, res) => {
@@ -189,11 +200,16 @@ export function ordersHttp(
       .send(buildPeachtreePdf(row.snapshot, division, row.number));
   });
   r.get("/:id/ipo.pdf", async (req, res) => {
-    const q = await repo.get(parse(z.uuid(), req.params.id));
+    const { row: q, division } = await repo.peachtree(
+      parse(z.uuid(), req.params.id),
+    );
     res
       .type("application/pdf")
-      .set("Content-Disposition", `attachment; filename="${q.number}.pdf"`)
-      .send(buildIpoPdf(q.snapshot, q.number));
+      .set(
+        "Content-Disposition",
+        `attachment; filename="${q.number}-IPO-and-Peachtree.pdf"`,
+      )
+      .send(buildIpoPdf(q.snapshot, q.number, division));
   });
   r.get("/:id", async (req, res) =>
     res.json(await repo.get(parse(z.uuid(), req.params.id))),

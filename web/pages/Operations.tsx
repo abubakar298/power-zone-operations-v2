@@ -1,3 +1,4 @@
+import { quotationTypeLabel } from "../../server/orders/sale-type.js";
 import { useEffect, useState, useRef } from "react";
 import { api, type Session } from "../api.js";
 type DeliveryDetails = {
@@ -272,7 +273,11 @@ export function Operations({
                 <tbody>
                   {portalData?.ipos.map((i: any) => (
                     <tr key={i.id}>
-                      <td>{i.number}</td>
+                      <td>
+                        {i.number}
+                        <br />
+                        <small>{quotationTypeLabel(i.quotationType)}</small>
+                      </td>
                       <td>
                         {i.customer}
                         <br />
@@ -289,7 +294,7 @@ export function Operations({
                           target="_blank"
                           rel="noreferrer"
                         >
-                          View IPO
+                          View IPO &amp; Peachtree PDF
                         </a>
                       </td>
                     </tr>
@@ -432,6 +437,9 @@ export function Operations({
             <section>
               <h3>Requirements to send</h3>
               <p>
+                <strong>Quotation type:</strong> {quotationTypeLabel(source)}
+              </p>
+              <p>
                 {source.customer.name} · {source.siteName} / {source.siteCode} ·{" "}
                 {source.boqNumber}
               </p>
@@ -493,7 +501,13 @@ export function Operations({
             <tbody>
               {(workspace === "received" ? bucketRows : rows).map((r) => (
                 <tr key={r.id}>
-                  <td>{r.number}</td>
+                  <td>
+                    {r.number}
+                    <br />
+                    <small>
+                      {quotationTypeLabel(r.quotationType ?? r.snapshot)}
+                    </small>
+                  </td>
                   <td>
                     {r.snapshot.customer.name}
                     <br />
@@ -530,6 +544,10 @@ export function Operations({
       {selected && (
         <section>
           <h3>{selected.number}</h3>
+          <p>
+            <strong>Quotation type:</strong>{" "}
+            {quotationTypeLabel(selected.quotationType ?? selected.snapshot)}
+          </p>
           <p>
             {selected.snapshot.customer.name} · {selected.snapshot.siteName} ·{" "}
             {selected.snapshot.ipoNumber}

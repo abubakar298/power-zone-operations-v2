@@ -1,3 +1,4 @@
+import { OrdersRepository } from "../orders/repository.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { transaction } from "../db/transaction.js";
@@ -6,6 +7,12 @@ import { fingerprint } from "../boq/repository.js";
 import type { IssuanceInput, DeliveryPlanInput } from "./schema.js";
 export class OperationsRepository {
   constructor(private pool: Pool) {}
+  async withQuotationTypes(rows: any[]) {
+    const types = await new OrdersRepository(this.pool).quotationTypes(
+      rows.map((r) => r.ipo_id),
+    );
+    return rows.map((r) => ({ ...r, quotationType: types.get(r.ipo_id) }));
+  }
   async portal() {
     const rows = (
       await this.pool.query(
@@ -22,7 +29,17 @@ export class OperationsRepository {
         `SELECT d.item_key,d.brand,d.specification,d.unit,SUM(d.quantity)::text AS required_quantity,SUM(CASE WHEN s.id IS NULL THEN d.quantity ELSE 0 END)::text AS awaiting_store_quantity,SUM(CASE WHEN s.id IS NOT NULL THEN d.quantity ELSE 0 END)::text AS sent_to_store_quantity,COUNT(DISTINCT d.issuance_id)::integer AS sites FROM operations_stock_demand d LEFT JOIN store_boq_issuances s ON s.issuance_id=d.issuance_id GROUP BY d.item_key,d.brand,d.specification,d.unit ORDER BY d.item_key,d.brand`,
       )
     ).rows;
-    return { issuances: rows, ipos, demand };
+    const types = await new OrdersRepository(this.pool).quotationTypes(
+      ipos.map((i) => i.id),
+    );
+    return {
+      issuances: rows.map((r) => ({
+        ...r,
+        quotationType: types.get(r.ipo_id),
+      })),
+      ipos: ipos.map((i) => ({ ...i, quotationType: types.get(i.id) })),
+      demand,
+    };
   }
   async sendToStore(
     actor: string,
@@ -92,6 +109,13 @@ export class OperationsRepository {
       const number = `STORE-BOQ-${String((await c.query("SELECT count(*)::integer AS n FROM store_boq_issuances")).rows[0].n + 1).padStart(6, "0")}`;
       const snapshot = {
         ...issuance.snapshot,
+        quotationType:
+          issuance.snapshot.quotationType ??
+          (
+            await new OrdersRepository(this.pool).quotationTypes([
+              issuance.ipo_id,
+            ])
+          ).get(issuance.ipo_id),
         operationsIssuanceNumber: issuance.number,
         deliveryPlanVersion: plan.version,
         ...plan.details,
@@ -122,19 +146,21 @@ export class OperationsRepository {
   }
   async storeIssuance(id: string) {
     const row = (
-      await this.pool.query("SELECT * FROM store_boq_issuances WHERE id=$1", [
-        id,
-      ])
+      await this.pool.query(
+        "SELECT s.*,o.ipo_id FROM store_boq_issuances s JOIN operations_boq_issuances o ON o.id=s.issuance_id WHERE s.id=$1",
+        [id],
+      )
     ).rows[0];
     if (!row) throw new HttpError(404, "Store issuance not found.");
-    return row;
+    return (await this.withQuotationTypes([row]))[0];
   }
   async list() {
-    return (
+    const rows = (
       await this.pool.query(
         "SELECT * FROM operations_boq_issuances ORDER BY created_at DESC LIMIT 200",
       )
     ).rows;
+    return this.withQuotationTypes(rows);
   }
   async get(id: string) {
     const r = (
@@ -144,7 +170,7 @@ export class OperationsRepository {
       )
     ).rows[0];
     if (!r) throw new HttpError(404, "Operations issuance not found.");
-    return r;
+    return (await this.withQuotationTypes([r]))[0];
   }
   async deliveryPlan(issuanceId: string) {
     await this.get(issuanceId);
@@ -264,6 +290,9 @@ export class OperationsRepository {
       version: 1,
       ipoNumber: ipo.number,
       quotationNumber: s.quotationNumber,
+      quotationType: (
+        await new OrdersRepository(this.pool).quotationTypes([ipo.id])
+      ).get(ipo.id),
       boqNumber: b.number,
       boqRevisionId: b.id,
       customer: s.customer,

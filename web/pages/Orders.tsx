@@ -1,3 +1,4 @@
+import { quotationTypeLabel } from "../../server/orders/sale-type.js";
 import { ipoPresentation } from "../../server/orders/presentation.js";
 import { useEffect, useState, useRef } from "react";
 import { api, type Session } from "../api.js";
@@ -57,6 +58,7 @@ export function Orders({
     [submissions, setSubmissions] = useState<any[]>([]),
     [review, setReview] = useState<any>();
   const [customerName, setCustomerName] = useState("");
+  const [selectedType, setSelectedType] = useState<any>();
   const [extraction, setExtraction] = useState("");
   const selection = useRef(0);
   const manager = ["Admin", "Management"].includes(session.user.role);
@@ -116,7 +118,8 @@ export function Orders({
     const defaults = await api<any>(`/orders/quotation-defaults/${id}`);
     if (token !== selection.current) return;
     setCustomerName(defaults.customerName);
-    const { customerName: _name, ...values } = defaults;
+    const { customerName: _name, quotationType, ...values } = defaults;
+    setSelectedType(quotationType);
     setInput((v) => ({ ...v, ...values }));
   }
   const customerFields = [
@@ -172,7 +175,18 @@ export function Orders({
       </label>
     );
   }
-  const snapshot = saved?.snapshot ?? review?.snapshot ?? preview?.snapshot;
+  const rawSnapshot = saved?.snapshot ?? review?.snapshot ?? preview?.snapshot;
+  const snapshot = rawSnapshot
+    ? {
+        ...rawSnapshot,
+        quotationType:
+          saved?.quotationType ??
+          review?.quotationType ??
+          rawSnapshot.quotationType ??
+          rawSnapshot.peachtree ??
+          selectedType,
+      }
+    : undefined;
   const view = snapshot ? ipoPresentation(snapshot) : undefined;
   return (
     <div className="orders-module">
@@ -202,6 +216,12 @@ export function Orders({
             });
           }}
         >
+          {input.quotationId && selectedType && (
+            <p>
+              <strong>Quotation type:</strong>{" "}
+              {quotationTypeLabel(selectedType)}
+            </p>
+          )}
           <fieldset disabled={busy} className="order-fields">
             <label>
               Accepted quotation
@@ -369,6 +389,10 @@ export function Orders({
             {snapshot.input.evidenceType} {snapshot.input.poNumber} ·{" "}
             {snapshot.boqNumber}
           </p>
+          <p>
+            <strong>Quotation type:</strong>{" "}
+            {quotationTypeLabel(saved?.quotationType ?? snapshot)}
+          </p>
           <p>Evidence: {snapshot.input.evidenceNotes}</p>
           <p>
             Final payable:{" "}
@@ -534,23 +558,16 @@ export function Orders({
                   const u = URL.createObjectURL(await r.blob());
                   const a = window.document.createElement("a");
                   a.href = u;
-                  a.download = `${saved?.number ?? "DRAFT"}-IPO.pdf`;
+                  a.download = `${saved?.number ?? "DRAFT"}-IPO-and-Peachtree.pdf`;
                   a.click();
                   setTimeout(() => URL.revokeObjectURL(u), 1000);
                 })
               }
             >
-              {saved ? "Download IPO PDF" : "Download preview PDF"}
+              {saved
+                ? "Download IPO & Peachtree PDF"
+                : "Download IPO & Peachtree preview"}
             </button>
-            {saved && (
-              <a
-                className="dark-button"
-                href={`/api/orders/${saved.id}/peachtree.pdf`}
-                download
-              >
-                Download Peachtree Division
-              </a>
-            )}
             {snapshot.document && (
               <a
                 href={`/api/orders/documents/${snapshot.document.id}`}
@@ -617,6 +634,7 @@ export function Orders({
                 {s.snapshot.quotationNumber} · {s.input.evidenceType} ·{" "}
                 {s.prepared_by}
               </button>
+              <small>{quotationTypeLabel(s.quotationType ?? s.snapshot)}</small>
             </p>
           ))}
         {!submissions.some((s) => !s.ipo_id) && <p>No pending submissions.</p>}
@@ -656,7 +674,11 @@ export function Orders({
                     </td>
                     <td>{o.customer}</td>
                     <td>{o.po_number}</td>
-                    <td>{o.quotation_number}</td>
+                    <td>
+                      {o.quotation_number}
+                      <br />
+                      <small>{quotationTypeLabel(o.quotationType)}</small>
+                    </td>
                     <td>{money(o.total)}</td>
                   </tr>
                 ))}

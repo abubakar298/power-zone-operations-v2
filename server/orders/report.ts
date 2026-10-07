@@ -1,3 +1,5 @@
+import { appendPeachtreePage } from "./peachtree-report.js";
+import { quotationTypeLabel } from "./sale-type.js";
 import { ipoPresentation } from "./presentation.js";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
@@ -16,7 +18,7 @@ const money = (s: string) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-export function buildIpoPdf(s: any, number?: string) {
+export function buildIpoPdf(s: any, number?: string, division = s.peachtree) {
   const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
   pdf.setProperties({
     title: number ?? "Draft IPO",
@@ -32,7 +34,10 @@ export function buildIpoPdf(s: any, number?: string) {
   pdf.setFontSize(8);
   pdf.text("POWER ZONE ENGINEERING & SERVICES (PVT) LIMITED", 14, 42);
   const i = s.input;
-  const view = ipoPresentation(s);
+  const view = ipoPresentation({
+    ...s,
+    quotationType: division ?? s.quotationType,
+  });
   const entries =
     i.entryVersion === 2
       ? [
@@ -135,7 +140,10 @@ export function buildIpoPdf(s: any, number?: string) {
       2: { cellWidth: 27 },
       3: { cellWidth: 64 },
     },
-    body: entries.map((row) => row.map(clean)),
+    body: [
+      ...entries,
+      ["Quotation type", quotationTypeLabel(division ?? s), "", ""],
+    ].map((row) => row.map(clean)),
   });
   autoTable(pdf, {
     startY: (pdf as any).lastAutoTable.finalY + 4,
@@ -208,6 +216,12 @@ export function buildIpoPdf(s: any, number?: string) {
       ...(i.remarks ? [["Remarks", clean(i.remarks)]] : []),
     ],
   });
-  drawReportFooter(pdf, number ?? "DRAFT IPO");
+  if (division) appendPeachtreePage(pdf, s, division, number ?? "DRAFT IPO");
+  drawReportFooter(
+    pdf,
+    number
+      ? `${number} / IPO & Peachtree Division`
+      : "DRAFT IPO & Peachtree Division",
+  );
   return Buffer.from(pdf.output("arraybuffer"));
 }

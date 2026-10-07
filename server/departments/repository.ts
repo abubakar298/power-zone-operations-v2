@@ -40,12 +40,17 @@ export class DepartmentRepository {
       key = inventory ? "store_issuance_id" : "ipo_id";
     const rows = (
       await this.pool.query(
-        `SELECT s.id,s.number,s.snapshot,s.created_at,COALESCE(c.stage,$1) AS stage,COALESCE(c.version,0) AS version,COALESCE(c.created_at,s.created_at) AS stage_since,c.notes FROM ${table} s LEFT JOIN LATERAL(SELECT * FROM department_checkpoints WHERE ${key}=s.id ORDER BY version DESC LIMIT 1)c ON true ORDER BY s.created_at DESC LIMIT 500`,
+        `SELECT s.id,s.number,s.snapshot,s.created_at,${inventory ? "o.ipo_id," : ""}COALESCE(c.stage,$1) AS stage,COALESCE(c.version,0) AS version,COALESCE(c.created_at,s.created_at) AS stage_since,c.notes FROM ${table} s ${inventory ? "JOIN operations_boq_issuances o ON o.id=s.issuance_id" : ""} LEFT JOIN LATERAL(SELECT * FROM department_checkpoints WHERE ${key}=s.id ORDER BY version DESC LIMIT 1)c ON true ORDER BY s.created_at DESC LIMIT 500`,
         [inventory ? "Received BOQs" : "New IPOs"],
       )
     ).rows;
+    const orders = new OrdersRepository(this.pool);
+    const types = await orders.quotationTypes(
+      rows.map((r) => (inventory ? r.ipo_id : r.id)),
+    );
+    for (const row of rows)
+      row.quotationType = types.get(inventory ? row.ipo_id : row.id);
     if (!inventory) {
-      const orders = new OrdersRepository(this.pool);
       for (const row of rows)
         row.division = (await orders.peachtree(row.id)).division;
     }

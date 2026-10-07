@@ -12,16 +12,30 @@ import type { OrderInput } from "./schema.js";
 
 export class OrdersRepository {
   constructor(private pool: Pool) {}
+  async quotationTypes(ipoIds: string[]) {
+    if (!ipoIds.length) return new Map<string, any>();
+    const { rows } = await this.pool.query(
+      `SELECT i.id,p.snapshot->'input'->>'presentation' AS presentation,p.snapshot->'input'->>'taxMode' AS "taxMode" FROM internal_purchase_orders i JOIN quotation_versions q ON q.id::text=i.snapshot->>'quotationId' JOIN commercial_pricing_versions p ON p.id=q.pricing_id WHERE i.id=ANY($1::uuid[])`,
+      [ipoIds],
+    );
+    return new Map(
+      rows.map((r) => [
+        r.id,
+        { presentation: r.presentation, taxMode: r.taxMode },
+      ]),
+    );
+  }
   async defaults(quotationId: string) {
     const row = (
       await this.pool.query(
-        `SELECT c.*, q.snapshot->'input'->>'proposedBy' AS proposed_by FROM quotation_versions q JOIN boq_revisions b ON b.id=q.boq_revision_id JOIN boqs o ON o.id=b.boq_id JOIN customers c ON c.id=o.customer_id WHERE q.id=$1`,
+        `SELECT c.*, q.snapshot->'input'->>'proposedBy' AS proposed_by,p.snapshot->'input'->>'presentation' AS presentation,p.snapshot->'input'->>'taxMode' AS tax_mode FROM quotation_versions q JOIN commercial_pricing_versions p ON p.id=q.pricing_id JOIN boq_revisions b ON b.id=q.boq_revision_id JOIN boqs o ON o.id=b.boq_id JOIN customers c ON c.id=o.customer_id WHERE q.id=$1`,
         [quotationId],
       )
     ).rows[0];
     if (!row) throw new HttpError(404, "Quotation customer not found.");
     return {
       customerName: row.name,
+      quotationType: { presentation: row.presentation, taxMode: row.tax_mode },
       contactPerson: row.contact_person || row.name,
       phone: row.phone,
       email: row.email,
@@ -207,7 +221,7 @@ export class OrdersRepository {
   async submissions(actor: string) {
     return (
       await this.pool.query(
-        "SELECT s.*,u.display_name AS prepared_by,i.id AS ipo_id,i.number AS ipo_number FROM ipo_submissions s JOIN users u ON u.id=s.created_by LEFT JOIN internal_purchase_orders i ON i.submission_id=s.id WHERE s.created_by=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role IN('Admin','Management')) ORDER BY s.created_at DESC LIMIT 200",
+        "SELECT s.*,jsonb_build_object('presentation',p.snapshot->'input'->>'presentation','taxMode',p.snapshot->'input'->>'taxMode') AS \"quotationType\",u.display_name AS prepared_by,i.id AS ipo_id,i.number AS ipo_number FROM ipo_submissions s LEFT JOIN quotation_versions q ON q.id::text=s.input->>'quotationId' LEFT JOIN commercial_pricing_versions p ON p.id=q.pricing_id JOIN users u ON u.id=s.created_by LEFT JOIN internal_purchase_orders i ON i.submission_id=s.id WHERE s.created_by=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role IN('Admin','Management')) ORDER BY s.created_at DESC LIMIT 200",
         [actor],
       )
     ).rows;
@@ -372,11 +386,13 @@ export class OrdersRepository {
     });
   }
   async list() {
-    return (
+    const rows = (
       await this.pool.query(
         "SELECT id,number,created_at,snapshot->>'quotationNumber' AS quotation_number,snapshot->'input'->>'poNumber' AS po_number,snapshot->'customer'->>'name' AS customer,snapshot->'allocation'->>'total' AS total FROM internal_purchase_orders ORDER BY created_at DESC LIMIT 200",
       )
     ).rows;
+    const types = await this.quotationTypes(rows.map((r) => r.id));
+    return rows.map((r) => ({ ...r, quotationType: types.get(r.id) }));
   }
   async get(id: string) {
     const row = (
@@ -386,40 +402,47 @@ export class OrdersRepository {
       )
     ).rows[0];
     if (!row) throw new HttpError(404, "IPO not found.");
-    return row;
+    return {
+      ...row,
+      quotationType: (await this.quotationTypes([row.id])).get(row.id),
+    };
   }
   async peachtree(id: string) {
     const row = await this.get(id);
-    if (row.snapshot.peachtree)
-      return { row, division: row.snapshot.peachtree };
+    return { row, division: await this.divisionForSnapshot(row.snapshot) };
+  }
+  async divisionForSnapshot(snapshot: any) {
+    if (snapshot.peachtree) return snapshot.peachtree;
     // Earlier IPOs retain their snapshots. Version-1 report derivation uses only
     // their immutable costing/pricing links, never today's master data.
     const b = (
       await this.pool.query("SELECT snapshot FROM boq_revisions WHERE id=$1", [
-        row.snapshot.boqRevisionId,
+        snapshot.boqRevisionId,
       ])
     ).rows[0];
     const p = (
       await this.pool.query(
         "SELECT p.snapshot FROM commercial_pricing_versions p JOIN quotation_versions q ON q.pricing_id=p.id WHERE q.id=$1",
-        [row.snapshot.quotationId],
+        [snapshot.quotationId],
       )
     ).rows[0];
     const extra = (
       await this.pool.query(
         "SELECT input FROM quotation_additional_inputs WHERE quotation_id=$1",
-        [row.snapshot.quotationId],
+        [snapshot.quotationId],
       )
     ).rows[0]?.input;
-    return {
-      row,
-      division: peachtreeDivision(
-        row.snapshot.allocation,
-        b.snapshot,
-        p.snapshot,
-        extra?.cost ?? "0",
-      ),
-    };
+    if (!b || !p)
+      throw new HttpError(
+        422,
+        "The original costing or pricing record is missing.",
+      );
+    return peachtreeDivision(
+      snapshot.allocation,
+      b.snapshot,
+      p.snapshot,
+      extra?.cost ?? "0",
+    );
   }
   async upload(actor: string, filename: string, mime: string, bytes: Buffer) {
     const id = randomUUID(),

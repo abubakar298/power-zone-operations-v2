@@ -1,9 +1,14 @@
 import { Decimal } from "decimal.js";
 export function ipoPresentation(snapshot: any) {
   const presentation =
-    snapshot.peachtree?.presentation ?? snapshot.presentation ?? "Full Breakup";
+    snapshot.quotationType?.presentation ??
+    snapshot.peachtree?.presentation ??
+    snapshot.presentation ??
+    "Full Breakup";
   const included =
-    (snapshot.peachtree?.taxMode ?? snapshot.taxMode) === "Tax Included";
+    (snapshot.quotationType?.taxMode ??
+      snapshot.peachtree?.taxMode ??
+      snapshot.taxMode) === "Tax Included";
   const source = snapshot.allocation.lines.filter(
     (l: any) => Number(l.qty) > 0 || Number(l.total) > 0,
   );

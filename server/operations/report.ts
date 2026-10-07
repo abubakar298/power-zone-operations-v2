@@ -1,3 +1,4 @@
+import { quotationTypeLabel } from "../orders/sale-type.js";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import {
@@ -32,6 +33,12 @@ export function buildOperationsPdf(row: any) {
     body: [
       ["Issuance", row.number, "IPO", s.ipoNumber],
       ["Customer", clean(s.customer.name), "Quotation", s.quotationNumber],
+      [
+        "Quotation type",
+        clean(quotationTypeLabel(row.quotationType ?? s)),
+        "",
+        "",
+      ],
       [
         "Site",
         clean(`${s.siteName} / ${s.siteCode}`),
