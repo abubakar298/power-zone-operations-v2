@@ -1973,16 +1973,58 @@ test("quotation page saves and submits, management previews discount and request
       })
     ).ok(),
   ).toBe(true);
+  await page.route("**/discount-review", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        message: "Profit preview temporarily unavailable",
+      }),
+    }),
+  );
   await page.getByRole("button", { name: "Quotations", exact: true }).click();
   await page.getByRole("button", { name: new RegExp(aq.number) }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Profit preview temporarily unavailable",
+  );
   await expect(
     page.getByRole("button", { name: "Approve quotation", exact: true }),
   ).toBeEnabled();
   await page
     .getByLabel("Review comments", { exact: true })
     .fill("Approved after reviewing the saved quotation.");
+  // Unsaved discount changes must never be silently approved even without metrics.
+  const approvalDiscount = page.getByLabel("Quotation discount (PKR)", {
+    exact: true,
+  });
+  const savedDiscount = aq.snapshot.input.discount ?? "0";
+  await approvalDiscount.fill(String(Number(savedDiscount) + 1));
   await page
     .getByRole("button", { name: "Approve quotation", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("Request revision");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await approvalDiscount.fill(String(savedDiscount));
+  await page
+    .getByRole("button", { name: "Approve quotation", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  expect(
+    (
+      await (
+        await page.request.get(`/api/commercial/quotations/${aq.id}`)
+      ).json()
+    ).workflow_status,
+  ).toBe("Submitted");
+  await page
+    .getByRole("button", { name: "Approve quotation", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirm and send", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Quotation workflow · Approved" }),

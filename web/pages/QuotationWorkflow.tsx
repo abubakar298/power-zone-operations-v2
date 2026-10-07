@@ -76,7 +76,11 @@ export function QuotationWorkflow({
       (discount.trim() || "0") !== String(q.snapshot.input.discount ?? "0") &&
       metrics &&
       Number(discount || 0) !== Number(q.snapshot.input.discount ?? 0);
-    if (kind === "Approved" && proposedChange) {
+    if (
+      kind === "Approved" &&
+      (!validDiscount ||
+        Number(discount.trim() || 0) !== Number(q.snapshot.input.discount ?? 0))
+    ) {
       setError(
         "This discount is a preview. Request revision with the proposed discount before approving the saved quotation.",
       );
@@ -84,7 +88,7 @@ export function QuotationWorkflow({
     }
     if (
       !(await (
-        kind === "Changes requested"
+        ["Changes requested", "Approved"].includes(kind)
           ? confirmRevision
           : async (a: string, d: string) => confirmTransition(a, d)
       )(
@@ -231,7 +235,7 @@ export function QuotationWorkflow({
                 />
               </label>
               <button
-                disabled={busy || calculating || !metrics}
+                disabled={busy}
                 onClick={() => void transition("Approved")}
               >
                 Approve quotation
