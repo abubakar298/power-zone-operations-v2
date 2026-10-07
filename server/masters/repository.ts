@@ -1,3 +1,4 @@
+import { importCustomers, customerImportSchema } from "./customer-import.js";
 import type { Pool, PoolClient } from "pg";
 import { transaction } from "../db/transaction.js";
 import { HttpError } from "../http/errors.js";
@@ -8,6 +9,26 @@ export class MastersRepository {
     private pool: Pool | PoolClient,
     private serial = false,
   ) {}
+  async customerImport(
+    actor: string,
+    input: unknown,
+    expected?: string,
+    confirmedBackup?: boolean,
+  ) {
+    const parsed = customerImportSchema.safeParse(input);
+    if (!parsed.success)
+      throw new HttpError(
+        400,
+        "Check the six customer fields; phone numbers must be text.",
+      );
+    return importCustomers(
+      this.pool as Pool,
+      actor,
+      parsed.data,
+      expected,
+      confirmedBackup,
+    );
+  }
   async list() {
     const queries = [
       "SELECT * FROM customers ORDER BY id",
@@ -138,7 +159,7 @@ export class MastersRepository {
             ).rows[0].id,
           );
           await c.query(
-            "INSERT INTO customers(id,name,short_code,contact_person,phone,email,address,status,notes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+            "INSERT INTO customers(id,name,short_code,contact_person,phone,email,address,status,notes,city,province) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
             [
               nextId,
               values.name,
@@ -149,12 +170,16 @@ export class MastersRepository {
               values.address,
               values.status,
               values.notes,
+              values.city ?? "",
+              values.province ?? "",
             ],
           );
         } else {
           const columns =
             kind === "customers"
               ? [
+                  ...(values.city !== undefined ? ["city"] : []),
+                  ...(values.province !== undefined ? ["province"] : []),
                   "name",
                   "short_code",
                   "contact_person",

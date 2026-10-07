@@ -1,3 +1,4 @@
+import { CustomerImport } from "../components/CustomerImport.js";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, type Session } from "../api.js";
 import { canWriteMaster } from "../../server/masters/permissions.js";
@@ -22,6 +23,9 @@ const columns: Record<Kind, [string, string][]> = {
     ["name", "Customer"],
     ["short_code", "Short code"],
     ["contact_person", "Contact"],
+    ["phone", "Phone"],
+    ["city", "City"],
+    ["province", "Province"],
     ["status", "Status"],
   ],
   sites: [
@@ -67,6 +71,8 @@ const fields: Record<Kind, string[]> = {
     "phone",
     "email",
     "address",
+    "city",
+    "province",
     "status",
     "notes",
   ],
@@ -83,6 +89,8 @@ const labels: Record<string, string> = {
   phone: "Phone",
   email: "Email",
   address: "Address",
+  city: "City",
+  province: "Province",
   status: "Status",
   notes: "Notes",
   code: "Site code",
@@ -249,6 +257,9 @@ export function Masters({
             </button>
           )}
       </div>
+      {kind === "customers" && session.user.role === "Admin" && (
+        <CustomerImport session={session} onImported={load} />
+      )}
       <label className="search-label" htmlFor="master-search">
         Search {titles[kind].toLowerCase()}
       </label>

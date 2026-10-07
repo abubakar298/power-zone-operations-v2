@@ -2398,4 +2398,54 @@ test("Admin downloads an encrypted recovery backup and clears passphrases after 
   expect(bounds.left).toBeGreaterThanOrEqual(0);
   expect(bounds.right).toBeLessThanOrEqual(bounds.width + 1);
   await panel.screenshot({ path: "test-results/admin-backup-panel.png" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("button", { name: "Master data", exact: true }).click();
+  await page.getByText("Customer database import", { exact: true }).click();
+  const customerRows = [
+    {
+      name: "Browser Import Unique XYZ",
+      contact_person: "Contact",
+      phone: "00123456789",
+      address: "Address only",
+      city: "Lahore",
+      province: "Punjab",
+    },
+  ];
+  await page
+    .getByLabel("Customer import file", { exact: true })
+    .setInputFiles({
+      name: "customers.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(customerRows)),
+    });
+  await expect(page.getByRole("status")).toContainText(
+    "Import preview: 1 added",
+  );
+  await expect(
+    page.getByRole("button", {
+      name: "Import confirmed customers",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await page
+    .getByLabel("I downloaded and saved a fresh full encrypted backup.")
+    .check();
+  await page
+    .getByRole("button", { name: "Import confirmed customers", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirm and send", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Import completed: 1 added",
+  );
+  await page
+    .getByLabel("Search customers", { exact: true })
+    .fill("Browser Import Unique XYZ");
+  await expect(
+    page.getByRole("row", {
+      name: /Browser Import Unique XYZ.*00123456789.*Lahore.*Punjab/,
+    }),
+  ).toBeVisible();
 });

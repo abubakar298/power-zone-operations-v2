@@ -24,6 +24,8 @@ const schemas = {
       phone: text.max(100),
       email: z.union([z.literal(""), z.email().max(254)]),
       address: text,
+      city: text.max(200).optional(),
+      province: text.max(200).optional(),
       status,
       notes: text,
     })
@@ -65,6 +67,40 @@ export function mastersHttp(
   const router = Router();
   router.use(requireSession);
   router.get("/", async (_req, res) => res.json(await repo.list()));
+  router.post("/customer-import/preview", async (req, res) => {
+    if (
+      !equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken)
+    )
+      throw new HttpError(403, "Refresh and try again.");
+    res.json(await repo.customerImport(req.authSession!.user.id, req.body));
+  });
+  router.post("/customer-import/commit", async (req, res) => {
+    if (
+      !equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken)
+    )
+      throw new HttpError(403, "Refresh and try again.");
+    const v = z
+      .object({
+        input: z.unknown(),
+        fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+        backupSaved: z.literal(true),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!v.success)
+      throw new HttpError(
+        400,
+        "Confirm the downloaded backup and preview first.",
+      );
+    res.json(
+      await repo.customerImport(
+        req.authSession!.user.id,
+        v.data.input,
+        v.data.fingerprint,
+        v.data.backupSaved,
+      ),
+    );
+  });
   router.get("/:kind/history", async (req, res) => {
     const kind = z.enum(["rates", "rules", "items"]).safeParse(req.params.kind),
       key = z.string().min(1).max(200).safeParse(req.query.key);
