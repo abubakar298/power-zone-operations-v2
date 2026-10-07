@@ -139,7 +139,10 @@ before(async () => {
     panelWattage: "645",
     structure: "Elevated",
     dcMetres: "360",
-    acInverter16: "15", acInverter25: "0", acPanel16: "0", acPanel25: "20",
+    acInverter16: "15",
+    acInverter25: "0",
+    acPanel16: "0",
+    acPanel25: "20",
     earth25: "20",
     earth6: "90",
     earth10: "90",
@@ -1226,7 +1229,9 @@ test("coordination dashboard derives live tasks, clears completed handoffs and e
   );
   assert.ok(team.activity.handoffs >= 1);
   const issued = (
-    await db.pool.query("SELECT ipo_id FROM operations_boq_issuances")
+    await db.pool.query(
+      "SELECT o.ipo_id FROM operations_boq_issuances o JOIN ipo_accounts_handoffs h ON h.ipo_id=o.ipo_id",
+    )
   ).rows.map((r: any) => r.ipo_id);
   assert.ok(
     team.tasks
@@ -1271,14 +1276,23 @@ test("coordination dashboard derives live tasks, clears completed handoffs and e
   );
 });
 
-test("completing a pending Operations handoff clears the task and increments recorded activity", async () => {
+test("handoff stays pending until both Operations and Accounts receive the approved IPO", async () => {
   const before = (
     await request(app)
       .get("/api/coordinator?scope=team")
       .set("Cookie", cookie)
       .expect(200)
   ).body;
-  const task = before.tasks.find((t: any) => t.kind === "Operations issuance");
+  const unissued = (
+    await db.pool.query(
+      "SELECT id FROM internal_purchase_orders i WHERE NOT EXISTS(SELECT 1 FROM operations_boq_issuances o WHERE o.ipo_id=i.id) AND NOT EXISTS(SELECT 1 FROM ipo_accounts_handoffs h WHERE h.ipo_id=i.id)",
+    )
+  ).rows;
+  const task = before.tasks.find(
+    (t: any) =>
+      t.kind === "Operations issuance" &&
+      unissued.some((i: any) => i.id === t.ipo_id),
+  );
   assert.ok(task, "Isolated IPO fixture must contain a pending handoff");
   const r = await request(app)
     .post("/api/operations")
@@ -1297,9 +1311,26 @@ test("completing a pending Operations handoff clears the task and increments rec
       .set("Cookie", cookie)
       .expect(200)
   ).body;
-  assert.equal(after.total, before.total - 1);
+  assert.equal(after.total, before.total);
   assert.equal(after.activity.handoffs, before.activity.handoffs + 1);
-  assert.ok(!after.tasks.some((t: any) => t.ipo_id === task.ipo_id));
+  const pendingHandoff = after.tasks.find((t: any) => t.ipo_id === task.ipo_id);
+  assert.equal(pendingHandoff.stage, "Operations & Accounts Handoff");
+  assert.equal(pendingHandoff.target, "orders");
+  await request(app)
+    .post(`/api/orders/${task.ipo_id}/accounts-handoff`)
+    .set("Origin", origin)
+    .set("Cookie", cookie)
+    .set("X-CSRF-Token", csrf)
+    .send({})
+    .expect(201);
+  const finished = (
+    await request(app)
+      .get("/api/coordinator?scope=team")
+      .set("Cookie", cookie)
+      .expect(200)
+  ).body;
+  assert.equal(finished.total, before.total - 1);
+  assert.ok(!finished.tasks.some((t: any) => t.ipo_id === task.ipo_id));
   assert.equal(r.body.snapshot.ipoNumber, task.reference);
   const outsider = randomUUID();
   await db.pool.query(

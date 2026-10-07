@@ -13,7 +13,7 @@ const stages = [
   "Customer confirmation",
   "IPO preparation",
   "IPO approval",
-  "Operations handoff",
+  "Operations & Accounts Handoff",
 ];
 export function Coordinator({
   session,

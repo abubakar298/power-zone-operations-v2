@@ -20,7 +20,7 @@ export class CoordinatorRepository {
  UNION ALL
  SELECT s.id,'IPO evidence',s.snapshot->>'quotationNumber',s.snapshot->>'siteName','Awaiting evidence approval',s.created_at,'orders',NULL,NULL,NULL,NULL FROM ipo_submissions s WHERE ($2 OR s.created_by=$1) AND NOT EXISTS(SELECT 1 FROM internal_purchase_orders i WHERE i.submission_id=s.id)
  UNION ALL
- SELECT i.id,'Operations issuance',i.number,i.snapshot->>'siteName','Send approved BOQ to Operations',i.created_at,'operations',NULL,NULL,i.id,NULL FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE ($2 OR i.created_by=$1 OR s.created_by=$1) AND NOT EXISTS(SELECT 1 FROM operations_boq_issuances o WHERE o.ipo_id=i.id)
+ SELECT i.id,'Operations issuance',i.number,i.snapshot->>'siteName','Complete Accounts and Operations handoff',i.created_at,'orders',NULL,NULL,i.id,NULL FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE ($2 OR i.created_by=$1 OR s.created_by=$1) AND (NOT EXISTS(SELECT 1 FROM operations_boq_issuances o WHERE o.ipo_id=i.id) OR NOT EXISTS(SELECT 1 FROM ipo_accounts_handoffs h WHERE h.ipo_id=i.id))
  )`;
     const result = (
       await this.pool.query(
@@ -52,7 +52,7 @@ export class CoordinatorRepository {
             : t.kind === "IPO evidence"
               ? "IPO approval"
               : t.kind === "Operations issuance"
-                ? "Operations handoff"
+                ? "Operations & Accounts Handoff"
                 : t.status === "Quotation changes requested"
                   ? "Revision required"
                   : t.status === "Awaiting quotation approval"
@@ -65,7 +65,7 @@ export class CoordinatorRepository {
     const targets: Record<string, number> = {
       "Quotation approval": 20,
       "IPO preparation": 15,
-      "Operations handoff": 30,
+      "Operations & Accounts Handoff": 30,
     };
     const timings = (
       await this.pool.query(

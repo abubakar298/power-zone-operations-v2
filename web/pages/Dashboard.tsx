@@ -488,6 +488,12 @@ export function Dashboard({
           )}
           {view === "orders" && (
             <Orders
+              key={bucketTask?.ipo_id ?? bucketTask?.id ?? "orders"}
+              initialIpoId={
+                bucketTask?.kind === "Operations issuance"
+                  ? bucketTask.ipo_id
+                  : undefined
+              }
               session={session}
               initialSubmissionId={
                 bucketTask?.kind === "IPO evidence" ? bucketTask.id : undefined

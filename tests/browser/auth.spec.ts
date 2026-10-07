@@ -1623,11 +1623,20 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
     expect(approved.ok()).toBe(true);
     const ipo = await approved.json();
     await page.reload();
-    await page.getByRole("button", { name: /Operations handoff/ }).click();
+    await page
+      .getByRole("button", { name: /Operations & Accounts Handoff/ })
+      .click();
     await page
       .getByRole("row", { name: new RegExp(ipo.number) })
       .getByRole("button", { name: "Open workflow" })
       .click();
+    await expect(
+      page.getByRole("button", { name: "Send IPO to Accounts", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Send IPO to Accounts", exact: true })
+      .click();
+    await expect(page.getByRole("status")).toContainText("Sent to Accounts");
     await page
       .getByLabel("Instructions to Operations")
       .fill("SAMPLE ONLY: approved requirements for workflow verification.");

@@ -141,6 +141,15 @@ export function Operations({
     setOrders(o.orders);
     setRows(r.issuances);
     setPortalData(r);
+    if (initialIpoId) {
+      const existing = r.issuances.find(
+        (row: any) => row.ipo_id === initialIpoId,
+      );
+      if (existing) {
+        setSelected(existing);
+        setIpoId("");
+      }
+    }
     setSelected((v: any) =>
       v ? (r.issuances.find((row: any) => row.id === v.id) ?? v) : v,
     );
@@ -415,93 +424,100 @@ export function Operations({
           {error}
         </p>
       )}
-      {workspace === "handoff" && (
-        <>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void send();
-            }}
-            className="operations-form"
-          >
-            <label>
-              Saved IPO
-              <select
-                required
-                value={ipoId}
-                onChange={(e) => setIpoId(e.target.value)}
-              >
-                <option value="">
-                  Select an IPO awaiting Operations issuance
-                </option>
-                {pending.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.number} · {o.customer} · {o.quotation_number}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Instructions to Operations
-              <textarea
-                value={notes}
-                maxLength={2000}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </label>
-            <button
-              className="dark-button"
-              disabled={busy || !ipoId || !source || sourceLoading}
-            >
-              {busy ? "Sending…" : "Send BOQ to Operations"}
-            </button>
-          </form>
-          {source && (
-            <section>
-              <h3>Requirements to send</h3>
-              <p>
-                <strong>Quotation type:</strong> {quotationTypeLabel(source)}
-              </p>
-              <p>
-                {source.customer.name} · {source.siteName} / {source.siteCode} ·{" "}
-                {source.boqNumber}
-              </p>
-              <p>
-                {source.items.length} required BOQ lines from the approved
-                revision.
-              </p>
-              <div className="order-table-scroll">
-                <table className="order-table">
-                  <thead>
-                    <tr>
-                      <th>Item</th>
-                      <th>Specification</th>
-                      <th>Brand</th>
-                      <th>Qty</th>
-                      <th>Unit</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {source.items.map((l: any, i: number) => (
-                      <tr key={i}>
-                        <td>{l.description}</td>
-                        <td>{l.specification || "Need to enter"}</td>
-                        <td>
-                          {l.brand === "Any of the Above"
-                            ? l.brandAlternatives?.join(" / ")
-                            : l.brand}
-                        </td>
-                        <td>{l.qty}</td>
-                        <td>{l.unit}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-        </>
+      {initialIpoId && rows.some((r) => r.ipo_id === initialIpoId) && (
+        <p role="status">
+          BOQ already sent to Operations. The original issuance is retained
+          below.
+        </p>
       )}
+      {workspace === "handoff" &&
+        !(initialIpoId && rows.some((r) => r.ipo_id === initialIpoId)) && (
+          <>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void send();
+              }}
+              className="operations-form"
+            >
+              <label>
+                Saved IPO
+                <select
+                  required
+                  value={ipoId}
+                  onChange={(e) => setIpoId(e.target.value)}
+                >
+                  <option value="">
+                    Select an IPO awaiting Operations issuance
+                  </option>
+                  {pending.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.number} · {o.customer} · {o.quotation_number}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Instructions to Operations
+                <textarea
+                  value={notes}
+                  maxLength={2000}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </label>
+              <button
+                className="dark-button"
+                disabled={busy || !ipoId || !source || sourceLoading}
+              >
+                {busy ? "Sending…" : "Send BOQ to Operations"}
+              </button>
+            </form>
+            {source && (
+              <section>
+                <h3>Requirements to send</h3>
+                <p>
+                  <strong>Quotation type:</strong> {quotationTypeLabel(source)}
+                </p>
+                <p>
+                  {source.customer.name} · {source.siteName} / {source.siteCode}{" "}
+                  · {source.boqNumber}
+                </p>
+                <p>
+                  {source.items.length} required BOQ lines from the approved
+                  revision.
+                </p>
+                <div className="order-table-scroll">
+                  <table className="order-table">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Specification</th>
+                        <th>Brand</th>
+                        <th>Qty</th>
+                        <th>Unit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {source.items.map((l: any, i: number) => (
+                        <tr key={i}>
+                          <td>{l.description}</td>
+                          <td>{l.specification || "Need to enter"}</td>
+                          <td>
+                            {l.brand === "Any of the Above"
+                              ? l.brandAlternatives?.join(" / ")
+                              : l.brand}
+                          </td>
+                          <td>{l.qty}</td>
+                          <td>{l.unit}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+          </>
+        )}
       <h3>
         {workspace === "handoff"
           ? "Issued requirements"
