@@ -1,3 +1,4 @@
+import { displayUnit } from "../../server/boq/unit.js";
 import { confirmTransition } from "../confirm.js";
 import { quotationTypeLabel } from "../../server/orders/sale-type.js";
 import { useEffect, useState, useRef } from "react";
@@ -365,7 +366,7 @@ export function Operations({
                           {d.specification}
                         </td>
                         <td>{d.brand}</td>
-                        <td>{d.unit}</td>
+                        <td>{displayUnit(d.unit,d.required_quantity)}</td>
                         <td>{d.required_quantity}</td>
                         <td>{d.awaiting_store_quantity}</td>
                         <td>{d.sent_to_store_quantity}</td>
@@ -509,7 +510,7 @@ export function Operations({
                               : l.brand}
                           </td>
                           <td>{l.qty}</td>
-                          <td>{l.unit}</td>
+                          <td>{displayUnit(l.unit,l.qty)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -725,7 +726,7 @@ export function Operations({
                         : l.brand}
                     </td>
                     <td>{l.qty}</td>
-                    <td>{l.unit}</td>
+                    <td>{displayUnit(l.unit,l.qty)}</td>
                   </tr>
                 ))}
               </tbody>

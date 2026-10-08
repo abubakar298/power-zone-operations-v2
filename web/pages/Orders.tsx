@@ -1,3 +1,4 @@
+import { displayUnit } from "../../server/boq/unit.js";
 import { DocumentPreview } from "../components/DocumentPreview.js";
 import { money } from "../numbers.js";
 import { ExternalApproval } from "../components/ExternalApproval.js";
@@ -527,7 +528,7 @@ export function Orders({
                   <tr key={i}>
                     <td style={{ whiteSpace: "pre-line" }}>{l.description}</td>
                     <td>{l.qty}</td>
-                    <td>{l.unit}</td>
+                    <td>{displayUnit(l.unit,l.qty)}</td>
                     <td>{money(l.rate)}</td>
                     <td>{money(l.amount)}</td>
                     {!view!.included && (

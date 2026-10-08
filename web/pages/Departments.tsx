@@ -1,3 +1,4 @@
+import { displayUnit } from "../../server/boq/unit.js";
 import { money } from "../numbers.js";
 import { confirmTransition } from "../confirm.js";
 import { quotationTypeLabel } from "../../server/orders/sale-type.js";
@@ -274,7 +275,7 @@ export function Departments({
                         </td>
                         <td>{i.brand}</td>
                         <td>
-                          {i.qty} {i.unit}
+                          {i.qty} {displayUnit(i.unit,i.qty)}
                         </td>
                       </tr>
                     ))}
