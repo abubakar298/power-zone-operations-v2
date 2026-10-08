@@ -126,7 +126,7 @@ test("string boundaries, all configurations, battery limits, fractional quantiti
       calculate({ ...survey, panelQty: qty }, masters).engineering.strings,
       expected,
     );
-  for (const i of masters.inverters) {
+  for (const i of masters.inverters.filter((i: any) => i.configuration !== "6 kW SP")) {
     const dual = i.quantity === 2;
     const result = calculate(
       { ...survey, inverter: i.configuration, batteryKwh: dual ? 120 : 60 },
@@ -609,4 +609,62 @@ test("HV BESS IDs derive inverter quantities and BMS per inverter", async () => 
     ["25mm² 4C AC Cable", "20"],
   ])
     assert.equal(dual.lines.find((l) => l.key === key)?.qty, qty);
+});
+
+test("SP engine prices all twelve LV configurations without HV equipment or four-core AC cable", () => {
+  const keys = ["HYB-SP-006", "BAT-LV-05 KW WO BMS", "CH-BMS-LV", "10mm² 1C AC Cable",
+    "500V 2P DC Breaker", "63A 2P MCB", "32A 2P MCB", "32A 2P Breaker Changeover", "63A 1P AC VPD", "SP AC Conduit Accessories and Box", "SP DC Enclosures", "DC SPD", "DC Fuse with Holder"];
+  const isolated = structuredClone(masters);
+  isolated.rates = isolated.rates.filter((r: any) => !keys.includes(r.key));
+  for (const key of keys) isolated.rates.push({ key, unit: "Each", rate: "100", version: 1, status: "Active", notes: "isolated fixture" });
+  for (let capacity = 5; capacity <= 60; capacity += 5) {
+    const input = surveySchema.parse({ ...survey, panelQty: 20, bessId: `6-${capacity}`, inverter: "6 kW SP",
+      batteryKwh: capacity, spLoadPanelRunMetres: "12.5" });
+    const result = calculate(input, isolated);
+    const line = (key: string) => result.lines.find(l => l.key === key);
+    assert.equal(line("BAT-LV-05 KW WO BMS")!.qty, String(capacity / 5));
+    assert.equal(line("CH-BMS-LV")!.qty, String(Math.ceil(capacity / 20)));
+    assert.equal(line("10mm² 1C AC Cable")!.qty, "45");
+    assert.equal(line("500V 2P DC Breaker")!.qty, "4");
+    for (const forbidden of ["BAT-HV-05 KW WO BMS", "CH-BMS-HV", "AC SPD", "16mm² 4C AC Cable", "25mm² 4C AC Cable", "AC & DC Boxes"])
+      assert.equal(line(forbidden), undefined);
+    assert.equal(result.engineering.releaseReady, false);
+  }
+  assert.throws(() => calculate({ ...survey, bessId: "6-20", inverter: "6 kW SP", batteryKwh: 20, panelQty: 21, spLoadPanelRunMetres: "10" }, isolated), /two MPPT/);
+  assert.throws(() => calculate({ ...survey, bessId: "6-20", inverter: "6 kW SP", batteryKwh: 25 }, isolated), /does not match/);
+  const badMaster = structuredClone(isolated);
+  badMaster.inverters.find((i: any) => i.configuration === "6 kW SP").quantity = 2;
+  assert.throws(() => calculate({ ...survey, bessId: "6-20", inverter: "6 kW SP", batteryKwh: 20 }, badMaster), /master configuration is inconsistent/);
+});
+
+test("SP drafts persist and preview but cannot bypass the electrical approval gate", async () => {
+  const keys = ["HYB-SP-006", "BAT-LV-05 KW WO BMS", "CH-BMS-LV", "10mm² 1C AC Cable",
+    "500V 2P DC Breaker", "63A 2P MCB", "32A 2P MCB", "32A 2P Breaker Changeover", "63A 1P AC VPD", "SP AC Conduit Accessories and Box", "SP DC Enclosures", "DC SPD", "DC Fuse with Holder"];
+  for (const key of keys) {
+    await db.pool.query("INSERT INTO item_master(key,unit,display_name) VALUES($1,'Each',$1) ON CONFLICT(key) DO NOTHING", [key]);
+    await db.pool.query("INSERT INTO rate_versions(key,version,rate,status,notes) SELECT $1,COALESCE(max(version),0)+1,100,'Active','isolated test fixture' FROM rate_versions WHERE key=$1", [key]);
+  }
+  await db.pool.query("INSERT INTO inverter_configurations(configuration,total_kw,sku,quantity) VALUES('6 kW SP',6,'HYB-SP-006',1) ON CONFLICT(configuration) DO NOTHING");
+  const inputs = { ...survey, bessId: "6-20", inverter: "6 kW SP", batteryKwh: 20, panelQty: 20, spLoadPanelRunMetres: "10" };
+  const draft = (await post("/drafts", { version: 0, inputs }).expect(200)).body;
+  const preview = (await post("/preview", inputs).expect(200)).body;
+  assert.equal(preview.snapshot.engineering.releaseReady, false);
+  const blocked = await post("/reviews", { draftId: draft.id, version: 1, fingerprint: preview.fingerprint }).expect(422);
+  assert.match(blocked.body.message, /electrical verification/i);
+  const row = (await db.pool.query("SELECT inputs FROM survey_drafts WHERE id=$1", [draft.id])).rows[0];
+  assert.equal(row.inputs.bessId, "6-20");
+  assert.equal(row.inputs.spLoadPanelRunMetres, "10");
+  assert.equal(Number((await db.pool.query("SELECT count(*) FROM boq_review_submissions WHERE draft_id=$1", [draft.id])).rows[0].count), 0);
+});
+
+test("SP additive masters preserve manual rates/specs and expose owner provisional costs", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const sql = await readFile("migrations/028_single_phase_costing.sql", "utf8");
+  const old = await db.pool.query("SELECT * FROM rate_versions WHERE key='HYB-SP-006' ORDER BY version");
+  const spec = await db.pool.query("SELECT * FROM item_spec_versions WHERE key='HYB-SP-006' ORDER BY version");
+  await db.pool.query(sql);
+  assert.deepEqual((await db.pool.query("SELECT * FROM rate_versions WHERE key='HYB-SP-006' ORDER BY version")).rows, old.rows);
+  assert.deepEqual((await db.pool.query("SELECT * FROM item_spec_versions WHERE key='HYB-SP-006' ORDER BY version")).rows, spec.rows);
+  for (const [key,rate] of [["500V 2P DC Breaker","4950.0000"],["SP DC Enclosures","5000.0000"],["10mm² 1C AC Cable","720.0000"]])
+    assert.equal((await db.pool.query("SELECT rate FROM rate_versions WHERE key=$1 AND version=1",[key])).rows[0].rate,rate);
 });

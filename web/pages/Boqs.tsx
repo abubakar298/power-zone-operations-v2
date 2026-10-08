@@ -207,14 +207,15 @@ export function Boqs({
       structure: f.get("structure"),
       dcMetres: sourceMode === "General quotation" ? "0" : f.get("dcMetres"),
       acInverter16:
-        sourceMode === "General quotation" ? "0" : f.get("acInverter16"),
+        sourceMode === "General quotation" ? "0" : f.get("acInverter16") || "0",
       acInverter25:
-        sourceMode === "General quotation" ? "0" : f.get("acInverter25"),
-      acPanel16: sourceMode === "General quotation" ? "0" : f.get("acPanel16"),
-      acPanel25: sourceMode === "General quotation" ? "0" : f.get("acPanel25"),
+        sourceMode === "General quotation" ? "0" : f.get("acInverter25") || "0",
+      acPanel16: sourceMode === "General quotation" ? "0" : f.get("acPanel16") || "0",
+      acPanel25: sourceMode === "General quotation" ? "0" : f.get("acPanel25") || "0",
       earth25: sourceMode === "General quotation" ? "0" : f.get("earth25"),
       earth6: sourceMode === "General quotation" ? "0" : f.get("earth6"),
       earth10: sourceMode === "General quotation" ? "0" : f.get("earth10"),
+      spLoadPanelRunMetres: f.get("spLoadPanelRunMetres") || undefined,
       bessId: f.get("bessId") || undefined,
       inverter: f.get("inverter") || undefined,
       batteryKwh: f.get("batteryKwh") ? Number(f.get("batteryKwh")) : undefined,
@@ -1252,6 +1253,7 @@ export function Boqs({
                     ),
                   )
                     .filter(([k]) => !["pvWatts", "dcMetres"].includes(k))
+                    .filter(([k]) => inverter !== "6 kW SP" || !["ac16", "ac25"].includes(k))
                     .map(([k, v]) => (
                       <div key={k}>
                         <dt>
@@ -1271,6 +1273,7 @@ export function Boqs({
                       </div>
                     ))}
                 </dl>
+                {inverter === "6 kW SP" && <p>10mm² single-core AC cable: 20 m inverter termination + 40 m load-panel conductors (20 m estimated route × line and neutral).</p>}
               </section>
             )}
             <fieldset disabled={busy}>
@@ -1283,6 +1286,7 @@ export function Boqs({
               <div className="survey-grid">
                 {Object.entries(quantities)
                   .filter(([k]) => k !== "batteryKwh")
+                  .filter(([k]) => inverter !== "6 kW SP" || !["acInverter16", "acInverter25", "acPanel16", "acPanel25"].includes(k))
                   .filter(
                     ([k]) =>
                       sourceMode !== "General quotation" ||
@@ -1339,6 +1343,12 @@ export function Boqs({
                     {k === "panelWattage" && <BessSelector initial={initial} onChange={setInverter} />}
                     </Fragment>
                   ))}
+                {inverter === "6 kW SP" && sourceMode !== "General quotation" && (
+                  <label>AC load-panel cable route (m)
+                    <input name="spLoadPanelRunMetres" aria-label="AC load-panel cable route (m)" type="number" min="0" max="99999999" step="0.0001" required defaultValue={initial.spLoadPanelRunMetres ?? ""} />
+                    <small>Measured route length. Costing includes line and neutral: twice this length, plus the fixed 20 m inverter termination allowance.</small>
+                  </label>
+                )}
                 <label>
                   Structure
                   <select
@@ -1561,12 +1571,13 @@ export function Boqs({
               />
               <div className="save-boq-panel">
                 <p>
-                  Submit this exact costing for approval. If changes are
-                  requested, edit the draft and resubmit.
+                  {preview.snapshot.engineering.releaseReady === false
+                    ? "Single-phase costing preview only. Electrical verification is required before management submission. Your draft can be saved and resumed."
+                    : "Submit this exact costing for approval. If changes are requested, edit the draft and resubmit."}
                 </p>
                 <button
                   className="primary"
-                  disabled={busy || (uploads.length > 0 && !reviewed)}
+                  disabled={busy || preview.snapshot.engineering.releaseReady === false || (uploads.length > 0 && !reviewed)}
                   onClick={() => {
                     void submitReview();
                   }}

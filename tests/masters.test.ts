@@ -66,9 +66,9 @@ test("reviewed import preserves all IDs, names, codes, site zeros, rates, status
   assert.equal(body.customers.length, 286);
   assert.equal(body.sites.length, 4);
   assert.equal(body.brands.length, 25);
-  assert.equal(body.rates.length, 33);
+  assert.equal(body.rates.length, 44); // 33 existing + 11 additive SP reference items.
   assert.equal(body.rules.length, 21);
-  assert.equal(body.inverters.length, 7);
+  assert.equal(body.inverters.length, 8); // Existing seven plus the single 6 kW SP configuration.
   assert.equal(
     body.inverters.find((i: any) => i.configuration === "2×12 kW").quantity,
     2,
@@ -93,7 +93,7 @@ test("reviewed import preserves all IDs, names, codes, site zeros, rates, status
       Number(body.rules.find((v: { key: string }) => v.key === r.key).value),
       Number(r.value),
     );
-  assert.equal(body.items.length, 57);
+  assert.equal(body.items.length, 68); // Eleven additive SP items; original specifications checked below.
   assert.equal(
     body.items.find((r: { key: string }) => r.key === "DC SPD")
       .approved_specification,

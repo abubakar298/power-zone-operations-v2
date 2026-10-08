@@ -25,13 +25,14 @@ export const surveySchema = z
     acInverter25: quantity.optional(),
     acPanel16: quantity.optional(),
     acPanel25: quantity.optional(),
+    spLoadPanelRunMetres: quantity.optional(),
 
     earth25: quantity,
     earth6: quantity,
     earth10: quantity,
     bessId: z
       .string()
-      .regex(/^BESS-\d+-\d+$/)
+      .regex(/^(BESS-\d+-\d+|6-(5|10|15|20|25|30|35|40|45|50|55|60))$/)
       .optional(),
     inverter: z.string().min(1).max(30),
     batteryKwh: z.number().int().min(0).max(120),

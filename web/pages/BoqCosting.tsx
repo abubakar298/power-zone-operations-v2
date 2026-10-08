@@ -45,6 +45,14 @@ export function BoqCosting({
           <p>PKR {format(s.perWatt, 2)} / W</p>
         </div>
       </div>
+      {s.engineering.singlePhaseScope && (
+        <section className="detail-panel">
+          <h3>Single-phase calculation basis</h3>
+          <p>10mm² single-core AC cable: {s.engineering.singlePhaseScope.cable.fixedTotalMetres} m fixed termination + {s.engineering.singlePhaseScope.cable.loadPanelConductorMetres} m load-panel conductors. Route: {s.engineering.singlePhaseScope.cable.loadPanelRunMetres} m × line and neutral ({s.engineering.singlePhaseScope.cable.loadPanelBasis}).</p>
+          <p>DC protection: {s.engineering.singlePhaseScope.dc.roomBreakers} inverter-room + {s.engineering.singlePhaseScope.dc.rooftopBreakers} rooftop 500 V, 2-pole breakers. VPD inside the AC protection box; no external AC SPD.</p>
+          <p>Provisional costs requiring review: DC breaker PKR 4,950 each; AC box/accessories bundle PKR 5,000; DC enclosure bundle PKR 5,000. Current Rate Master values take precedence. Electrical verification remains pending; this preview cannot be submitted for approval.</p>
+        </section>
+      )}
       {s.warnings.length > 0 && (
         <details className="rate-notice">
           <summary>{s.warnings.length} rate statuses require review</summary>

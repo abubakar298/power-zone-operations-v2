@@ -1,0 +1,40 @@
+import { test, expect } from '@playwright/test';
+for (const quick of [false, true]) test(`Single-phase ${quick ? 'Quick BOQ' : 'survey'} costing preview and approval lock`, async ({page}) => {
+  const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? '3180'}`;
+  if ((await (await page.request.get('/api/auth/status')).json()).setupRequired)
+    expect((await page.request.post('/api/auth/setup',{headers:{Origin:origin},data:{email:'admin@example.test',displayName:'Isolated admin',password:'browser-test-passphrase-298',setupToken:'browser-test-setup-key-isolated-only'}})).status()).toBe(201);
+  await page.goto('/login');
+  await page.getByLabel('Email address').fill('admin@example.test');
+  await page.getByLabel('Password',{exact:true}).fill('browser-test-passphrase-298');
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await page.getByRole('button',{name:'Survey & BOQ',exact:true}).click();
+  await page.getByRole('button',{name:quick ? 'Quick BOQ · no survey' : 'New BOQ',exact:true}).click();
+  await page.getByLabel('Customer',{exact:true}).selectOption('3');
+  await page.getByLabel('New site name',{exact:true}).fill(`SP isolated ${quick?'quick':'survey'}`);
+  await page.getByLabel('Site code',{exact:true}).fill(quick?'SPQ':'SPS');
+  await page.getByLabel('Location',{exact:true}).fill('Isolated test');
+  await page.getByLabel('Panel quantity',{exact:true}).fill('20');
+  await page.getByLabel('Panel wattage (W)',{exact:true}).fill('645');
+  await page.getByLabel('BESS configuration',{exact:true}).selectOption('6-25');
+  await expect(page.getByLabel('Inverter termination · 16 mm² 4-core (m)',{exact:true})).toHaveCount(0);
+  if (!quick) await page.getByLabel('AC load-panel cable route (m)',{exact:true}).fill('12.5');
+  else await expect(page.getByText(/20 m inverter termination \+ 40 m load-panel conductors/)).toBeVisible();
+  for (const [field,label] of [['Solar Panel brand','Any of the Above'],['Inverter brand','Chint Power'],['Battery & BMS brand','Chint Power'],['Cable brand','Newage Cables'],['Switchgear brand','CHINT']])
+    await page.getByLabel(field,{exact:true}).selectOption({label});
+  const response=page.waitForResponse(r=>r.url().endsWith('/api/boqs/preview')&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Calculate & review BOQ',exact:true}).click();
+  const result=await response;expect(result.status()).toBe(200);
+  const {snapshot}=await result.json();
+  const line=(key:string)=>snapshot.lines.find((l:any)=>l.key===key);
+  expect(line('HYB-SP-006').total).toBe('230179');
+  expect(line('BAT-LV-05 KW WO BMS').qty).toBe('5');
+  expect(line('CH-BMS-LV').qty).toBe('2');
+  expect(line('10mm² 1C AC Cable').qty).toBe(quick?'60':'45');
+  expect(line('500V 2P DC Breaker').total).toBe('19800');
+  expect(line('SP AC Conduit Accessories and Box').total).toBe('5000');
+  expect(line('SP DC Enclosures').total).toBe('5000');
+  expect(line('AC SPD')).toBeUndefined();
+  await expect(page.getByRole('button',{name:'Submit for review',exact:true})).toBeDisabled();
+  await expect(page.getByText(/Single-phase costing preview only/)).toBeVisible();
+  await page.screenshot({path:`test-results/sp2-${quick?'quick':'survey'}.png`,fullPage:true});
+});

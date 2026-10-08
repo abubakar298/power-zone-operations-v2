@@ -69,7 +69,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("cell", { name: "0128", exact: true }),
   ).toBeVisible();
-  await page.getByRole("tab", { name: "Items & specifications 57" }).click();
+  await page.getByRole("tab", { name: /Items & specifications \d+/ }).click();
   await page.getByLabel("Specification status").selectOption("Need to enter");
   await expect(
     page.getByRole("cell", { name: "Solar PV Modules", exact: true }),

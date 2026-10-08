@@ -1,3 +1,5 @@
+import { singlePhaseConfigurations } from "./equipment.js";
+import { singlePhaseScope } from "./single-phase.js";
 import { findBess, BESS_RULE_VERSION } from "./bess.js";
 import { Decimal } from "decimal.js";
 import { HttpError } from "../http/errors.js";
@@ -82,7 +84,11 @@ export function calculate(s: Survey, m: Masters) {
     (c) => c.id === s.customerId && c.status === "Active",
   );
   if (!customer) throw new HttpError(400, "Select an active customer.");
-  if (s.bessId) {
+  const sp = singlePhaseConfigurations.find(c => c.id === s.bessId);
+  if (s.inverter === "6 kW SP" && !sp) throw new HttpError(400, "Select a supported single-phase BESS ID.");
+  if (sp && (s.inverter !== "6 kW SP" || s.batteryKwh !== sp.batteryKwh))
+    throw new HttpError(400, "Single-phase BESS ID does not match its equipment.");
+  if (s.bessId && !sp) {
     const bess = findBess(s.bessId);
     if (!bess) throw new HttpError(400, "Select a supported HV BESS ID.");
     if (s.inverter !== bess.inverter || s.batteryKwh !== bess.batteryKwh)
@@ -94,6 +100,8 @@ export function calculate(s: Survey, m: Masters) {
   const config = m.inverters.find((i) => i.configuration === s.inverter);
   if (!config)
     throw new HttpError(400, "Select a supported inverter configuration.");
+  if (sp && (config.sku !== sp.inverterSku || config.quantity !== 1 || !new Decimal(config.total_kw).eq(6)))
+    throw new HttpError(422, "Single-phase inverter master configuration is inconsistent. Ask an administrator to review it.");
   const allowances =
     s.sourceMode === "General quotation"
       ? generalAllowances(s.panelQty, s.panelWattage, config.quantity)
@@ -151,11 +159,15 @@ export function calculate(s: Survey, m: Masters) {
       422,
       "String and battery design limits must be positive.",
     );
-  const strings = Math.max(
+  const spScope = sp ? singlePhaseScope({ bessId: sp.id, panelQty: s.panelQty,
+    mode: s.sourceMode ?? "Survey", loadPanelRunMetres: s.spLoadPanelRunMetres,
+    rooftopPerString: { fuseWithHolder: rnum(24), dcSpd: rnum(23) } }) : undefined;
+  if (spScope && spScope.strings > 2) throw new HttpError(400, "Single-phase design exceeds two MPPT string inputs. Revise the panel design.");
+  const strings = spScope?.strings ?? Math.max(
       1,
       1 + Math.ceil(Math.max(0, s.panelQty - rnum(4)) / rnum(5)),
     ),
-    bms = modules.div(config.quantity).div(rule(7)).ceil().mul(config.quantity);
+    bms = sp ? new Decimal(sp.bmsQty) : modules.div(config.quantity).div(rule(7)).ceil().mul(config.quantity);
   const lines: CostLine[] = [],
     warnings: string[] = [];
   function add(
@@ -196,8 +208,8 @@ export function calculate(s: Survey, m: Masters) {
   add("Solar PV Modules", pv, "Solar Panels", "solar");
   add(`Structure - ${s.structure}`, pv, "Structure");
   add(config.sku, config.quantity, "BESS", "inverter");
-  add("BAT-HV-05 KW WO BMS", modules, "BESS", "battery");
-  add("CH-BMS-HV", bms, "BESS", "battery");
+  add(sp?.batterySku ?? "BAT-HV-05 KW WO BMS", sp?.batteryModules ?? modules, "BESS", "battery");
+  add(sp?.bmsSku ?? "CH-BMS-HV", bms, "BESS", "battery");
   for (const [key, qty] of Object.entries({
     "6mm² DC Cable Red": allowances
       ? new Decimal(allowances.dcRed)
@@ -208,14 +220,27 @@ export function calculate(s: Survey, m: Masters) {
     "2.5mm² Earthing Cable": allowances?.earth25 ?? s.earth25,
     "6mm² Earthing Cable": allowances?.earth6 ?? s.earth6,
     "10mm² Earthing Cable": allowances?.earth10 ?? s.earth10,
-    "16mm² 4C AC Cable": allowances
+    "16mm² 4C AC Cable": sp ? "0" : allowances
       ? allowances.ac16
       : new Decimal(s.acInverter16 ?? "0").add(s.acPanel16 ?? "0"),
-    "25mm² 4C AC Cable": allowances
+    "25mm² 4C AC Cable": sp ? "0" : allowances
       ? allowances.ac25
       : new Decimal(s.acInverter25 ?? "0").add(s.acPanel25 ?? "0"),
   }))
     add(key, qty, "EPC", "cable", "Installation Cost");
+  if (spScope) {
+    add("10mm² 1C AC Cable", new Decimal(spScope.cable.fixedTotalMetres).plus(spScope.cable.loadPanelConductorMetres), "EPC", "cable", "Installation Cost");
+    for (const [key, qty] of Object.entries({
+      "500V 2P DC Breaker": spScope.dc.totalBreakers,
+      "DC SPD": spScope.dc.rooftopSpd,
+      "DC Fuse with Holder": spScope.dc.rooftopFuseWithHolder,
+      "63A 2P MCB": 1, "32A 2P MCB": 1,
+      "32A 2P Breaker Changeover": 1, "63A 1P AC VPD": 1,
+    })) add(key, qty, "EPC", "switchgear", "Installation Cost");
+    add("SP AC Conduit Accessories and Box", 1, "EPC", undefined, "Installation Cost");
+    add("SP DC Enclosures", 1, "EPC", undefined, "Installation Cost");
+    warnings.push("Single-phase design requires electrical verification before release; DC breaker, AC accessories and DC enclosure allowances are provisional.");
+  } else {
   for (const [key, qty] of Object.entries({
     "DC Breaker": rule(22).mul(strings),
     "DC SPD": rule(23).mul(strings),
@@ -227,6 +252,7 @@ export function calculate(s: Survey, m: Masters) {
   }))
     add(key, qty, "EPC", "switchgear", "Installation Cost");
   add("AC & DC Boxes", rule(20), "EPC", undefined, "Installation Cost");
+  }
   add("Earthing Bore", rule(13), "EPC", undefined, "Earthing Cost");
   add("Misc. Accessories", rule(21), "EPC", undefined, "Installation Cost");
   add("Labour", pv, "EPC", undefined, "Electrical Labour");
@@ -308,12 +334,13 @@ export function calculate(s: Survey, m: Masters) {
       strings,
       batteryModules: modules.toString(),
       bms: bms.toString(),
-      bmsRuleVersion: BESS_RULE_VERSION,
+      bmsRuleVersion: sp ? "sp-single-bank-2026-10-08-v1" : BESS_RULE_VERSION,
       bmsPerInverter: bms.div(config.quantity).toString(),
       batteryPerInverter: new Decimal(s.batteryKwh)
         .div(config.quantity)
         .toString(),
-      bessId: `${new Decimal(config.total_kw)}-${s.batteryKwh}`,
+      ...(spScope ? { singlePhaseScope: spScope, releaseReady: false } : {}),
+      bessId: sp?.id ?? `${new Decimal(config.total_kw)}-${s.batteryKwh}`,
       solutionId: `${pv.div(1000).toDecimalPlaces(1, Decimal.ROUND_HALF_UP)}-${new Decimal(config.total_kw)}-${s.batteryKwh}`,
     },
     lines,
