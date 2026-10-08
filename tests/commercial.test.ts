@@ -606,6 +606,17 @@ test("Full Breakup additional cost, markup and tax reconcile and stay internal a
       taxRate: "18",
     },
   });
+  // New policy pricing requires classified BOQ scope. Keep the historical
+  // quote-only-extra compatibility checks against an explicit legacy fixture.
+  await post("/quotations/preview", input).expect(422);
+  const legacySnapshot = price(boq.snapshot, boq.number.replace(/-R0$/, "-R1"), pricingInput);
+  const legacyId = randomUUID();
+  await db.pool.query(
+    "INSERT INTO commercial_pricing_versions(id,boq_revision_id,version,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,2,$3,$4,$5,$6,$7)",
+    [legacyId, independentBoq, `CP-LEGACY-${independentBoq}`, legacySnapshot,
+      fingerprint(legacySnapshot), randomUUID(), adminId],
+  );
+  input.pricingId = legacyId;
   const qp = (await post("/quotations/preview", input).expect(200)).body;
   await post("/quotations", {
     ...input,
@@ -1025,6 +1036,7 @@ test("revision routing requires approved separate costing and preserves origin, 
     revisionRequestId: started.id,
     presentation: "Full Breakup",
     additionalMarkup: "20",
+    additionalCategory: "other",
   };
   await post("/pricing/preview", {
     ...pi,
@@ -1048,7 +1060,7 @@ test("revision routing requires approved separate costing and preserves origin, 
   const qp = (await post("/quotations/preview", qi).expect(200)).body;
   assert.equal(qp.snapshot.lines.length, 17);
   assert.equal(qp.snapshot.lines[16].qty, "2");
-  assert.equal(qp.snapshot.lines[16].amount, "2962.94");
+  assert.equal(qp.snapshot.lines[16].amount, "3086.40"); // standard other markup25%, not submitted20%
   assert.equal(qp.snapshot.revision.origin, "Customer");
   assert.equal(qp.snapshot.revision.sourceQuotation, issued.number);
   const key = randomUUID();
@@ -1266,14 +1278,13 @@ test("coordination dashboard derives live tasks, clears completed handoffs and e
   }
   assert.ok(mine.total <= team.total);
   assert.equal(mine.scope, "mine");
-  assert.deepEqual(
-    (
-      await request(app)
-        .get("/api/coordinator?scope=team")
-        .set("Cookie", cookie)
-    ).body,
-    team,
-  );
+  const refreshedTeam = (await request(app)
+    .get("/api/coordinator?scope=team").set("Cookie", cookie).expect(200)).body;
+  // Elapsed preparation time changes between requests; compare stable content.
+  const stable = (value: any) => ({ ...value, tasks: value.tasks.map(
+    ({ preparation_minutes, ...task }: any) => task), performance: undefined });
+  assert.deepEqual(stable(refreshedTeam), stable(team));
+  assert.deepEqual(refreshedTeam.performance.targets, team.performance.targets);
 });
 
 test("handoff stays pending until both Operations and Accounts receive the approved IPO", async () => {
