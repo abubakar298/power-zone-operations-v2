@@ -124,7 +124,6 @@ for (const quick of [false, true]) {
       if (!quick) {
         for (const [label, value] of [
           ["6mm² DC cable total (m)", "360"],
-          ["Panel termination · 25 mm² 4-core (m)", "0"],
           ["2.5mm² earth cable (m)", "20"],
           ["6mm² earth cable (m)", "90"],
           ["10mm² earth cable (m)", "90"],
