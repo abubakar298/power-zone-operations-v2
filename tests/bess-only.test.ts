@@ -54,6 +54,13 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  const solar=calculate({...s,family:'solar-hybrid',panelQty:10,panelWattage:'585',brands:{...s.brands,solar:brand('Solar Panel')},spIncludeEarthingBore:false},m as any);
  for(const [key,value] of [['Labour','15000'],['Delivery','15000'],['Misc. Accessories','45000']])assert.equal(solar.lines.find(l=>l.key===key)!.total,value);
  assert.equal(solar.lines.some(l=>l.key==='Earthing Bore'),false);
+ for(const presentation of ['Full Breakup','Basic Breakup','No Breakup'])for(const taxMode of ['Tax Included','Show Sales Tax Separately']){
+ const pricing=price(solar,'SOLAR-SP',{boqRevisionId:randomUUID(),presentation,taxMode,preparedBy:'Fixture',markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},remarks:''} as any,policy);
+ const quoted=quote(pricing,solar,{pricingId:randomUUID(),quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture'});
+ assert.equal(quoted.lines.some(l=>/Three Phase|High Voltage|AC SPD/.test(l.description)),false);
+ if(presentation!=='No Breakup')assert.equal(quoted.lines.reduce((v,l)=>v.add(l.amount??0),new Decimal(0)).toFixed(2),taxMode==='Tax Included'?pricing.total:pricing.subtotal);
+ }
+
  }
  const redacted=restrictedCostView(b);assert.equal(redacted.lines.filter((l:any)=>l.phase==='BESS').every((l:any)=>l.rate===null&&l.total===null),true);assert.equal(redacted.perWatt,'0.00');assert.equal(redacted.summary.some((r:any)=>r.name==='BESS'),false);
  for(const presentation of ['Full Breakup','Basic Breakup','No Breakup'])for(const taxMode of ['Tax Included','Show Sales Tax Separately']){

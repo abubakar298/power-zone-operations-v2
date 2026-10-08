@@ -180,6 +180,7 @@ export function quotationLines(
   full = false,
 ): QuoteLine[] {
   if(s.survey.family === "bess-only") return bessOnlyLines(s, full ? "Full Breakup" : "No Breakup");
+  const sp = s.survey.inverter === "6 kW SP";
   const brand = (field: string) => {
     const b = s.selectedBrands[field];
     return b.name === "Any of the Above" ? b.alternatives.join(" / ") : b.name;
@@ -206,21 +207,21 @@ export function quotationLines(
     "structure",
   );
   add(
-    `${brand("inverter")} ${s.inverterConfig.sku.replace("HYB-3P-", "").replace(/^0+/, "")} kW IP66 Three Phase High Voltage Hybrid Inverter with 5-Years Replacement Warranty`,
+    sp ? `${brand("inverter")} ${line(s.inverterConfig.sku)?.specification ?? "6 kW single-phase low-voltage hybrid inverter"}` : `${brand("inverter")} ${s.inverterConfig.sku.replace("HYB-3P-", "").replace(/^0+/, "")} kW IP66 Three Phase High Voltage Hybrid Inverter with 5-Years Replacement Warranty`,
     "No.",
     String(s.inverterConfig.quantity),
     "bess",
   );
   if (full || D(s.engineering.batteryModules).gt(0))
     add(
-      `${brand("battery")} 5 kWh IP65 High Voltage Lithium Ion ESS Battery Module with 5-Years Replacement Warranty`,
+      sp ? `${brand("battery")} ${line("BAT-LV-05 KW WO BMS")?.specification ?? "5 kWh low-voltage lithium-ion battery module"}` : `${brand("battery")} 5 kWh IP65 High Voltage Lithium Ion ESS Battery Module with 5-Years Replacement Warranty`,
       "No.",
       s.engineering.batteryModules,
       "bess",
     );
   if (full || D(s.engineering.bms).gt(0))
     add(
-      `${brand("battery")} ${bmsDescription}`,
+      `${brand("battery")} ${sp ? line("CH-BMS-LV")?.specification ?? "Low-voltage battery control and safety unit" : bmsDescription}`,
       "No.",
       s.engineering.bms,
       "bess",
@@ -239,7 +240,7 @@ export function quotationLines(
   ])
     if (full || D(quantity).gt(0))
       add(`${key} — ${brand("cable")}`, "m", quantity, "balance");
-  const ac = ["16mm² 4C AC Cable", "25mm² 4C AC Cable"]
+  const ac = ["16mm² 4C AC Cable", "25mm² 4C AC Cable", "10mm² 1C AC Cable"]
     .filter((k) => line(k))
     .map((k) => `${k} (${qty(k)}m)`)
     .join(" & ");
@@ -251,7 +252,7 @@ export function quotationLines(
     "balance",
   );
   add(
-    `AC Protection & Distribution: MCB/MCCB, Rotary Changeover, AC SPD and AC/DC Protection Boxes — ${brand("switchgear")}`,
+    sp ? `AC Protection & Distribution: 63A input MCB, 32A output MCB, 32A changeover, VPD and protection boxes — ${brand("switchgear")}` : `AC Protection & Distribution: MCB/MCCB, Rotary Changeover, AC SPD and AC/DC Protection Boxes — ${brand("switchgear")}`,
     "LS",
     "1",
     "balance",
@@ -377,21 +378,21 @@ export function quote(
       ["Solar PV Modules"],
       [`Structure - ${boq.survey.structure}`],
       [boq.inverterConfig.sku],
-      ["BAT-HV-05 KW WO BMS"],
-      ["CH-BMS-HV"],
+      [boq.survey.inverter === "6 kW SP" ? "BAT-LV-05 KW WO BMS" : "BAT-HV-05 KW WO BMS"],
+      [boq.survey.inverter === "6 kW SP" ? "CH-BMS-LV" : "CH-BMS-HV"],
       ["Earthing Bore"],
       ["6mm² DC Cable Red", "6mm² DC Cable Black"],
       ["2.5mm² Earthing Cable"],
       ["6mm² Earthing Cable"],
       ["10mm² Earthing Cable"],
-      ["16mm² 4C AC Cable", "25mm² 4C AC Cable"],
-      ["DC Breaker", "DC SPD", "DC Fuse with Holder"],
+      ["16mm² 4C AC Cable", "25mm² 4C AC Cable", "10mm² 1C AC Cable"],
+      ["DC Breaker", "500V 2P DC Breaker", "DC SPD", "DC Fuse with Holder", "SP DC Enclosures"],
       [
         "63A 4P MCB",
         "100A 4P MCCB",
         "100A Rotary Changeover with Box",
         "AC SPD",
-        "AC & DC Boxes",
+        "AC & DC Boxes", "63A 2P MCB", "32A 2P MCB", "32A 2P Breaker Changeover", "63A 1P AC VPD", "SP AC Conduit Accessories and Box",
       ],
       [
         "Misc. Accessories",
