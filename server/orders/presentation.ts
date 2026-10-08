@@ -49,6 +49,10 @@ export function ipoPresentation(snapshot: any) {
     presentation,
     included,
     rows,
+    taxSummary: included ? [] : [
+      {label:"Solar panel sales tax @10%",amount:sum(source.filter((l:any)=>new Decimal(l.taxRate).eq(10)),"tax")},
+      {label:"Sales tax on other items @18%",amount:sum(source.filter((l:any)=>new Decimal(l.taxRate).eq(18)),"tax")},
+    ],
     amount: included ? snapshot.allocation.total : snapshot.allocation.subtotal,
     tax: included ? "0.00" : snapshot.allocation.tax,
     total: snapshot.allocation.total,

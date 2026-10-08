@@ -541,6 +541,7 @@ export function Orders({
                 ))}
               </tbody>
               <tfoot>
+                {!view!.included && view!.taxSummary.map((tax)=><tr key={tax.label}><th colSpan={6}>{tax.label}</th><td>{money(tax.amount)}</td><td></td></tr>)}
                 <tr>
                   <th colSpan={4}>Grand total</th>
                   <td>{money(view!.amount)}</td>

@@ -207,7 +207,7 @@ export function buildIpoPdf(s: any, number?: string, division = s.peachtree) {
       ...(!view.included
         ? [
             ["Grand total before tax", money(view.amount)],
-            ["Total tax", money(view.tax)],
+            ...view.taxSummary.map((tax)=>[tax.label,money(tax.amount)]),
           ]
         : []),
       ["GRAND TOTAL (PKR)", money(s.allocation.total)],
