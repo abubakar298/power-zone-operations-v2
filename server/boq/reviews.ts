@@ -166,8 +166,7 @@ export class ReviewRepository {
         parsed.data,
         await new MastersRepository(c, true).list(),
       );
-      if (snapshot.engineering.releaseReady === false)
-        throw new HttpError(422, "Single-phase electrical verification is required before submitting for approval.");
+      // Electrical certification is deferred by owner; normal review controls remain.
       if (fingerprint(snapshot) !== expected)
         throw new HttpError(
           409,

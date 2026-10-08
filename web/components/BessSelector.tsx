@@ -56,7 +56,7 @@ export function BessSelector({
       </select>
       <input type="hidden" name="inverter" value={b?.inverter ?? ""} />
       <input type="hidden" name="batteryKwh" value={b?.batteryKwh ?? ""} />
-      {sp && <small role="status">Single-phase costing preview. Management submission remains locked pending electrical verification.</small>}
+      {sp && <small role="status">Electrical verification pending. Commercial preparation is enabled; this is not an installation clearance.</small>}
       {b && (
         <small>
           {b.inverterQty} × {b.inverterKw} kW inverter · {b.batteryModules} × 5

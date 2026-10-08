@@ -1488,12 +1488,12 @@ export function Boqs({
               <div className="save-boq-panel">
                 <p>
                   {preview.snapshot.engineering.releaseReady === false
-                    ? "Single-phase costing preview only. Electrical verification is required before management submission. Your draft can be saved and resumed."
+                    ? "Electrical verification is pending. Commercial preparation is enabled; check the costing and create the quotation for Management review."
                     : "Check this costing, then create the quotation at standard policy prices. Management reviews the quotation."}
                 </p>
                 <button
                   className="primary"
-                  disabled={busy || preview.snapshot.engineering.releaseReady === false || (uploads.length > 0 && !reviewed)}
+                  disabled={busy || (uploads.length > 0 && !reviewed)}
                   onClick={() => {
                     void submitReview();
                   }}

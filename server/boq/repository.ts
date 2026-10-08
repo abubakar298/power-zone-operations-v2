@@ -184,7 +184,8 @@ export class BoqRepository {
       if(survey.uploadIds.length&&!survey.ocrReviewed)throw new HttpError(400,"Review source documents first.");
       await this.uploads(c,owner,survey.uploadIds,d.base_revision_id);
       const snapshot=calculate(survey,await new MastersRepository(c,true).list());
-      if(snapshot.engineering.releaseReady===false)throw new HttpError(422,"Electrical verification is required before commercial preparation.");
+      // Owner deferred electrical certification on 9 October 2026; retain pending
+      // snapshot status and calculation checks without blocking commercial preparation.
       if(fingerprint(snapshot)!==expected)throw new HttpError(409,"Reference data changed. Recalculate the costing.");
       return this.finalize(c,owner,d,snapshot,false);
     });

@@ -637,7 +637,7 @@ test("SP engine prices all twelve LV configurations without HV equipment or four
   assert.throws(() => calculate({ ...survey, bessId: "6-20", inverter: "6 kW SP", batteryKwh: 20 }, badMaster), /master configuration is inconsistent/);
 });
 
-test("SP drafts persist and preview but cannot bypass the electrical approval gate", async () => {
+test("SP drafts retain pending electrical status while owner-authorized commercial review remains available", async () => {
   const keys = ["HYB-SP-006", "BAT-LV-05 KW WO BMS", "CH-BMS-LV", "10mm² 1C AC Cable",
     "500V 2P DC Breaker", "63A 2P MCB", "32A 2P MCB", "32A 2P Breaker Changeover", "63A 1P AC VPD", "SP AC Conduit Accessories and Box", "SP DC Enclosures", "DC SPD", "DC Fuse with Holder"];
   for (const key of keys) {
@@ -649,12 +649,11 @@ test("SP drafts persist and preview but cannot bypass the electrical approval ga
   const draft = (await post("/drafts", { version: 0, inputs }).expect(200)).body;
   const preview = (await post("/preview", inputs).expect(200)).body;
   assert.equal(preview.snapshot.engineering.releaseReady, false);
-  const blocked = await post("/reviews", { draftId: draft.id, version: 1, fingerprint: preview.fingerprint }).expect(422);
-  assert.match(blocked.body.message, /electrical verification/i);
+  await post("/reviews", { draftId: draft.id, version: 1, fingerprint: preview.fingerprint }).expect(201);
   const row = (await db.pool.query("SELECT inputs FROM survey_drafts WHERE id=$1", [draft.id])).rows[0];
   assert.equal(row.inputs.bessId, "6-20");
   assert.equal(row.inputs.spLoadPanelRunMetres, "10");
-  assert.equal(Number((await db.pool.query("SELECT count(*) FROM boq_review_submissions WHERE draft_id=$1", [draft.id])).rows[0].count), 0);
+  assert.equal(Number((await db.pool.query("SELECT count(*) FROM boq_review_submissions WHERE draft_id=$1", [draft.id])).rows[0].count), 1);
 });
 
 test("SP additive masters preserve manual rates/specs and expose owner provisional costs", async () => {
