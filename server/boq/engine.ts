@@ -229,7 +229,7 @@ export function calculate(s: Survey, m: Masters) {
   }))
     add(key, qty, "EPC", "cable", "Installation Cost");
   if (spScope) {
-    add("10mm² 1C AC Cable", new Decimal(spScope.cable.fixedTotalMetres).plus(spScope.cable.loadPanelConductorMetres), "EPC", "cable", "Installation Cost");
+    add("10mm² 1C AC Cable", new Decimal(s.sourceMode !== "General quotation" && s.acTerminationMode === "Measured" ? s.spInverterTerminationMetres ?? spScope.cable.fixedTotalMetres : spScope.cable.fixedTotalMetres).plus(spScope.cable.loadPanelConductorMetres), "EPC", "cable", "Installation Cost");
     for (const [key, qty] of Object.entries({
       "500V 2P DC Breaker": spScope.dc.totalBreakers,
       "DC SPD": spScope.dc.rooftopSpd,

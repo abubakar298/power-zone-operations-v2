@@ -50,13 +50,13 @@ export class CoordinatorRepository {
     const stage = (t: any) =>
       t.kind === "Survey / BOQ"
         ? t.status === "Awaiting review"
-          ? "Costing review"
-          : "Survey preparation"
+          ? "Survey & Costing Preparation"
+          : "Survey & Costing Preparation"
         : t.kind === "Commercial pricing" || t.kind === "Quotation"
-          ? "Quotation preparation"
+          ? "Survey & Costing Preparation"
           : t.kind === "Quotation revision"
             ? t.status === "Awaiting review"
-              ? "Costing review"
+              ? "Survey & Costing Preparation"
               : "Revision required"
             : t.kind === "IPO evidence"
               ? "IPO approval"
@@ -70,7 +70,7 @@ export class CoordinatorRepository {
                       ? "IPO preparation"
                       : t.status === "Awaiting PO / sale confirmation"
                         ? "Customer confirmation"
-                        : "Ready for quotation approval";
+                        : "Survey & Costing Preparation";
     const targets: Record<string, number> = {
       "Quotation approval": 20,
       "IPO preparation": 15,
@@ -90,7 +90,6 @@ export class CoordinatorRepository {
       stage: stage(t),
       target_minutes: targets[stage(t)] ?? null,
       responsibility: [
-        "Costing review",
         "Quotation approval",
         "IPO approval",
       ].includes(stage(t))
@@ -103,7 +102,7 @@ export class CoordinatorRepository {
       if (
         t.kind === "Sale confirmation" &&
         [
-          "Ready for quotation approval",
+          "Survey & Costing Preparation",
           "Quotation approval",
           "Revision required",
         ].includes(t.stage)

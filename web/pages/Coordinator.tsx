@@ -4,10 +4,7 @@ import { api, type Session } from "../api.js";
 export type CoordinatorTarget =
   "boqs" | "pricing" | "quotes" | "orders" | "operations";
 const stages = [
-  "Survey preparation",
-  "Costing review",
-  "Quotation preparation",
-  "Ready for quotation approval",
+  "Survey & Costing Preparation",
   "Quotation approval",
   "Revision required",
   "Customer confirmation",
@@ -230,7 +227,6 @@ export function Coordinator({
             </strong>
             <small>
               {[
-                "Costing review",
                 "Quotation approval",
                 "IPO approval",
               ].includes(stage)
