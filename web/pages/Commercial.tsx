@@ -422,12 +422,18 @@ export function Commercial({
       );
     });
   }
+  useEffect(()=>{
+    if(!initialRevisionId||!policy||revisionLoading||!input.boqRevisionId||savedPrice)return;
+    let active=true;
+    const timer=setTimeout(()=>{api<{snapshot:PricingSnapshot;fingerprint:string}>("/commercial/pricing/preview",{body:input,csrf:session.csrfToken}).then(r=>{if(active)setPreview(r);}).catch(e=>{if(active)fail(e);});},200);
+    return()=>{active=false;clearTimeout(timer);};
+  },[initialRevisionId,policy,revisionLoading,input,savedPrice]);
   async function pricingSave() {
     if (!preview) return;
     if (
       !confirmTransition(
-        "Save pricing version",
-        "This preserves the selling prices and margins used to prepare the quotation.",
+        "Create quotation",
+        "Save these standard prices and open the customer quotation.",
       )
     )
       return;
@@ -438,6 +444,7 @@ export function Commercial({
       });
       setSavedPrice(p);
       await load();
+      await prepareQuote({pricingId:p.id,revisionRequestId:input.revisionRequestId,quotedDate:new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Karachi",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()),validity:"7 Days",proposedBy:session.user.displayName});
       setNotice(
         `${p.number} saved. You can now prepare its customer quotation.`,
       );
@@ -858,7 +865,7 @@ export function Commercial({
                   disabled={busy}
                   onClick={() => void pricingSave()}
                 >
-                  Save pricing version
+                  Create quotation
                 </button>
               ) : (
                 <>

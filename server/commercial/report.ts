@@ -3,6 +3,7 @@ import {
   drawReportFooter,
   reportBottomMargin,
 } from "../reports/branding.js";
+import { Decimal } from "decimal.js";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import type { QuotationSnapshot } from "./engine.js";
@@ -22,6 +23,27 @@ function appendQuotation(
   number?: string,
   label?: string,
 ) {
+  // Promotional presentation only. The immutable net/tax basis remains unchanged for review and IPO/PT.
+  if(s.standardDiscountStrategy){
+    const D=Decimal;
+    const included=s.footer.some(r=>r.label==="Total");
+    const groups=s.standardDiscountStrategy.groups.map(g=>({...g,amount:new D(g.beforeTax).mul(included?new D(g.taxRate).div(100).add(1):1).toDecimalPlaces(2,Decimal.ROUND_HALF_UP)}));
+    const allowance=groups.reduce((sum,g)=>sum.add(g.amount),new D(0));
+    const lines=s.lines.map(l=>({...l}));
+    for(const group of groups){
+      const members=lines.filter(l=>l.group===group.group&&l.amount!==undefined);
+      if(members.some(l=>l.standardAllowanceBeforeTax!==undefined)){
+        let assigned=new D(0);
+        members.forEach((row,index)=>{const extra=index===members.length-1?group.amount.sub(assigned):new D(row.standardAllowanceBeforeTax??"0").mul(included?new D(group.taxRate).div(100).add(1):1).toDecimalPlaces(2,Decimal.ROUND_HALF_UP);assigned=assigned.add(extra);row.amount=new D(row.amount!).add(extra).toFixed(2);});
+      }else if(members[0])members[0].amount=new D(members[0].amount!).add(group.amount).toFixed(2);
+    }
+    const footer=s.footer.map(r=>({...r}));
+    const total=footer.find(r=>r.label===(included?"Total":"Subtotal Before Tax"));
+    if(total)total.amount=new D(total.amount).add(allowance).toFixed(2);
+    const index=footer.findIndex(r=>r.label==="Special Discount");
+    footer.splice(included?index:1,0,{label:"Standard Discount",amount:allowance.toFixed(2)});
+    s={...s,lines,footer};
+  }
   const margin = 14;
   pdf.setProperties({
     title: number ?? "Quotation preview",

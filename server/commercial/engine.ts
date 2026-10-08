@@ -141,8 +141,11 @@ export function price(
     total = money(D(subtotal).add(tax)),
     discount = "0.00";
   return {
-    engineVersion: policy ? 3 : 2,
-    ...(policy ? {policy, itemPricing} : {}),
+    engineVersion: policy ? 4 : 2,
+    ...(policy ? {policy, itemPricing, standardDiscountStrategy: {
+      version: "PZ-STANDARD-DISCOUNT-1",
+      groups: allRows.map(row=>({group:row.key,beforeTax:money((itemPricing??[]).filter(l=>l.group===row.key&&["bess","other"].includes(l.category)).reduce((sum,l)=>sum.add(D(l.cost).mul("0.05")),D("0"))),taxRate:row.taxRate})),
+    }} : {}),
     input,
     boqNumber,
     customer: boq.customer,
@@ -168,6 +171,7 @@ export interface QuoteLine {
   qty: string;
   group: "solar" | "structure" | "bess" | "earthing" | "balance" | "additional";
   amount?: string;
+  standardAllowanceBeforeTax?: string;
   span?: number;
 }
 export function quotationLines(
@@ -413,6 +417,7 @@ export function quote(
           ? selling.mul(D(category.taxRate).div(100).add(1))
           : selling,
       );
+      if(p.standardDiscountStrategy)l.standardAllowanceBeforeTax=money((p.itemPricing??[]).filter(x=>keys[i].includes(x.key)&&["bess","other"].includes(x.category)).reduce((sum,x)=>sum.add(D(x.cost).mul("0.05")),D("0")));
       l.span = 1;
     });
     // Carry rounding cents on the last nonzero BOS row so printed rows reconcile.
@@ -452,6 +457,7 @@ export function quote(
   // Customer snapshot contains selling amounts only; never serialize internal pricing or BOQ specifications.
   return {
     engineVersion: 1,
+    ...(p.standardDiscountStrategy ? {standardDiscountStrategy:p.standardDiscountStrategy} : {}),
     input: {
       quotedDate: input.quotedDate,
       validity: input.validity,

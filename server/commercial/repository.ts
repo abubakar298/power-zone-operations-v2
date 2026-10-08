@@ -618,6 +618,31 @@ export class CommercialRepository {
       return row;
     });
   }
+  async managementFinalQuotation(actor:string,id:string,discount:string,notes:string){
+    await this.manager(this.pool,actor,false);
+    await this.discountReview(actor,id,{discount});
+    const newId=await transaction(this.pool,async c=>{
+      await c.query("SELECT pg_advisory_xact_lock(742019003)");
+      await this.manager(c,actor,false);
+      const q=(await c.query("SELECT * FROM quotation_versions WHERE id=$1 FOR UPDATE",[id])).rows[0];
+      if(!q)throw new HttpError(404,"Quotation not found.");
+      const latest=(await c.query("SELECT id,version FROM quotation_versions WHERE boq_revision_id=$1 ORDER BY version DESC LIMIT 1",[q.boq_revision_id])).rows[0];
+      const event=(await c.query("SELECT kind FROM coordination_events WHERE quotation_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1",[id])).rows[0];
+      if(latest.id!==id||event?.kind!=="Submitted")throw new HttpError(409,"Only the latest quotation awaiting approval can be finalized.");
+      const snapshot=JSON.parse(JSON.stringify(q.snapshot));
+      const net=snapshot.footer.find((r:any)=>r.label==="Net Total");
+      const old=snapshot.footer.find((r:any)=>r.label==="Special Discount");
+      net.amount=new Decimal(net.amount).add(old.amount).sub(discount).toFixed(2);old.amount=new Decimal(discount).toFixed(2);snapshot.input.discount=old.amount;
+      snapshot.managementAdjustment={sourceQuotationId:id,remarks:notes};
+      const next=randomUUID(),version=Number(latest.version)+1,number=`Q-${snapshot.boqNumber}-V${version}`;
+      await c.query("INSERT INTO quotation_versions(id,pricing_id,boq_revision_id,version,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",[next,q.pricing_id,q.boq_revision_id,version,number,snapshot,fingerprint(snapshot),randomUUID(),actor]);
+      await c.query("INSERT INTO quotation_additional_inputs(quotation_id,input) SELECT $1,input FROM quotation_additional_inputs WHERE quotation_id=$2",[next,id]);
+      for(const kind of ["Submitted","Approved"])await c.query("INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by,created_at) VALUES($1,$2,$3,$4,$5,now()+CASE WHEN $3='Approved' THEN interval '1 microsecond' ELSE interval '0 seconds' END)",[randomUUID(),next,kind,notes,actor]);
+      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)",[actor,`quotation.${number}.management-created-and-approved.from.${q.number}`]);
+      return next;
+    });
+    return this.quotationGet(newId);
+  }
   async quotationList(actor?: string) {
     return (
       await this.pool.query(

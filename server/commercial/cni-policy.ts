@@ -3,7 +3,7 @@ import { z } from "zod";
 
 /** Cabinet prices are final customer amounts, independent of presentation. */
 export const cniPolicy = Object.freeze({
-  version: "CNI-1", taxRate: "18", standardUnitPayable: "17250000.00",
+  version: "CNI-2-STANDARD-DISCOUNT", taxRate: "18", standardUnitPayable: "17250000.00",
   minimumUnitPayable: "15500000.00",
 });
 const input = z.object({
@@ -18,6 +18,7 @@ export function priceCni(raw: unknown) {
   const rate = new Decimal(value.taxRate);
   if (rate.greaterThan(100)) throw new Error("Invalid GST rate.");
   const standard = new Decimal(cniPolicy.standardUnitPayable).mul(value.quantity);
+  const standardDiscount = standard.mul("0.05").toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
   const discount = new Decimal(value.discount);
   const payable = standard.minus(discount);
   const floor = new Decimal(cniPolicy.minimumUnitPayable).mul(value.quantity);
@@ -27,7 +28,8 @@ export function priceCni(raw: unknown) {
   return Object.freeze({
     policyVersion: cniPolicy.version, quantity: value.quantity,
     unitPayable: cniPolicy.standardUnitPayable, standardPayable: standard.toFixed(2),
-    discount: discount.toFixed(2), payable: payable.toFixed(2),
+    standardDiscount: standardDiscount.toFixed(2), displayedOffer: standard.add(standardDiscount).toFixed(2),
+    discount: discount.toFixed(2), totalDiscount: standardDiscount.add(discount).toFixed(2), payable: payable.toFixed(2),
     beforeTax: beforeTax.toFixed(2), tax: tax.toFixed(2), taxRate: rate.toString(),
     presentation: value.presentation, requiresDiscountApproval: discount.greaterThan(0),
   });

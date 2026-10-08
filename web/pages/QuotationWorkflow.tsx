@@ -1,3 +1,4 @@
+import { BoqCosting } from "./BoqCosting.js";
 import { money } from "../numbers.js";
 import { SharePdf } from "../components/SharePdf.js";
 import { ExternalApproval } from "../components/ExternalApproval.js";
@@ -43,6 +44,9 @@ export function QuotationWorkflow({
 }) {
   const manager = ["Admin", "Management"].includes(session.user.role);
   const author = q.created_by === session.user.id;
+  const [costing,setCosting]=useState<any>(),[costingError,setCostingError]=useState("");
+  useEffect(()=>{let active=true;setCosting(undefined);setCostingError("");if(manager&&q.boq_revision_id)api<any>(`/boqs/${q.boq_revision_id}`).then(r=>{if(active)setCosting(r);}).catch(e=>{if(active)setCostingError(e.message);});return()=>{active=false;};},[manager,q.boq_revision_id]);
+
   const [notes, setNotes] = useState("");
   const [revision, setRevision] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -62,6 +66,16 @@ export function QuotationWorkflow({
     setDiscount(q.snapshot.input.discount ?? "0"); setMode("discount");
     setTargetMargin(""); setRevision(false); setNotes(""); setError("");
   }, [q.id]);
+  async function createFinalQuotation(){
+    const choices:Array<{key:"discount"|"margin";label:string;discount:string;payable:string}>=[];
+    if(lump.result&&!lump.pending&&!lump.failure)choices.push({key:"discount",label:"Discount amount",discount:money(lump.result.discount),payable:money(lump.result.proposed.payable)});
+    if(targetMargin.trim()&&target.result&&!target.pending&&!target.failure)choices.push({key:"margin",label:`Target markup ${targetMargin}%`,discount:money(target.result.discount),payable:money(target.result.proposed.payable)});
+    if(!choices.length){setError("Wait for a valid adjustment comparison.");return;}
+    const chosen=await confirmDiscountProposal(choices);if(!chosen)return;
+    const value=chosen==="discount"?lump.result:target.result;
+    if(!confirmTransition("Create and approve final quotation","Save the selected adjustment as a new immutable approved quotation version."))return;
+    setBusy(true);setError("");try{onChange(await api(`/commercial/quotations/${q.id}/management-final`,{csrf:session.csrfToken,body:{discount:value.discount,notes}}));}catch(e){setError((e as Error).message);}finally{setBusy(false);}
+  }
   async function transition(kind: string) {
     let actionDiscount = effectiveDiscount;
     let actionMetrics = metrics;
@@ -220,7 +234,11 @@ export function QuotationWorkflow({
 
         </section>
       )}
+      {manager&&costingError&&<p role="alert">{costingError}</p>}
+      {manager&&costing&&<section className="detail-panel"><h3>Project costing & EPC summaries</h3>{([costing.snapshot.summary,costing.snapshot.epc] as any[][]).map((rows,index)=><div className="table-scroll" key={index}><table><thead><tr><th>{index?"EPC":"Project category"}</th><th>Budgeted cost (PKR)</th></tr></thead><tbody>{rows.map(row=><tr key={row.name}><th>{row.name}</th><td>{money(row.cost)}</td></tr>)}</tbody></table></div>)}</section>}
       {renderPreview(q.snapshot)}
+      {manager&&costing&&<BoqCosting snapshot={costing.snapshot} number={costing.number} createdAt={costing.created_at} pdfUrl={`/api/boqs/${costing.id}/costing.pdf`}/>}
+
       <section
         className="quotation-review-panel"
         aria-label="Quotation review actions"
@@ -284,6 +302,7 @@ export function QuotationWorkflow({
               >
                 Approve quotation
               </button>
+              <button disabled={busy||lump.pending||target.pending} onClick={()=>void createFinalQuotation()}>Apply selected adjustment & create final quotation</button>
               <button disabled={busy} onClick={() => setRevision(true)}>
                 Request revision
               </button>

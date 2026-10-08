@@ -87,7 +87,15 @@ export function cniHttp(pool:Pool,requireSession:RequestHandler) {
    const action=await client.query("SELECT action FROM cni_proposal_actions WHERE version_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1",[v.versionId]);
    if(action.rows[0]?.action!=="Approval requested")throw new HttpError(409,"This proposal is not awaiting quotation approval.");
    const instructions=v.recommendedDiscount===undefined?{}:{recommendedDiscount:reviewCni(latest.rows[0].snapshot.pricing,latest.rows[0].internal_cost_snapshot,{discount:v.recommendedDiscount}).recommendedDiscount};
-   if(v.action==="Approved"&&v.recommendedDiscount!==undefined&&v.recommendedDiscount!==latest.rows[0].snapshot.pricing.discount)throw new HttpError(400,"Send revised pricing back for a new quotation version before approving it.");
+   if(v.action==="Approved"&&v.recommendedDiscount!==undefined&&v.recommendedDiscount!==latest.rows[0].snapshot.pricing.discount){
+    const prior=latest.rows[0],snapshot={...prior.snapshot,pricing:priceCni({quantity:prior.snapshot.pricing.quantity,presentation:prior.snapshot.pricing.presentation,taxRate:prior.snapshot.pricing.taxRate,discount:v.recommendedDiscount})};
+    const nextId=randomUUID(),version=prior.version+1,number=prior.number.replace(/-V\d+$/,`-V${version}`);
+    await client.query("INSERT INTO cni_proposal_actions(id,version_id,action,remarks,instructions,created_by) VALUES($1,$2,'Revision requested',$3,$4,$5)",[randomUUID(),v.versionId,"Management created adjusted quotation",instructions,req.authSession!.user.id]);
+    await client.query("INSERT INTO cni_proposal_versions(id,proposal_id,version,number,snapshot,internal_cost_snapshot,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)",[nextId,id,version,number,snapshot,prior.internal_cost_snapshot,req.authSession!.user.id]);
+    await client.query("INSERT INTO cni_proposal_actions(id,version_id,action,remarks,instructions,created_by) VALUES($1,$2,'Approved',$3,$4,$5)",[randomUUID(),nextId,v.remarks,instructions,req.authSession!.user.id]);
+    await client.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)",[req.authSession!.user.id,`C&I ${number}: Management created and approved adjusted quotation`]);
+    await client.query("COMMIT");res.json({ok:true,versionId:nextId});return;
+   }
    await client.query("INSERT INTO cni_proposal_actions(id,version_id,action,remarks,instructions,created_by) VALUES($1,$2,$3,$4,$5,$6)",[randomUUID(),v.versionId,v.action,v.remarks,instructions,req.authSession!.user.id]);
    await client.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)",[req.authSession!.user.id,`C&I ${latest.rows[0].number}: ${v.action}`]);
    await client.query("COMMIT");res.json({ok:true});

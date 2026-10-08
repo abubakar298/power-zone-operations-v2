@@ -1,3 +1,4 @@
+import { StandardSellingSummary } from "../components/StandardSellingSummary.js";
 import { CniProposals } from "./CniProposals.js";
 import { money } from "../numbers.js";
 import { SurveyQuantityFields } from "../components/SurveyQuantityFields.js";
@@ -327,34 +328,13 @@ export function Boqs({
   }
   async function submitReview() {
     if (!draft || !preview || busy) return;
-    if (
-      !confirmTransition(
-        "Submit costing for review",
-        "This sends the current BOQ costing to Management and preserves this review version.",
-      )
-    )
-      return;
-    setBusy(true);
-    setError("");
+    if (!confirmTransition("Create quotation", "Save this exact BOQ and prepare its standard commercial quotation. Management reviews the final quotation.")) return;
+    setBusy(true);setError("");
     try {
-      const r = await api<{ id: string }>("/boqs/reviews", {
-        body: {
-          draftId: draft.id,
-          version: draft.version,
-          fingerprint: preview.fingerprint,
-        },
-        csrf: session.csrfToken,
-      });
+      const r=await api<{id:string}>("/boqs/save",{body:{draftId:draft.id,version:draft.version,fingerprint:preview.fingerprint},csrf:session.csrfToken});
       await load();
-      await openReview(r.id);
-      setNotice(
-        "Submitted for review. This costing version is preserved until a reviewer approves it or requests changes.",
-      );
-    } catch (e) {
-      fail(e);
-    } finally {
-      setBusy(false);
-    }
+      if(onPricing)onPricing(r.id);else setNotice("BOQ saved. Open Commercial pricing to prepare the quotation.");
+    }catch(e){fail(e);}finally{setBusy(false);}
   }
   async function uploadApproval(file?: File) {
     if (!file || busy) return;
@@ -1500,11 +1480,12 @@ export function Boqs({
                 snapshot={preview.snapshot}
                 pdfUrl={`/api/boqs/drafts/${draft?.id}/costing.pdf?fingerprint=${preview.fingerprint}`}
               />
+              <StandardSellingSummary snapshot={preview.snapshot}/>
               <div className="save-boq-panel">
                 <p>
                   {preview.snapshot.engineering.releaseReady === false
                     ? "Single-phase costing preview only. Electrical verification is required before management submission. Your draft can be saved and resumed."
-                    : "Submit this exact costing for approval. If changes are requested, edit the draft and resubmit."}
+                    : "Check this costing, then create the quotation at standard policy prices. Management reviews the quotation."}
                 </p>
                 <button
                   className="primary"
@@ -1513,7 +1494,7 @@ export function Boqs({
                     void submitReview();
                   }}
                 >
-                  Submit for review
+                  Create quotation
                 </button>
               </div>
             </>

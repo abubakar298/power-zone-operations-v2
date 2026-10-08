@@ -9,6 +9,7 @@ const Departments = lazy(() => import("./Departments.js").then(module => ({ defa
 const Director = lazy(() => import("./Director.js").then(module => ({ default: module.Director })));
 const Coordinator = lazy(() => import("./Coordinator.js").then(module => ({ default: module.Coordinator })));
 const Operations = lazy(() => import("./Operations.js").then(module => ({ default: module.Operations })));
+const CniProposals = lazy(() => import("./CniProposals.js").then(module => ({ default: module.CniProposals })));
 const Commercial = lazy(() => import("./Commercial.js").then(module => ({ default: module.Commercial })));
 const Orders = lazy(() => import("./Orders.js").then(module => ({ default: module.Orders })));
 const Boqs = lazy(() => import("./Boqs.js").then(module => ({ default: module.Boqs })));
@@ -451,7 +452,7 @@ export function Dashboard({
                 }}
               />
             )}
-          {(view === "pricing" || view === "quotes") && (
+          {(view === "pricing" || view === "quotes") && (bucketTask?.kind === "C&I proposal" ? <CniProposals reviewOnly session={session} masters={{customers:[]}} initialProposalId={bucketTask.id} onLogout={onLogout} onBack={()=>navigate("dashboard")} /> : (
             <Commercial
               key={view + String(pricingRevisionId) + String(pricingRequestId)}
               session={session}
@@ -476,7 +477,7 @@ export function Dashboard({
                 navigate("boqs");
               }}
             />
-          )}
+          ))}
           {view === "boqs" && (
             <Boqs
               initialDraftId={revisionDraftId}

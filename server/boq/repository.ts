@@ -169,20 +169,27 @@ export class BoqRepository {
     if (Number(n) !== ids.length)
       throw new HttpError(403, "One or more attachments are unavailable.");
   }
-  async save(owner: string, id: string, _version: number, _expected: string) {
-    const existing = (
-      await this.pool.query(
-        "SELECT r.* FROM boq_draft_finalizations f JOIN survey_drafts d ON d.id=f.draft_id JOIN boq_revisions r ON r.id=f.revision_id WHERE f.draft_id=$1 AND d.owner_id=$2",
-        [id, owner],
-      )
-    ).rows[0];
-    if (existing) return existing;
-    throw new HttpError(
-      409,
-      "Submit the costing for review. Approval saves the exact reviewed BOQ.",
-    );
+  async save(owner: string, id: string, version: number, expected: string) {
+    return transaction(this.pool, async c => {
+      await c.query("SELECT pg_advisory_xact_lock(742019002)");
+      const user=(await c.query("SELECT active,role FROM users WHERE id=$1 FOR SHARE",[owner])).rows[0];
+      if(!user?.active)throw new HttpError(401,"Your access has ended.");
+      if(!["Coordinator","Admin","Management"].includes(user.role))throw new HttpError(403,"Commercial preparation access required.");
+      const d=(await c.query("SELECT * FROM survey_drafts WHERE id=$1 AND owner_id=$2 FOR UPDATE",[id,owner])).rows[0];
+      if(!d)throw new HttpError(404,"Draft not found.");
+      const existing=(await c.query("SELECT r.* FROM boq_draft_finalizations f JOIN boq_revisions r ON r.id=f.revision_id WHERE f.draft_id=$1",[id])).rows[0];
+      if(existing)return existing;
+      if(d.version!==version)throw new HttpError(409,"Draft changed. Save and recalculate before creating a quotation.");
+      const survey=surveySchema.parse(d.inputs);
+      if(survey.uploadIds.length&&!survey.ocrReviewed)throw new HttpError(400,"Review source documents first.");
+      await this.uploads(c,owner,survey.uploadIds,d.base_revision_id);
+      const snapshot=calculate(survey,await new MastersRepository(c,true).list());
+      if(snapshot.engineering.releaseReady===false)throw new HttpError(422,"Electrical verification is required before commercial preparation.");
+      if(fingerprint(snapshot)!==expected)throw new HttpError(409,"Reference data changed. Recalculate the costing.");
+      return this.finalize(c,owner,d,snapshot,false);
+    });
   }
-  async finalize(c: PoolClient, actor: string, d: any, snapshot: BoqSnapshot) {
+  async finalize(c: PoolClient, actor: string, d: any, snapshot: BoqSnapshot, managementApproved = true) {
     const s = snapshot.survey;
     let boq: string, revision: number, number: string;
     if (d.base_revision_id) {
@@ -279,7 +286,7 @@ export class BoqRepository {
     );
     await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
       actor,
-      `boq.${number}.approved`,
+      `boq.${number}.${managementApproved ? "approved" : "saved-for-quotation"}`,
     ]);
     return saved;
   }
