@@ -6,6 +6,7 @@ import { NotificationsRepository } from "./repository.js";
 export function notificationsHttp(
   repo: NotificationsRepository,
   requireSession: RequestHandler,
+  readiness:{emailConfigured:boolean;webhookConfigured:boolean}={emailConfigured:false,webhookConfigured:false},
 ) {
   const r = Router();
   r.use(requireSession);
@@ -74,7 +75,7 @@ export function notificationsHttp(
   r.get("/settings", async (req, res) => {
     if (!["Admin", "Management"].includes(req.authSession!.user.role))
       throw new HttpError(403, "Management access required.");
-    res.json(await repo.settings());
+    res.json({...await repo.settings(),...readiness});
   });
   r.post("/settings", async (req, res) => {
     if (req.authSession!.user.role !== "Admin")

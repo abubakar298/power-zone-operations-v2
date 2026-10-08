@@ -176,7 +176,7 @@ export function createApp(
     "/api/departments",
     departmentsHttp(new DepartmentRepository(pool), auth.requireSession),
   );
-  app.use("/api/notifications",notificationsHttp(new NotificationsRepository(pool),auth.requireSession));
+  app.use("/api/notifications",notificationsHttp(new NotificationsRepository(pool),auth.requireSession,{emailConfigured:delivery.configured,webhookConfigured:!!config.emailWebhookSecret}));
   app.use("/api/dashboard", dashboardRoutes(auth.requireSession));
   app.use(
     "/api/masters",

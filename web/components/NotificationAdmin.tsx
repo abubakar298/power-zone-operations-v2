@@ -31,7 +31,7 @@ export function NotificationAdmin({ session }: { session: Session }) {
   }
   return (
     <section className="detail-panel">
-      <h2>Communication settings</h2>
+      <h2>Communication settings</h2><p role="status">Email transport: {data.emailConfigured?"ready":"paused or not configured"} · Provider delivery callbacks: {data.webhookConfigured?"configured":"setup pending"}</p>
       <p>
         Workflow recipients follow document ownership and departmental
         permissions. Security emails cannot be disabled by employee preferences.
