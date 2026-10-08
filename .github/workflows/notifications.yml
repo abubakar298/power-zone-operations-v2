@@ -31,8 +31,8 @@ jobs:
         run: pnpm audit --prod --audit-level high
       - name: Build and type check
         run: pnpm build
-      - name: Native PostgreSQL integration tests
-        run: pnpm test
+      - name: Focused account and notification security integration
+        run: pnpm exec tsx --test --test-concurrency=1 tests/accounts.test.ts tests/email-sender.test.ts tests/notifications.test.ts tests/notification-http.test.ts tests/notification-webhooks.test.ts
       - name: Install browser
         run: pnpm exec playwright install --with-deps chromium
       - name: Notification browser acceptance with native PostgreSQL

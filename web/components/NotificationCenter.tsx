@@ -68,9 +68,11 @@ export function NotificationCenter({
       if (!document.hidden) void load();
     }, 30000);
     window.addEventListener("focus", load);
+    window.addEventListener("hashchange", load);
     return () => {
       clearInterval(timer);
       window.removeEventListener("focus", load);
+      window.removeEventListener("hashchange", load);
     };
   }, [session.user.id]);
   useEffect(() => {
@@ -80,6 +82,7 @@ export function NotificationCenter({
     if (!id || !items.length) return;
     const n = items.find((n) => n.id === id);
     if (n) {
+      setOpen(false);
       onOpen(n.target);
       void mark(n.id);
       window.history.replaceState(null, "", "/dashboard");
