@@ -6,10 +6,14 @@ export const testArchiveKey = "owner-confirmed-test-workflow-2026-10-07";
 export const completedSampleArchiveKey =
   "owner-confirmed-completed-samples-2026-10-07-115531";
 const requests: Record<string, string> = {
+  "owner-confirmed-all-samples-2026-10-08-171813": "2026-10-08T17:18:13Z",
   [testArchiveKey]: "2026-10-07T06:52:51Z",
   [completedSampleArchiveKey]: "2026-10-07T11:55:31Z",
 };
 const tables = [
+  "cni_proposal_actions",
+  "cni_proposal_versions",
+  "cni_proposals",
   "external_document_approval_files",
   "external_document_approvals",
   "design_survey_handoffs",
