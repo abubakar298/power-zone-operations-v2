@@ -1,3 +1,4 @@
+import { DocumentPreview } from "../components/DocumentPreview.js";
 import { money } from "../numbers.js";
 import { ExternalApproval } from "../components/ExternalApproval.js";
 import { SharePdf } from "../components/SharePdf.js";
@@ -485,6 +486,21 @@ export function Orders({
             <strong>PKR {money(snapshot.allocation.total)}</strong> · Matches
             quotation after discount.
           </p>
+          {manager && (review || saved) && (
+            <section className="ipo-approval-comparison" aria-label="Quotation and IPO comparison">
+              <h3>Compare with the approved quotation</h3>
+              <p>Review the customer, scope, quantities and final payable against the exact quotation accepted by the customer.</p>
+              <div className="ipo-comparison-grid">
+                <DocumentPreview title={`Approved quotation · ${snapshot.quotationNumber}`} url={`/api/commercial/quotations/${snapshot.input.quotationId}/quotation.pdf`} />
+                <DocumentPreview title={saved ? "Issued IPO / PT" : "IPO / PT awaiting approval"} url={saved ? `/api/orders/${saved.id}/ipo.pdf` : `/api/orders/submissions/${review.id}/preview.pdf`} />
+              </div>
+              <section className="ipo-evidence-review" aria-label="Customer approval evidence">
+                <h3>Customer approval evidence</h3>
+                <p><strong>{snapshot.input.evidenceType}</strong> · {snapshot.input.evidenceNotes || "No additional remarks recorded."}</p>
+                {snapshot.document ? <DocumentPreview title={`Attached evidence · ${snapshot.document.filename}`} url={`/api/orders/documents/${snapshot.document.id}`} mime={snapshot.document.mime} /> : <p>{snapshot.input.evidenceType === "Verbal sale confirmation" ? "Verbal confirmation recorded; no attachment." : "No attachment recorded. Review the evidence before approving."}</p>}
+              </section>
+            </section>
+          )}
           <div className="order-table-scroll">
             <table className="order-table">
               <thead>
