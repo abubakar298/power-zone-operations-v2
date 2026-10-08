@@ -73,8 +73,9 @@ export function QuotationWorkflow({
     if(!choices.length){setError("Wait for a valid adjustment comparison.");return;}
     const chosen=await confirmDiscountProposal(choices);if(!chosen)return;
     const value=chosen==="discount"?lump.result:target.result;
-    if(!confirmTransition("Create and approve final quotation","Save the selected adjustment as a new immutable approved quotation version."))return;
-    setBusy(true);setError("");try{onChange(await api(`/commercial/quotations/${q.id}/management-final`,{csrf:session.csrfToken,body:{discount:value.discount,notes}}));}catch(e){setError((e as Error).message);}finally{setBusy(false);}
+    if(!notes.trim()){setError("Enter adjustment instructions for Atif in Review comments.");return;}
+    if(!confirmTransition("Send adjustments to Atif","The quotation will move to Revision required. Atif must revise and resubmit it for your final approval."))return;
+    setBusy(true);setError("");try{await api("/coordinator/events",{csrf:session.csrfToken,body:{quotationId:q.id,kind:"Changes requested",notes:`${notes.trim()}\nProposed total discount: PKR ${money(value.discount)}. Proposed net payable: PKR ${money(value.proposed.payable)}.`}});onChange(await api(`/commercial/quotations/${q.id}`));}catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
   async function transition(kind: string) {
     let actionDiscount = effectiveDiscount;
@@ -300,9 +301,9 @@ export function QuotationWorkflow({
                 disabled={busy}
                 onClick={() => void transition("Approved")}
               >
-                Approve quotation
+                Final approve quotation
               </button>
-              <button disabled={busy||lump.pending||target.pending} onClick={()=>void createFinalQuotation()}>Apply selected adjustment & create final quotation</button>
+              <button disabled={busy||lump.pending||target.pending} onClick={()=>void createFinalQuotation()}>Send selected adjustments to Atif</button>
               <button disabled={busy} onClick={() => setRevision(true)}>
                 Request revision
               </button>
