@@ -32,6 +32,7 @@ const defaults = (name: string, id = ""): PricingInput => ({
   remarks: "",
 });
 function editablePricing(p: PricingSnapshot): PricingInput {
+  if (p.policy) return { ...p.input, markups: { ...p.input.markups } };
   const markups = { ...p.input.markups };
   for (const r of p.rows) if (r.key !== "additional") markups[r.key] = r.markup;
   return { ...p.input, markups };

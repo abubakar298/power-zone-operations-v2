@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { jsPDF } from "jspdf";
+import { Decimal } from "decimal.js";
 import { readFile } from "node:fs/promises";
 
 test.beforeEach(async ({ page }) => {
@@ -399,12 +400,18 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Create quotation", exact: true })
     .click();
+  const standardPreviewResponse = page.waitForResponse(r =>
+    r.url().endsWith("/api/commercial/pricing/preview") && r.request().method() === "POST");
   await page
     .getByRole("button", { name: "Calculate selling price", exact: true })
     .click();
-  await expect(
-    page.getByText("PKR 8,824,826.93", { exact: true }),
-  ).toBeVisible();
+  const standardPreview = await (await standardPreviewResponse).json();
+  expect(standardPreview.snapshot.policy.version).toBeGreaterThan(0);
+  const money = (value: string) => Number(value).toLocaleString("en-PK", {
+    minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const standardNet = money(standardPreview.snapshot.netTotal);
+  const discountedNet = money(new Decimal(standardPreview.snapshot.netTotal).sub("1000.50").toFixed(2));
+  await expect(page.getByText(`PKR ${standardNet}`, { exact: true })).toBeVisible();
   await page
     .getByRole("button", { name: "Save pricing version", exact: true })
     .click();
@@ -419,9 +426,9 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   });
   await expect(inlineDiscount).toHaveClass("pdf-inline-discount");
   await inlineDiscount.fill("1000.50");
-  await expect(page.locator(".pdf-inline-net")).toHaveText("8,823,826.43");
+  await expect(page.locator(".pdf-inline-net")).toHaveText(discountedNet);
   await inlineDiscount.fill("");
-  await expect(page.locator(".pdf-inline-net")).toHaveText("8,824,826.93");
+  await expect(page.locator(".pdf-inline-net")).toHaveText(standardNet);
   const description = page.locator(".quote-description textarea").first();
   const originalDescription = await description.inputValue();
   const invalidPreview = page.waitForResponse(
@@ -448,9 +455,9 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("button", { name: "Save quotation version", exact: true }),
   ).toBeEnabled();
   await inlineDiscount.fill("1000.50");
-  await expect(page.locator(".pdf-inline-net")).toHaveText("8,823,826.43");
+  await expect(page.locator(".pdf-inline-net")).toHaveText(discountedNet);
   await expect(
-    page.getByText("Net Total: PKR 8,823,826.43", { exact: true }),
+    page.getByText(`Net Total: PKR ${discountedNet}`, { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Save quotation version", exact: true }),
@@ -565,7 +572,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Calculate selling price", exact: true })
     .click();
-  await page.getByLabel("Additional item markup %", { exact: true }).fill("25");
+  await page.getByLabel("Additional scope category", { exact: true }).selectOption("other");
   await page
     .getByRole("button", { name: "Calculate selling price", exact: true })
     .click();
@@ -1344,9 +1351,9 @@ test("Coordinator records external approval with screenshots and receives its qu
   await expect(
     page.getByLabel("Tax presentation", { exact: true }),
   ).toHaveValue("Tax Included");
-  await expect(page.getByLabel("BESS Markup %", { exact: true })).toHaveValue(
-    "33",
-  );
+  await expect(page.getByLabel("BESS Markup %", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Standard commercial policy" }))
+    .toContainText("Inverter, battery & BMS 30%");
   await page.screenshot({
     path: "test-results/external-approval-pricing.png",
     fullPage: true,
@@ -1852,26 +1859,26 @@ test("quotation page saves and submits, management previews discount and request
   const saved = await (
     await page.request.get(`/api/commercial/quotations/${id}`)
   ).json();
-  const discount = page.getByLabel("Quotation discount (PKR)", { exact: true });
+  const discount = page.getByLabel("Management discount amount (PKR)", { exact: true });
   await expect(discount).toBeVisible();
   const initial = Number(saved.snapshot.input.discount ?? 0);
   const originalNet = Number(saved.snapshot.footer.at(-1).amount);
   await discount.fill(String(initial + 1000));
-  await expect(page.locator(".pdf-inline-net")).toHaveText(
+  await expect(page.getByRole("region", { name: "Discount amount comparison", exact: true }).getByRole("row", { name: /Final payable/ }).getByRole("cell").last()).toHaveText(
     (originalNet - 1000).toLocaleString("en-PK", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }),
   );
   await expect(
-    page.getByRole("row", { name: /Profit % on cost/ }),
+    page.getByRole("row", { name: /Markup on cost/ }).first(),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "Approve quotation", exact: true })
     .click();
-  await expect(page.getByRole("alert")).toContainText("Request revision");
+  await expect(page.getByRole("alert").filter({ hasText: "Request revision" }).first()).toContainText("Request revision");
   await discount.fill("");
-  await expect(page.locator(".pdf-inline-net")).toHaveText(
+  await expect(page.getByRole("region", { name: "Discount amount comparison", exact: true }).getByRole("row", { name: /Final payable/ }).getByRole("cell").last()).toHaveText(
     (originalNet + initial).toLocaleString("en-PK", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -1950,7 +1957,7 @@ test("quotation page saves and submits, management previews discount and request
     }),
   );
   await row.getByRole("button", { name: "Open workflow", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText(
+  await expect(page.getByRole("alert").filter({ hasText: "Profit preview temporarily unavailable" }).first()).toContainText(
     "Profit preview temporarily unavailable",
   );
   await page
@@ -2064,7 +2071,7 @@ test("quotation page saves and submits, management previews discount and request
   );
   await page.getByRole("button", { name: "Quotations", exact: true }).click();
   await page.getByRole("button", { name: new RegExp(aq.number) }).click();
-  await expect(page.getByRole("alert")).toContainText(
+  await expect(page.getByRole("alert").filter({ hasText: "Profit preview temporarily unavailable" }).first()).toContainText(
     "Profit preview temporarily unavailable",
   );
   await expect(
@@ -2074,7 +2081,7 @@ test("quotation page saves and submits, management previews discount and request
     .getByLabel("Review comments", { exact: true })
     .fill("Approved after reviewing the saved quotation.");
   // Unsaved discount changes must never be silently approved even without metrics.
-  const approvalDiscount = page.getByLabel("Quotation discount (PKR)", {
+  const approvalDiscount = page.getByLabel("Management discount amount (PKR)", {
     exact: true,
   });
   const savedDiscount = aq.snapshot.input.discount ?? "0";
@@ -2082,7 +2089,7 @@ test("quotation page saves and submits, management previews discount and request
   await page
     .getByRole("button", { name: "Approve quotation", exact: true })
     .click();
-  await expect(page.getByRole("alert")).toContainText("Request revision");
+  await expect(page.getByRole("alert").filter({ hasText: "Request revision" }).first()).toContainText("Request revision");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await approvalDiscount.fill(String(savedDiscount));
   await page

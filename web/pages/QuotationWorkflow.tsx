@@ -66,7 +66,7 @@ export function QuotationWorkflow({
     let actionDiscount = effectiveDiscount;
     let actionMetrics = metrics;
 
-    if (kind === "Changes requested" && manager) {
+    if (kind === "Changes requested" && manager && (targetMargin.trim() || (discount.trim() && Number(discount) !== Number(q.snapshot.input.discount ?? 0)))) {
       if ((!discount.trim() && !targetMargin.trim()) || (discount.trim() && (lump.pending || !lump.result)) || (targetMargin.trim() && (target.pending || !target.result || !percentageValid))) {
         setError("Enter at least one valid discount proposal and wait for its calculated totals."); return;
       }

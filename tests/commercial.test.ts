@@ -1028,6 +1028,8 @@ test("revision routing requires approved separate costing and preserves origin, 
       comments: "Reviewed costing and scope",
     }).expect(200)
   ).body.saved;
+  const revisionContext = (await get(`/revision-context/${approved.id}`).expect(200)).body;
+  assert.doesNotThrow(() => pricingSchema.parse({ ...revisionContext.pricing_input, boqRevisionId: approved.id }));
   assert.notEqual(approved.id, issued.boq_revision_id);
   assert.equal(approved.revision_origin, "Customer");
   const pi = {
