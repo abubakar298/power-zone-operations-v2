@@ -539,7 +539,7 @@ export function Orders({
               </tfoot>
             </table>
           </div>
-          <div className="survey-actions">
+          <div className="survey-actions ipo-document-actions">
             {saved && onOperations && !initialIpoId && (
               <button onClick={() => onOperations(saved.id)}>
                 Send BOQ to Operations
@@ -633,12 +633,6 @@ export function Orders({
                 }}
               />
             )}
-            {!saved && !manager && (
-              <p>
-                Admin or Management must approve the sale evidence before an IPO
-                is issued.
-              </p>
-            )}
             <button
               disabled={busy}
               onClick={() =>
@@ -723,6 +717,14 @@ export function Orders({
                   Send IPO to Accounts
                 </button>
               ))}
+          </div>
+          <div className="ipo-action-notes">
+            {!saved && !manager && (
+              <p>
+                Admin or Management must approve the sale evidence before an IPO
+                is issued.
+              </p>
+            )}
             {snapshot.document && (
               <a
                 href={`/api/orders/documents/${snapshot.document.id}`}
