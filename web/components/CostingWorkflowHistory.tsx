@@ -10,6 +10,8 @@ export function CostingWorkflowHistory({
   const history = review.workflow_history ?? [];
   if (!quotation && !review.base_revision_id) return null;
   const previous = history.at(-1);
+  const showMarkup = history.some((b:any)=>b.quotations?.some((q:any)=>Object.hasOwn(q,"budgeted_markup")));
+  const markup = (q:any) => q?.budgeted_markup == null ? "—" : `${new Decimal(q.budgeted_markup).toFixed(2)}%`;
   const context = review.revision_context;
   const difference =
     !quotation && previous?.budgeted_cost != null
@@ -44,6 +46,7 @@ export function CostingWorkflowHistory({
               <th scope="col" className="numeric">
                 Budgeted cost (PKR)
               </th>
+              {showMarkup && <th scope="col" className="numeric">Budgeted markup on cost (%)</th>}
             </tr>
           </thead>
           <tbody>
@@ -71,6 +74,7 @@ export function CostingWorkflowHistory({
                   )}
                 </td>
                 <td className="numeric">{amount(b.budgeted_cost)}</td>
+                {showMarkup && <td className="numeric">—</td>}
               </tr>,
               ...b.quotations
                 .filter((q: any) => q.id !== quotation?.id)
@@ -100,6 +104,7 @@ export function CostingWorkflowHistory({
                       )}
                     </td>
                     <td className="numeric">{amount(b.budgeted_cost)}</td>
+                    {showMarkup && <td className="numeric">{markup(q)}</td>}
                   </tr>
                 )),
             ])}
@@ -131,6 +136,7 @@ export function CostingWorkflowHistory({
                     )}
                 </td>
                 <td className="numeric">—</td>
+                {showMarkup && <td className="numeric">—</td>}
               </tr>
             )}
             {!quotation && (
@@ -160,6 +166,7 @@ export function CostingWorkflowHistory({
                 <td className="numeric">
                   <strong>{amount(review.snapshot.total)}</strong>
                 </td>
+                {showMarkup && <td className="numeric">—</td>}
               </tr>
             )}
             {quotation && (
@@ -208,6 +215,7 @@ export function CostingWorkflowHistory({
                     ? amount(previous.budgeted_cost)
                     : "—"}
                 </td>
+                {showMarkup && <td className="numeric">{markup(history.flatMap((b:any)=>b.quotations).find((q:any)=>q.id===quotation.id))}</td>}
               </tr>
             )}
           </tbody>

@@ -9,7 +9,7 @@ test("BOQ projection keeps equipment, removes BESS rates and recomputes only the
  const before=JSON.stringify(boq),v=restrictedCostView({snapshot:boq});assert.equal(v.snapshot.total,"1000");assert.equal(v.snapshot.costVisibility,"Excluding BESS");assert.equal(v.snapshot.lines[0].rate,null);assert.equal(v.snapshot.lines[0].total,null);assert.equal(v.snapshot.lines[0].qty,"1");assert.equal(v.snapshot.lines[1].rate,"100");assert.equal(v.snapshot.summary.length,1);assert.equal(JSON.stringify(boq),before);
 });
 test("pricing projection preserves non-BESS review and selling totals while removing BESS costs, markup and overall profit",()=>{
- const v=restrictedCostView(pricing,true);assert.equal(v.cost,undefined);assert.equal(v.profit,undefined);assert.equal(v.rows[0].cost,undefined);assert.equal(v.rows[0].markup,undefined);assert.equal(v.rows[0].beforeTax,"472998.8");assert.equal(v.rows[1].cost,"1000");assert.equal(v.rows[1].markup,"25");assert.equal(v.input.markups.bess,undefined);assert.equal(v.policy.markups.bess,undefined);assert.equal(v.netTotal,pricing.netTotal);
+ const v=restrictedCostView(pricing,true);assert.equal(v.cost,undefined);assert.equal(v.profit,undefined);assert.equal(v.rows[0].cost,undefined);assert.equal(v.rows[0].markup,undefined);assert.equal(v.rows[0].beforeTax,"472998.8");assert.equal(v.rows[1].cost,"1000");assert.equal(v.rows[1].markup,"25");assert.equal(v.input.markups.bess,undefined);assert.equal(v.policy.markups.bess,undefined);assert.equal(v.netTotal,pricing.netTotal);assert.equal(restrictedCostView({budgeted_markup:'21.75'}).budgeted_markup,undefined);
 });
 test("outbound HTTP boundary uses authenticated role at send time, including history, pricing, masters and nested handoffs",async()=>{
  const app=express();app.use(financialVisibility);app.use((req,_res,next)=>{(req as any).authSession={user:{role:req.get("X-Fixture-Role")}};next();});
@@ -39,6 +39,14 @@ test('real authenticated API hides BESS masters/policy and costing while retaini
  if(role==='Coordinator'){const writeRate=await request(app).post('/api/masters/rates').set('Cookie',cookie).set('Origin',origin).set('X-CSRF-Token',csrf).send({id:'HYB-3P-012',version:1,values:{rate:'1',status:'Active',notes:'Fixture'}});assert.equal(writeRate.status,403);}
  const policy=await request(app).get('/api/commercial/standard-policy').set('Cookie',cookie).expect(200);assert.equal(policy.body.markups.bess,role==='Coordinator'?undefined:'30');
  const preview=await request(app).post('/api/boqs/preview').set('Cookie',cookie).set('Origin',origin).set('X-CSRF-Token',csrf).send(survey).expect(200);const s=preview.body.snapshot;
+ if(role==='Management'){
+ const {price,quote}=await import('../server/commercial/engine.js');const {savedQuotationMarkup,workflowHistory}=await import('../server/boq/workflow-history.js');const {Decimal}=await import('decimal.js');
+ const pricingInput={boqRevisionId:randomUUID(),presentation:'No Breakup',taxMode:'Show Sales Tax Separately',markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},preparedBy:'Fixture',remarks:''} as any;
+ const p=price(s,'FIXTURE-R0',pricingInput);const q=quote(p,s,{pricingId:randomUUID(),quotedDate:'2026-10-08',validity:'7 Days',proposedBy:'Fixture',discount:'0'});
+ assert.equal(savedQuotationMarkup(p,s,q),new Decimal(p.subtotal).minus(p.cost).div(p.cost).mul(100).toFixed(2));
+ assert.ok(new Decimal(savedQuotationMarkup(p,s,{...q,input:{...q.input,discount:'11800'}})!).lt(savedQuotationMarkup(p,s,q)!));
+ assert.deepEqual(await workflowHistory(db.pool,randomUUID()),[]);
+ }
  if(role==='Coordinator'){
  const draft=(await request(app).post('/api/boqs/drafts').set('Cookie',cookie).set('Origin',origin).set('X-CSRF-Token',csrf).send({version:0,inputs:survey}).expect(200)).body;
  const pdf=await request(app).get(`/api/boqs/drafts/${draft.id}/costing.pdf?fingerprint=${preview.body.fingerprint}`).set('Cookie',cookie).expect(200);

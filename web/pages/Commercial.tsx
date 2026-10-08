@@ -425,7 +425,7 @@ export function Commercial({
     });
   }
   useEffect(()=>{
-    if(!initialRevisionId||!policy||revisionLoading||!input.boqRevisionId||savedPrice)return;
+    if(initialQuotationId||section!=="pricing"||!initialRevisionId||!policy||revisionLoading||!input.boqRevisionId||savedPrice)return;
     let active=true;
     const timer=setTimeout(()=>{api<{snapshot:PricingSnapshot;fingerprint:string}>("/commercial/pricing/preview",{body:input,csrf:session.csrfToken}).then(r=>{if(active)setPreview(r);}).catch(e=>{if(active)fail(e);});},200);
     return()=>{active=false;clearTimeout(timer);};

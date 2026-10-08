@@ -11,6 +11,7 @@ export function restrictedCostView(value:any, commercial=false):any {
   const result:any={};
   const boq=Array.isArray(value.lines)&&value.engineering&&value.survey;
   for(const [key,v] of Object.entries(value)){
+    if(key==="budgeted_markup")continue;
     if(key==="budgeted_cost"){result[key]=null;continue;}
     if(commercial&&["profit","margin","marginOnSales"].includes(key))continue;
     if(commercial&&key==="cost"&&Array.isArray(value.rows))continue;
