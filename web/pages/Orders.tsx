@@ -63,6 +63,20 @@ export function Orders({
   const [selectedType, setSelectedType] = useState<any>();
   const [extraction, setExtraction] = useState("");
   const selection = useRef(0);
+  const draftReady = useRef(false);
+  const draftKey = (id:string) => `pz-ipo-draft:${session.user.id}:${id}`;
+  useEffect(()=>{
+    if(!draftReady.current||!input.quotationId||review||saved)return;
+    try{sessionStorage.setItem(draftKey(input.quotationId),JSON.stringify({input,accepted}));}catch{/* Browser storage unavailable; form remains usable. */}
+  },[input,accepted,review,saved]);
+  useEffect(()=>{
+    if(!accepted||review||saved)return;
+    const parsed=orderSchema.safeParse({...input,customerAccepted:true});
+    if(!parsed.success)return;
+    let active=true;
+    const timer=setTimeout(()=>{api<any>("/orders/preview",{body:parsed.data,csrf:session.csrfToken}).then(r=>{if(active)setPreview(r);}).catch(()=>{if(active)setPreview(undefined);});},300);
+    return()=>{active=false;clearTimeout(timer);};
+  },[input,accepted,review,saved]);
   const manager = ["Admin", "Management"].includes(session.user.role);
   async function load() {
     const [q, o, s] = await Promise.all([
@@ -107,6 +121,7 @@ export function Orders({
   }
   async function choose(id: string) {
     const token = ++selection.current;
+    draftReady.current=false;
     setInput({
       quotationId: id,
       entryVersion: 2,
@@ -126,7 +141,11 @@ export function Orders({
     setCustomerName(defaults.customerName);
     const { customerName: _name, quotationType, ...values } = defaults;
     setSelectedType(quotationType);
-    setInput((v) => ({ ...v, ...values }));
+    let draft:any;
+    try{draft=JSON.parse(sessionStorage.getItem(draftKey(id))||"null");}catch{}
+    setInput((v) => ({ ...v, ...values,...(draft?.input?.quotationId===id?draft.input:{}) }));
+    setAccepted(draft?.input?.quotationId===id&&draft.accepted===true);
+    draftReady.current=true;
   }
   const customerFields = [
     "contactPerson",
@@ -257,10 +276,10 @@ export function Orders({
       )}
       {!initialIpoId && (
         <section className="detail-panel">
-          <h2>Receive customer PO & prepare IPO</h2>
+          <h2>Customer confirmation & IPO</h2>
           <p>
             Select the exact quotation accepted by the customer. IPO rates are
-            net selling rates; the approved costing stays unchanged.
+            net selling rates; the approved costing stays unchanged. Record approval below; the IPO preview prepares automatically when required details are complete. Unsubmitted details are retained in this browser tab while you navigate or refresh.
           </p>
           <form
             onSubmit={(e) => {
@@ -533,7 +552,7 @@ export function Orders({
                   void act(async () => {
                     if (
                       !confirmTransition(
-                        "Submit sale evidence for IPO approval",
+                        "Submit for IPO approval",
                         "Management will review the accepted quotation and attached sale evidence before issuing the IPO.",
                       )
                     )
@@ -549,6 +568,7 @@ export function Orders({
                       },
                       csrf: session.csrfToken,
                     });
+                    try{if(input.quotationId)sessionStorage.removeItem(draftKey(input.quotationId));}catch{}
                     setReview(row);
                     setPreview(undefined);
                     setKey(crypto.randomUUID());

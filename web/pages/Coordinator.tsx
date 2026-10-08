@@ -8,7 +8,6 @@ const stages = [
   "Quotation approval",
   "Revision required",
   "Customer confirmation",
-  "IPO preparation",
   "IPO approval",
   "Operations & Accounts Handoff",
 ];
