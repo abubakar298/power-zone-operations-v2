@@ -341,6 +341,7 @@ export function Commercial({
             setRevisionInfo(r);
             setInput({
               ...r.pricing_input,
+              markups: { ...defaults(session.user.displayName).markups, ...r.pricing_input.markups },
               boqRevisionId: initialRevisionId,
               revisionRequestId: r.id,
             });

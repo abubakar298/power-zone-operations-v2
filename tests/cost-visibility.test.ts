@@ -49,3 +49,9 @@ test('real authenticated API hides BESS masters/policy and costing while retaini
  }
  }finally{await db.close();}
 });
+
+ test('redacted revision pricing remains valid without supplying confidential BESS markup',async()=>{
+ const {pricingSchema}=await import('../server/commercial/schema.js');
+ const original={boqRevisionId:'00000000-0000-4000-8000-000000000001',presentation:'No Breakup',taxMode:'Show Sales Tax Separately',markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},preparedBy:'Atif Hameed',remarks:'Revised technical BOQ'};
+ const redacted=restrictedCostView(original,true);assert.equal(redacted.markups.bess,undefined);const parsed=pricingSchema.parse(redacted);assert.equal(parsed.markups.bess,'0');assert.equal(parsed.markups.balance,'25');assert.equal(parsed.remarks,original.remarks);
+ });

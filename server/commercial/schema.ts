@@ -13,7 +13,9 @@ export const pricingSchema = z.object({
   markups: z.object({
     solar: percent,
     structure: percent,
-    bess: percent,
+    // Confidential markup is omitted from Coordinator revision responses.
+    // The active server policy supplies the authoritative value.
+    bess: percent.default("0"),
     earthing: percent,
     balance: percent,
     rest: percent,
