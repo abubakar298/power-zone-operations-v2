@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { recommendSiteCode } from "../../server/boq/schema.js";
 
-/** Search does not change a selected identity; choosing another customer does. */
+/** A customer ID is submitted only after an explicit selection from the search results. */
 export function CustomerSiteFields({
   masters,
   initial,
@@ -17,7 +17,8 @@ export function CustomerSiteFields({
 }) {
   const [customer, setCustomer] = useState(String(initial.customerId ?? ""));
   const [customerSearch, setCustomerSearch] = useState("");
-  const [siteSearch, setSiteSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+
   const [siteId, setSiteId] = useState("");
   const [site, setSite] = useState({
     name: initial.siteName ?? "",
@@ -32,14 +33,14 @@ export function CustomerSiteFields({
       location: initial.location ?? "",
     });
     setCustomerSearch("");
-    setSiteSearch("");
+    setSearchOpen(false);
     setSiteId("");
   }, [initial]);
   useEffect(() => {
     if (preferredCustomer) {
       setCustomer(preferredCustomer);
       setCustomerSearch("");
-      setSiteSearch("");
+      setSearchOpen(false);
       setSiteId("");
     }
   }, [preferredCustomer]);
@@ -49,130 +50,53 @@ export function CustomerSiteFields({
   const changeCustomer = (value: string) => {
     setCustomer(value);
     setSiteId("");
-    setSiteSearch("");
+
     setSite({ name: "", code: "", location: "" });
   };
   return (
     <>
-      {!revision && (
-        <label>
-          Find customer
-          <input
-            type="search"
-            aria-label="Find BOQ customer"
-            value={customerSearch}
-            onChange={(e) => setCustomerSearch(e.target.value)}
-            placeholder="Search by name, code or contact"
-          />
-        </label>
-      )}
       <label>
         Customer
-        <select
-          name="customerId"
-          aria-label="Customer"
-          disabled={revision}
-          value={customer}
-          required
-          onChange={(e) => changeCustomer(e.target.value)}
-        >
-          <option value="">Select customer</option>
-          {masters.customers
-            .filter(
-              (c: any) =>
-                c.status === "Active" &&
-                (String(c.id) === customer ||
-                  [c.name, c.short_code, c.contact_person, c.phone]
-                    .join(" ")
-                    .toLowerCase()
-                    .includes(customerSearch.trim().toLowerCase())),
-            )
-            .map((c: any) => (
-              <option key={c.id} value={c.id}>
-                {c.name} · {c.short_code}
-              </option>
-            ))}
-        </select>
-        {onAdd && !revision && (
-          <button type="button" onClick={onAdd}>
-            Add customer
-          </button>
-        )}
+        <input type="search" role="combobox" aria-label="Customer" aria-expanded={searchOpen && !revision} aria-controls="boq-customer-options" aria-autocomplete="list" required disabled={revision}
+          value={customerSearch || (masters.customers.find((c: any) => String(c.id) === customer)?.name ?? "")}
+          placeholder="Search customer name, code or contact"
+          onFocus={() => setSearchOpen(true)}
+          ref={input => { input?.setCustomValidity(customer || revision ? "" : "Select a customer from the search results."); }}
+          onChange={e => { setCustomerSearch(e.target.value); changeCustomer(""); setSearchOpen(true); }}
+          onKeyDown={e => {
+            if (e.key === "Escape") setSearchOpen(false);
+            if (e.key === "ArrowDown") { e.preventDefault(); setSearchOpen(true); document.querySelector<HTMLButtonElement>("#boq-customer-options button")?.focus(); }
+            if (e.key === "Enter") { e.preventDefault(); document.querySelector<HTMLButtonElement>("#boq-customer-options button")?.click(); }
+          }} />
+        <input type="hidden" name="customerId" value={customer} />
+        {!revision && searchOpen && <div className="customer-search-results" id="boq-customer-options" role="listbox" aria-label="Customer matches">
+          {masters.customers.filter((c: any) => c.status === "Active" && [c.name,c.short_code,c.contact_person,c.phone].join(" ").toLowerCase().includes(customerSearch.trim().toLowerCase())).map((c: any) =>
+            <button key={c.id} type="button" role="option" aria-selected={String(c.id) === customer} onKeyDown={e => { const target = e.currentTarget; if (e.key === "ArrowDown") { e.preventDefault(); (target.nextElementSibling as HTMLElement)?.focus(); } if (e.key === "ArrowUp") { e.preventDefault(); (target.previousElementSibling as HTMLElement)?.focus(); } if (e.key === "Escape") setSearchOpen(false); }} onClick={() => { changeCustomer(String(c.id)); setCustomerSearch(""); setSearchOpen(false); }}>{c.name} · {c.short_code}</button>)}
+        </div>}
       </label>
-      {!revision && (
-        <>
-          <label>
-            Find site
-            <input
-              type="search"
-              aria-label="Find BOQ site"
-              disabled={!customer}
-              value={siteSearch}
-              onChange={(e) => setSiteSearch(e.target.value)}
-              placeholder="Search this customer's sites"
-            />
-          </label>
-          <label>
-            Existing site
-            <select
-              aria-label="Existing site"
-              disabled={!customer}
-              value={siteId}
-              onChange={(e) => {
-                const chosen = sites.find(
-                  (s: any) => String(s.id) === e.target.value,
-                );
-                setSiteId(e.target.value);
-                setSite(
-                  chosen
-                    ? {
-                        name: chosen.name,
-                        code: chosen.code,
-                        location: chosen.location ?? "",
-                      }
-                    : { name: "", code: "", location: "" },
-                );
-              }}
-            >
-              <option value="">Create a new site</option>
-              {sites
-                .filter(
-                  (s: any) =>
-                    String(s.id) === siteId ||
-                    [s.name, s.code, s.location]
-                      .join(" ")
-                      .toLowerCase()
-                      .includes(siteSearch.trim().toLowerCase()),
-                )
-                .map((s: any) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} · {s.code}
-                  </option>
-                ))}
-            </select>
-            <small>
-              If this site already has a BOQ, open that BOQ and create a
-              revision.
-            </small>
-          </label>
-        </>
-      )}
+      {onAdd && !revision && <button type="button" onClick={() => { setSearchOpen(false); onAdd(); }}>Add customer</button>}
       <label>
         {siteId || revision ? "Site name" : "New site name"}
         <input
           name="siteName"
           aria-label="New site name"
           value={site.name}
-          readOnly={!!siteId}
+          readOnly={revision}
           required
           maxLength={200}
-          onChange={(e) => setSite({ ...site, name: e.target.value })}
+          list={revision ? undefined : "boq-site-options"}
+          onChange={(e) => {
+            const existing = sites.find((s: any) => s.name === e.target.value);
+            setSiteId(existing ? String(existing.id) : "");
+            setSite(existing ? {name: existing.name, code: existing.code, location: existing.location ?? ""} : {...site, name: e.target.value, code: ""});
+          }}
           onBlur={() => {
             if (!site.code)
               setSite({ ...site, code: recommendSiteCode(site.name) });
           }}
         />
       </label>
+      {!revision && <datalist id="boq-site-options">{sites.map((s: any) => <option key={s.id} value={s.name}>{s.code}</option>)}</datalist>}
       <label>
         Site code
         <input
@@ -196,7 +120,7 @@ export function CustomerSiteFields({
           name="location"
           aria-label="Location"
           value={site.location}
-          readOnly={!!siteId}
+          readOnly={revision}
           maxLength={1000}
           onChange={(e) => setSite({ ...site, location: e.target.value })}
         />

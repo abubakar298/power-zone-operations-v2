@@ -83,6 +83,8 @@ export function Boqs({
     [sourceMode, setSourceMode] = useState("Survey"),
     [pvInput, setPvInput] = useState({ qty: 0, wattage: "0" }),
     [inverter, setInverter] = useState("10 kW");
+  const [revisionMode, setRevisionMode] = useState(false);
+  const [revisionCustomer, setRevisionCustomer] = useState("");
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [createdCustomerId, setCreatedCustomerId] = useState<string>();
   const form = useRef<HTMLFormElement>(null);
@@ -150,6 +152,9 @@ export function Boqs({
     setError("");
     setNotice("");
     setInverter("10 kW");
+    setRevisionMode(false);
+    setRevisionCustomer("");
+    return true;
   }
   function resume(d: any) {
     setCreatedCustomerId(undefined);
@@ -188,6 +193,7 @@ export function Boqs({
     );
   }
   function read(validate = true) {
+    if (revisionMode && !baseRevisionId) { setError("Select the original BOQ before entering a revision."); return; }
     if (!form.current || (validate && !form.current.reportValidity())) return;
     const f = new FormData(form.current);
     return {
@@ -206,10 +212,9 @@ export function Boqs({
       panelWattage: f.get("panelWattage"),
       structure: f.get("structure"),
       dcMetres: sourceMode === "General quotation" ? "0" : f.get("dcMetres"),
-      acInverter16:
-        sourceMode === "General quotation" ? "0" : f.get("acInverter16") || "0",
-      acInverter25:
-        sourceMode === "General quotation" ? "0" : f.get("acInverter25") || "0",
+      acTerminationMode: "Fixed" as const,
+      acInverter16: "0",
+      acInverter25: "0",
       acPanel16: sourceMode === "General quotation" ? "0" : f.get("acPanel16") || "0",
       acPanel25: sourceMode === "General quotation" ? "0" : f.get("acPanel25") || "0",
       earth25: sourceMode === "General quotation" ? "0" : f.get("earth25"),
@@ -463,7 +468,7 @@ export function Boqs({
       setBusy(false);
     }
   }
-  function reviseSaved() {
+  function reviseSaved(selected = saved) {
     if (
       !confirmTransition(
         "Create BOQ revision draft",
@@ -471,9 +476,9 @@ export function Boqs({
       )
     )
       return;
-    const original = saved;
+    const original = selected;
     setDesignSource(undefined);
-    fresh(original.snapshot.survey.sourceMode ?? "Survey");
+    if (!fresh(original.snapshot.survey.sourceMode ?? "Survey")) return;
     setPvInput({
       qty: original.snapshot.survey.panelQty,
       wattage: original.snapshot.survey.panelWattage,
@@ -1021,7 +1026,7 @@ export function Boqs({
               disabled={
                 busy || (history.length > 0 && history[0].id !== saved.id)
               }
-              onClick={reviseSaved}
+              onClick={() => reviseSaved()}
             >
               Create revision draft
             </button>
@@ -1066,8 +1071,16 @@ export function Boqs({
           <p>
             {baseRevisionId
               ? "This revision uses the existing customer and site. Approval saves a new immutable revision."
-              : "Select an existing site or create a new one. A BOQ number is issued when the reviewed costing is approved."}
+              : "Search and select a customer, then enter the site name. Use Revision mode for changes to an existing BOQ."}
           </p>
+          {!baseRevisionId && <section aria-label="BOQ entry mode">
+            <label>Document action<select aria-label="Document action" value={revisionMode ? "revision" : "new"} onChange={e => setRevisionMode(e.target.value === "revision")}><option value="new">New BOQ</option><option value="revision">Revise an existing BOQ</option></select></label>
+            {revisionMode && <>
+              <p>For Management-requested changes, open Revision Requested in your dashboard. To start your own revision, select the original BOQ below.</p>
+              <label>Revision customer<select aria-label="Revision customer" value={revisionCustomer} onChange={e => setRevisionCustomer(e.target.value)}><option value="">Select customer</option>{masters.customers.filter((c: any) => records.some(r => String(r.customer_id) === String(c.id))).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+              <label>Original BOQ<select aria-label="Original BOQ" disabled={!revisionCustomer || busy} value="" onChange={async e => { if (!e.target.value) return; setBusy(true); try { const original = await api<any>(`/boqs/${e.target.value}`); reviseSaved(original); setRevisionMode(false); } catch(error) { fail(error); } finally { setBusy(false); } }}><option value="">Select BOQ to load original values</option>{records.filter(r => String(r.customer_id) === revisionCustomer).map(r => <option key={r.id} value={r.id}>{r.number} · {r.site}</option>)}</select></label>
+            </>}
+          </section>}
           {baseRevisionId && (
             <label className="source-label">
               Revision source
@@ -1198,7 +1211,7 @@ export function Boqs({
               </p>
             </aside>
           )}
-          <form
+          {!revisionMode && <form
             ref={form}
             className="survey-form"
             onSubmit={calculate}
@@ -1283,9 +1296,10 @@ export function Boqs({
                   ? "PV capacity & solution"
                   : "Survey quantities & solution"}
               </legend>
+              {inverter !== "6 kW SP" && <p>Inverter termination is automatic: {inverter.startsWith("2×") ? "15 m of 16mm² + 20 m of 25mm²" : "30 m of 16mm²"}. Enter only the measured panel-termination cable quantities below.</p>}
               <div className="survey-grid">
                 {Object.entries(quantities)
-                  .filter(([k]) => k !== "batteryKwh")
+                  .filter(([k]) => !["batteryKwh", "acInverter16", "acInverter25"].includes(k))
                   .filter(([k]) => inverter !== "6 kW SP" || !["acInverter16", "acInverter25", "acPanel16", "acPanel25"].includes(k))
                   .filter(
                     ([k]) =>
@@ -1562,7 +1576,7 @@ export function Boqs({
                 {busy ? "Processing…" : "Calculate & review BOQ"}
               </button>
             </div>
-          </form>
+          </form>}
           {preview && (
             <>
               <BoqCosting

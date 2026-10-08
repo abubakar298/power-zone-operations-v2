@@ -100,3 +100,6 @@
 @media (max-width: 760px) { .backup-form { grid-template-columns: 1fr; } .backup-form button { width: 100%; } }
 
 .revision-confirmation{border:1px solid #dfd7eb;margin:auto;color:#30253c}.revision-confirmation::backdrop{background:#30253c66}.revision-confirmation .dialog-actions{display:flex;justify-content:flex-end;gap:12px;margin-top:24px}
+
+.customer-search-results { max-height: 16rem; overflow-y: auto; border: 1px solid #d8d3e7; border-radius: 8px; padding: 4px; background: white; }
+.customer-search-results button { display: block; width: 100%; text-align: left; margin: 2px 0; }

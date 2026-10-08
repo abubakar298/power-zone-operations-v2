@@ -48,6 +48,7 @@ const columns: Record<Kind, [string, string][]> = {
     ["rate", "Rate (PKR)"],
     ["status", "Status"],
     ["version", "Version"],
+    ["notes", "Review notes / allowance basis"],
   ],
   rules: [
     ["rule_group", "Group"],
@@ -186,14 +187,21 @@ export function Masters({
     }
   }
   function display(row: Row, key: string) {
+    const reviewReasons: Record<string, string> = {
+      "SP AC Conduit Accessories and Box": "Temporary PKR 5,000 allowance: AC box, conduit and termination accessories. Confirm actual combined cost.",
+      "500V 2P DC Breaker": "Temporary PKR 4,950 per breaker. Confirm supplier rate and current rating.",
+      "SP DC Enclosures": "Temporary PKR 5,000 project allowance for roof and inverter-room DC enclosures. Confirm actual cost.",
+    };
+    if (kind === "rates" && key === "notes" && rateReview(row) && reviewReasons[String(row.key)]) return reviewReasons[String(row.key)] + " " + String(row.notes ?? "");
     const value = row[key];
     if (value === null || value === "") return "—";
     return ["rate", "value", "version", "id"].includes(key)
       ? numberFormat.format(Number(value))
       : String(value);
   }
+  const rateReview = (r: Row) => r.status === "Needs Rate" || /provisional|temporary|review later/i.test(String(r.notes ?? "")) && ["SP AC Conduit Accessories and Box", "SP DC Enclosures", "500V 2P DC Breaker"].includes(String(r.key));
   const rows = (data?.[kind] ?? [])
-    .filter((r) => filter === "All" || String(r.status) === filter)
+    .filter((r) => filter === "All" || (filter === "Under review" ? rateReview(r) : String(r.status) === filter))
     .filter((r) =>
       columns[kind].some(([key]) =>
         String(r[key] ?? "")
@@ -270,6 +278,7 @@ export function Masters({
         onChange={(e) => setQuery(e.target.value)}
         placeholder={`Search ${titles[kind].toLowerCase()}…`}
       />
+      {kind === "rates" && <label className="master-filter">Rate review status<select value={filter} onChange={e => setFilter(e.target.value)}><option>All</option><option>Under review</option><option>Active</option><option>Needs Rate</option></select><small>Temporary allowances are usable for costing but need confirmation. Edit the rate and notes after review.</small></label>}
       {kind === "items" && (
         <label className="master-filter">
           Specification status
@@ -345,7 +354,7 @@ export function Masters({
                           <span
                             className={`master-status ${row.status === "Needs Rate" ? "needs-rate" : ""}`}
                           >
-                            {display(row, key)}
+                            {kind === "rates" && rateReview(row) ? "Under review" : display(row, key)}
                           </span>
                         ) : (
                           display(row, key)

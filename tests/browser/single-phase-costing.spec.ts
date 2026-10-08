@@ -9,7 +9,8 @@ for (const quick of [false, true]) test(`Single-phase ${quick ? 'Quick BOQ' : 's
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
   await page.getByRole('button',{name:'Survey & BOQ',exact:true}).click();
   await page.getByRole('button',{name:quick ? 'Quick BOQ · no survey' : 'New BOQ',exact:true}).click();
-  await page.getByLabel('Customer',{exact:true}).selectOption('3');
+  await page.getByLabel("Customer", {exact: true}).fill("Alfalah");
+  await page.getByRole("option", {name: /Alfalah/}).click();
   await page.getByLabel('New site name',{exact:true}).fill(`SP isolated ${quick?'quick':'survey'}`);
   await page.getByLabel('Site code',{exact:true}).fill(quick?'SPQ':'SPS');
   await page.getByLabel('Location',{exact:true}).fill('Isolated test');

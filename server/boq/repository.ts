@@ -286,7 +286,7 @@ export class BoqRepository {
   async list(actor?: string) {
     return (
       await this.pool.query(
-        `SELECT r.id,r.number,r.revision,r.revision_reason,r.boq_id,r.created_at,r.snapshot->'customer'->>'name' AS customer,r.snapshot->'survey'->>'siteName' AS site,r.snapshot->>'total' AS total FROM boq_revisions r ${actor ? `WHERE ${ownedCondition("boq", "r.id", "$1")}` : ""} ORDER BY created_at DESC LIMIT 200`,
+        `SELECT r.id,r.number,r.revision,r.revision_reason,r.boq_id,r.created_at,r.snapshot->'customer'->>'id' AS customer_id,r.snapshot->'customer'->>'name' AS customer,r.snapshot->'survey'->>'siteName' AS site,r.snapshot->>'total' AS total FROM boq_revisions r ${actor ? `WHERE ${ownedCondition("boq", "r.id", "$1")}` : ""} ORDER BY created_at DESC LIMIT 200`,
         actor ? [actor] : [],
       )
     ).rows;

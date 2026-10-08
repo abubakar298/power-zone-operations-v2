@@ -23,6 +23,7 @@ export const surveySchema = z
     dcMetres: quantity,
     acInverter16: quantity.optional(),
     acInverter25: quantity.optional(),
+    acTerminationMode: z.enum(["Fixed"]).optional(),
     acPanel16: quantity.optional(),
     acPanel25: quantity.optional(),
     spLoadPanelRunMetres: quantity.optional(),

@@ -96,41 +96,13 @@ for (const quick of [false, true]) {
         expect((await page.request.get(path)).status(), path).toBe(403);
       await button(page, "Survey & BOQ").click();
       await button(page, quick ? "Quick BOQ · no survey" : "New BOQ").click();
-      await page.getByLabel("Find BOQ customer").fill("Alfalah");
-      await page.getByLabel("Customer", { exact: true }).selectOption("3");
-      // Filtering must retain the selected identity, rather than silently picking another customer.
-      await page
-        .getByLabel("Find BOQ customer")
-        .fill("no matching other customer");
-      await expect(page.getByLabel("Customer", { exact: true })).toHaveValue(
-        "3",
-      );
-      await page.getByLabel("Find BOQ customer").fill("");
-      if (quick) {
-        await page.getByLabel("Find BOQ site").fill("Skardu");
-        await expect(
-          page.getByLabel("Existing site").locator("option"),
-        ).toHaveCount(2);
-        await page.getByLabel("Existing site").selectOption("2");
-        await expect(
-          page.getByLabel("New site name", { exact: true }),
-        ).toHaveValue("Skardu -2520");
-        await expect(page.getByLabel("Site code", { exact: true })).toHaveValue(
-          "2520",
-        );
-      } else {
-        // Customer switching clears a site belonging to the previous customer.
-        await page.getByLabel("Existing site").selectOption("2");
-        await page.getByLabel("Customer", { exact: true }).selectOption("2");
-        await expect(page.getByLabel("Site code", { exact: true })).toHaveValue(
-          "",
-        );
-        await page.getByLabel("Customer", { exact: true }).selectOption("3");
-        await page
-          .getByLabel("New site name", { exact: true })
-          .fill("Coordinator validation 90901");
-        await page.getByLabel("Location", { exact: true }).fill("Lahore");
-      }
+      await page.getByLabel("Customer", {exact: true}).fill("Alfalah");
+      await page.getByRole("option", {name: /Alfalah/}).click();
+      await expect(page.locator('input[name="customerId"]')).toHaveValue("3");
+      await expect(page.getByLabel("Find BOQ customer")).toHaveCount(0);
+      await expect(page.getByLabel("Existing site")).toHaveCount(0);
+      await page.getByLabel("New site name", {exact: true}).fill(quick ? "Skardu -2520" : "Coordinator validation 90901");
+      if (!quick) await page.getByLabel("Location", {exact: true}).fill("Lahore");
       await page.getByLabel("Panel quantity", { exact: true }).fill("60");
       await page.getByLabel("Panel wattage (W)", { exact: true }).fill("645");
       expect(await page.getByLabel("Panel wattage (W)", { exact: true }).evaluate(input => {
@@ -152,8 +124,7 @@ for (const quick of [false, true]) {
       if (!quick) {
         for (const [label, value] of [
           ["6mm² DC cable total (m)", "360"],
-          ["Inverter termination · 16 mm² 4-core (m)", "15"],
-          ["Panel termination · 25 mm² 4-core (m)", "20"],
+          ["Panel termination · 25 mm² 4-core (m)", "0"],
           ["2.5mm² earth cable (m)", "20"],
           ["6mm² earth cable (m)", "90"],
           ["10mm² earth cable (m)", "90"],

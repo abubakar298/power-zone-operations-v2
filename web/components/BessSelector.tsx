@@ -30,7 +30,7 @@ export function BessSelector({
   const b = resolve(id);
   return (
     <label>
-      BESS configuration
+      BESS ID
       <select
         name="bessId"
         aria-label="BESS configuration"
@@ -49,7 +49,7 @@ export function BessSelector({
         <optgroup label="Three phase · HV">
         {bessConfigurations.map((v) => (
           <option key={v.id} value={v.id}>
-            {v.id} · {v.inverter} · {v.batteryKwh} kWh
+            {v.id.replace(/^BESS-/, "")} · {v.inverter} · {v.batteryKwh} kWh
           </option>
         ))}
         </optgroup>

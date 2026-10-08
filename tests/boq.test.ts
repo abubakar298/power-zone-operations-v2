@@ -668,3 +668,16 @@ test("SP additive masters preserve manual rates/specs and expose owner provision
   for (const [key,rate] of [["500V 2P DC Breaker","4950.0000"],["SP DC Enclosures","5000.0000"],["10mm² 1C AC Cable","720.0000"]])
     assert.equal((await db.pool.query("SELECT rate FROM rate_versions WHERE key=$1 AND version=1",[key])).rows[0].rate,rate);
 });
+
+test("new survey entry fixes inverter termination and preserves measured panel quantities and legacy snapshots", () => {
+  for (const [inverter, batteryKwh, fixed16, fixed25] of [["10 kW",20,"30","0"],["2×12 kW",40,"15","20"]] as const) {
+    const inputs = {...survey, inverter, batteryKwh, bessId: undefined, acTerminationMode: "Fixed" as const, acInverter16:"999", acInverter25:"999", acPanel16:"7.5", acPanel25:"12"};
+    const result = calculate(inputs, masters);
+    for (const [key, expected] of [["16mm² 4C AC Cable",new Decimal(fixed16).plus("7.5").toString()],["25mm² 4C AC Cable",new Decimal(fixed25).plus("12").toString()]])
+      assert.equal(result.lines.find(l=>l.key===key)?.qty,expected);
+    assert.equal(result.survey.acTerminationMode,"Fixed");
+    const legacy = calculate({...inputs, acTerminationMode:undefined, acInverter16:"1", acInverter25:"2"}, masters);
+    assert.equal(legacy.lines.find(l=>l.key==="16mm² 4C AC Cable")?.qty,"8.5");
+    assert.equal(legacy.lines.find(l=>l.key==="25mm² 4C AC Cable")?.qty,"14");
+  }
+});

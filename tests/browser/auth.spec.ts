@@ -110,7 +110,8 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   ).toBeVisible();
   await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
   await page.getByRole("button", { name: "New BOQ", exact: true }).click();
-  await page.getByLabel("Customer", { exact: true }).selectOption("3");
+  await page.getByLabel("Customer", {exact: true}).fill("Alfalah");
+  await page.getByRole("option", {name: /Alfalah/}).click();
   await page.getByLabel("New site name").fill("Browser reference site 05850");
   await page.getByLabel("Location", { exact: true }).fill("Lahore");
   await expect(page.getByLabel("Site code", { exact: true })).toHaveValue(
@@ -119,12 +120,10 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page.getByLabel("Panel quantity", { exact: true }).fill("60");
   await page.getByLabel("Panel wattage (W)", { exact: true }).fill("645");
   await page.getByLabel("6mm² DC cable total (m)", { exact: true }).fill("360");
-  await page
-    .getByLabel("Inverter termination · 16 mm² 4-core (m)", { exact: true })
-    .fill("15");
+  await expect(page.getByLabel("Inverter termination · 16 mm² 4-core (m)", {exact: true})).toHaveCount(0);
   await page
     .getByLabel("Panel termination · 25 mm² 4-core (m)", { exact: true })
-    .fill("20");
+    .fill("0");
   await page.getByLabel("2.5mm² earth cable (m)", { exact: true }).fill("20");
   await page.getByLabel("6mm² earth cable (m)", { exact: true }).fill("90");
   await page.getByLabel("10mm² earth cable (m)", { exact: true }).fill("90");
@@ -1068,8 +1067,8 @@ test("management bucket opens a coordinator costing review and isolates approval
     .click();
   await expect(customerDialog).not.toBeVisible();
   await expect(
-    page.getByLabel("Customer", { exact: true }).locator("option:checked"),
-  ).toContainText("SAMPLE Quick quote customer");
+    page.getByLabel("Customer", { exact: true }),
+  ).toHaveValue("SAMPLE Quick quote customer");
   await expect(page.getByLabel("New site name", { exact: true })).toHaveValue(
     "Preserve unsaved site",
   );
@@ -1187,7 +1186,8 @@ test("management bucket opens a coordinator costing review and isolates approval
   });
   await page.getByRole("button", { name: "Back to BOQs", exact: true }).click();
   await page.getByRole("button", { name: "Quick BOQ · no survey" }).click();
-  await page.getByLabel("Customer", { exact: true }).selectOption("3");
+  await page.getByLabel("Customer", {exact: true}).fill("Alfalah");
+  await page.getByRole("option", {name: /Alfalah/}).click();
   await page.getByLabel("New site name").fill("Quick proposal 67890");
   await page.getByLabel("Panel quantity", { exact: true }).fill("60");
   await page.getByLabel("Panel wattage (W)", { exact: true }).fill("645");

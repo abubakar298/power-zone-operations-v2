@@ -222,10 +222,10 @@ export function calculate(s: Survey, m: Masters) {
     "10mm² Earthing Cable": allowances?.earth10 ?? s.earth10,
     "16mm² 4C AC Cable": sp ? "0" : allowances
       ? allowances.ac16
-      : new Decimal(s.acInverter16 ?? "0").add(s.acPanel16 ?? "0"),
+      : new Decimal(s.acTerminationMode === "Fixed" ? (config.quantity === 2 ? "15" : "30") : s.acInverter16 ?? "0").add(s.acPanel16 ?? "0"),
     "25mm² 4C AC Cable": sp ? "0" : allowances
       ? allowances.ac25
-      : new Decimal(s.acInverter25 ?? "0").add(s.acPanel25 ?? "0"),
+      : new Decimal(s.acTerminationMode === "Fixed" ? (config.quantity === 2 ? "20" : "0") : s.acInverter25 ?? "0").add(s.acPanel25 ?? "0"),
   }))
     add(key, qty, "EPC", "cable", "Installation Cost");
   if (spScope) {
