@@ -103,3 +103,6 @@
 
 .customer-search-results { max-height: 16rem; overflow-y: auto; border: 1px solid #d8d3e7; border-radius: 8px; padding: 4px; background: white; }
 .customer-search-results button { display: block; width: 100%; text-align: left; margin: 2px 0; }
+
+/* Keep controls equal-height; explanatory text must not stretch adjacent inputs. */
+.survey-grid{align-items:start}.survey-grid label{align-content:start;grid-template-rows:auto auto}.survey-grid input:not([type=hidden]),.survey-grid select{height:46px;box-sizing:border-box}.survey-grid .pv-total{grid-column:1/-1;margin:0;padding:8px 0;font-size:13px}.ac-panel-fields{display:grid;gap:12px}.survey-grid>button{align-self:start;min-height:46px}
