@@ -23,6 +23,15 @@ export function peachtreeDivision(
   const included = pricing.input.taxMode === "Tax Included";
   const field = included ? "total" : "beforeTax";
   const target = D(included ? allocation.total : allocation.subtotal);
+  if(boq.survey.family === "direct-product") {
+    const phases=names.map(name=>({name,amount:money(allocation.lines.filter(line=>{
+      const source=boq.lines.find(l=>l.key===line.description);
+      const category=source?.phase === "Solar Panels" ? "Solar Panels" : source?.phase === "Structure" ? "Structure" : /^HYB-/.test(source?.key ?? "") ? "Inverter" : /^BAT-/.test(source?.key ?? "") ? "Batteries" : /^(CH-BMS-|BMS-)/.test(source?.key ?? "") ? "BMS" : "EPC";
+      return category === name;
+    }).reduce((sum,line)=>sum.add(line[field]),D("0")))}));
+    if(!phases.reduce((sum,p)=>sum.add(p.amount),D("0")).eq(target))throw new HttpError(422,"Product classifications do not reconcile with the IPO.");
+    return {version:2,policy:"exact-accepted-quotation-v2",presentation:pricing.input.presentation,taxMode:pricing.input.taxMode,basis:included?"Tax-inclusive selling values":"Selling values excluding tax",effectivePooledMarkup:null,phases,phaseTotal:money(target),ipoBeforeTax:allocation.subtotal,ipoTax:allocation.tax,ipoPayable:allocation.total};
+  }
   if(boq.survey.family === "bess-only"){
     const phases=[{name:"BESS",amount:money(allocation.lines.filter(l=>l.group==="bess").reduce((v,l)=>v.add(l[field]),D("0")))},{name:"EPC",amount:money(allocation.lines.filter(l=>l.group!=="bess").reduce((v,l)=>v.add(l[field]),D("0")))}];
     if(!D(phases[0].amount).add(phases[1].amount).eq(target))throw new HttpError(422,"BESS/EPC totals do not reconcile with the IPO.");

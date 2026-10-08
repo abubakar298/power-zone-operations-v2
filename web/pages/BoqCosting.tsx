@@ -13,7 +13,8 @@ export function BoqCosting({
   createdAt?: string;
   pdfUrl: string;
 }) {
-  const bessOnly=s.survey.family === "bess-only";
+  const direct=s.survey.family === "direct-product";
+  const bessOnly=direct || s.survey.family === "bess-only";
   return (
     <section className="boq-costing">
       <div className="panel-heading">
@@ -30,15 +31,15 @@ export function BoqCosting({
       <div className="summary-grid">
         <div className="summary-card">
           <span>{bessOnly ? "Solution family" : "PV capacity"}</span>
-          <strong>{bessOnly ? "BESS Only · UPS with Installation" : `${format(s.engineering.pvKwp,2)} kWp`}</strong>
+          <strong>{bessOnly ? direct ? "Direct Product Sale" : "BESS Only · UPS with Installation" : `${format(s.engineering.pvKwp,2)} kWp`}</strong>
         </div>
         <div className="summary-card">
           <span>Solution ID</span>
           <strong>{s.engineering.solutionId}</strong>
-          <p>
+          {!direct && <p>
             {format(s.engineering.batteryModules, 0)} battery modules ·{" "}
             {format(s.engineering.bms, 0)} BMS {!bessOnly && <>· {format(s.engineering.strings,0)} strings</>}
-          </p>
+          </p>}
         </div>
         <div className="summary-card">
           <span>{(s as any).costVisibility ? "Project cost excluding BESS" : "Budgeted project cost"}</span>
@@ -86,7 +87,7 @@ export function BoqCosting({
           </tr>
         </tbody>
       </table>
-      <h3>EPC Costing Breakup</h3>
+      {!direct && <><h3>EPC Costing Breakup</h3>
       <table>
         <thead>
           <tr>
@@ -105,7 +106,8 @@ export function BoqCosting({
           ))}
         </tbody>
       </table>
-      <h3>Project Costing Detailed Breakup</h3>
+      </>}
+      <h3>{direct ? "Product Costing Detailed Breakup" : "Project Costing Detailed Breakup"}</h3>
       <div className="table-scroll">
         <table>
           <thead>

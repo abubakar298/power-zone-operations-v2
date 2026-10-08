@@ -7,7 +7,8 @@ const quantity = z
   );
 export const surveySchema = z
   .object({
-    family: z.enum(["solar-hybrid", "bess-only"]).optional(),
+    family: z.enum(["solar-hybrid", "bess-only", "direct-product"]).optional(),
+    directProducts: z.array(z.object({kind:z.enum(["item","bess"]),key:z.string().trim().min(1).max(200),qty:quantity.refine(v=>Number(v)>0),brandId:z.number().int().positive().optional()}).strict()).min(1).max(30).optional(),
     sourceMode: z.enum(["Survey", "General quotation"]).optional(),
     customerId: z.number().int().min(0),
     siteName: z.string().trim().min(1).max(200),
@@ -45,10 +46,10 @@ export const surveySchema = z
     brands: z
       .object({
         solar: z.number().int().min(0).default(0),
-        inverter: z.number().int().positive(),
-        battery: z.number().int().positive(),
-        cable: z.number().int().positive(),
-        switchgear: z.number().int().positive(),
+        inverter: z.number().int().min(0).default(0),
+        battery: z.number().int().min(0).default(0),
+        cable: z.number().int().min(0).default(0),
+        switchgear: z.number().int().min(0).default(0),
       })
       .strict(),
     preparedBy: z.string().trim().min(1).max(100),

@@ -764,7 +764,7 @@ export class CommercialRepository {
         additionalItem: extra,
       },
     );
-    const rows = b.snapshot.survey.family === "bess-only" && p.snapshot.itemPricing ? p.snapshot.itemPricing.map((l:any)=>{
+    const rows = ["bess-only","direct-product"].includes(b.snapshot.survey.family) && p.snapshot.itemPricing ? p.snapshot.itemPricing.map((l:any)=>{
       const source=b.snapshot.lines.find((x:any)=>x.key===l.key);
       return {description:source.description,qty:source.qty,unit:source.unit,group:l.group,beforeTax:l.beforeTax,taxRate:l.taxRate};
     }) : detailed.lines.map((l, i) => ({
@@ -783,7 +783,7 @@ export class CommercialRepository {
     return managementReview(
       rows,
       amount("Subtotal Before Tax"),
-      b.snapshot.survey.family === "bess-only" ? p.snapshot.solarTax : amount("SOLAR PANEL SALES TAX @10%"),
+      ["bess-only","direct-product"].includes(b.snapshot.survey.family) ? p.snapshot.solarTax : amount("SOLAR PANEL SALES TAX @10%"),
       amount("SALES TAX ON OTHER ITEMS @18%"),
       new Decimal(p.snapshot.cost).add(extra?.cost ?? "0").toString(),
       q.snapshot.input.discount ?? "0",

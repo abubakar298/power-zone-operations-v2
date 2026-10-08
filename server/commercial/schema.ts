@@ -9,6 +9,7 @@ export const pricingSchema = z.object({
   boqRevisionId: z.uuid(),
   revisionRequestId: z.uuid().optional(),
   presentation: z.enum(["No Breakup", "Basic Breakup", "Full Breakup"]),
+  groupBessPackages: z.boolean().optional(),
   taxMode: z.enum(["Tax Included", "Show Sales Tax Separately"]),
   markups: z.object({
     solar: percent,
@@ -44,6 +45,6 @@ export const quotationSchema = z.object({
     .optional(),
   validity: z.string().trim().min(1).max(100),
   proposedBy: z.string().trim().min(1).max(100),
-  descriptions: z.array(z.string().trim().min(1).max(1500)).max(40).optional(),
+  descriptions: z.array(z.string().trim().min(1).max(1500)).max(90).optional(),
 });
 export type QuotationInput = z.infer<typeof quotationSchema>;

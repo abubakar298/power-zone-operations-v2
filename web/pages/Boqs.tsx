@@ -1,3 +1,4 @@
+import { DirectProductFields } from "../components/DirectProductFields.js";
 import { StandardSellingSummary } from "../components/StandardSellingSummary.js";
 import { CniProposals } from "./CniProposals.js";
 import { money } from "../numbers.js";
@@ -208,7 +209,8 @@ export function Boqs({
       ...(sourceMode === "General quotation"
         ? { sourceMode: "General quotation" }
         : {}),
-      family: boqFamily === "bess-only" ? "bess-only" : "solar-hybrid",
+      family: boqFamily === "direct-product" ? "direct-product" : boqFamily === "bess-only" ? "bess-only" : "solar-hybrid",
+      ...(boqFamily === "direct-product" ? {directProducts:JSON.parse(String(f.get("directProducts") || "[]"))} : {}),
       customerId: baseRevisionId
         ? initial.customerId
         : f.get("customerId")
@@ -217,23 +219,23 @@ export function Boqs({
       siteName: f.get("siteName"),
       siteCode: f.get("siteCode"),
       location: f.get("location"),
-      panelQty: boqFamily === "bess-only" ? 0 : f.get("panelQty") ? Number(f.get("panelQty")) : undefined,
-      panelWattage: boqFamily === "bess-only" ? "0" : f.get("panelWattage"),
-      structure: boqFamily === "bess-only" ? "L1" : f.get("structure"),
-      dcMetres: boqFamily === "bess-only" ? "0" : sourceMode === "General quotation" ? "0" : f.get("dcMetres"),
+      panelQty: boqFamily === "direct-product" || boqFamily === "bess-only" ? 0 : f.get("panelQty") ? Number(f.get("panelQty")) : undefined,
+      panelWattage: boqFamily === "direct-product" || boqFamily === "bess-only" ? "0" : f.get("panelWattage"),
+      structure: boqFamily === "direct-product" || boqFamily === "bess-only" ? "L1" : f.get("structure"),
+      dcMetres: boqFamily === "direct-product" || boqFamily === "bess-only" ? "0" : sourceMode === "General quotation" ? "0" : f.get("dcMetres"),
       acTerminationMode: sourceMode === "General quotation" ? "Fixed" as const : "Measured" as const,
       acInverter16: f.get("acInverter16") || "0",
       acInverter25: f.get("acInverter25") || "0",
       spInverterTerminationMetres: f.get("spInverterTerminationMetres") || undefined,
       acPanel16: sourceMode === "General quotation" ? "0" : f.get("acPanel16") || "0",
       acPanel25: sourceMode === "General quotation" ? "0" : f.get("acPanel25") || "0",
-      earth25: boqFamily === "bess-only" || sourceMode === "General quotation" ? "0" : f.get("earth25"),
+      earth25: boqFamily === "direct-product" || boqFamily === "bess-only" || sourceMode === "General quotation" ? "0" : f.get("earth25"),
       earth6: sourceMode === "General quotation" || (boqFamily === "bess-only" && f.get("inverter") !== "6 kW SP") ? "0" : f.get("earth6") || "0",
       earth10: sourceMode === "General quotation" || (boqFamily === "bess-only" && f.get("inverter") === "6 kW SP") ? "0" : f.get("earth10") || "0",
       spLoadPanelRunMetres: f.get("spLoadPanelTotalMetres") ? String(Number(f.get("spLoadPanelTotalMetres")) / 2) : undefined,
       bessId: f.get("bessId") || undefined,
-      inverter: f.get("inverter") || undefined,
-      batteryKwh: f.get("batteryKwh") ? Number(f.get("batteryKwh")) : undefined,
+      inverter: boqFamily === "direct-product" ? "Products" : f.get("inverter") || undefined,
+      batteryKwh: boqFamily === "direct-product" ? 0 : f.get("batteryKwh") ? Number(f.get("batteryKwh")) : undefined,
       smartMeter: f.get("smartMeter") === "yes",
       genset: f.get("genset") === "yes",
       spIncludeEarthingBore:f.get("spIncludeEarthingBore") === "on",
@@ -243,7 +245,7 @@ export function Boqs({
           .map((k) => [k, Number(f.get(`brand-${k}`))]),
       ),
       preparedBy: f.get("preparedBy"),
-      additionalItem,
+      additionalItem:boqFamily === "direct-product" ? undefined : additionalItem,
       specifications: Object.keys(specifications).length
         ? specifications
         : undefined,
@@ -1080,7 +1082,7 @@ export function Boqs({
               <option value="solar-hybrid">Solar Hybrid Project</option>
               <option value="ci-bess">C&amp;I BESS</option>
               <option value="bess-only">BESS Only (UPS with Installation)</option>
-              <option value="single-items" disabled>Single Items — coming soon</option>
+              <option value="direct-product">Direct Product Sale</option>
             </select></label>
             <small>Select the solution family. BESS Only uses the existing quotation and approval workflow.</small>
           </div>
@@ -1109,7 +1111,7 @@ export function Boqs({
               />
             </label>
           )}
-          {sourceMode !== "General quotation" && (
+          {sourceMode !== "General quotation" && boqFamily !== "direct-product" && (
             <section className="detail-panel upload-panel">
               <h3>Upload survey information</h3>
               <p>
@@ -1190,7 +1192,7 @@ export function Boqs({
               )}
             </section>
           )}
-          {sourceMode === "General quotation" && boqFamily !== "bess-only" && (
+          {sourceMode === "General quotation" && boqFamily === "solar-hybrid" && (
             <section className="detail-panel">
               <h3>General quotation · no survey</h3>
               <p>
@@ -1246,7 +1248,7 @@ export function Boqs({
                 />
               </div>
             </fieldset>
-            {sourceMode === "General quotation" && boqFamily !== "bess-only" && (
+            {sourceMode === "General quotation" && boqFamily === "solar-hybrid" && (
               <section className="detail-panel">
                 <h3>Automatic cable allowances</h3>
                 <p>
@@ -1297,14 +1299,14 @@ export function Boqs({
                 2 ·{" "}
                 {sourceMode === "General quotation"
                   ? boqFamily === "bess-only" ? "BESS & AC solution" : "PV capacity & solution"
-                  : "Survey quantities & solution"}
+                  : boqFamily === "direct-product" ? "Products & quantities" : "Survey quantities & solution"}
               </legend>
-              <SurveyQuantityFields key={`${baseRevisionId ?? "new"}-${initial.bessId ?? ""}`} initial={initial} patch={quantityPatch} inverter={inverter} quick={sourceMode === "General quotation"} bessOnly={boqFamily === "bess-only"} onInverter={setInverter} />
+              {boqFamily === "direct-product" ? <DirectProductFields masters={masters} initial={initial.directProducts}/> : <SurveyQuantityFields key={`${baseRevisionId ?? "new"}-${initial.bessId ?? ""}`} initial={initial} patch={quantityPatch} inverter={inverter} quick={sourceMode === "General quotation"} bessOnly={boqFamily === "bess-only"} onInverter={setInverter} />}
             </fieldset>
             <fieldset disabled={busy}>
               <legend>3 · Brands & preparation</legend>
               <div className="survey-grid">
-                {Object.entries(brandFields).filter(([k])=>boqFamily !== "bess-only" || k !== "solar").map(([k, category]) => (
+                {Object.entries(brandFields).filter(([k])=>boqFamily !== "direct-product" && (boqFamily !== "bess-only" || k !== "solar")).map(([k, category]) => (
                   <label key={k}>
                     {category} brand
                     <select
@@ -1341,7 +1343,7 @@ export function Boqs({
                 </label>
               </div>
             </fieldset>
-            <fieldset disabled={busy}>
+            {boqFamily !== "direct-product" && <fieldset disabled={busy}>
               <legend>
                 Additional scope — included in BOQ costing and approval
               </legend>
@@ -1421,7 +1423,7 @@ export function Boqs({
                   </label>
                 </div>
               )}
-            </fieldset>
+            </fieldset>}
             {baseRevisionId && technicalLines.length > 0 && (
               <details className="revision-specifications">
                 <summary>Review / change technical specifications</summary>

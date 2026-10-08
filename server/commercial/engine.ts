@@ -54,6 +54,7 @@ export function price(
   input: PricingInput,
   policy?: CommercialPolicy,
 ) {
+  if(boq.survey.family === "direct-product" && input.presentation === "Basic Breakup") throw new HttpError(400,"Direct Product Sale supports No Breakup or Breakup only.");
   const itemPricing = policy ? standardItemPrices(boq, input, policy) : undefined;
   if (policy) input = {...input, markups:{solar:policy.markups.solar,structure:policy.markups.structure,bess:policy.markups.bess,earthing:policy.markups.earthing,balance:policy.markups.other,rest:policy.markups.other},additionalMarkup:input.additionalCategory?policy.markups[input.additionalCategory]:undefined};
   const summary = (name: string) =>
@@ -122,7 +123,7 @@ export function price(
         ];
       })()
     : [];
-  const allRows = [...rows, ...extraRows].filter(r=>boq.survey.family!=="bess-only"||!["solar","structure"].includes(r.key));
+  const allRows = [...rows, ...extraRows].filter(r=>boq.survey.family === "direct-product" ? !D(r.cost).isZero() : boq.survey.family!=="bess-only"||!["solar","structure"].includes(r.key));
   const sum = (field: "beforeTax" | "tax" | "profit") =>
     allRows.reduce((a, r) => a.add(r[field]), D("0"));
   // Keep exact component math, round the two presented tax buckets once.
@@ -141,6 +142,7 @@ export function price(
     total = money(D(subtotal).add(tax)),
     discount = "0.00";
   return {
+    boqFamily: boq.survey.family ?? "solar-hybrid",
     engineVersion: policy ? 4 : 2,
     ...(policy ? {policy, itemPricing, standardDiscountStrategy: {
       version: "PZ-STANDARD-DISCOUNT-1",
@@ -180,6 +182,7 @@ export function quotationLines(
   bmsDescription = "IP65 Battery Control and Safety Unit for High Voltage Batteries",
   full = false,
 ): QuoteLine[] {
+  if(s.survey.family === "direct-product") return directQuotationLines(s);
   if(s.survey.family === "bess-only") return bessOnlyLines(s, full ? "Full Breakup" : "No Breakup");
   const sp = s.survey.inverter === "6 kW SP";
   const brand = (field: string) => {
@@ -335,6 +338,7 @@ export function quote(
       "Special discount cannot exceed the quoted total.",
     );
   const netTotal = money(D(total).minus(discount));
+  if(boq.survey.family === "direct-product") return quoteDirectProducts(p,boq,input,discount,netTotal,total,subtotal,solarTax,otherTax);
   if(boq.survey.family === "bess-only") return quoteBessOnly(p,boq,input,discount,netTotal,total,subtotal,solarTax,otherTax);
   const lines = quotationLines(boq, bmsDescription, full);
   const scopeCount = lines.length;
@@ -552,4 +556,42 @@ function quoteBessOnly(p:PricingSnapshot,boq:BoqSnapshot,input:QuotationInput,di
   if(p.input.taxMode!=="Tax Included"&&!D(solarTax).isZero())footer.splice(1,0,{label:"SALES TAX ON ADDITIONAL ITEMS @10%",amount:solarTax});
   footer.push({label:"Special Discount",amount:discount},{label:"Net Total",amount:netTotal});
   return {engineVersion:1,...(p.standardDiscountStrategy?{standardDiscountStrategy:p.standardDiscountStrategy}:{}),input:{quotedDate:input.quotedDate,validity:input.validity,proposedBy:input.proposedBy,discount},customer:{...p.customer,contactPerson:"",phone:""},siteName:p.siteName,siteCode:p.siteCode,boqNumber:p.boqNumber,solutionId:p.solutionId,presentation,scopeCount:lines.length,subject:"Quotation for BESS Only (UPS with Installation).",lines,footer,notes:NOTES,terms:TERMS};
+}
+
+function directQuotationLines(boq:BoqSnapshot):QuoteLine[] {
+  return (boq.directProductGroups ?? []).flatMap(group=>group.components.map(component=>{
+    const source=boq.lines.find(l=>l.key===component.key)!;
+    return {description:[source.specification || source.description,source.brand].filter(Boolean).join(" — "),unit:source.unit,qty:component.qty,group:source.phase==="BESS"?"bess" as const:source.phase==="Solar Panels"?"solar" as const:"balance" as const};
+  }));
+}
+function quoteDirectProducts(p:PricingSnapshot,boq:BoqSnapshot,input:QuotationInput,discount:string,netTotal:string,total:string,subtotal:string,solarTax:string,otherTax:string) {
+  if(p.input.presentation==="Basic Breakup")throw new HttpError(400,"Direct Product Sale supports No Breakup or Breakup only.");
+  const lines=directQuotationLines(boq);
+  if(input.descriptions && input.descriptions.length!==lines.length)throw new HttpError(400,"Provide one description for each quotation row.");
+  let offset=0;
+  for(const group of boq.directProductGroups ?? []){
+    const grouped=group.package && p.input.groupBessPackages===true;
+    let amount=D("0"),allowance=D("0");
+    group.components.forEach((component,index)=>{
+      const line=lines[offset+index],source=boq.lines.find(l=>l.key===component.key)!;
+      const priced=p.itemPricing?.find(l=>l.key===component.key);
+      if(!priced)throw new HttpError(422,"Standard item pricing is required for Direct Product Sale.");
+      if(input.descriptions)line.description=input.descriptions[offset+index];
+      if(p.input.taxMode==="Tax Included"&&/\bGST\b|sales tax|tax included/i.test(line.description))throw new HttpError(400,"Remove tax wording from customer descriptions for this presentation.");
+      const share=D(component.qty).div(source.qty);
+      const selling=D(priced.beforeTax).mul(share).mul(p.input.taxMode==="Tax Included"?D(priced.taxRate).div(100).add(1):1);
+      const introductory=["bess","other"].includes(priced.category)?D(priced.cost).mul(share).mul("0.05"):D("0");
+      amount=amount.add(selling);allowance=allowance.add(introductory);
+      if(p.input.presentation!=="No Breakup"&&!grouped){line.amount=money(selling);line.span=1;line.standardAllowanceBeforeTax=money(introductory);}
+    });
+    if(p.input.presentation!=="No Breakup"&&grouped){lines[offset].amount=money(amount);lines[offset].span=group.components.length;lines[offset].standardAllowanceBeforeTax=money(allowance);}
+    offset+=group.components.length;
+  }
+  if(p.input.presentation!=="No Breakup"){
+    const last=lines.findLast(l=>l.amount!==undefined)!;
+    last.amount=money(D(last.amount!).add(D(p.input.taxMode==="Tax Included"?total:subtotal).sub(lines.reduce((v,l)=>v.add(l.amount??"0"),D("0")))));
+  }
+  const footer=p.input.taxMode==="Tax Included"?[{label:"Total",amount:total}]:[{label:"Subtotal Before Tax",amount:subtotal},...(D(solarTax).isZero()?[]:[{label:"SOLAR PANEL SALES TAX @10%",amount:solarTax}]),...(D(otherTax).isZero()?[]:[{label:"SALES TAX ON OTHER ITEMS @18%",amount:otherTax}])];
+  footer.push({label:"Special Discount",amount:discount},{label:"Net Total",amount:netTotal});
+  return {engineVersion:1,...(p.standardDiscountStrategy?{standardDiscountStrategy:p.standardDiscountStrategy}:{}),input:{quotedDate:input.quotedDate,validity:input.validity,proposedBy:input.proposedBy,discount},customer:{...p.customer,contactPerson:"",phone:""},siteName:p.siteName,siteCode:p.siteCode,boqNumber:p.boqNumber,solutionId:p.solutionId,presentation:p.input.presentation,scopeCount:lines.length,subject:"Quotation for Direct Product Sale.",lines,footer,notes:["All prices are ex-warehouse Lahore/Karachi.",...NOTES.slice(0,1)],terms:TERMS};
 }

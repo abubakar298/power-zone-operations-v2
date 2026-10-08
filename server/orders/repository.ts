@@ -135,7 +135,7 @@ export class OrdersRepository {
         extra?.taxRate === "18" ? extraTax : 0,
       ),
     );
-    const lines = b.snapshot.survey.family === "bess-only" && p.snapshot.itemPricing ? p.snapshot.itemPricing.map((l:any)=>{
+    const lines = ["bess-only","direct-product"].includes(b.snapshot.survey.family) && p.snapshot.itemPricing ? p.snapshot.itemPricing.map((l:any)=>{
       const source=b.snapshot.lines.find((x:any)=>x.key===l.key);
       return {description:source.description,qty:source.qty,unit:source.unit,group:l.group,beforeTax:l.beforeTax,taxRate:l.taxRate};
     }) : detailed.lines.map((l, i) => ({

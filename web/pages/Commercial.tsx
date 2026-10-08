@@ -289,6 +289,7 @@ export function Commercial({
     ),
   );
   const [revisionRequests, setRevisionRequests] = useState<any[]>([]);
+  const directSale = (boqs.find(b=>b.id===input.boqRevisionId)?.family ?? savedPrice?.snapshot.boqFamily) === "direct-product";
   async function load() {
     const [b, q] = await Promise.all([
       api<{ boqs: any[] }>("/boqs"),
@@ -352,13 +353,15 @@ export function Commercial({
         .finally(() => setRevisionLoading(false));
   }, []);
   async function applyApprovalInstructions(id: string) {
+    const source = await api<any>(`/boqs/${id}`);
+    if(source.snapshot.survey.family === "direct-product") setInput(old=>old.boqRevisionId===id ? {...old,presentation:old.presentation === "Basic Breakup" ? "Full Breakup" : old.presentation} : old);
     const a = await api<any>(`/boqs/${id}/instructions`);
     if (a) {
       setInput((old) =>
         old.boqRevisionId === id
           ? {
               ...old,
-              presentation: a.instructions.presentation,
+              presentation: source.snapshot.survey.family === "direct-product" && a.instructions.presentation === "Basic Breakup" ? "Full Breakup" : a.instructions.presentation,
               taxMode: a.instructions.taxMode,
               markups: a.instructions.markups ? {...defaults(session.user.displayName).markups,...a.instructions.markups} : defaults(session.user.displayName).markups,
               remarks: a.instructions.notes,
@@ -726,10 +729,11 @@ export function Commercial({
                     }
                   >
                     <option>No Breakup</option>
-                    <option>Basic Breakup</option>
-                    <option>Full Breakup</option>
+                    {!directSale && <option>Basic Breakup</option>}
+                    <option value="Full Breakup">{directSale ? "Breakup" : "Full Breakup"}</option>
                   </select>
                 </label>
+                {directSale && input.presentation === "Full Breakup" && <label>Complete BESS package pricing<select aria-label="Complete BESS package pricing" value={input.groupBessPackages ? "grouped" : "separate"} onChange={e=>update({groupBessPackages:e.target.value === "grouped"})}><option value="separate">Show inverter, battery and BMS prices separately</option><option value="grouped">One combined amount per complete BESS package</option></select></label>}
                 <label>
                   Tax presentation
                   <select

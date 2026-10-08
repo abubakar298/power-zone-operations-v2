@@ -1,3 +1,4 @@
+import { calculateDirectProducts, directProductGroups } from "./direct-products.js";
 import { singlePhaseCableDescription } from "./ac-cable.js";
 import { singlePhaseConfigurations } from "./equipment.js";
 import { singlePhaseScope } from "./single-phase.js";
@@ -81,6 +82,10 @@ export interface CostLine {
 }
 export type SelectedBrand = BrandMaster & { alternatives: string[] };
 export function calculate(s: Survey, m: Masters) {
+  if(s.family === "direct-product") return calculateDirectProducts(s,m);
+  return calculateInstallation(s,m);
+}
+function calculateInstallation(s:Survey,m:Masters) {
   const bessOnly=s.family === "bess-only";
   if(!bessOnly && (s.panelQty<1 || new Decimal(s.panelWattage).lte(0))) throw new HttpError(400,"Enter positive panel quantity and wattage.");
   const customer = m.customers.find(
@@ -378,8 +383,9 @@ export function calculate(s: Survey, m: Masters) {
           },
         }
       : {}),
+    directProductGroups: undefined as ReturnType<typeof directProductGroups> | undefined,
     engineVersion: 1,
   };
 }
 
-export type BoqSnapshot = ReturnType<typeof calculate>;
+export type BoqSnapshot = ReturnType<typeof calculateInstallation>;
