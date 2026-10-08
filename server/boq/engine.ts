@@ -222,8 +222,8 @@ export function calculate(s: Survey, m: Masters) {
       ? new Decimal(allowances.dcBlack)
       : new Decimal(s.dcMetres).div(2),
     "2.5mm² Earthing Cable": bessOnly ? "0" : allowances?.earth25 ?? s.earth25,
-    "6mm² Earthing Cable": allowances?.earth6 ?? s.earth6,
-    "10mm² Earthing Cable": bessOnly ? "0" : allowances?.earth10 ?? s.earth10,
+    "6mm² Earthing Cable": bessOnly && !sp ? "0" : allowances?.earth6 ?? s.earth6,
+    "10mm² Earthing Cable": bessOnly && sp ? "0" : allowances?.earth10 ?? s.earth10,
     "16mm² 4C AC Cable": sp ? "0" : bessOnly && s.sourceMode === "General quotation" ? (dual ? "15" : "30") : allowances
       ? allowances.ac16
       : new Decimal(s.acTerminationMode === "Fixed" ? (config.quantity === 2 ? "15" : "30") : s.acInverter16 ?? "0").add(s.acPanel16 ?? "0"),
@@ -260,7 +260,7 @@ export function calculate(s: Survey, m: Masters) {
     add(key, qty, "EPC", "switchgear", "Installation Cost");
   add("AC & DC Boxes", rule(20), "EPC", undefined, "Installation Cost");
   }
-  add("Earthing Bore", sp && s.spIncludeEarthingBore === false ? 0 : bessOnly ? 1 : rule(13), "EPC", undefined, "Earthing Cost");
+  add("Earthing Bore", s.spIncludeEarthingBore === false ? 0 : bessOnly ? 1 : rule(13), "EPC", undefined, "Earthing Cost");
   const fixedCharge=(key:string,qty:number,rate:string,unit:string,description:string,epc:typeof lines[number]["epc"])=>{
     const spec=m.items.find(i=>i.key===key);
     lines.push({key,description,brand:"",brandAlternatives:[],specification:spec?.approved_specification??null,specVersion:spec?.version??null,qty:String(qty),unit,rate,rateVersion:0,rateStatus:"Active",total:new Decimal(qty).mul(rate).toString(),phase:"EPC",epc});

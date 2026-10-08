@@ -46,7 +46,7 @@ export function cableExcessNote(
       );
     return [`${key}: PKR ${money(D(rate).mul("1.20").mul("1.18"))}`];
   });
-  return `Cable quantities used in excess of the quantities stated in this quotation will be charged at the following rates per running metre (including GST): ${rates.join("; ")}.`;
+  return `Cable quantities used in excess of the quantities stated in this quotation will be charged at the following rates per running meter (including GST): ${rates.join("; ")}.`;
 }
 export function price(
   boq: BoqSnapshot,
@@ -499,7 +499,7 @@ function bessOnlyLines(boq:BoqSnapshot,presentation:string):QuoteLine[]{
   const bore=boq.lines.find(l=>l.key==="Earthing Bore");
   if(presentation==="Full Breakup" && bore) rows.push({description:"AC Earthing Bore",unit:"No.",qty:bore.qty,group:"earthing"});
   const others=boq.lines.filter(l=>l.phase!=="BESS"&&(presentation!=="Full Breakup"||l.key!=="Earthing Bore"));
-  if(others.length)rows.push({description:others.map(l=>`${l.description}${l.brand?` - ${l.brand}`:""} (${l.qty} ${l.unit})`).join("\n"),unit:"LS",qty:"1",group:"balance"});
+  if(others.length)rows.push({description:others.map(l=>`${l.description}${l.brand?` - ${l.brand}`:""} (${l.qty} ${/^(metre|meter)s?$/i.test(l.unit) ? (new Decimal(l.qty).eq(1) ? "meter" : "meters") : l.unit})`).join("\n"),unit:"LS",qty:"1",group:"balance"});
   return rows;
 }
 function quoteBessOnly(p:PricingSnapshot,boq:BoqSnapshot,input:QuotationInput,discount:string,netTotal:string,total:string,subtotal:string,solarTax:string,otherTax:string){

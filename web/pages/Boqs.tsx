@@ -228,15 +228,15 @@ export function Boqs({
       acPanel16: sourceMode === "General quotation" ? "0" : f.get("acPanel16") || "0",
       acPanel25: sourceMode === "General quotation" ? "0" : f.get("acPanel25") || "0",
       earth25: boqFamily === "bess-only" || sourceMode === "General quotation" ? "0" : f.get("earth25"),
-      earth6: sourceMode === "General quotation" ? "0" : f.get("earth6"),
-      earth10: boqFamily === "bess-only" || sourceMode === "General quotation" ? "0" : f.get("earth10"),
+      earth6: sourceMode === "General quotation" || (boqFamily === "bess-only" && f.get("inverter") !== "6 kW SP") ? "0" : f.get("earth6") || "0",
+      earth10: sourceMode === "General quotation" || (boqFamily === "bess-only" && f.get("inverter") === "6 kW SP") ? "0" : f.get("earth10") || "0",
       spLoadPanelRunMetres: f.get("spLoadPanelTotalMetres") ? String(Number(f.get("spLoadPanelTotalMetres")) / 2) : undefined,
       bessId: f.get("bessId") || undefined,
       inverter: f.get("inverter") || undefined,
       batteryKwh: f.get("batteryKwh") ? Number(f.get("batteryKwh")) : undefined,
       smartMeter: f.get("smartMeter") === "yes",
       genset: f.get("genset") === "yes",
-      ...(f.get("inverter") === "6 kW SP" ? {spIncludeEarthingBore:f.get("spIncludeEarthingBore") === "on"} : {}),
+      spIncludeEarthingBore:f.get("spIncludeEarthingBore") === "on",
       brands: Object.fromEntries(
         Object.keys(brandFields)
           .filter((k) => f.get(`brand-${k}`))

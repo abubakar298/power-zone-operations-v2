@@ -19,7 +19,7 @@ export function singlePhaseScope(input: {
   const estimated = input.mode === "General quotation";
   const rawRun = estimated ? "20" : input.loadPanelRunMetres;
   if (!rawRun || !/^\d{1,8}(\.\d{1,4})?$/.test(rawRun))
-    throw new Error("Enter the measured load-panel cable run in metres.");
+    throw new Error("Enter the measured load-panel cable run in meters.");
   const run = new Decimal(rawRun);
   const strings = Math.ceil(input.panelQty / 10);
   return {

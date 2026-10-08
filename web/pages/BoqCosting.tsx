@@ -1,3 +1,4 @@
+import { displayUnit } from "../../server/boq/unit.js";
 import { decimalDisplay as format } from "../numbers.js";
 import { SharePdf } from "../components/SharePdf.js";
 import type { BoqSnapshot } from "../../server/boq/engine.js";
@@ -138,7 +139,7 @@ export function BoqCosting({
                 <td className="numeric">
                   {format(l.qty, Number(l.qty) % 1 ? 2 : 0)}
                 </td>
-                <td>{l.unit}</td>
+                <td>{displayUnit(l.unit,l.qty)}</td>
                 <td className="numeric">
                   {(l as any).costRestricted ? "Restricted" : format(l.rate, Number(l.rate) % 1 ? 4 : 0)}
                 </td>

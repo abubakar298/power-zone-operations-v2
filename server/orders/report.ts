@@ -1,3 +1,4 @@
+import { displayUnit } from "../boq/unit.js";
 import { appendPeachtreePage } from "./peachtree-report.js";
 import { quotationTypeLabel } from "./sale-type.js";
 import { ipoPresentation } from "./presentation.js";
@@ -185,11 +186,11 @@ export function buildIpoPdf(s: any, number?: string, division = s.peachtree) {
         },
     body: view.rows.map((l) =>
       view.included
-        ? [clean(l.description), l.qty, l.unit, money(l.rate), money(l.amount)]
+        ? [clean(l.description), l.qty, displayUnit(l.unit,l.qty), money(l.rate), money(l.amount)]
         : [
             clean(l.description),
             l.qty,
-            l.unit,
+            displayUnit(l.unit,l.qty),
             money(l.rate),
             money(l.amount),
             l.taxRate,

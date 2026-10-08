@@ -42,7 +42,7 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  assert.equal((await db.pool.query('SELECT count(*) FROM ipo_accounts_handoffs WHERE ipo_id=$1',[issued.id])).rows[0].count,'1');
  assert.equal((await br.get(saved.id)).snapshot.survey.family,'bess-only');
  }
- assert.equal(b.lines.some(l=>['2.5mm² Earthing Cable','10mm² Earthing Cable'].includes(l.key)),false);
+ assert.equal(b.lines.some(l=>['2.5mm² Earthing Cable',sp?'10mm² Earthing Cable':'6mm² Earthing Cable'].includes(l.key)),false);
  if(sp)assert.match(b.lines.find(l=>l.key==='10mm² 1C AC Cable')!.description,/10 m red \+ 10 m black/);
  if(sp){
  assert.equal(b.lines.find(l=>l.key==='Misc. Accessories')!.total,'45000');

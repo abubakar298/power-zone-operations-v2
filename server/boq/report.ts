@@ -1,3 +1,4 @@
+import { displayUnit } from "./unit.js";
 import {
   drawReportLogo,
   drawReportFooter,
@@ -173,7 +174,7 @@ export function buildCostingPdf(
       label([l.brand || "-", ...l.brandAlternatives].join("\n")),
       label(l.specification || "-"),
       money(l.qty, Number(l.qty) % 1 ? 2 : 0),
-      label(l.unit),
+      label(displayUnit(l.unit,l.qty)),
       money(l.rate, Number(l.rate) % 1 ? 4 : 0),
       money(l.total),
     ]),

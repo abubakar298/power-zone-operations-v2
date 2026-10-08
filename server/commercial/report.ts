@@ -1,3 +1,4 @@
+import { displayUnit } from "../boq/unit.js";
 import {
   drawReportLogo,
   drawReportFooter,
@@ -103,7 +104,7 @@ function appendQuotation(
     const cells: any[] = [
       String(i + 1),
       text(r.description),
-      r.unit,
+      displayUnit(r.unit,r.qty),
       new Intl.NumberFormat("en-PK", { maximumFractionDigits: 4 }).format(
         Number(r.qty),
       ),
