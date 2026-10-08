@@ -42,9 +42,11 @@ const age = (date: string) => {
 export function Departments({
   session,
   department,
+  initialRecordId,
 }: {
   session: Session;
   department: Department;
+  initialRecordId?:string;
 }) {
   const [records, setRecords] = useState<RecordRow[]>([]),
     [bucket, setBucket] = useState(stages[department][0]),
@@ -82,6 +84,7 @@ export function Departments({
       clearInterval(timer);
     };
   }, [department]);
+  useEffect(()=>{if(initialRecordId&&loaded){const row=records.find(r=>r.id===initialRecordId);if(row)void open(row);}},[initialRecordId,loaded]);
   async function open(row: RecordRow) {
     setSelected(row);
     setHistory([]);

@@ -13,6 +13,7 @@ type State =
   | { kind: "login" }
   | { kind: "authenticated"; session: Session };
 export function App() {
+  const [notificationLink] = useState(()=>/^#notification=[0-9a-f-]{36}$/i.test(window.location.hash)?window.location.hash:"");
   const [state, setState] = useState<State>({ kind: "loading" });
   const [linkPage, setLinkPage] = useState(
     window.location.pathname === "/account-link"
@@ -23,8 +24,8 @@ export function App() {
   );
   const [setupComplete, setSetupComplete] = useState(false);
   const go = useCallback(
-    (path: string) => window.history.replaceState(null, "", path),
-    [],
+    (path: string) => window.history.replaceState(null, "", path+(path==="/dashboard"?notificationLink:"")),
+    [notificationLink],
   );
   const signedOut = useCallback(() => {
     setState({ kind: "login" });

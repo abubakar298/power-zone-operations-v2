@@ -12,6 +12,7 @@ const schema = z.object({
   DATABASE_CA_FILE: z.string().optional(),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(0),
   EMAIL_DELIVERY_ENABLED: z.enum(["true", "false"]).default("true"),
+  RESEND_WEBHOOK_SECRET: z.string().regex(/^whsec_[A-Za-z0-9+/=]+$/).optional(),
   RESEND_API_KEY: z.string().min(10).optional(),
   EMAIL_FROM: z.email().optional(),
   EMAIL_REPLY_TO: z.email().optional(),
@@ -39,6 +40,7 @@ export interface Config {
   trustProxyHops: number;
   sessionHours: number;
   emailDeliveryEnabled?: boolean;
+  emailWebhookSecret?: string;
   emailApiKey?: string;
   emailFrom?: string;
   emailReplyTo?: string;
@@ -75,6 +77,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     trustProxyHops: e.TRUST_PROXY_HOPS,
     sessionHours: 12,
     emailDeliveryEnabled: e.EMAIL_DELIVERY_ENABLED === "true",
+    emailWebhookSecret: e.RESEND_WEBHOOK_SECRET,
     emailApiKey: e.RESEND_API_KEY,
     emailFrom: e.EMAIL_FROM,
     emailReplyTo: e.EMAIL_REPLY_TO,

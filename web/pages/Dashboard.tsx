@@ -1,3 +1,5 @@
+import {NotificationAdmin} from "../components/NotificationAdmin.js";
+import {NotificationCenter} from "../components/NotificationCenter.js";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { WorkspaceBoundary } from "../components/WorkspaceBoundary.js";
 import { api, ApiError, type Session, type User } from "../api.js";
@@ -313,6 +315,7 @@ export function Dashboard({
                                     : "My account"}
             </strong>
           </span>
+          <NotificationCenter session={session} onOpen={task=>{setPricingRevisionId(task.boq_revision_id??undefined);setPricingRequestId(task.request_id??undefined);setRevisionDraftId(task.draft_id??undefined);setOperationsIpoId(task.ipo_id??undefined);navigate(task.target,task);}} />
           <div className="account">
             <button
               className="account-trigger"
@@ -430,7 +433,7 @@ export function Dashboard({
           )}
           {(view === "finance" ||
             (view === "dashboard" && session.user.role === "Accounts")) && (
-            <Departments session={session} department="Accounts" />
+            <Departments session={session} department="Accounts" initialRecordId={bucketTask?.ipo_id} />
           )}
           {view === "dashboard" && session.user.role === "Employee" && (
             <section className="card"><h2>Department access required</h2><p>Your account is active. Ask your administrator to assign your department before starting a workflow.</p></section>
@@ -517,7 +520,7 @@ export function Dashboard({
           {view === "operations" && (
             <Operations session={session} initialIpoId={operationsIpoId} />
           )}
-          {view === "team" && <Team session={session} onLogout={onLogout} />}
+          {view === "team" && <><Team session={session} onLogout={onLogout} />{session.user.role==="Admin"&&<NotificationAdmin session={session}/>}</>}
           {view === "masters" && (
             <Masters session={session} onLogout={onLogout} />
           )}

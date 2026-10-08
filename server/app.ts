@@ -1,3 +1,6 @@
+import {notificationWebhook} from "./notifications/webhook.js";
+import {NotificationsRepository} from "./notifications/repository.js";
+import {notificationsHttp} from "./notifications/http.js";
 import { financialVisibility } from "./http/cost-visibility.js";
 import { cniHttp } from "./commercial/cni-http.js";
 import { DesignRepository } from "./design/repository.js";
@@ -64,6 +67,7 @@ export function createApp(
     res.set("Cache-Control", "no-store");
     next();
   });
+  app.use("/api/email-webhooks/resend",notificationWebhook(pool,config.emailWebhookSecret));
   app.use("/api", (req, _res, next) => {
     if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
       if (req.get("Origin") !== config.origin)
@@ -172,6 +176,7 @@ export function createApp(
     "/api/departments",
     departmentsHttp(new DepartmentRepository(pool), auth.requireSession),
   );
+  app.use("/api/notifications",notificationsHttp(new NotificationsRepository(pool),auth.requireSession));
   app.use("/api/dashboard", dashboardRoutes(auth.requireSession));
   app.use(
     "/api/masters",
