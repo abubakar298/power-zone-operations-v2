@@ -133,6 +133,16 @@ for (const quick of [false, true]) {
       }
       await page.getByLabel("Panel quantity", { exact: true }).fill("60");
       await page.getByLabel("Panel wattage (W)", { exact: true }).fill("645");
+      expect(await page.getByLabel("Panel wattage (W)", { exact: true }).evaluate(input => {
+        const next = input.closest("label")?.nextElementSibling;
+        return next?.querySelector('select[name="bessId"]') !== null;
+      })).toBe(true);
+      for (let capacity = 5; capacity <= 60; capacity += 5) {
+        await page.getByLabel("BESS configuration", { exact: true }).selectOption(`6-${capacity}`);
+        await expect(page.locator('input[name="inverter"]')).toHaveValue("6 kW SP");
+        await expect(page.locator('input[name="batteryKwh"]')).toHaveValue(String(capacity));
+        await expect(page.getByText(`1 × 6 kW inverter · ${capacity / 5} × 5 kWh battery modules · ${Math.ceil(capacity / 20)} BMS · LV · Single phase`, { exact: true })).toBeVisible();
+      }
       await page
         .getByLabel("BESS configuration", { exact: true })
         .selectOption(quick ? "BESS-24-60" : "BESS-30-40");

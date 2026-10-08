@@ -2,7 +2,7 @@ import { money } from "../numbers.js";
 import { BessSelector } from "../components/BessSelector.js";
 import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js";
 import { confirmTransition } from "../confirm.js";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import { api, ApiError, type Session } from "../api.js";
 import { CustomerSiteFields } from "../components/CustomerSiteFields.js";
 import { generalAllowances } from "../../server/boq/general.js";
@@ -1298,7 +1298,8 @@ export function Boqs({
                       ].includes(k),
                   )
                   .map(([k, label]) => (
-                    <label key={k}>
+                    <Fragment key={k}>
+                    <label>
                       {label}
                       <input
                         name={k}
@@ -1335,6 +1336,8 @@ export function Boqs({
                         }
                       />
                     </label>
+                    {k === "panelWattage" && <BessSelector initial={initial} onChange={setInverter} />}
+                    </Fragment>
                   ))}
                 <label>
                   Structure
@@ -1348,7 +1351,6 @@ export function Boqs({
                     ))}
                   </select>
                 </label>
-                <BessSelector initial={initial} onChange={setInverter} />
                 <label>
                   Extra smart meter
                   <select
