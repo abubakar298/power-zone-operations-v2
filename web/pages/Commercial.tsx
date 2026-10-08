@@ -829,7 +829,7 @@ export function Commercial({
                       <tr key={r.key}>
                         <td>{r.name}</td>
                         <td className="numeric">{money(r.cost)}</td>
-                        <td className="numeric">{r.markup}%</td>
+                        <td className="numeric">{new Decimal(r.markup).toDecimalPlaces(2).toString()}%</td>
                         <td className="numeric">{money(r.profit)}</td>
                         <td className="numeric">{money(r.beforeTax)}</td>
                         <td className="numeric">{money(r.tax)}</td>
@@ -840,7 +840,7 @@ export function Commercial({
                 </table>
               </div>
               {p.policy && <p>Standard Commercial Policy v{p.policy.version} · Category percentages in the summary are effective averages where a display group contains different item markups.</p>}
-              {p.itemPricing && <details><summary>Standard item selling prices</summary><div className="table-scroll"><table className="master-table"><thead><tr><th>Item</th><th>Category</th><th>Pre-tax cost</th><th>Standard markup</th><th>Selling before tax</th></tr></thead><tbody>{p.itemPricing.map(l=><tr key={l.key}><td>{l.description}</td><td>{l.category}</td><td>{money(l.cost)}</td><td>{l.markup}%</td><td>{money(l.beforeTax)}</td></tr>)}</tbody></table></div></details>}
+              {p.itemPricing && <details><summary>Standard item selling prices</summary><div className="table-scroll"><table className="master-table"><thead><tr><th>Item</th><th>Category</th><th>Pre-tax cost</th><th>Standard markup</th><th>Selling before tax</th></tr></thead><tbody>{p.itemPricing.map(l=><tr key={l.key}><td>{l.description}</td><td>{l.category}</td><td>{money(l.cost)}</td><td>{new Decimal(l.markup).toDecimalPlaces(2).toString()}%</td><td>{money(l.beforeTax)}</td></tr>)}</tbody></table></div></details>}
               <div className="quote-totals">
                 <p>
                   <span>Approved BOQ cost</span>

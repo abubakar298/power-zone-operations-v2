@@ -236,7 +236,7 @@ export function QuotationWorkflow({
         </section>
       )}
       {manager&&costingError&&<p role="alert">{costingError}</p>}
-      {manager&&costing&&<section className="detail-panel"><h3>Project costing & EPC summaries</h3>{([costing.snapshot.summary,costing.snapshot.epc] as any[][]).map((rows,index)=><div className="table-scroll" key={index}><table><thead><tr><th>{index?"EPC":"Project category"}</th><th>Budgeted cost (PKR)</th></tr></thead><tbody>{rows.map(row=><tr key={row.name}><th>{row.name}</th><td>{money(row.cost)}</td></tr>)}</tbody></table></div>)}</section>}
+      {manager&&costing&&<section className="detail-panel"><h3>Project Costing Summary</h3>{([costing.snapshot.summary,costing.snapshot.epc] as any[][]).map((rows,index)=><div key={index}>{index===1&&<h4>EPC Summary</h4>}<div className="table-scroll"><table><thead><tr><th>{index?"EPC category":"Project category"}</th><th>Budgeted cost (PKR)</th></tr></thead><tbody>{rows.map(row=><tr key={row.name}><th>{row.name}</th><td>{money(row.cost)}</td></tr>)}</tbody><tfoot><tr><th>{index?"Total EPC":"Total Project Cost"}</th><td><strong>{money(rows.reduce((total,row)=>total.plus(row.cost),new Decimal(0)).toString())}</strong></td></tr></tfoot></table></div></div>)}</section>}
       {renderPreview(q.snapshot)}
       {manager&&costing&&<BoqCosting snapshot={costing.snapshot} number={costing.number} createdAt={costing.created_at} pdfUrl={`/api/boqs/${costing.id}/costing.pdf`}/>}
 
