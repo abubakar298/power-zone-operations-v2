@@ -1,3 +1,4 @@
+import { CniProposals } from "./CniProposals.js";
 import { money } from "../numbers.js";
 import { SurveyQuantityFields } from "../components/SurveyQuantityFields.js";
 import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js";
@@ -46,6 +47,7 @@ export function Boqs({
   onPricing?: (id: string) => void;
   initialDraftId?: string;
 }) {
+  const [boqFamily, setBoqFamily] = useState("solar-hybrid");
   const [masters, setMasters] = useState<any>(),
     [records, setRecords] = useState<any[]>([]),
     [drafts, setDrafts] = useState<any[]>([]),
@@ -578,6 +580,7 @@ export function Boqs({
   }
   if (!masters)
     return <p role="status">{error || "Loading project references…"}</p>;
+  if (boqFamily === "ci-bess") return <CniProposals session={session} onLogout={onLogout} masters={masters} onBack={() => setBoqFamily("solar-hybrid")} />;
   return (
     <section className="boq-section">
       {addingCustomer && (
@@ -1086,13 +1089,13 @@ export function Boqs({
             </>}
           </section>}
           <div className="boq-family-field">
-            <label>BOQ type<select aria-label="BOQ type" value="solar-hybrid" onChange={() => {}}>
+            <label>BOQ type<select aria-label="BOQ type" value={boqFamily} onChange={e => setBoqFamily(e.target.value)}>
               <option value="solar-hybrid">Solar Hybrid Project</option>
-              <option value="ci-bess" disabled>C&amp;I BESS — coming soon</option>
+              <option value="ci-bess">C&amp;I BESS</option>
               <option value="bess-only" disabled>BESS Only — coming soon</option>
               <option value="single-items" disabled>Single Items — coming soon</option>
             </select></label>
-            <small>Solar Hybrid Project BOQs are currently available. Other families will have their own BOQ forms.</small>
+            <small>Select Solar Hybrid Project or C&I BESS. Each family uses its own form and approval flow.</small>
           </div>
           {baseRevisionId && (
             <label className="source-label">

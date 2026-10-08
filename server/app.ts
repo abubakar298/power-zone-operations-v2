@@ -1,3 +1,4 @@
+import { cniHttp } from "./commercial/cni-http.js";
 import { DesignRepository } from "./design/repository.js";
 import { backupsHttp } from "./backups/http.js";
 import { backupDevicesHttp } from "./backups/devices.js";
@@ -77,6 +78,7 @@ export function createApp(
   app.use(
     [
       "/api/boqs",
+      "/api/cni",
       "/api/commercial",
       "/api/orders",
       "/api/coordinator",
@@ -88,6 +90,7 @@ export function createApp(
     auth.requireSession,
     workflowBoundary(pool),
   );
+  app.use("/api/cni", express.json({limit:"32kb"}), cniHttp(pool, auth.requireSession));
   const boqs = new BoqRepository(pool);
   app.use(
     "/api/survey-uploads",
