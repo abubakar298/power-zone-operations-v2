@@ -106,8 +106,9 @@ for (const quick of [false, true]) {
       await page.getByLabel("Panel quantity", { exact: true }).fill("60");
       await page.getByLabel("Panel wattage (W)", { exact: true }).fill("645");
       expect(await page.getByLabel("Panel wattage (W)", { exact: true }).evaluate(input => {
-        const next = input.closest("label")?.nextElementSibling;
-        return next?.querySelector('select[name="bessId"]') !== null;
+        const summary = input.closest("label")?.nextElementSibling;
+        const next = summary?.nextElementSibling;
+        return summary?.textContent?.includes("Total installed wattage") === true && !!next?.querySelector('select[name="bessId"]');
       })).toBe(true);
       for (let capacity = 5; capacity <= 60; capacity += 5) {
         await page.getByLabel("BESS configuration", { exact: true }).selectOption(`6-${capacity}`);
