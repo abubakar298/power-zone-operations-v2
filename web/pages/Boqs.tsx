@@ -1,8 +1,8 @@
 import { money } from "../numbers.js";
-import { BessSelector } from "../components/BessSelector.js";
+import { SurveyQuantityFields } from "../components/SurveyQuantityFields.js";
 import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js";
 import { confirmTransition } from "../confirm.js";
-import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, ApiError, type Session } from "../api.js";
 import { CustomerSiteFields } from "../components/CustomerSiteFields.js";
 import { generalAllowances } from "../../server/boq/general.js";
@@ -141,6 +141,7 @@ export function Boqs({
     setAdditionalItem(undefined);
     setSpecifications({});
     setTechnicalLines([]);
+    setQuantityPatch({});
     setInitial({});
     setDraft(undefined);
     setUploads([]);
@@ -171,6 +172,7 @@ export function Boqs({
     setSpecifications(d.inputs.specifications ?? {});
     setTechnicalLines([]);
     setError("");
+    setQuantityPatch({});
     setInitial(d.inputs);
     setDraft({ id: d.id, version: d.version });
     setUploads(
@@ -220,7 +222,7 @@ export function Boqs({
       earth25: sourceMode === "General quotation" ? "0" : f.get("earth25"),
       earth6: sourceMode === "General quotation" ? "0" : f.get("earth6"),
       earth10: sourceMode === "General quotation" ? "0" : f.get("earth10"),
-      spLoadPanelRunMetres: f.get("spLoadPanelRunMetres") || undefined,
+      spLoadPanelRunMetres: f.get("spLoadPanelTotalMetres") ? String(Number(f.get("spLoadPanelTotalMetres")) / 2) : undefined,
       bessId: f.get("bessId") || undefined,
       inverter: f.get("inverter") || undefined,
       batteryKwh: f.get("batteryKwh") ? Number(f.get("batteryKwh")) : undefined,
@@ -560,12 +562,14 @@ export function Boqs({
       setProgress("");
     }
   }
+  const [quantityPatch, setQuantityPatch] = useState<Record<string,string>>({});
   function applySuggestions() {
     if (!form.current) return;
     for (const [key, value] of Object.entries(suggestions)) {
       const input = form.current.elements.namedItem(key);
       if (input instanceof HTMLInputElement) input.value = value;
     }
+    setQuantityPatch({...suggestions});
     setPreview(undefined);
     setReviewed(false);
     setNotice(
@@ -1296,108 +1300,7 @@ export function Boqs({
                   ? "PV capacity & solution"
                   : "Survey quantities & solution"}
               </legend>
-              {inverter !== "6 kW SP" && <p>Inverter termination is automatic: {inverter.startsWith("2×") ? "15 m of 16mm² + 20 m of 25mm²" : "30 m of 16mm²"}. Enter only the measured panel-termination cable quantities below.</p>}
-              <div className="survey-grid">
-                {Object.entries(quantities)
-                  .filter(([k]) => !["batteryKwh", "acInverter16", "acInverter25"].includes(k))
-                  .filter(([k]) => inverter !== "6 kW SP" || !["acInverter16", "acInverter25", "acPanel16", "acPanel25"].includes(k))
-                  .filter(
-                    ([k]) =>
-                      sourceMode !== "General quotation" ||
-                      ![
-                        "dcMetres",
-                        "earth25",
-                        "earth6",
-                        "earth10",
-                        "acInverter16",
-                        "acInverter25",
-                        "acPanel16",
-                        "acPanel25",
-                      ].includes(k),
-                  )
-                  .map(([k, label]) => (
-                    <Fragment key={k}>
-                    <label>
-                      {label}
-                      <input
-                        name={k}
-                        aria-label={label}
-                        type="number"
-                        required
-                        min={
-                          k === "panelQty"
-                            ? 1
-                            : k === "panelWattage"
-                              ? 0.0001
-                              : 0
-                        }
-                        max={
-                          k === "batteryKwh"
-                            ? inverter.startsWith("2×")
-                              ? 120
-                              : 60
-                            : k === "panelQty"
-                              ? 1000000
-                              : 99999999
-                        }
-                        step={
-                          k === "panelQty" ? 1 : k === "batteryKwh" ? 5 : 0.0001
-                        }
-                        defaultValue={
-                          initial[k] ??
-                          (k.startsWith("earth") ||
-                          k.startsWith("ac") ||
-                          k === "dcMetres" ||
-                          k === "batteryKwh"
-                            ? "0"
-                            : "")
-                        }
-                      />
-                    </label>
-                    {k === "panelWattage" && <BessSelector initial={initial} onChange={setInverter} />}
-                    </Fragment>
-                  ))}
-                {inverter === "6 kW SP" && sourceMode !== "General quotation" && (
-                  <label>AC load-panel cable route (m)
-                    <input name="spLoadPanelRunMetres" aria-label="AC load-panel cable route (m)" type="number" min="0" max="99999999" step="0.0001" required defaultValue={initial.spLoadPanelRunMetres ?? ""} />
-                    <small>Measured route length. Costing includes line and neutral: twice this length, plus the fixed 20 m inverter termination allowance.</small>
-                  </label>
-                )}
-                <label>
-                  Structure
-                  <select
-                    aria-label="Structure"
-                    name="structure"
-                    defaultValue={initial.structure ?? "L1"}
-                  >
-                    {["L1", "L2", "L3", "Elevated"].map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Extra smart meter
-                  <select
-                    name="smartMeter"
-                    aria-label="Extra smart meter"
-                    defaultValue={initial.smartMeter ? "yes" : "no"}
-                  >
-                    <option value="no">No</option>
-                    <option value="yes">Yes</option>
-                  </select>
-                </label>
-                <label>
-                  Genset synchronisation
-                  <select
-                    name="genset"
-                    aria-label="Genset synchronisation"
-                    defaultValue={initial.genset ? "yes" : "no"}
-                  >
-                    <option value="no">No</option>
-                    <option value="yes">Yes</option>
-                  </select>
-                </label>
-              </div>
+              <SurveyQuantityFields key={`${baseRevisionId ?? "new"}-${initial.bessId ?? ""}`} initial={initial} patch={quantityPatch} inverter={inverter} quick={sourceMode === "General quotation"} onInverter={setInverter} />
             </fieldset>
             <fieldset disabled={busy}>
               <legend>3 · Brands & preparation</legend>

@@ -44,7 +44,7 @@ export function CustomerSiteFields({
       setSiteId("");
     }
   }, [preferredCustomer]);
-  const sites = masters.sites.filter(
+  const sites = (masters.sites as any[]).filter(
     (s: any) => s.status === "Active" && String(s.customer_id) === customer,
   );
   const changeCustomer = (value: string) => {
@@ -55,6 +55,7 @@ export function CustomerSiteFields({
   };
   return (
     <>
+      <div className="customer-field">
       <label>
         Customer
         <input type="search" role="combobox" aria-label="Customer" aria-expanded={searchOpen && !revision} aria-controls="boq-customer-options" aria-autocomplete="list" required disabled={revision}
@@ -75,6 +76,7 @@ export function CustomerSiteFields({
         </div>}
       </label>
       {onAdd && !revision && <button type="button" onClick={() => { setSearchOpen(false); onAdd(); }}>Add customer</button>}
+      </div>
       <label>
         {siteId || revision ? "Site name" : "New site name"}
         <input
