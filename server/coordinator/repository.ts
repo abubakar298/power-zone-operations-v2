@@ -26,6 +26,9 @@ export class CoordinatorRepository {
  SELECT s.id,'IPO evidence',s.snapshot->>'quotationNumber',s.snapshot->>'siteName','Awaiting evidence approval',s.created_at,'orders',NULL,NULL,NULL,NULL FROM ipo_submissions s WHERE ($2 OR s.created_by=$1) AND NOT EXISTS(SELECT 1 FROM internal_purchase_orders i WHERE i.submission_id=s.id)
  UNION ALL
  SELECT i.id,'Operations issuance',i.number,i.snapshot->>'siteName','Complete Accounts and Operations handoff',i.created_at,'orders',NULL,NULL,i.id,NULL FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE ($2 OR i.created_by=$1 OR s.created_by=$1) AND (NOT EXISTS(SELECT 1 FROM operations_boq_issuances o WHERE o.ipo_id=i.id) OR NOT EXISTS(SELECT 1 FROM ipo_accounts_handoffs h WHERE h.ipo_id=i.id))
+ UNION ALL
+ SELECT p.id,'C&I proposal',v.number,v.snapshot->>'siteName',CASE WHEN a.action='Revision requested' THEN 'Quotation changes requested' WHEN a.action='Approved' THEN 'Awaiting PO / sale confirmation' ELSE 'Awaiting quotation approval' END,COALESCE(a.created_at,v.created_at),'boqs',NULL,NULL,NULL,NULL
+ FROM cni_proposals p JOIN LATERAL(SELECT id,number,snapshot,created_at FROM cni_proposal_versions WHERE proposal_id=p.id ORDER BY version DESC LIMIT 1)v ON true LEFT JOIN LATERAL(SELECT action,created_at FROM cni_proposal_actions WHERE version_id=v.id ORDER BY created_at DESC,id DESC LIMIT 1)a ON true WHERE ($2 OR p.created_by=$1)
  )`;
     const result = (
       await this.pool.query(

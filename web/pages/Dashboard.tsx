@@ -480,6 +480,7 @@ export function Dashboard({
           {view === "boqs" && (
             <Boqs
               initialDraftId={revisionDraftId}
+              initialCniId={bucketTask?.kind === "C&I proposal" ? bucketTask.id : undefined}
               onPricing={(id) => {
                 setPricingRequestId(undefined);
                 setPricingRevisionId(id);

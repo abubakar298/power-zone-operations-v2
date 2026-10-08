@@ -41,13 +41,15 @@ export function Boqs({
   onLogout,
   onPricing,
   initialDraftId,
+  initialCniId,
 }: {
   session: Session;
   onLogout: () => void;
   onPricing?: (id: string) => void;
   initialDraftId?: string;
+  initialCniId?: string;
 }) {
-  const [boqFamily, setBoqFamily] = useState("solar-hybrid");
+  const [boqFamily, setBoqFamily] = useState(initialCniId ? "ci-bess" : "solar-hybrid");
   const [masters, setMasters] = useState<any>(),
     [records, setRecords] = useState<any[]>([]),
     [drafts, setDrafts] = useState<any[]>([]),
@@ -580,7 +582,7 @@ export function Boqs({
   }
   if (!masters)
     return <p role="status">{error || "Loading project references…"}</p>;
-  if (boqFamily === "ci-bess") return <CniProposals session={session} onLogout={onLogout} masters={masters} onBack={() => setBoqFamily("solar-hybrid")} />;
+  if (boqFamily === "ci-bess") return <CniProposals initialProposalId={initialCniId} session={session} onLogout={onLogout} masters={masters} onBack={() => setBoqFamily("solar-hybrid")} />;
   return (
     <section className="boq-section">
       {addingCustomer && (

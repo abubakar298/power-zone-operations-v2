@@ -19,10 +19,17 @@ test("C&I standard/revision/discount workflow, immutable history and departmenta
  }
  const get=(path:string,role="Coordinator")=>request(app).get(`/api/cni${path}`).set("Cookie",users[role].cookie);
  const post=(path:string,body:object,role="Coordinator")=>request(app).post(`/api/cni${path}`).set("Cookie",users[role].cookie).set("Origin",origin).set("X-CSRF-Token",users[role].csrf).send(body);
+ const overview=async(role="Coordinator",team=false)=>(await request(app).get(`/api/coordinator${team?"?scope=team":""}`).set("Cookie",users[role].cookie).expect(200)).body;
+ const cniTasks=async(role="Coordinator",team=false)=>(await overview(role,team)).tasks.filter((t:any)=>t.kind==="C&I proposal");
  const base={customerId:3,siteName:"Isolated C&I project",quantity:3,presentation:"Inclusive",discount:"0"};
  await request(app).get("/api/cni").expect(401);
  await request(app).post("/api/cni").set("Cookie",users.Coordinator.cookie).set("Origin",origin).send(base).expect(403);
  const saved=(await post("/",base).expect(201)).body;
+ const pending=await cniTasks();assert.equal(pending.length,1);assert.equal(pending[0].id,saved.id);assert.equal(pending[0].stage,"Quotation approval");assert.equal(pending[0].target,"boqs");
+ assert.equal((await cniTasks("OtherCoordinator")).length,0);
+ for(const role of ["Management","Admin"])assert.equal((await cniTasks(role,true))[0].id,saved.id);
+ assert.doesNotMatch(JSON.stringify(pending),/internal_cost|11000000|unitCostBeforeTax/);
+ await request(app).get("/api/coordinator?scope=team").set("Cookie",users.Coordinator.cookie).expect(403);
  assert.equal(saved.snapshot.pricing.payable,"51750000.00");assert.equal(saved.snapshot.pricing.requiresDiscountApproval,false);
  assert.equal((await get("/").expect(200)).body.proposals.length,1);
  assert.equal((await get("/","OtherCoordinator").expect(200)).body.proposals.length,0);
@@ -47,9 +54,11 @@ test("C&I standard/revision/discount workflow, immutable history and departmenta
  assert.equal(target.proposed.markup,"30.00");assert.equal(target.proposed.payable,"50622000.00");
  await post(`/${saved.id}/financial-preview`,{targetMarkup:"15"},"Management").expect(400);
  await post(`/${saved.id}/review`,{versionId:saved.versionId,action:"Approved",remarks:"Standard quotation approved"},"Management").expect(200);
+ assert.equal((await cniTasks())[0].stage,"Customer confirmation");
  await post("/",{...base,discount:"5250000.01"}).expect(400);
  await post("/",{...base,unitPayable:"1"}).expect(400);
  const revised=(await post("/",{...base,presentation:"Separate",discount:"1000000",proposalId:saved.id,expectedVersion:1}).expect(201)).body;
+ assert.equal((await cniTasks()).length,1);assert.equal((await cniTasks())[0].stage,"Quotation approval");assert.equal((await cniTasks())[0].reference,revised.number);
  assert.equal(revised.version,2);assert.equal(revised.snapshot.pricing.payable,"50750000.00");
  await post("/",{...base,proposalId:saved.id,expectedVersion:1}).expect(409);
  await post(`/${saved.id}/review`,{versionId:revised.versionId,action:"Approved",remarks:""}).expect(403);
@@ -59,6 +68,11 @@ test("C&I standard/revision/discount workflow, immutable history and departmenta
  await post(`/${saved.id}/review`,{versionId:revised.versionId,action:"Approved",remarks:"Approved"},"Management").expect(409);
  const ready=await get(`/${saved.id}/versions/${revised.versionId}/proposal.pdf`).expect(200);assert.doesNotMatch(ready.headers["content-disposition"],/DRAFT/);
  const history=(await get(`/${saved.id}`).expect(200)).body;assert.equal(history.versions.length,2);assert.equal(history.versions[1].snapshot.pricing.payable,"51750000.00");
+ const revisionSample=(await post("/",{...base,siteName:"Revision bucket fixture"}).expect(201)).body;
+ await post(`/${revisionSample.id}/review`,{versionId:revisionSample.versionId,action:"Revision requested",remarks:"Review quantity"},"Management").expect(200);
+ assert.equal((await cniTasks()).find((t:any)=>t.id===revisionSample.id).stage,"Revision required");
+ await post("/",{...base,proposalId:revisionSample.id,expectedVersion:1}).expect(201);
+ const after=await cniTasks();assert.equal(after.filter((t:any)=>t.id===revisionSample.id).length,1);assert.equal(after.find((t:any)=>t.id===revisionSample.id).stage,"Quotation approval");
  await assert.rejects(db.pool.query("UPDATE cni_proposal_versions SET number='changed' WHERE id=$1",[saved.versionId]));
  await assert.rejects(db.pool.query("DELETE FROM cni_proposal_actions WHERE version_id=$1",[revised.versionId]));
  }finally{await db.close();}

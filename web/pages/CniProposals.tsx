@@ -7,7 +7,7 @@ import { confirmTransition } from "../confirm.js";
 import { money } from "../numbers.js";
 import { priceCni, cniPolicy } from "../../server/commercial/cni-policy.js";
 import { displayDate } from "../../server/display/dates.js";
-export function CniProposals({session,masters:initialMasters,onBack,onLogout}:{session:Session;masters:any;onBack:()=>void;onLogout:()=>void}) {
+export function CniProposals({session,masters:initialMasters,onBack,onLogout,initialProposalId}:{initialProposalId?:string;session:Session;masters:any;onBack:()=>void;onLogout:()=>void}) {
  const [masters,setMasters]=useState(initialMasters),[addingCustomer,setAddingCustomer]=useState(false),[dirty,setDirty]=useState(false);
  useUnsavedChanges(dirty);
  const [rows,setRows]=useState<any[]>([]),[detail,setDetail]=useState<any>(),[search,setSearch]=useState("");
@@ -19,6 +19,7 @@ export function CniProposals({session,masters:initialMasters,onBack,onLogout}:{s
  useEffect(()=>{load().catch(e=>setError(e.message));},[]);
  let preview:ReturnType<typeof priceCni>|undefined;try{preview=priceCni({quantity:Number(quantity),discount:discount||"0",presentation,taxRate:cniPolicy.taxRate});}catch{}
  const open=async(id:string)=>{setBusy(true);try{setDetail(await api<any>(`/cni/${id}`));setError("");}catch(e){setError((e as Error).message);}finally{setBusy(false);}};
+ useEffect(()=>{if(initialProposalId)void open(initialProposalId);},[initialProposalId]);
  const reset=()=>{if(!confirmLeaveWorkspace())return;setDirty(false);setEditing(undefined);setCustomerId("");setSearch("");setSiteName("");setQuantity("1");setDiscount("0");setDetail(undefined);};
  const current=detail?.versions[0];
  const action=current&&detail.actions.filter((a:any)=>a.version_id===current.id).at(-1)?.action;
