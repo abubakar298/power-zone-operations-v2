@@ -160,3 +160,9 @@ export function ownedCondition(
     .replaceAll("$1", idExpression)
     .replaceAll("$2", actorParameter)}))`;
 }
+
+export const managementOnly: RequestHandler = (req, _res, next) => {
+  if (!["Admin", "Management"].includes(req.authSession!.user.role))
+    throw new HttpError(403, "Management access required.");
+  next();
+};

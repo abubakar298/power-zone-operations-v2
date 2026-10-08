@@ -1,3 +1,4 @@
+import type { CommercialPolicy } from "../../server/commercial/active-policy.js";
 import { money } from "../numbers.js";
 import { SharePdf } from "../components/SharePdf.js";
 import { QuotationWorkflow } from "./QuotationWorkflow.js";
@@ -20,12 +21,12 @@ const defaults = (name: string, id = ""): PricingInput => ({
   presentation: "No Breakup",
   taxMode: "Show Sales Tax Separately",
   markups: {
-    solar: "20",
-    structure: "20",
-    bess: "15",
-    earthing: "20",
-    balance: "20",
-    rest: "20",
+    solar: "10",
+    structure: "10",
+    bess: "30",
+    earthing: "10",
+    balance: "25",
+    rest: "25",
   },
   preparedBy: name,
   remarks: "",
@@ -247,6 +248,7 @@ export function Commercial({
   const manager = ["Admin", "Management", "Coordinator"].includes(
     session.user.role,
   );
+  const [policy,setPolicy] = useState<CommercialPolicy>();
   const [boqs, setBoqs] = useState<any[]>([]),
     [prices, setPrices] = useState<any[]>([]),
     [quotes, setQuotes] = useState<any[]>([]),
@@ -290,6 +292,7 @@ export function Commercial({
       api<{ boqs: any[] }>("/boqs"),
       api<{ quotations: any[] }>("/commercial/quotations"),
     ]);
+    setPolicy(await api<CommercialPolicy>("/commercial/standard-policy"));
     setBoqs(b.boqs);
     setQuotes(q.quotations);
     setRevisionRequests(
@@ -732,47 +735,17 @@ export function Commercial({
                     <option>Show Sales Tax Separately</option>
                   </select>
                 </label>
-                {[
-                  ["solar", "Solar"],
-                  ["structure", "Structure"],
-                  ["bess", "BESS"],
-                  ["earthing", "Earthing Bores"],
-                  ["balance", "BOS (shared)"],
-                ].map(([k, label]) => (
-                  <label key={k}>
-                    {label} Markup %
-                    <input
-                      aria-label={`${label} Markup %`}
-                      type="number"
-                      min="0"
-                      max="999999"
-                      step="0.0001"
-                      required
-                      value={input.markups[k as keyof PricingInput["markups"]]}
-                      onChange={(e) =>
-                        update({
-                          markups: { ...input.markups, [k]: e.target.value },
-                        })
-                      }
-                    />
+                <div className="pricing-markup-group" role="group" aria-label="Standard commercial policy">
+                  <h3>Power Zone standard pricing{policy ? ` · Policy v${policy.version}` : ""}</h3>
+                  <p className="muted-label">Selling prices are calculated automatically from each item's pre-tax cost. Quotation layout does not change its markup.</p>
+                  {policy && <p>Solar panels {policy.markups.solar}% · Structure {policy.markups.structure}% · Earthing bores {policy.markups.earthing}% · Inverter, battery &amp; BMS {policy.markups.bess}% · Everything else {policy.markups.other}%</p>}
+                  <label>Additional scope category (if included in the BOQ)
+                    <select aria-label="Additional scope category" value={input.additionalCategory ?? ""} onChange={e=>update({additionalCategory:e.target.value as PricingInput["additionalCategory"] || undefined})}>
+                      <option value="">Select category if additional scope exists</option>
+                      <option value="solar">Solar panels</option><option value="structure">Structure</option><option value="earthing">Earthing bore</option><option value="bess">Inverter, battery or BMS</option><option value="other">Everything else</option>
+                    </select>
                   </label>
-                ))}
-                {(input.additionalMarkup !== undefined ||
-                  p?.rows.some((r) => r.key === "additional")) && (
-                  <label>
-                    Additional item markup %
-                    <input
-                      aria-label="Additional item markup %"
-                      type="number"
-                      min="0"
-                      step="0.0001"
-                      value={input.additionalMarkup ?? input.markups.balance}
-                      onChange={(e) =>
-                        update({ additionalMarkup: e.target.value })
-                      }
-                    />
-                  </label>
-                )}
+                </div>
                 {(input.additionalMarkup !== undefined ||
                   p?.rows.some((r) => r.key === "additional")) && (
                   <label>
@@ -816,8 +789,7 @@ export function Commercial({
                 </label>
               </div>
               <p className="muted-label">
-                Markup is added to cost: 100 cost + 33% markup = 133 selling
-                before tax. Starting percentages are editable.
+                Standard markup is added to pre-tax cost automatically. Saved pricing keeps the policy version used at preparation.
               </p>
             </fieldset>
             <button className="primary" disabled={busy} type="submit">
@@ -859,6 +831,8 @@ export function Commercial({
                   </tbody>
                 </table>
               </div>
+              {p.policy && <p>Standard Commercial Policy v{p.policy.version} · Category percentages in the summary are effective averages where a display group contains different item markups.</p>}
+              {p.itemPricing && <details><summary>Standard item selling prices</summary><div className="table-scroll"><table className="master-table"><thead><tr><th>Item</th><th>Category</th><th>Pre-tax cost</th><th>Standard markup</th><th>Selling before tax</th></tr></thead><tbody>{p.itemPricing.map(l=><tr key={l.key}><td>{l.description}</td><td>{l.category}</td><td>{money(l.cost)}</td><td>{l.markup}%</td><td>{money(l.beforeTax)}</td></tr>)}</tbody></table></div></details>}
               <div className="quote-totals">
                 <p>
                   <span>Approved BOQ cost</span>
@@ -1007,7 +981,7 @@ export function Commercial({
                   />
                 </label>
               ))}
-              {savedPrice?.snapshot.input.presentation === "Full Breakup" &&
+              {!savedPrice?.snapshot.policy && savedPrice?.snapshot.input.presentation === "Full Breakup" &&
                 !savedPrice.snapshot.rows.some(
                   (r: any) => r.key === "additional",
                 ) &&

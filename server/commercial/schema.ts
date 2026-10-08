@@ -17,7 +17,8 @@ export const pricingSchema = z.object({
     earthing: percent,
     balance: percent,
     rest: percent,
-  }),
+  }).default({solar:"10",structure:"10",bess:"30",earthing:"10",balance:"25",rest:"25"}),
+  additionalCategory: z.enum(["solar","structure","earthing","bess","other"]).optional(),
   // Accepted for compatibility with older drafts; pricing never applies it.
   discount: amount.optional(),
   preparedBy: z.string().trim().min(1).max(100),

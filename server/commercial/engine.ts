@@ -1,3 +1,4 @@
+import { standardItemPrices, type CommercialPolicy } from "./active-policy.js";
 import { Decimal } from "decimal.js";
 import type { BoqSnapshot } from "../boq/engine.js";
 import { HttpError } from "../http/errors.js";
@@ -13,7 +14,8 @@ export const TERMS = [
   "This is only technical proposed document and is not a legal document.",
   "The payment is not refundable.",
 ];
-const D = (v: string) => new Decimal(v),
+const ExactDecimal = Decimal.clone({precision:50});
+const D = (v: string) => new ExactDecimal(v),
   money = (v: Decimal) =>
     v.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2);
 export function cableExcessNote(
@@ -50,7 +52,10 @@ export function price(
   boq: BoqSnapshot,
   boqNumber: string,
   input: PricingInput,
+  policy?: CommercialPolicy,
 ) {
+  const itemPricing = policy ? standardItemPrices(boq, input, policy) : undefined;
+  if (policy) input = {...input, markups:{solar:policy.markups.solar,structure:policy.markups.structure,bess:policy.markups.bess,earthing:policy.markups.earthing,balance:policy.markups.other,rest:policy.markups.other},additionalMarkup:input.additionalCategory?policy.markups[input.additionalCategory]:undefined};
   const summary = (name: string) =>
     D(boq.summary.find((x) => x.name === name)?.cost ?? "0");
   const solar = summary("Solar Panels"),
@@ -82,13 +87,13 @@ export function price(
     ] as const
   ).map(([key, name, base]) => {
     const markup = input.markups[key];
-    const selling = base.mul(D(markup).div(100).add(1)),
+    const selling = itemPricing ? itemPricing.filter(l=>l.group===key).reduce((s,l)=>s.add(l.beforeTax),D("0")) : base.mul(D(markup).div(100).add(1)),
       rate = key === "solar" ? "10" : "18";
     return {
       key,
       name,
       cost: base.toString(),
-      markup,
+      markup: itemPricing && !base.isZero() ? selling.div(base).minus(1).mul(100).toFixed(6) : markup,
       profit: selling.minus(base).toString(),
       beforeTax: selling.toString(),
       taxRate: rate,
@@ -99,7 +104,7 @@ export function price(
   const extraRows = boq.survey.additionalItem
     ? (() => {
         const markup = input.additionalMarkup ?? input.markups.balance;
-        const selling = additional.mul(D(markup).div(100).add(1));
+        const selling = itemPricing ? D(itemPricing.find(l=>l.group==="additional")!.beforeTax) : additional.mul(D(markup).div(100).add(1));
         const rate =
           input.additionalTaxRate ?? boq.survey.additionalItem.taxRate;
         return [
@@ -136,7 +141,8 @@ export function price(
     total = money(D(subtotal).add(tax)),
     discount = "0.00";
   return {
-    engineVersion: 2,
+    engineVersion: policy ? 3 : 2,
+    ...(policy ? {policy, itemPricing} : {}),
     input,
     boqNumber,
     customer: boq.customer,
@@ -275,6 +281,7 @@ export function quote(
 ) {
   const full = p.input.presentation === "Full Breakup";
   const extra = input.additionalItem;
+  if (p.policy && extra) throw new HttpError(422,"Add new scope through an approved BOQ revision so its standard commercial category can be priced.");
   if (extra && boq.survey.additionalItem)
     throw new HttpError(
       409,
@@ -400,7 +407,7 @@ export function quote(
       const base = boq.lines
         .filter((x) => keys[i].includes(x.key))
         .reduce((a, x) => a.add(x.total), D("0"));
-      const selling = base.mul(D(category.markup).div(100).add(1));
+      const selling = p.itemPricing ? p.itemPricing.filter(x=>keys[i].includes(x.key)).reduce((sum,x)=>sum.add(x.beforeTax),D("0")) : base.mul(D(category.markup).div(100).add(1));
       l.amount = money(
         p.input.taxMode === "Tax Included"
           ? selling.mul(D(category.taxRate).div(100).add(1))

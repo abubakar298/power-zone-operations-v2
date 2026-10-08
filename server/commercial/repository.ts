@@ -1,3 +1,4 @@
+import { commercialPolicySchema, type CommercialPolicy } from "./active-policy.js";
 import { ownedCondition } from "../http/permissions.js";
 import { workflowHistory } from "../boq/workflow-history.js";
 import { Decimal } from "decimal.js";
@@ -220,6 +221,25 @@ export class CommercialRepository {
     if (!r) throw new HttpError(404, "Approved BOQ revision not found.");
     return r;
   }
+  async standardPolicy(actor:string, c:Pool | PoolClient = this.pool):Promise<CommercialPolicy> {
+    await this.manager(c,actor);
+    const row=(await c.query("SELECT version,policy FROM standard_commercial_policy_versions ORDER BY version DESC LIMIT 1")).rows[0];
+    if(!row) throw new HttpError(422,"Standard Commercial Policy is missing. Ask Management to configure it.");
+    return {...commercialPolicySchema.parse(row.policy),version:row.version};
+  }
+  async saveStandardPolicy(actor:string, raw:unknown, expectedVersion:number) {
+    return transaction(this.pool,async c=>{
+      await c.query("SELECT pg_advisory_xact_lock(742019003)");
+      await this.manager(c,actor,false);
+      const current=await this.standardPolicy(actor,c);
+      if(current.version!==expectedVersion) throw new HttpError(409,"Policy changed. Refresh before publishing a new version.");
+      const policy=commercialPolicySchema.parse(raw);
+      const version=current.version+1;
+      await c.query("INSERT INTO standard_commercial_policy_versions(version,policy,created_by) VALUES($1,$2,$3)",[version,policy,actor]);
+      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)",[actor,`commercial.policy.v${version}.published`]);
+      return {...policy,version};
+    });
+  }
   async pricingPreview(actor: string, input: PricingInput) {
     await this.manager(this.pool, actor);
     await this.requireCostingContext(
@@ -234,7 +254,7 @@ export class CommercialRepository {
         input.boqRevisionId,
       );
     const b = await this.boq(this.pool, input.boqRevisionId),
-      snapshot = price(b.snapshot, b.number, input);
+      snapshot = price(b.snapshot, b.number, input, await this.standardPolicy(actor));
     return { snapshot, fingerprint: fingerprint(snapshot) };
   }
   async pricingList(actor: string) {
@@ -281,7 +301,7 @@ export class CommercialRepository {
           input.boqRevisionId,
         );
       const b = await this.boq(c, input.boqRevisionId),
-        snapshot = price(b.snapshot, b.number, input),
+        snapshot = price(b.snapshot, b.number, input, await this.standardPolicy(actor,c)),
         fp = fingerprint(snapshot);
       if (fp !== expected)
         throw new HttpError(409, "Preview the current pricing before saving.");
