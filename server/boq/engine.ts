@@ -1,3 +1,4 @@
+import { singlePhaseCableDescription } from "./ac-cable.js";
 import { singlePhaseConfigurations } from "./equipment.js";
 import { singlePhaseScope } from "./single-phase.js";
 import { findBess, BESS_RULE_VERSION } from "./bess.js";
@@ -220,9 +221,9 @@ export function calculate(s: Survey, m: Masters) {
     "6mm² DC Cable Black": bessOnly ? "0" : allowances
       ? new Decimal(allowances.dcBlack)
       : new Decimal(s.dcMetres).div(2),
-    "2.5mm² Earthing Cable": allowances?.earth25 ?? s.earth25,
+    "2.5mm² Earthing Cable": bessOnly ? "0" : allowances?.earth25 ?? s.earth25,
     "6mm² Earthing Cable": allowances?.earth6 ?? s.earth6,
-    "10mm² Earthing Cable": allowances?.earth10 ?? s.earth10,
+    "10mm² Earthing Cable": bessOnly ? "0" : allowances?.earth10 ?? s.earth10,
     "16mm² 4C AC Cable": sp ? "0" : bessOnly && s.sourceMode === "General quotation" ? (dual ? "15" : "30") : allowances
       ? allowances.ac16
       : new Decimal(s.acTerminationMode === "Fixed" ? (config.quantity === 2 ? "15" : "30") : s.acInverter16 ?? "0").add(s.acPanel16 ?? "0"),
@@ -232,7 +233,10 @@ export function calculate(s: Survey, m: Masters) {
   }))
     add(key, qty, "EPC", "cable", "Installation Cost");
   if (spScope) {
-    add("10mm² 1C AC Cable", new Decimal(s.sourceMode !== "General quotation" && s.acTerminationMode === "Measured" ? s.spInverterTerminationMetres ?? spScope.cable.fixedTotalMetres : spScope.cable.fixedTotalMetres).plus(spScope.cable.loadPanelConductorMetres), "EPC", "cable", "Installation Cost");
+    const termination = s.sourceMode !== "General quotation" && s.acTerminationMode === "Measured" ? s.spInverterTerminationMetres ?? spScope.cable.fixedTotalMetres : spScope.cable.fixedTotalMetres;
+    add("10mm² 1C AC Cable", new Decimal(termination).plus(spScope.cable.loadPanelConductorMetres), "EPC", "cable", "Installation Cost");
+    const cable = lines.find(l=>l.key === "10mm² 1C AC Cable");
+    if(cable) cable.description = `10mm² single-core AC cable\nInverter termination (${termination} m): ${singlePhaseCableDescription(termination)}\nLoad-panel termination (${spScope.cable.loadPanelConductorMetres} m): ${singlePhaseCableDescription(spScope.cable.loadPanelConductorMetres)}`;
     for (const [key, qty] of Object.entries({
       "500V 2P DC Breaker": bessOnly ? 0 : spScope.dc.totalBreakers,
       "DC SPD": bessOnly ? 0 : spScope.dc.rooftopSpd,

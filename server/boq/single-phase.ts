@@ -57,7 +57,8 @@ export function singlePhaseTermination(inverterQty: 1 | 2) {
   const circuits = inverterQty === 2
     ? [{ port: "input", lineMetres: "7.5", neutralMetres: "7.5" },
        { port: "output", lineMetres: "7.5", neutralMetres: "7.5" }]
-    : [{ port: "termination", lineMetres: "10", neutralMetres: "10" }];
+    : [{ port: "input", lineMetres: "5", neutralMetres: "5" },
+       { port: "output", lineMetres: "5", neutralMetres: "5" }];
   const perInverter = circuits.reduce((sum, c) => sum.plus(c.lineMetres).plus(c.neutralMetres), new Decimal(0));
   return { sizeMm2: 10, cores: 1, inverterQty, circuitsPerInverter: circuits,
     perInverterMetres: perInverter.toString(), totalMetres: perInverter.mul(inverterQty).toString() };

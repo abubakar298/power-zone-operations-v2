@@ -1,3 +1,4 @@
+import {singlePhaseCableDescription} from '../server/boq/ac-cable.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {Decimal} from 'decimal.js';
@@ -25,7 +26,7 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  const row=(await db.pool.query('SELECT version,policy FROM standard_commercial_policy_versions ORDER BY version DESC LIMIT 1')).rows[0];const policy={...row.policy,version:row.version};
  for(const mode of [0,1,2])for(const quick of [false,true]){
  const sp=mode===1,dual=mode===2;
- const s=surveySchema.parse({family:'bess-only',sourceMode:quick?'General quotation':'Survey',customerId:3,siteName:`Isolated UPS fixture ${mode}`,siteCode:`UPS${mode}`,location:'Lahore',panelQty:0,panelWattage:'0',structure:'L1',dcMetres:'999',acInverter16:'10',acPanel16:'20',acInverter25:'0',acPanel25:'0',spInverterTerminationMetres:'20',spLoadPanelRunMetres:'10',earth25:'0',earth6:'10',earth10:'15',bessId:sp?'6-10':dual?'BESS-24-20':'BESS-12-20',inverter:sp?'6 kW SP':dual?'2×12 kW':'12 kW',batteryKwh:sp?10:20,smartMeter:false,genset:false,brands:{inverter:brand('Inverter'),battery:brand('Battery & BMS'),cable:brand('Cable'),switchgear:brand('Switchgear')},preparedBy:'Fixture'});
+ const s=surveySchema.parse({family:'bess-only',sourceMode:quick?'General quotation':'Survey',customerId:3,siteName:`Isolated UPS fixture ${mode}`,siteCode:`UPS${mode}`,location:'Lahore',panelQty:0,panelWattage:'0',structure:'L1',dcMetres:'999',acInverter16:'10',acPanel16:'20',acInverter25:'0',acPanel25:'0',spInverterTerminationMetres:'20',spLoadPanelRunMetres:'10',earth25:'99',earth6:'10',earth10:'15',bessId:sp?'6-10':dual?'BESS-24-20':'BESS-12-20',inverter:sp?'6 kW SP':dual?'2×12 kW':'12 kW',batteryKwh:sp?10:20,smartMeter:false,genset:false,brands:{inverter:brand('Inverter'),battery:brand('Battery & BMS'),cable:brand('Cable'),switchgear:brand('Switchgear')},preparedBy:'Fixture'});
  const b=calculate(s,m as any);assert.equal(b.engineering.pvWatts,'0');assert.equal(b.engineering.strings,0);assert.equal(b.lines.find(l=>l.key==='Earthing Bore')!.qty,'1');assert.equal(b.lines.find(l=>l.key==='Labour')!.total,dual?'100000':'50000');assert.equal(b.lines.find(l=>l.key==='Delivery')!.total,'50000');assert.equal(b.lines.some(l=>l.phase==='Solar Panels'||l.phase==='Structure'||/DC Cable|DC Breaker|DC SPD|DC Fuse|SP DC Enclosures/.test(l.key)),false);
  if(mode!==2&&!quick){
  const br=new BoqRepository(db.pool),cr=new CommercialRepository(db.pool),orders=new OrdersRepository(db.pool);
@@ -41,6 +42,8 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  assert.equal((await db.pool.query('SELECT count(*) FROM ipo_accounts_handoffs WHERE ipo_id=$1',[issued.id])).rows[0].count,'1');
  assert.equal((await br.get(saved.id)).snapshot.survey.family,'bess-only');
  }
+ assert.equal(b.lines.some(l=>['2.5mm² Earthing Cable','10mm² Earthing Cable'].includes(l.key)),false);
+ if(sp)assert.match(b.lines.find(l=>l.key==='10mm² 1C AC Cable')!.description,/10 m red \+ 10 m black/);
  const redacted=restrictedCostView(b);assert.equal(redacted.lines.filter((l:any)=>l.phase==='BESS').every((l:any)=>l.rate===null&&l.total===null),true);assert.equal(redacted.perWatt,'0.00');assert.equal(redacted.summary.some((r:any)=>r.name==='BESS'),false);
  for(const presentation of ['Full Breakup','Basic Breakup','No Breakup'])for(const taxMode of ['Tax Included','Show Sales Tax Separately']){
  const p=price(b,'UPS-R0',{boqRevisionId:randomUUID(),presentation,taxMode,markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},preparedBy:'Fixture',remarks:''} as any,policy);
@@ -55,4 +58,9 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  }
  }
  }finally{await db.close();}
+});
+
+test('single-phase conductor descriptions explain both circuits and colour totals',()=>{
+ assert.equal(singlePhaseCableDescription('20'),'10 m input + 10 m output (5 m line + 5 m neutral each). Total: 10 m red + 10 m black.');
+ assert.equal(singlePhaseCableDescription('4'),'2 m input + 2 m output (1 m line + 1 m neutral each). Total: 2 m red + 2 m black.');
 });

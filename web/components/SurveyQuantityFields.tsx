@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Decimal } from "decimal.js";
+import { singlePhaseCableDescription } from "../../server/boq/ac-cable.js";
 import { BessSelector } from "./BessSelector.js";
 
 /** Display quantities without changing the established persisted cable basis. */
@@ -23,15 +24,15 @@ export function SurveyQuantityFields({initial, patch, inverter, quick, bessOnly=
     <BessSelector initial={initial} onChange={onInverter}/>
     {!quick && !bessOnly && input("dcMetres","6mm² DC cable total (m)",`${metres(number("dcMetres").div(2))} m red + ${metres(number("dcMetres").div(2))} m black.`)}
     {!quick && <>
-      {sp ? input("spInverterTerminationMetres","AC cable · inverter termination · 10mm² 1-core (m)","Automatically suggested; editable for the measured site requirement.") : <div>{input("acInverter16","AC cable · inverter termination · 16mm² 4-core (m)","Automatically suggested; editable for the measured site requirement.")}{dual&&input("acInverter25","AC cable · inverter termination · 25mm² 4-core (m)")}</div>}
-      {sp ? input("spLoadPanelTotalMetres","10mm² 1-core AC cable · load-panel termination (m)",`${metres(number("spLoadPanelTotalMetres").div(4))} m line + ${metres(number("spLoadPanelTotalMetres").div(4))} m neutral for input; the same for output. Total conductor quantity.`) : <div className="ac-panel-fields">
+      {sp ? input("spInverterTerminationMetres","AC cable · inverter termination · 10mm² 1-core (m)",singlePhaseCableDescription(number("spInverterTerminationMetres").toString())) : <div>{input("acInverter16","AC cable · inverter termination · 16mm² 4-core (m)","Automatically suggested; editable for the measured site requirement.")}{dual&&input("acInverter25","AC cable · inverter termination · 25mm² 4-core (m)")}</div>}
+      {sp ? input("spLoadPanelTotalMetres","10mm² 1-core AC cable · load-panel termination (m)",singlePhaseCableDescription(number("spLoadPanelTotalMetres").toString())) : <div className="ac-panel-fields">
         <small>AC load-panel termination · {dual ? "25" : "16"}mm² 4-core for the selected BESS configuration.</small>
         {input(dual?"acPanel25":"acPanel16",`Panel termination · ${dual?"25":"16"} mm² 4-core (m)`,split(dual?"acPanel25":"acPanel16","4-core cable"))}
         {number(dual?"acPanel16":"acPanel25").gt(0) ? input(dual?"acPanel16":"acPanel25",`Panel termination · ${dual?"16":"25"} mm² 4-core (m)`,"Existing additional cable quantity retained from this survey. Review if the solution changes.") : <input type="hidden" name={dual?"acPanel16":"acPanel25"} value="0"/>}
       </div>}
-      {input("earth25","2.5mm² earth cable (m)")}
+      {!bessOnly && input("earth25","2.5mm² earth cable (m)")}
       {input("earth6","6mm² earth cable (m)")}
-      {input("earth10","10mm² earth cable (m)")}
+      {!bessOnly && input("earth10","10mm² earth cable (m)")}
     </>}
     {!bessOnly && <label>Structure<select aria-label="Structure" name="structure" defaultValue={initial.structure??"L1"}>{["L1","L2","L3","Elevated"].map(v=><option key={v}>{v}</option>)}</select></label>}
     <label>Extra smart meter<select aria-label="Extra smart meter" name="smartMeter" defaultValue={initial.smartMeter?"yes":"no"}><option value="no">No</option><option value="yes">Yes</option></select></label>
