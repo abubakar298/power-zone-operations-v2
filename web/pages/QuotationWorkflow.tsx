@@ -5,7 +5,7 @@ import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js"
 import { Decimal } from "decimal.js";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, type Session } from "../api.js";
-import { confirmTransition, confirmRevision } from "../confirm.js";
+import { confirmTransition, confirmRevision, confirmDiscountProposal } from "../confirm.js";
 import type { QuotationSnapshot } from "../../server/commercial/engine.js";
 function useAdjustmentPreview(q: any, session: Session, enabled: boolean, kind: "discount" | "targetMargin", value: string) {
   const [result, setResult] = useState<any>();
@@ -61,16 +61,32 @@ export function QuotationWorkflow({
     setTargetMargin(""); setRevision(false); setNotes(""); setError("");
   }, [q.id]);
   async function transition(kind: string) {
+    let actionDiscount = effectiveDiscount;
+    let actionMetrics = metrics;
+    let proposalConfirmed = false;
+    if (kind === "Changes requested" && manager && discount.trim() && targetMargin.trim()) {
+      if (lump.pending || target.pending || !lump.result || !target.result) {
+        setError("Both proposals must have valid calculated totals before choosing a discount order."); return;
+      }
+      const chosen = await confirmDiscountProposal([
+        { key: "discount", label: "Lump-sum discount", discount: money(lump.result.discount), payable: money(lump.result.proposed.payable) },
+        { key: "margin", label: `Target margin ${targetMargin}%`, discount: money(target.result.discount), payable: money(target.result.proposed.payable) },
+      ]);
+      if (!chosen) return;
+      setMode(chosen); proposalConfirmed = true;
+      actionMetrics = chosen === "discount" ? lump.result : target.result;
+      actionDiscount = actionMetrics.discount;
+    }
     const proposedChange =
       manager &&
-      (effectiveDiscount.trim() || "0") !== String(q.snapshot.input.discount ?? "0") &&
-      metrics &&
-      Number(effectiveDiscount || 0) !== Number(q.snapshot.input.discount ?? 0);
+      (actionDiscount.trim() || "0") !== String(q.snapshot.input.discount ?? "0") &&
+      actionMetrics &&
+      Number(actionDiscount || 0) !== Number(q.snapshot.input.discount ?? 0);
     if (
       kind === "Approved" &&
       ((mode === "margin" && (calculating || !metrics)) ||
         !validDiscount ||
-        Number(effectiveDiscount.trim() || 0) !== Number(q.snapshot.input.discount ?? 0))
+        Number(actionDiscount.trim() || 0) !== Number(q.snapshot.input.discount ?? 0))
     ) {
       setError(
         "This discount is a preview. Request revision with the proposed discount before approving the saved quotation.",
@@ -78,7 +94,7 @@ export function QuotationWorkflow({
       return;
     }
     if (
-      !(await (
+      !proposalConfirmed && !(await (
         ["Changes requested", "Approved"].includes(kind)
           ? confirmRevision
           : async (a: string, d: string) => confirmTransition(a, d)
@@ -97,7 +113,7 @@ export function QuotationWorkflow({
     try {
       const feedback =
         kind === "Changes requested" && proposedChange
-          ? `${notes.trim()}\nProposed total discount: PKR ${money(effectiveDiscount || "0")}. Proposed net payable: PKR ${money(metrics.proposed.payable)}.`
+          ? `${notes.trim()}\nProposed total discount: PKR ${money(actionDiscount || "0")}. Proposed net payable: PKR ${money(actionMetrics.proposed.payable)}.`
           : notes.trim();
       await api("/coordinator/events", {
         body: { quotationId: q.id, kind, notes: feedback },
@@ -302,6 +318,7 @@ export function QuotationWorkflow({
               >
                 Approve quotation
               </button>
+              <button disabled={busy} onClick={() => setRevision(true)}>Issue discount order</button>
               <button disabled={busy} onClick={() => setRevision(true)}>
                 Request revision
               </button>
