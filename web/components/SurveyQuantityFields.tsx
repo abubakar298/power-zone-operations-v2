@@ -34,6 +34,7 @@ export function SurveyQuantityFields({initial, patch, inverter, quick, bessOnly=
       {input("earth6","6mm² earth cable (m)")}
       {!bessOnly && input("earth10","10mm² earth cable (m)")}
     </>}
+    {sp && <label>AC earthing bore<input type="checkbox" aria-label="Include AC earthing bore" style={{width:20,height:20,minHeight:20,alignSelf:"start",accentColor:"#6658e8"}} name="spIncludeEarthingBore" defaultChecked={initial.spIncludeEarthingBore !== false}/><small>Include earthing bore in this BOQ. Uncheck if it is not required at this site.</small></label>}
     {!bessOnly && <label>Structure<select aria-label="Structure" name="structure" defaultValue={initial.structure??"L1"}>{["L1","L2","L3","Elevated"].map(v=><option key={v}>{v}</option>)}</select></label>}
     <label>Extra smart meter<select aria-label="Extra smart meter" name="smartMeter" defaultValue={initial.smartMeter?"yes":"no"}><option value="no">No</option><option value="yes">Yes</option></select></label>
     <label>Genset synchronisation<select aria-label="Genset synchronisation" name="genset" defaultValue={initial.genset?"yes":"no"}><option value="no">No</option><option value="yes">Yes</option></select></label>

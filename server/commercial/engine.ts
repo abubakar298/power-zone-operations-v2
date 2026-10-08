@@ -495,7 +495,8 @@ export type QuotationSnapshot = ReturnType<typeof quote>;
 function bessOnlyLines(boq:BoqSnapshot,presentation:string):QuoteLine[]{
   const equipment=boq.lines.filter(l=>l.phase==="BESS");
   const rows:QuoteLine[]=equipment.map(l=>({description:[l.brand,l.specification??l.description].filter(Boolean).join(" "),unit:l.unit,qty:l.qty,group:"bess"}));
-  if(presentation==="Full Breakup") rows.push({description:"AC Earthing Bore",unit:"No.",qty:boq.lines.find(l=>l.key==="Earthing Bore")!.qty,group:"earthing"});
+  const bore=boq.lines.find(l=>l.key==="Earthing Bore");
+  if(presentation==="Full Breakup" && bore) rows.push({description:"AC Earthing Bore",unit:"No.",qty:bore.qty,group:"earthing"});
   const others=boq.lines.filter(l=>l.phase!=="BESS"&&(presentation!=="Full Breakup"||l.key!=="Earthing Bore"));
   if(others.length)rows.push({description:others.map(l=>`${l.description}${l.brand?` - ${l.brand}`:""} (${l.qty} ${l.unit})`).join("\n"),unit:"LS",qty:"1",group:"balance"});
   return rows;

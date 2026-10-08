@@ -27,7 +27,7 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  for(const mode of [0,1,2])for(const quick of [false,true]){
  const sp=mode===1,dual=mode===2;
  const s=surveySchema.parse({family:'bess-only',sourceMode:quick?'General quotation':'Survey',customerId:3,siteName:`Isolated UPS fixture ${mode}`,siteCode:`UPS${mode}`,location:'Lahore',panelQty:0,panelWattage:'0',structure:'L1',dcMetres:'999',acInverter16:'10',acPanel16:'20',acInverter25:'0',acPanel25:'0',spInverterTerminationMetres:'20',spLoadPanelRunMetres:'10',earth25:'99',earth6:'10',earth10:'15',bessId:sp?'6-10':dual?'BESS-24-20':'BESS-12-20',inverter:sp?'6 kW SP':dual?'2×12 kW':'12 kW',batteryKwh:sp?10:20,smartMeter:false,genset:false,brands:{inverter:brand('Inverter'),battery:brand('Battery & BMS'),cable:brand('Cable'),switchgear:brand('Switchgear')},preparedBy:'Fixture'});
- const b=calculate(s,m as any);assert.equal(b.engineering.pvWatts,'0');assert.equal(b.engineering.strings,0);assert.equal(b.lines.find(l=>l.key==='Earthing Bore')!.qty,'1');assert.equal(b.lines.find(l=>l.key==='Labour')!.total,dual?'100000':'50000');assert.equal(b.lines.find(l=>l.key==='Delivery')!.total,'50000');assert.equal(b.lines.some(l=>l.phase==='Solar Panels'||l.phase==='Structure'||/DC Cable|DC Breaker|DC SPD|DC Fuse|SP DC Enclosures/.test(l.key)),false);
+ const b=calculate(s,m as any);assert.equal(b.engineering.pvWatts,'0');assert.equal(b.engineering.strings,0);assert.equal(b.lines.find(l=>l.key==='Earthing Bore')!.qty,'1');assert.equal(b.lines.find(l=>l.key==='Labour')!.total,sp?'15000':dual?'100000':'50000');assert.equal(b.lines.find(l=>l.key==='Delivery')!.total,sp?'15000':'50000');assert.equal(b.lines.some(l=>l.phase==='Solar Panels'||l.phase==='Structure'||/DC Cable|DC Breaker|DC SPD|DC Fuse|SP DC Enclosures/.test(l.key)),false);
  if(mode!==2&&!quick){
  const br=new BoqRepository(db.pool),cr=new CommercialRepository(db.pool),orders=new OrdersRepository(db.pool);
  const draft=await br.draft(employee,undefined,0,s);const bp=await br.preview(s);const saved=await br.save(employee,draft.id,draft.version,bp.fingerprint);
@@ -44,6 +44,17 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  }
  assert.equal(b.lines.some(l=>['2.5mm² Earthing Cable','10mm² Earthing Cable'].includes(l.key)),false);
  if(sp)assert.match(b.lines.find(l=>l.key==='10mm² 1C AC Cable')!.description,/10 m red \+ 10 m black/);
+ if(sp){
+ assert.equal(b.lines.find(l=>l.key==='Misc. Accessories')!.total,'45000');
+ const noBore=calculate({...s,spIncludeEarthingBore:false},m as any);
+ assert.equal(noBore.lines.some(l=>l.key==='Earthing Bore'),false);
+ assert.equal(new Decimal(b.total).sub(noBore.total).toString(),b.lines.find(l=>l.key==='Earthing Bore')!.total);
+ const noBorePricing=price(noBore,'UPS',{boqRevisionId:randomUUID(),presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},preparedBy:'Fixture',remarks:''} as any,policy);
+ assert.equal(quote(noBorePricing,noBore,{pricingId:randomUUID(),quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture'}).lines.some(l=>l.group==='earthing'),false);
+ const solar=calculate({...s,family:'solar-hybrid',panelQty:10,panelWattage:'585',brands:{...s.brands,solar:brand('Solar Panel')},spIncludeEarthingBore:false},m as any);
+ for(const [key,value] of [['Labour','15000'],['Delivery','15000'],['Misc. Accessories','45000']])assert.equal(solar.lines.find(l=>l.key===key)!.total,value);
+ assert.equal(solar.lines.some(l=>l.key==='Earthing Bore'),false);
+ }
  const redacted=restrictedCostView(b);assert.equal(redacted.lines.filter((l:any)=>l.phase==='BESS').every((l:any)=>l.rate===null&&l.total===null),true);assert.equal(redacted.perWatt,'0.00');assert.equal(redacted.summary.some((r:any)=>r.name==='BESS'),false);
  for(const presentation of ['Full Breakup','Basic Breakup','No Breakup'])for(const taxMode of ['Tax Included','Show Sales Tax Separately']){
  const p=price(b,'UPS-R0',{boqRevisionId:randomUUID(),presentation,taxMode,markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},preparedBy:'Fixture',remarks:''} as any,policy);

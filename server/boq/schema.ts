@@ -30,6 +30,7 @@ export const surveySchema = z
     acPanel25: quantity.optional(),
     spLoadPanelRunMetres: quantity.optional(),
 
+    spIncludeEarthingBore: z.boolean().optional(),
     earth25: quantity,
     earth6: quantity,
     earth10: quantity,

@@ -260,13 +260,16 @@ export function calculate(s: Survey, m: Masters) {
     add(key, qty, "EPC", "switchgear", "Installation Cost");
   add("AC & DC Boxes", rule(20), "EPC", undefined, "Installation Cost");
   }
-  add("Earthing Bore", bessOnly ? 1 : rule(13), "EPC", undefined, "Earthing Cost");
-  add("Misc. Accessories", rule(21), "EPC", undefined, "Installation Cost");
-  if(bessOnly){
-    for(const [key,qty,epc] of [["Labour",config.quantity,"Electrical Labour"],["Delivery",1,"Deliveries"]] as const){
-      const spec=m.items.find(i=>i.key===key);
-      lines.push({key,description:key==="Labour"?"UPS installation per inverter":"Project delivery",brand:"",brandAlternatives:[],specification:spec?.approved_specification??null,specVersion:spec?.version??null,qty:String(qty),unit:key==="Labour"?"Inverter":"Project",rate:"50000",rateVersion:0,rateStatus:"Active",total:new Decimal(qty).mul(50000).toString(),phase:"EPC",epc});
-    }
+  add("Earthing Bore", sp && s.spIncludeEarthingBore === false ? 0 : bessOnly ? 1 : rule(13), "EPC", undefined, "Earthing Cost");
+  const fixedCharge=(key:string,qty:number,rate:string,unit:string,description:string,epc:typeof lines[number]["epc"])=>{
+    const spec=m.items.find(i=>i.key===key);
+    lines.push({key,description,brand:"",brandAlternatives:[],specification:spec?.approved_specification??null,specVersion:spec?.version??null,qty:String(qty),unit,rate,rateVersion:0,rateStatus:"Active",total:new Decimal(qty).mul(rate).toString(),phase:"EPC",epc});
+  };
+  if(sp)fixedCharge("Misc. Accessories",1,"45000","LS","Miscellaneous accessories","Installation Cost");
+  else add("Misc. Accessories", rule(21), "EPC", undefined, "Installation Cost");
+  if(sp || bessOnly){
+    fixedCharge("Labour",config.quantity,sp?"15000":"50000","Inverter",sp?"Single-phase installation per inverter":"UPS installation per inverter","Electrical Labour");
+    fixedCharge("Delivery",1,sp?"15000":"50000","Project","Project delivery","Deliveries");
   }else{
     add("Labour", pv, "EPC", undefined, "Electrical Labour");
     add("Delivery", pv, "EPC", undefined, "Deliveries");

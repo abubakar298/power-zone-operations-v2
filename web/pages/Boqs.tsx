@@ -236,6 +236,7 @@ export function Boqs({
       batteryKwh: f.get("batteryKwh") ? Number(f.get("batteryKwh")) : undefined,
       smartMeter: f.get("smartMeter") === "yes",
       genset: f.get("genset") === "yes",
+      ...(f.get("inverter") === "6 kW SP" ? {spIncludeEarthingBore:f.get("spIncludeEarthingBore") === "on"} : {}),
       brands: Object.fromEntries(
         Object.keys(brandFields)
           .filter((k) => f.get(`brand-${k}`))
