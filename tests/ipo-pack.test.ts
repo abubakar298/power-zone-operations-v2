@@ -63,7 +63,7 @@ test("Combined IPO packs retain accepted amounts, show sale type across all six 
       for (const taxMode of ["Tax Included", "Show Sales Tax Separately"]) {
         const d = peachtreeDivision(
           row.snapshot.allocation,
-          {} as any,
+          { survey: { family: "solar-hybrid" }, lines: [] } as any,
           { input: { presentation, taxMode } } as any,
         );
         const pdf = buildIpoPdf(row.snapshot, row.number, d),

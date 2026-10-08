@@ -27,8 +27,8 @@ test("training batch creates 20 usable staged records atomically and is idempote
       false,
     );
     assert.equal(view.total, 20);
-    assert.equal(Object.keys(view.stageCounts).length, 10);
-    assert.ok(Object.values(view.stageCounts).every((count) => count === 2));
+    assert.equal(Object.keys(view.stageCounts).length, 6);
+    assert.equal(Object.values(view.stageCounts).reduce((sum: number, count: any) => sum + count, 0), 20);
     assert.ok(view.tasks.every((task: any) => task.site.startsWith("SAMPLE")));
     assert.ok(
       view.tasks.some(

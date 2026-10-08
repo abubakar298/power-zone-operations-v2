@@ -129,8 +129,8 @@ function appendQuotation(
     body,
     theme: "grid",
     styles: {
-      fontSize: 7.5,
-      cellPadding: 1,
+      fontSize: 7,
+      cellPadding: 0.5,
       overflow: "linebreak",
       lineColor: [230, 230, 238],
       lineWidth: 0.2,
@@ -178,7 +178,7 @@ function appendQuotation(
       [{ content: "TERMS AND CONDITIONS", styles: { fontStyle: "bold" } }],
       ...s.terms.map((r, i) => [text(`${i + 1}. ${r}`)]),
     ],
-    styles: { fontSize: 7.5, cellPadding: 0.7, overflow: "linebreak" },
+    styles: { fontSize: 7, cellPadding: 0.3, overflow: "linebreak" },
     rowPageBreak: "avoid",
   });
 }

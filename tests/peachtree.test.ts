@@ -24,7 +24,7 @@ test("all IPO formats retain accepted prices and discounted payable with matchin
     for (const presentation of ["No Breakup", "Basic Breakup", "Full Breakup"])
       for (const taxMode of ["Tax Included", "Show Sales Tax Separately"]) {
         const p: any = { input: { presentation, taxMode } };
-        const d = peachtreeDivision(a, {} as any, p);
+        const d = peachtreeDivision(a, { survey: { family: "solar-hybrid" }, lines: [] } as any, p);
         const included = taxMode === "Tax Included";
         assert.equal(d.phaseTotal, included ? a.total : a.subtotal);
         assert.equal(

@@ -1564,8 +1564,8 @@ test("survey aging starts at receipt, excludes management waiting and never rese
   const repo = new CoordinatorRepository(db.pool);
   const view = await repo.overview(adminId, false);
   const task = view.tasks.find((t: any) => t.draft_id === id);
-  assert.equal(task.stage, "Costing review");
-  assert.equal(task.responsibility, "Management");
+  assert.equal(task.stage, "Survey & Costing Preparation");
+  assert.equal(task.responsibility, "Coordinator");
   assert.ok(task.preparation_minutes >= 15 && task.preparation_minutes < 15.1);
   assert.ok(Date.now() - new Date(task.started_at).getTime() > 44 * 60000);
   await db.pool.query(
@@ -1575,7 +1575,7 @@ test("survey aging starts at receipt, excludes management waiting and never rese
   const changed = (await repo.overview(adminId, false)).tasks.find(
     (t: any) => t.draft_id === id,
   );
-  assert.equal(changed.stage, "Survey preparation");
+  assert.equal(changed.stage, "Survey & Costing Preparation");
   assert.ok(Date.now() - new Date(changed.started_at).getTime() < 10000);
   assert.ok(
     changed.preparation_minutes >= 15 && changed.preparation_minutes < 15.1,
@@ -1686,8 +1686,8 @@ test("quotation-linked BOQ revisions move between coordinator revision and manag
   for (const team of [false, true]) {
     tasks = await task(team);
     assert.equal(tasks.length, 1);
-    assert.equal(tasks[0].stage, "Costing review");
-    assert.equal(tasks[0].responsibility, "Management");
+    assert.equal(tasks[0].stage, "Survey & Costing Preparation");
+    assert.equal(tasks[0].responsibility, "Coordinator");
     assert.equal(tasks[0].target, "boqs");
     assert.equal(tasks[0].draft_id, draft);
   }
@@ -1700,7 +1700,7 @@ test("quotation-linked BOQ revisions move between coordinator revision and manag
     "INSERT INTO boq_review_submissions(id,draft_id,draft_version,snapshot,fingerprint,submitted_by,base_revision_id) VALUES($1,$2,2,'{}','revision-bucket-2',$3,$4)",
     [second, draft, adminId, boq.id],
   );
-  assert.equal((await task())[0].stage, "Costing review");
+  assert.equal((await task())[0].stage, "Survey & Costing Preparation");
   const { BoqRepository } = await import("../server/boq/repository.js");
   const review = await new BoqRepository(db.pool)
     .reviews()

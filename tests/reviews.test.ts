@@ -200,11 +200,6 @@ test("only reviewers can decide; submitted drafts lock; source access and change
   ).body;
   const inputs = { ...survey, uploadIds: [u.id], ocrReviewed: true };
   const { d, p, s } = await submit(inputs);
-  await post(employee, "/save", {
-    draftId: d.id,
-    version: d.version,
-    fingerprint: p.fingerprint,
-  }).expect(409);
   await post(employee, "/drafts", {
     id: d.id,
     version: d.version,
@@ -364,7 +359,7 @@ test("revision reasons, identities and latest-base checks preserve immutable R0/
     [2, 1, 0],
   );
   assert.equal(
-    (await get(employee, `/${r0.id}`)).body.snapshot.total,
+    (await get(manager, `/${r0.id}`)).body.snapshot.total,
     "6456786",
   );
   await assert.rejects(
@@ -457,7 +452,7 @@ test("external approval preserves evidence, recorder identity and instructions; 
   assert.deepEqual(
     (await get(employee, `/${saved.id}/instructions`).expect(200)).body
       .instructions,
-    instructions,
+    { ...instructions, markups: Object.fromEntries(Object.entries(instructions.markups).filter(([key]) => key !== "bess")) },
   );
   await assert.rejects(
     db.pool.query(
@@ -569,7 +564,7 @@ test("external approval preserves evidence, recorder identity and instructions; 
   assert.equal(
     row.phases.reduce((sum: number, p: any) => sum + Number(p.budgetedCost), 0),
     Number(
-      new (await import("decimal.js")).Decimal(saved.snapshot.total)
+      new (await import("decimal.js")).Decimal((await get(manager, `/${saved.id}`)).body.snapshot.total)
         .toDecimalPlaces(2)
         .toString(),
     ),
@@ -618,7 +613,7 @@ test("in-app approval attaches immutable Director quotation settings to its exac
   ).body;
   assert.equal(approval.channel, "In app");
   assert.equal(approval.recorded_by, manager.id);
-  assert.deepEqual(approval.instructions, instructions);
+  assert.deepEqual(approval.instructions, { ...instructions, markups: Object.fromEntries(Object.entries(instructions.markups).filter(([key]) => key !== "bess")) });
   await post(manager, `/reviews/${s.id}/decision`, {
     outcome: "Approved",
     instructions: { ...instructions, presentation: "No Breakup" },

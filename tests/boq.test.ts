@@ -481,7 +481,7 @@ test("quick quotation scope uses calculated cable quantities and includes the ad
   assert(
     q.notes.some(
       (n) =>
-        n.includes("rates per running metre") && n.includes("including GST"),
+        n.includes("rates per running meter") && n.includes("including GST"),
     ),
   );
   const cable = b.lines.find((l) => l.key === "6mm² DC Cable Red")!;

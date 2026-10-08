@@ -25,7 +25,7 @@ test("C&I standard/revision/discount workflow, immutable history and departmenta
  await request(app).get("/api/cni").expect(401);
  await request(app).post("/api/cni").set("Cookie",users.Coordinator.cookie).set("Origin",origin).send(base).expect(403);
  const saved=(await post("/",base).expect(201)).body;
- const pending=await cniTasks();assert.equal(pending.length,1);assert.equal(pending[0].id,saved.id);assert.equal(pending[0].stage,"Quotation approval");assert.equal(pending[0].target,"boqs");
+ const pending=await cniTasks();assert.equal(pending.length,1);assert.equal(pending[0].id,saved.id);assert.equal(pending[0].stage,"Quotation approval");assert.equal(pending[0].target,"quotes");
  assert.equal((await cniTasks("OtherCoordinator")).length,0);
  for(const role of ["Management","Admin"])assert.equal((await cniTasks(role,true))[0].id,saved.id);
  assert.doesNotMatch(JSON.stringify(pending),/internal_cost|11000000|unitCostBeforeTax/);

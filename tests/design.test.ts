@@ -193,7 +193,7 @@ test("Design survey handoff freezes verified technical data, excludes brands and
       (
         await new CoordinatorRepository(db.pool).overview(coordinator, false)
       ).tasks.some(
-        (t: any) => t.draft_id === draft.id && t.stage === "Survey preparation",
+        (t: any) => t.draft_id === draft.id && t.stage === "Survey & Costing Preparation",
       ),
     );
     assert.equal(
