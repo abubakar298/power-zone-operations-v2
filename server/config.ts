@@ -11,8 +11,10 @@ const schema = z.object({
   DATABASE_SSL: z.enum(["true", "false"]).default("false"),
   DATABASE_CA_FILE: z.string().optional(),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(0),
+  EMAIL_DELIVERY_ENABLED: z.enum(["true", "false"]).default("true"),
   RESEND_API_KEY: z.string().min(10).optional(),
   EMAIL_FROM: z.email().optional(),
+  EMAIL_REPLY_TO: z.email().optional(),
   EMAIL_FROM_NAME: z
     .string()
     .trim()
@@ -36,8 +38,10 @@ export interface Config {
   databaseCaFile?: string;
   trustProxyHops: number;
   sessionHours: number;
+  emailDeliveryEnabled?: boolean;
   emailApiKey?: string;
   emailFrom?: string;
+  emailReplyTo?: string;
   emailFromName?: string;
   emailEncryptionKey?: string;
 }
@@ -70,8 +74,10 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseCaFile: e.DATABASE_CA_FILE,
     trustProxyHops: e.TRUST_PROXY_HOPS,
     sessionHours: 12,
+    emailDeliveryEnabled: e.EMAIL_DELIVERY_ENABLED === "true",
     emailApiKey: e.RESEND_API_KEY,
     emailFrom: e.EMAIL_FROM,
+    emailReplyTo: e.EMAIL_REPLY_TO,
     emailFromName: e.EMAIL_FROM_NAME,
     emailEncryptionKey: e.EMAIL_TOKEN_ENCRYPTION_KEY,
   };

@@ -1,3 +1,4 @@
+import {accountMessage} from '../email/templates.js';
 import { z } from "zod";
 import { AccountsRepository } from "./repository.js";
 import { AuthRepository, type User } from "../auth/repository.js";
@@ -119,19 +120,7 @@ export class AccountsService {
   ) {
     const token = newToken();
     const url = `${this.config.origin}/account-link#${purpose}/${token}`;
-    const encrypted = seal(
-      {
-        to: address,
-        subject:
-          purpose === "invite"
-            ? "Your Power Zone invitation"
-            : purpose === "reset"
-              ? "Reset your Power Zone password"
-              : "Verify your Power Zone email",
-        text: `Open this link to ${purpose === "invite" ? "create your account" : purpose === "reset" ? "reset your password" : "verify your email"}:\n${url}\n\nThis link expires in ${hours} hours and can be used once. If you did not request it, ignore this email.`,
-      },
-      this.config.emailEncryptionKey!,
-    );
+    const encrypted = seal(accountMessage(purpose,address,url,hours),this.config.emailEncryptionKey!);
     await this.repository.issue({
       hash: digest(token),
       purpose,

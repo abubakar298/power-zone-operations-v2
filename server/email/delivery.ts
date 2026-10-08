@@ -5,6 +5,7 @@ export interface Message {
   to: string;
   subject: string;
   text: string;
+  html?: string;
 }
 export interface EmailDelivery {
   configured: boolean;
@@ -42,13 +43,14 @@ export class ResendDelivery implements EmailDelivery {
   constructor(private config: Config) {}
   get configured() {
     return !!(
+      this.config.emailDeliveryEnabled !== false &&
       this.config.emailApiKey &&
       this.config.emailFrom &&
       this.config.emailEncryptionKey
     );
   }
   async send(message: Message, id: string) {
-    if (!this.config.emailApiKey || !this.config.emailFrom)
+    if (!this.configured)
       throw new Error("Email is not configured");
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -65,6 +67,8 @@ export class ResendDelivery implements EmailDelivery {
         to: [message.to],
         subject: message.subject,
         text: message.text,
+        ...(message.html ? {html:message.html} : {}),
+        ...(this.config.emailReplyTo ? {reply_to:this.config.emailReplyTo} : {}),
       }),
     });
     // Provider bodies may contain recipient information. Never log them.
