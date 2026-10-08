@@ -63,3 +63,8 @@ test('real authenticated API hides BESS masters/policy and costing while retaini
  const original={boqRevisionId:'00000000-0000-4000-8000-000000000001',presentation:'No Breakup',taxMode:'Show Sales Tax Separately',markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},preparedBy:'Atif Hameed',remarks:'Revised technical BOQ'};
  const redacted=restrictedCostView(original,true);assert.equal(redacted.markups.bess,undefined);const parsed=pricingSchema.parse(redacted);assert.equal(parsed.markups.bess,'0');assert.equal(parsed.markups.balance,'25');assert.equal(parsed.remarks,original.remarks);
  });
+
+test('restricted financial projection preserves database timestamps including nested Accounts handoffs',()=>{
+ const date=new Date('2026-10-08T18:20:00.000Z');const result=restrictedCostView({created_at:date,accounts_handoff:{created_at:date,sent_by:'Atif'}});
+ assert.equal(result.created_at,date.toISOString());assert.equal(result.accounts_handoff.created_at,date.toISOString());assert.ok(Number.isFinite(new Date(result.accounts_handoff.created_at).getTime()));assert.equal(date.toISOString(),'2026-10-08T18:20:00.000Z');
+});

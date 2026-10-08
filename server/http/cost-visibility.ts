@@ -6,6 +6,7 @@ export const isBessEquipment = (value:any) => value?.phase === "BESS" || /^(HYB-
 
 /** Projection only: authoritative stored costing and financial engines stay intact. */
 export function restrictedCostView(value:any, commercial=false):any {
+  if(value instanceof Date)return value.toJSON();
   if(Array.isArray(value))return value.map(v=>restrictedCostView(v,commercial));
   if(!value||typeof value!=="object")return value;
   const result:any={};
