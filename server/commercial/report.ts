@@ -1,3 +1,4 @@
+import { quotationDisplayRows } from "./quotation-rows.js";
 import { displayUnit } from "../boq/unit.js";
 import {
   drawReportLogo,
@@ -100,7 +101,7 @@ function appendQuotation(
   pdf.text(text(s.subject), margin, y);
   y += 5;
   const amounts = s.presentation !== "No Breakup";
-  const body = s.lines.map((r, i) => {
+  const body = quotationDisplayRows(s.lines).map((r, i) => {
     const cells: any[] = [
       String(i + 1),
       text(r.description),

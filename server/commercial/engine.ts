@@ -170,6 +170,7 @@ export interface QuoteLine {
   unit: string;
   qty: string;
   group: "solar" | "structure" | "bess" | "earthing" | "balance" | "additional";
+  items?: { description: string; unit: string; qty: string }[];
   amount?: string;
   standardAllowanceBeforeTax?: string;
   span?: number;
@@ -242,7 +243,7 @@ export function quotationLines(
       add(`${key} — ${brand("cable")}`, "m", quantity, "balance");
   const ac = ["16mm² 4C AC Cable", "25mm² 4C AC Cable", "10mm² 1C AC Cable"]
     .filter((k) => line(k))
-    .map((k) => `${k} (${qty(k)}m)`)
+    .map((k) => k)
     .join(" & ");
   add(`${ac} — ${brand("cable")}`, "LS", "1", "balance");
   add(
@@ -276,6 +277,22 @@ export function quotationLines(
       s.survey.additionalItem.qty,
       "additional",
     );
+  const detailKeys = [
+    ["16mm² 4C AC Cable", "25mm² 4C AC Cable", "10mm² 1C AC Cable"],
+    ["DC Breaker", "500V 2P DC Breaker", "DC SPD", "DC Fuse with Holder", "SP DC Enclosures"],
+    ["63A 4P MCB", "100A 4P MCCB", "100A Rotary Changeover with Box", "AC SPD", "AC & DC Boxes", "63A 2P MCB", "32A 2P MCB", "32A 2P Breaker Changeover", "63A 1P AC VPD", "SP AC Conduit Accessories and Box"],
+    ["Misc. Accessories", "Extra Smart Meter", "Genset Synchronisation with Battery SOC"],
+  ];
+  const firstComposite = rows.findIndex(r => r.description === `${ac} — ${brand("cable")}`);
+  detailKeys.forEach((keys,index) => {
+    rows[firstComposite + index].items = s.lines.filter(l=>keys.includes(l.key)).map(quotationItem);
+  });
+  const dcRow = rows.find(r=>r.description.startsWith("6mm² DC Cable Red and Black"));
+  if(dcRow) dcRow.items = s.lines.filter(l=>["6mm² DC Cable Red","6mm² DC Cable Black"].includes(l.key)).map(quotationItem);
+  for(const [description,key] of [["Installation, Testing & Commissioning Labour","Labour"],["Project Delivery / Logistics","Delivery"]]) {
+    const row = rows.find(r=>r.description===description), source = line(key);
+    if(row && source) row.items = [{description:row.description,unit:source.unit,qty:source.qty}];
+  }
   return rows;
 }
 export function quote(
@@ -492,6 +509,12 @@ export function quote(
 }
 export type QuotationSnapshot = ReturnType<typeof quote>;
 
+function quotationItem(l: BoqSnapshot["lines"][number]) {
+  // Item scope only: keep quantities in their own column and never expose costing.
+  const description = /Cable/.test(l.key) ? l.key : l.specification || l.description;
+  return {description: [description,l.brand].filter(Boolean).join(" — "), unit:l.unit, qty:l.qty};
+}
+
 /** BESS Only is a presentation of the same approved costing and pricing engine. */
 function bessOnlyLines(boq:BoqSnapshot,presentation:string):QuoteLine[]{
   const equipment=boq.lines.filter(l=>l.phase==="BESS");
@@ -499,7 +522,7 @@ function bessOnlyLines(boq:BoqSnapshot,presentation:string):QuoteLine[]{
   const bore=boq.lines.find(l=>l.key==="Earthing Bore");
   if(presentation==="Full Breakup" && bore) rows.push({description:"AC Earthing Bore",unit:"No.",qty:bore.qty,group:"earthing"});
   const others=boq.lines.filter(l=>l.phase!=="BESS"&&(presentation!=="Full Breakup"||l.key!=="Earthing Bore"));
-  if(others.length)rows.push({description:others.map(l=>`${l.description}${l.brand?` - ${l.brand}`:""} (${l.qty} ${/^(metre|meter)s?$/i.test(l.unit) ? (new Decimal(l.qty).eq(1) ? "meter" : "meters") : l.unit})`).join("\n"),unit:"LS",qty:"1",group:"balance"});
+  if(others.length)rows.push({description:"Installation and balance of system",unit:"LS",qty:"1",group:"balance",items:others.map(quotationItem)});
   return rows;
 }
 function quoteBessOnly(p:PricingSnapshot,boq:BoqSnapshot,input:QuotationInput,discount:string,netTotal:string,total:string,subtotal:string,solarTax:string,otherTax:string){

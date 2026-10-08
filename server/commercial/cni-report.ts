@@ -36,11 +36,13 @@ export function buildCniPdf(s:CniSnapshot,number:string,draft:boolean) {
  page("02 / TECHNICAL SOLUTION","An integrated cabinet system.");
  table([["System",`${s.pricing.quantity} x CPS ES-125kW/261kWh`],["PCS",`125 kW per cabinet; AC 400 V / 50 Hz. Total: ${totalKw} kW`],["Battery",`261 kWh per cabinet; 832 V / 314 Ah; 0.5C at 25 C. Total: ${totalKwh} kWh`],["Battery management","BMU, control box and communication cables"],["Fire suppression","Aerosol chamber, detectors, alarms and explosion-proof vent"],["Liquid cooling","3 kW liquid cooling machine, pipes and cables per cabinet"],["Auxiliary system","Breakers, UPS and dehumidifier"],["Enclosure","IP55 enclosure and accessories"],["Control unit","BAU and operation monitoring system for Microgrid"]],78);
  page("03 / COMMERCIAL OFFER","A clear, consolidated offer.");
- const rows:any[]=[["Description","CPS ES-125kW/261kWh"],["Cabinet quantity",String(s.pricing.quantity)],["Standard final unit price",`PKR ${money(s.pricing.unitPayable)}`],["Standard offer value",`PKR ${money(s.pricing.standardPayable)}`]];
+ autoTable(p,{startY:80,head:[["Description","UOM","Qty","Amount (PKR)"]],body:[["CPS ES-125kW/261kWh integrated cabinet system","Cabinet",String(s.pricing.quantity),money(s.pricing.standardPayable)]],theme:"grid",margin:{left:15,right:15,bottom:20},styles:{font:"helvetica",fontSize:10,cellPadding:4},headStyles:{fillColor:[...blue]},columnStyles:{0:{cellWidth:100},1:{cellWidth:20},2:{cellWidth:15},3:{cellWidth:45,halign:"right"}},rowPageBreak:"avoid"});
+ const commercialStart=(p as any).lastAutoTable.finalY+8;
+ const rows:any[]=[];
  if(s.pricing.standardDiscount)rows.push(["Offer before standard discount",`PKR ${money(s.pricing.displayedOffer)}`],["Standard discount",`PKR ${money(s.pricing.standardDiscount)}`]);
  if(s.pricing.discount!=="0.00")rows.push([draft?"Proposed discount - awaiting approval":"Management-approved discount",`PKR ${money(s.pricing.discount)}`]);
  if(s.pricing.presentation==="Separate")rows.push(["Price before GST",`PKR ${money(s.pricing.beforeTax)}`],[`GST ${s.pricing.taxRate}%`,`PKR ${money(s.pricing.tax)}`]);
- rows.push(["Total payable",`PKR ${money(s.pricing.payable)}`]);table(rows,80);
+ rows.push(["Total payable",`PKR ${money(s.pricing.payable)}`]);table(rows,commercialStart);
  y=(p as any).lastAutoTable.finalY+15;p.setFontSize(10);p.setFont("helvetica","normal");p.setTextColor(37,35,50);p.text(p.splitTextToSize("Installation, commissioning and delivery are excluded and will be charged as per actual.",175),15,y);
  page("04 / COMMERCIAL TERMS","Terms, warranty & services.");
  const paragraphs=cniReferenceTerms.replace(/Security Level: Confidential/g,"").split(/\n(?=(?:[1-9]\. |[A-H]\. |[1-9]-))/).map(t=>[t.replace(/\n/g," ").replace(/[^\x20-\x7e]/g,"")]);
