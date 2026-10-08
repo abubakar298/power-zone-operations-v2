@@ -37,9 +37,19 @@ export async function workflowHistory(pool: Pool, revisionId: string) {
       [revisionId],
     )
   ).rows;
+  let previousSettings:any=null;
   for(const b of history){
     for(const q of b.quotations){
+      q.quotation_type=q.private_pricing?.input ? `${q.private_pricing.input.presentation} · ${q.private_pricing.input.taxMode}` : null;
+      q.quotation_settings=q.private_pricing?.input ? {presentation:q.private_pricing.input.presentation,taxMode:q.private_pricing.input.taxMode} : null;
       q.budgeted_markup=q.private_pricing?savedQuotationMarkup(q.private_pricing,b.private_boq,q.private_quote):null;
+      q.settings_changes=[];
+      if(previousSettings && q.quotation_settings){
+        for(const [key,label] of [["presentation","Price presentation"],["taxMode","Tax presentation"]]){
+          if(previousSettings[key]!==q.quotation_settings[key]) q.settings_changes.push(`${label}: ${previousSettings[key]} → ${q.quotation_settings[key]}`);
+        }
+      }
+      if(q.quotation_settings) previousSettings=q.quotation_settings;
       delete q.private_quote;delete q.private_pricing;
     }
     delete b.private_boq;

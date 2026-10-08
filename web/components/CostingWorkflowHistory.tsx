@@ -12,6 +12,9 @@ export function CostingWorkflowHistory({
   const previous = history.at(-1);
   const showMarkup = history.some((b:any)=>b.quotations?.some((q:any)=>Object.hasOwn(q,"budgeted_markup")));
   const markup = (q:any) => q?.budgeted_markup == null ? "—" : `${new Decimal(q.budgeted_markup).toFixed(2)}%`;
+  const currentHistory = history.flatMap((b:any)=>b.quotations).find((q:any)=>q.id===quotation?.id);
+  const quotationType = (q:any) => q?.quotation_type ?? "—";
+  const settingsChanges = (q:any) => q?.settings_changes?.map((change:string)=><p key={change}>{change}</p>);
   const context = review.revision_context;
   const difference =
     !quotation && previous?.budgeted_cost != null
@@ -38,7 +41,7 @@ export function CostingWorkflowHistory({
               <th scope="col">Document / stage</th>
               <th scope="col">Date</th>
               <th scope="col">Status</th>
-              <th scope="col">Quotation number</th>
+              <th scope="col">Quotation number</th><th scope="col">Quotation type</th>
               <th scope="col" className="numeric">
                 Quoted amount (PKR)
               </th>
@@ -61,7 +64,7 @@ export function CostingWorkflowHistory({
                 </td>
                 <td>{new Date(b.created_at).toLocaleString()}</td>
                 <td>Approved</td>
-                <td>—</td>
+                <td>—</td><td>—</td>
                 <td className="numeric">—</td>
                 <td>
                   {b.survey_type === "General quotation"
@@ -91,12 +94,12 @@ export function CostingWorkflowHistory({
                         ? "Awaiting quotation approval"
                         : q.status}
                     </td>
-                    <td>{q.number}</td>
+                    <td>{q.number}</td><td>{quotationType(q)}</td>
                     <td className="numeric">
                       {q.net_total != null ? amount(q.net_total) : "—"}
                     </td>
                     <td>
-                      Based on {b.number}
+                      Based on {b.number}{settingsChanges(q)}
                       {q.revision && (
                         <p>
                           {q.revision.origin}: {q.revision.reason}
@@ -118,7 +121,7 @@ export function CostingWorkflowHistory({
                 </td>
                 <td>—</td>
                 <td>Revision requested</td>
-                <td>{context?.source_quotation ?? "—"}</td>
+                <td>{context?.source_quotation ?? "—"}</td><td>—</td>
                 <td className="numeric">—</td>
                 <td>
                   <strong>
@@ -148,7 +151,7 @@ export function CostingWorkflowHistory({
                 </td>
                 <td>{new Date(review.created_at).toLocaleString()}</td>
                 <td>{review.status}</td>
-                <td>Not yet prepared</td>
+                <td>Not yet prepared</td><td>—</td>
                 <td className="numeric">—</td>
                 <td>
                   {difference && (
@@ -172,7 +175,7 @@ export function CostingWorkflowHistory({
             {quotation && (
               <tr>
                 <td>
-                  <strong>Quotation under review</strong>
+                  <strong>{quotation.workflow_status === "Submitted" ? "Quotation under review" : "Quotation"}</strong>
                 </td>
                 <td>{new Date(quotation.created_at).toLocaleString()}</td>
                 <td>
@@ -180,7 +183,7 @@ export function CostingWorkflowHistory({
                     ? "Awaiting quotation approval"
                     : (quotation.workflow_status ?? "Not submitted")}
                 </td>
-                <td>{quotation.number}</td>
+                <td>{quotation.number}</td><td>{quotationType(currentHistory)}</td>
                 <td className="numeric">
                   {amount(
                     quotation.snapshot.footer.find(
@@ -189,7 +192,7 @@ export function CostingWorkflowHistory({
                   )}
                 </td>
                 <td>
-                  Based on {previous?.number}
+                  Based on {previous?.number}{settingsChanges(currentHistory)}
                   {previous?.quotations?.find((q: any) => q.id === quotation.id)
                     ?.revision && (
                     <p>
