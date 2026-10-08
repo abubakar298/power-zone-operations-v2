@@ -50,8 +50,11 @@ export function QuotationWorkflow({
   const [discount, setDiscount] = useState(q.snapshot.input.discount ?? "0");
   const [mode, setMode] = useState<"discount" | "margin">("discount");
   const [targetMargin, setTargetMargin] = useState("");
+  const percentageValid = /^\d{1,2}(\.\d{1,2})?$/.test(targetMargin.trim()) || targetMargin.trim() === "100";
+  const undiscountedPayable = new Decimal(q.snapshot.footer.at(-1).amount).add(q.snapshot.input.discount ?? "0");
+  const percentageAmount = percentageValid ? undiscountedPayable.mul(targetMargin).div(100).toFixed(2) : "";
   const lump = useAdjustmentPreview(q, session, manager, "discount", discount);
-  const target = useAdjustmentPreview(q, session, manager, "targetMargin", targetMargin);
+  const target = useAdjustmentPreview(q, session, manager && percentageValid, "discount", percentageAmount);
   const selected = mode === "discount" ? lump : target;
   const metrics = selected.result;
   const calculating = selected.pending;
@@ -63,17 +66,17 @@ export function QuotationWorkflow({
   async function transition(kind: string) {
     let actionDiscount = effectiveDiscount;
     let actionMetrics = metrics;
-    let proposalConfirmed = false;
-    if (kind === "Changes requested" && manager && discount.trim() && targetMargin.trim()) {
-      if (lump.pending || target.pending || !lump.result || !target.result) {
-        setError("Both proposals must have valid calculated totals before choosing a discount order."); return;
+
+    if (kind === "Changes requested" && manager) {
+      if ((!discount.trim() && !targetMargin.trim()) || (discount.trim() && (lump.pending || !lump.result)) || (targetMargin.trim() && (target.pending || !target.result || !percentageValid))) {
+        setError("Enter at least one valid discount proposal and wait for its calculated totals."); return;
       }
-      const chosen = await confirmDiscountProposal([
-        { key: "discount", label: "Lump-sum discount", discount: money(lump.result.discount), payable: money(lump.result.proposed.payable) },
-        { key: "margin", label: `Target margin ${targetMargin}%`, discount: money(target.result.discount), payable: money(target.result.proposed.payable) },
-      ]);
+      const choices: Array<{key: "discount" | "margin"; label: string; discount: string; payable: string}> = [];
+      if (discount.trim()) choices.push({key: "discount", label: "Discount amount", discount: money(lump.result.discount), payable: money(lump.result.proposed.payable)});
+      if (targetMargin.trim()) choices.push({key: "margin", label: `Discount ${targetMargin}%`, discount: money(target.result.discount), payable: money(target.result.proposed.payable)});
+      const chosen = await confirmDiscountProposal(choices);
       if (!chosen) return;
-      setMode(chosen); proposalConfirmed = true;
+      setMode(chosen);
       actionMetrics = chosen === "discount" ? lump.result : target.result;
       actionDiscount = actionMetrics.discount;
     }
@@ -94,7 +97,7 @@ export function QuotationWorkflow({
       return;
     }
     if (
-      !proposalConfirmed && !(await (
+      !(await (
         ["Changes requested", "Approved"].includes(kind)
           ? confirmRevision
           : async (a: string, d: string) => confirmTransition(a, d)
@@ -104,7 +107,7 @@ export function QuotationWorkflow({
           : kind === "Submitted"
             ? "Send quotation for approval"
             : "Request quotation revision",
-        `${q.number} will move to the next workflow stage. The saved quotation stays unchanged.`,
+        `${q.number} will move to the next workflow stage. The saved quotation stays unchanged.${kind === "Changes requested" && actionMetrics ? ` Proposed discount: PKR ${money(actionDiscount)}. Customer payable: PKR ${money(actionMetrics.proposed.payable)}.` : ""}`,
       ))
     )
       return;
@@ -184,31 +187,41 @@ export function QuotationWorkflow({
             Internal preview only. Applicable tax remains included in payable
             and excluded from profit.
           </p>
-          <p>Compare both proposals below. Choose one for the PDF preview and revision feedback; neither changes the saved quotation.</p>
+          <p>Enter a discount amount, a discount percentage, or both to compare their effects. Choose the proposal only when sending for revision. Saved quotation values remain unchanged.</p>
           <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 270px), 1fr))", gap: "1rem"}}>
             {(["discount", "margin"] as const).map(choice => {
               const state = choice === "discount" ? lump : target;
-              return <section key={choice} aria-label={choice === "discount" ? "Lump-sum discount comparison" : "Target margin comparison"} className="detail-panel">
-                <h4>{choice === "discount" ? "Lump-sum discount" : "Target profit margin on sales"}</h4>
-                <label>{choice === "discount" ? "Discount amount (PKR)" : "Target profit margin (%)"}
-                  <input aria-label={choice === "discount" ? "Management discount amount (PKR)" : "Target profit margin (%)"} type="number" min="0" max={choice === "margin" ? "99.99" : undefined} step="0.01" value={choice === "discount" ? discount : targetMargin} onChange={e => choice === "discount" ? setDiscount(e.target.value) : setTargetMargin(e.target.value)} />
+              return <section key={choice} aria-label={choice === "discount" ? "Discount amount comparison" : "Discount percentage comparison"} className="detail-panel">
+                <h4>{choice === "discount" ? "Discount amount" : "Discount percentage"}</h4>
+                <label>{choice === "discount" ? "Discount amount (PKR)" : "Discount (%)"}
+                  <input aria-label={choice === "discount" ? "Management discount amount (PKR)" : "Discount (%)"} type="number" min="0" max={choice === "margin" ? "100" : undefined} step="0.01" value={choice === "discount" ? discount : targetMargin} onChange={e => choice === "discount" ? setDiscount(e.target.value) : setTargetMargin(e.target.value)} />
                 </label>
                 <div aria-live="polite">
-                  {state.pending ? <p>Updating totals…</p> : state.failure ? <p role="alert">{state.failure}</p> : state.result ? <dl>
-                    <dt>Discount (PKR)</dt><dd>{money(state.result.discount)}</dd>
-                    <dt>Customer payable (PKR)</dt><dd>{money(state.result.proposed.payable)}</dd>
-                    <dt>Profit excluding GST (PKR)</dt><dd>{money(state.result.proposed.profit)}</dd>
-                    <dt>Profit margin on sales</dt><dd>{state.result.proposed.marginPercent ?? "N/A"}%</dd>
-                  </dl> : <p>Enter a target margin to compare.</p>}
+                  {state.pending ? <p>Updating totals…</p> : (choice === "margin" && targetMargin.trim() && !percentageValid) ? <p role="alert">Enter a discount percentage from 0 to 100, with at most two decimal places.</p> : state.failure ? <p role="alert">{state.failure}</p> : state.result ? <div className="table-scroll"><table>
+                    <thead><tr><th>Measure</th><th>Quoted / budgeted</th><th>After discount</th></tr></thead>
+                    <tbody>
+                      <tr><th>Budgeted cost (PKR)</th><td>{money(state.result.cost)}</td><td>{money(state.result.cost)}</td></tr>
+                      <tr><th>Budgeted profit (PKR)</th><td>{money(state.result.original.profit)}</td><td>{money(state.result.proposed.profit)}</td></tr>
+                      <tr><th>Quoted price without GST (PKR)</th><td>{money(state.result.original.revenue)}</td><td>{money(state.result.proposed.revenue)}</td></tr>
+                      <tr><th>Applicable GST (PKR)</th><td>{money(state.result.original.tax)}</td><td>{money(state.result.proposed.tax)}</td></tr>
+                      <tr><th>Final payable (PKR)</th><td>{money(state.result.original.payable)}</td><td>{money(state.result.proposed.payable)}</td></tr>
+                      <tr><th>Discount amount (PKR)</th><td>{money(q.snapshot.input.discount ?? "0")}</td><td>{money(state.result.discount)}</td></tr>
+                      <tr><th>Profit margin on sales</th><td>{state.result.original.marginPercent ?? "N/A"}%</td><td>{state.result.proposed.marginPercent ?? "N/A"}%</td></tr>
+                    </tbody>
+                  </table></div> : <p>Enter a discount to compare.</p>}
                 </div>
-                <label><input type="radio" name={`proposal-${q.id}`} aria-label={choice === "discount" ? "Use lump-sum discount proposal" : "Use target margin proposal"} checked={mode === choice} onChange={() => setMode(choice)} />Use this proposal for preview / revision</label>
               </section>;
             })}
           </div>
-          <p>Margin = profit ÷ selling price before tax. Solar remains unchanged under the existing discount policy.</p>
+          <p>Discount % uses the price before discounts, including applicable GST. Profit excludes GST. Solar remains unchanged under the existing discount allocation policy.</p>
+          {q.workflow_latest !== false && q.workflow_status === "Submitted" && <>
+            <label>Revision instructions<textarea aria-label="Discount revision instructions" maxLength={1700} value={notes} onChange={e => setNotes(e.target.value)} /></label>
+            <button disabled={busy || !notes.trim()} onClick={() => void transition("Changes requested")}>Send for revision</button>
+          </>}
+
         </section>
       )}
-      {renderPreview(snapshot)}
+      {renderPreview(q.snapshot)}
       <section
         className="quotation-review-panel"
         aria-label="Quotation review actions"
@@ -222,52 +235,6 @@ export function QuotationWorkflow({
             <strong>Latest review feedback</strong>
             <p style={{ whiteSpace: "pre-wrap" }}>{q.workflow_notes}</p>
           </aside>
-        )}
-        {manager && (
-          <div aria-label="Discount and profitability preview">
-            <p>
-              Discount preview only. Saved quotation and PDF remain unchanged.{" "}
-              {calculating ? "Updating totals…" : ""}
-            </p>
-            {metrics && !calculating && (
-              <>
-                <p>
-                  Approved BOQ cost: PKR {money(metrics.cost)} · {metrics.basis}
-                </p>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Measure</th>
-                      <th>Saved quotation</th>
-                      <th>Proposed discount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <th>Customer net payable</th>
-                      <td>{money(metrics.original.payable)}</td>
-                      <td>{money(metrics.proposed.payable)}</td>
-                    </tr>
-                    <tr>
-                      <th>Profit excluding GST (PKR)</th>
-                      <td>{money(metrics.original.profit)}</td>
-                      <td>{money(metrics.proposed.profit)}</td>
-                    </tr>
-                    <tr>
-                      <th>Profit % on cost</th>
-                      <td>{metrics.original.profitPercent ?? "N/A"}%</td>
-                      <td>{metrics.proposed.profitPercent ?? "N/A"}%</td>
-                    </tr>
-                    <tr>
-                      <th>Margin % on pre-tax sales</th>
-                      <td>{metrics.original.marginPercent ?? "N/A"}%</td>
-                      <td>{metrics.proposed.marginPercent ?? "N/A"}%</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </>
-            )}
-          </div>
         )}
         {(error || selected.failure) && <p role="alert">{error || selected.failure}</p>}
         {q.workflow_latest !== false &&
@@ -318,7 +285,6 @@ export function QuotationWorkflow({
               >
                 Approve quotation
               </button>
-              <button disabled={busy} onClick={() => setRevision(true)}>Issue discount order</button>
               <button disabled={busy} onClick={() => setRevision(true)}>
                 Request revision
               </button>

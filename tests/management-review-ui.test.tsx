@@ -54,20 +54,22 @@ test("management controls follow history before PDF and expose both adjustment m
     s.indexOf("Management pricing controls") < s.indexOf("PDF preview marker"),
   );
   assert.match(s, /Tax-inclusive quotation/);
-  assert.match(s, /Lump-sum discount/);
-  assert.match(s, /Target profit margin on sales/);
+  assert.match(s, /Discount amount/);
+  assert.match(s, /Discount percentage/);
   assert.match(s, /Management discount amount/);
-  assert.match(s, /aria-label="Target profit margin \(%\)"/);
-  assert.match(s, /Lump-sum discount comparison/);
-  assert.match(s, /Target margin comparison/);
+  assert.match(s, /aria-label="Discount \(%\)"/);
+  assert.match(s, /Discount amount comparison/);
+  assert.match(s, /Discount percentage comparison/);
   assert.doesNotMatch(s, /<select/);
-  assert.match(s, /Use target margin proposal/);
+  assert.doesNotMatch(s, /type="radio"|type="checkbox"/);
+  assert.match(s, /Send for revision/);
+
   assert.match(html("Management", true), /GST shown separately/);
 });
 test("coordinator does not receive management discount or target controls", () => {
   const s = html("Coordinator");
   assert.doesNotMatch(
     s,
-    /Management pricing controls|Target profit margin on sales|Management discount amount/,
+    /Management pricing controls|Discount percentage|Management discount amount/,
   );
 });

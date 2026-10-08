@@ -56,8 +56,8 @@ export function confirmDiscountProposal(proposals: Array<{ key: "discount" | "ma
     dialog.className = "revision-confirmation master-dialog";
     dialog.setAttribute("aria-label", "Select discount order proposal");
     const title = document.createElement("h2"); title.textContent = "Select one discount proposal";
-    const detail = document.createElement("p"); detail.textContent = "Both fields are filled. Select exactly one proposal to send to Atif for quotation revision. The saved quotation remains unchanged.";
-    const confirm = document.createElement("button"); confirm.type = "button"; confirm.textContent = "Confirm discount order"; confirm.className = "primary"; confirm.disabled = true;
+    const detail = document.createElement("p"); detail.textContent = "Select exactly one discount proposal to send to Atif for quotation revision. The saved quotation remains unchanged.";
+    const confirm = document.createElement("button"); confirm.type = "button"; confirm.textContent = "Send"; confirm.className = "primary"; confirm.disabled = true;
     let chosen: "discount" | "margin" | null = null;
     const inputs: HTMLInputElement[] = [];
     dialog.append(title, detail);

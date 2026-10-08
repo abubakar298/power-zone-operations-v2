@@ -9,7 +9,7 @@ test('discount order requires exactly one explicit choice and cancellation does 
   try {
     const proposals: any = [{key:'discount',label:'Amount',discount:'100',payable:'900'},{key:'margin',label:'Margin',discount:'200',payable:'800'}];
     const pending = confirmDiscountProposal(proposals);
-    const confirm = nodes.find(n=>n.textContent==='Confirm discount order');
+    const confirm = nodes.find(n=>n.textContent==='Send');
     assert.equal(confirm.disabled,true);
     const checks=nodes.filter(n=>n.type==='checkbox');
     assert.equal(checks.length,2);
