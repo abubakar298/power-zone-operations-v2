@@ -7,6 +7,25 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api, type Session } from "../api.js";
 import { confirmTransition, confirmRevision } from "../confirm.js";
 import type { QuotationSnapshot } from "../../server/commercial/engine.js";
+function useAdjustmentPreview(q: any, session: Session, enabled: boolean, kind: "discount" | "targetMargin", value: string) {
+  const [result, setResult] = useState<any>();
+  const [pending, setPending] = useState(false);
+  const [failure, setFailure] = useState("");
+  useEffect(() => {
+    setResult(undefined); setFailure("");
+    if (!enabled || (kind === "targetMargin" && !value.trim())) { setPending(false); return; }
+    let cancelled = false; setPending(true);
+    const timer = setTimeout(() => {
+      void api<any>(`/commercial/quotations/${q.id}/discount-review`, {
+        body: { [kind]: value.trim() || "0" }, csrf: session.csrfToken,
+      }).then(v => { if (!cancelled) setResult(v); })
+        .catch(e => { if (!cancelled) setFailure(e.message); })
+        .finally(() => { if (!cancelled) setPending(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [q.id, enabled, kind, value, session.csrfToken]);
+  return { result, pending, failure };
+}
 export function QuotationWorkflow({
   session,
   quotation: q,
@@ -31,64 +50,27 @@ export function QuotationWorkflow({
   const [discount, setDiscount] = useState(q.snapshot.input.discount ?? "0");
   const [mode, setMode] = useState<"discount" | "margin">("discount");
   const [targetMargin, setTargetMargin] = useState("");
-  const adjustmentValue = mode === "discount" ? discount : targetMargin;
-  const [metrics, setMetrics] = useState<any>();
-  const [calculating, setCalculating] = useState(false);
+  const lump = useAdjustmentPreview(q, session, manager, "discount", discount);
+  const target = useAdjustmentPreview(q, session, manager, "targetMargin", targetMargin);
+  const selected = mode === "discount" ? lump : target;
+  const metrics = selected.result;
+  const calculating = selected.pending;
+  const effectiveDiscount = mode === "discount" ? discount : (target.result?.discount ?? "");
   useEffect(() => {
-    setDiscount(q.snapshot.input.discount ?? "0");
-    setMetrics(undefined);
-    setMode("discount");
-    setTargetMargin("");
-    setRevision(false);
-    setNotes("");
-    setError("");
+    setDiscount(q.snapshot.input.discount ?? "0"); setMode("discount");
+    setTargetMargin(""); setRevision(false); setNotes(""); setError("");
   }, [q.id]);
-  useEffect(() => {
-    if (!manager) return;
-    let cancelled = false;
-    setCalculating(true);
-    setMetrics(undefined);
-    const timer = setTimeout(() => {
-      void api<any>(`/commercial/quotations/${q.id}/discount-review`, {
-        body:
-          mode === "margin"
-            ? { targetMargin: targetMargin.trim() }
-            : { discount: discount.trim() || "0" },
-        csrf: session.csrfToken,
-      })
-        .then((value) => {
-          if (!cancelled) {
-            setMetrics(value);
-            if (mode === "margin") setDiscount(value.discount);
-            setError("");
-          }
-        })
-        .catch((e) => {
-          if (!cancelled) {
-            setMetrics(undefined);
-            setError(e.message);
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setCalculating(false);
-        });
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [q.id, mode, adjustmentValue, manager, session.csrfToken]);
   async function transition(kind: string) {
     const proposedChange =
       manager &&
-      (discount.trim() || "0") !== String(q.snapshot.input.discount ?? "0") &&
+      (effectiveDiscount.trim() || "0") !== String(q.snapshot.input.discount ?? "0") &&
       metrics &&
-      Number(discount || 0) !== Number(q.snapshot.input.discount ?? 0);
+      Number(effectiveDiscount || 0) !== Number(q.snapshot.input.discount ?? 0);
     if (
       kind === "Approved" &&
       ((mode === "margin" && (calculating || !metrics)) ||
         !validDiscount ||
-        Number(discount.trim() || 0) !== Number(q.snapshot.input.discount ?? 0))
+        Number(effectiveDiscount.trim() || 0) !== Number(q.snapshot.input.discount ?? 0))
     ) {
       setError(
         "This discount is a preview. Request revision with the proposed discount before approving the saved quotation.",
@@ -115,7 +97,7 @@ export function QuotationWorkflow({
     try {
       const feedback =
         kind === "Changes requested" && proposedChange
-          ? `${notes.trim()}\nProposed total discount: PKR ${money(discount || "0")}. Proposed net payable: PKR ${money(metrics.proposed.payable)}.`
+          ? `${notes.trim()}\nProposed total discount: PKR ${money(effectiveDiscount || "0")}. Proposed net payable: PKR ${money(metrics.proposed.payable)}.`
           : notes.trim();
       await api("/coordinator/events", {
         body: { quotationId: q.id, kind, notes: feedback },
@@ -131,7 +113,7 @@ export function QuotationWorkflow({
       setBusy(false);
     }
   }
-  const normalizedDiscount = discount.trim() || "0";
+  const normalizedDiscount = effectiveDiscount.trim() || "0";
   const gross = new Decimal(q.snapshot.footer.at(-1).amount).add(
     q.snapshot.input.discount ?? "0",
   );
@@ -169,6 +151,7 @@ export function QuotationWorkflow({
           ))}
         </section>
       )}
+      <CostingWorkflowHistory review={q} quotation={q} />
       {manager && (
         <section
           aria-label="Management pricing controls"
@@ -185,54 +168,28 @@ export function QuotationWorkflow({
             Internal preview only. Applicable tax remains included in payable
             and excluded from profit.
           </p>
-          <label>
-            Adjustment method
-            <select
-              aria-label="Management adjustment method"
-              value={mode}
-              onChange={(e) => setMode(e.target.value as "discount" | "margin")}
-            >
-              <option value="discount">Lump-sum discount</option>
-              <option value="margin">Target profit margin on sales</option>
-            </select>
-          </label>
-          {mode === "discount" ? (
-            <label>
-              Discount amount (PKR)
-              <input
-                aria-label="Management discount amount (PKR)"
-                type="number"
-                min="0"
-                step="0.01"
-                value={discount}
-                onChange={(e) => setDiscount(e.target.value)}
-              />
-            </label>
-          ) : (
-            <label>
-              Target profit margin (%)
-              <input
-                aria-label="Target profit margin (%)"
-                type="number"
-                min="0"
-                max="99.99"
-                step="0.01"
-                value={targetMargin}
-                onChange={(e) => setTargetMargin(e.target.value)}
-              />
-            </label>
-          )}
-          <p>
-            Margin = profit ÷ selling price before tax. Solar remains unchanged
-            under the existing discount policy.
-          </p>
-          <p aria-live="polite">
-            {calculating
-              ? "Updating totals…"
-              : metrics
-                ? `Calculated discount: PKR ${money(metrics.discount)} · Customer payable: PKR ${money(metrics.proposed.payable)}`
-                : "Enter a valid adjustment to preview its effect."}
-          </p>
+          <p>Compare both proposals below. Choose one for the PDF preview and revision feedback; neither changes the saved quotation.</p>
+          <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 270px), 1fr))", gap: "1rem"}}>
+            {(["discount", "margin"] as const).map(choice => {
+              const state = choice === "discount" ? lump : target;
+              return <section key={choice} aria-label={choice === "discount" ? "Lump-sum discount comparison" : "Target margin comparison"} className="detail-panel">
+                <h4>{choice === "discount" ? "Lump-sum discount" : "Target profit margin on sales"}</h4>
+                <label>{choice === "discount" ? "Discount amount (PKR)" : "Target profit margin (%)"}
+                  <input aria-label={choice === "discount" ? "Management discount amount (PKR)" : "Target profit margin (%)"} type="number" min="0" max={choice === "margin" ? "99.99" : undefined} step="0.01" value={choice === "discount" ? discount : targetMargin} onChange={e => choice === "discount" ? setDiscount(e.target.value) : setTargetMargin(e.target.value)} />
+                </label>
+                <div aria-live="polite">
+                  {state.pending ? <p>Updating totals…</p> : state.failure ? <p role="alert">{state.failure}</p> : state.result ? <dl>
+                    <dt>Discount (PKR)</dt><dd>{money(state.result.discount)}</dd>
+                    <dt>Customer payable (PKR)</dt><dd>{money(state.result.proposed.payable)}</dd>
+                    <dt>Profit excluding GST (PKR)</dt><dd>{money(state.result.proposed.profit)}</dd>
+                    <dt>Profit margin on sales</dt><dd>{state.result.proposed.marginPercent ?? "N/A"}%</dd>
+                  </dl> : <p>Enter a target margin to compare.</p>}
+                </div>
+                <label><input type="radio" name={`proposal-${q.id}`} aria-label={choice === "discount" ? "Use lump-sum discount proposal" : "Use target margin proposal"} checked={mode === choice} onChange={() => setMode(choice)} />Use this proposal for preview / revision</label>
+              </section>;
+            })}
+          </div>
+          <p>Margin = profit ÷ selling price before tax. Solar remains unchanged under the existing discount policy.</p>
         </section>
       )}
       {renderPreview(snapshot)}
@@ -296,7 +253,7 @@ export function QuotationWorkflow({
             )}
           </div>
         )}
-        {error && <p role="alert">{error}</p>}
+        {(error || selected.failure) && <p role="alert">{error || selected.failure}</p>}
         {q.workflow_latest !== false &&
           !q.workflow_status &&
           (manager || author) && (
@@ -364,7 +321,7 @@ export function QuotationWorkflow({
                     disabled={
                       busy ||
                       !notes.trim() ||
-                      (Number(discount.trim() || 0) !==
+                      (Number(effectiveDiscount.trim() || 0) !==
                         Number(q.snapshot.input.discount ?? 0) &&
                         (calculating || !metrics))
                     }

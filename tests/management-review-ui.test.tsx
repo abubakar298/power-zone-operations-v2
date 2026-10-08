@@ -45,6 +45,7 @@ function html(role = "Management", separate = false) {
 }
 test("management controls follow history before PDF and expose both adjustment methods", () => {
   const s = html();
+  assert.match(s, /Document workflow history/);
   assert.ok(
     s.indexOf("Document workflow history") <
       s.indexOf("Management pricing controls"),
@@ -56,6 +57,11 @@ test("management controls follow history before PDF and expose both adjustment m
   assert.match(s, /Lump-sum discount/);
   assert.match(s, /Target profit margin on sales/);
   assert.match(s, /Management discount amount/);
+  assert.match(s, /aria-label="Target profit margin \(%\)"/);
+  assert.match(s, /Lump-sum discount comparison/);
+  assert.match(s, /Target margin comparison/);
+  assert.doesNotMatch(s, /<select/);
+  assert.match(s, /Use target margin proposal/);
   assert.match(html("Management", true), /GST shown separately/);
 });
 test("coordinator does not receive management discount or target controls", () => {
