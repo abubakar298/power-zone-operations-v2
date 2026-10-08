@@ -23,7 +23,7 @@ const defaults = (name: string, id = ""): PricingInput => ({
   markups: {
     solar: "10",
     structure: "10",
-    bess: "30",
+    bess: "0",
     earthing: "10",
     balance: "25",
     rest: "25",
@@ -32,9 +32,9 @@ const defaults = (name: string, id = ""): PricingInput => ({
   remarks: "",
 });
 function editablePricing(p: PricingSnapshot): PricingInput {
-  if (p.policy) return { ...p.input, markups: { ...p.input.markups } };
-  const markups = { ...p.input.markups };
-  for (const r of p.rows) if (r.key !== "additional") markups[r.key] = r.markup;
+  if (p.policy) return { ...p.input, markups: { ...defaults(p.input.preparedBy).markups, ...p.input.markups } };
+  const markups = { ...defaults(p.input.preparedBy).markups,...p.input.markups };
+  for (const r of p.rows) if (r.key !== "additional" && r.markup != null) markups[r.key] = r.markup;
   return { ...p.input, markups };
 }
 export function QuotationView({
@@ -246,6 +246,7 @@ export function Commercial({
   initialQuotationId?: string;
   initialPricingId?: string;
 }) {
+  const financialManager = ["Admin","Management"].includes(session.user.role);
   const manager = ["Admin", "Management", "Coordinator"].includes(
     session.user.role,
   );
@@ -358,7 +359,7 @@ export function Commercial({
               ...old,
               presentation: a.instructions.presentation,
               taxMode: a.instructions.taxMode,
-              markups: a.instructions.markups,
+              markups: a.instructions.markups ? {...defaults(session.user.displayName).markups,...a.instructions.markups} : defaults(session.user.displayName).markups,
               remarks: a.instructions.notes,
             }
           : old,
@@ -706,7 +707,7 @@ export function Commercial({
                     <option value="">Select approved revision</option>
                     {boqs.map((b) => (
                       <option key={b.id} value={b.id}>
-                        {b.number} · {b.site} · PKR {money(b.total)}
+                        {b.number} · {b.site}{financialManager && b.total != null ? ` · PKR ${money(b.total)}` : ""}
                       </option>
                     ))}
                   </select>
@@ -743,17 +744,12 @@ export function Commercial({
                     <option>Show Sales Tax Separately</option>
                   </select>
                 </label>
-                <div className="pricing-markup-group" role="group" aria-label="Standard commercial policy">
-                  <h3>Power Zone standard pricing{policy ? ` · Policy v${policy.version}` : ""}</h3>
-                  <p className="muted-label">Selling prices are calculated automatically from each item's pre-tax cost. Quotation layout does not change its markup.</p>
-                  {policy && <p>Solar panels {policy.markups.solar}% · Structure {policy.markups.structure}% · Earthing bores {policy.markups.earthing}% · Inverter, battery &amp; BMS {policy.markups.bess}% · Everything else {policy.markups.other}%</p>}
                   <label>Additional scope category (if included in the BOQ)
                     <select aria-label="Additional scope category" value={input.additionalCategory ?? ""} onChange={e=>update({additionalCategory:e.target.value as PricingInput["additionalCategory"] || undefined})}>
                       <option value="">Select category if additional scope exists</option>
                       <option value="solar">Solar panels</option><option value="structure">Structure</option><option value="earthing">Earthing bore</option><option value="bess">Inverter, battery or BMS</option><option value="other">Everything else</option>
                     </select>
                   </label>
-                </div>
                 {(input.additionalMarkup !== undefined ||
                   p?.rows.some((r) => r.key === "additional")) && (
                   <label>
@@ -796,9 +792,7 @@ export function Commercial({
                   />
                 </label>
               </div>
-              <p className="muted-label">
-                Standard markup is added to pre-tax cost automatically. Saved pricing keeps the policy version used at preparation.
-              </p>
+              <div className="pricing-policy-note"><strong>Power Zone standard pricing{policy ? ` · Policy v${policy.version}` : ""}</strong><p>Selling prices are applied automatically. Saved quotations retain their pricing policy version.</p>{policy?.markups&&<p>Solar panels {policy.markups.solar}% · Structure {policy.markups.structure}% · Earthing bores {policy.markups.earthing}% · Balance of systems {policy.markups.other}%</p>}</div>
             </fieldset>
             <button className="primary" disabled={busy} type="submit">
               Calculate selling price
@@ -819,18 +813,18 @@ export function Commercial({
                         "Selling before tax",
                         "Sales tax",
                         "Selling after tax",
-                      ].map((h) => (
+                      ].filter(h=>financialManager||h!=="Profit (PKR)").map((h) => (
                         <th key={h}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {p.rows.map((r) => (
+                    {p.rows.filter(r=>financialManager||r.key!=="bess").map((r) => (
                       <tr key={r.key}>
                         <td>{r.name}</td>
                         <td className="numeric">{money(r.cost)}</td>
                         <td className="numeric">{new Decimal(r.markup).toDecimalPlaces(2).toString()}%</td>
-                        <td className="numeric">{money(r.profit)}</td>
+                        {financialManager && <td className="numeric">{money(r.profit)}</td>}
                         <td className="numeric">{money(r.beforeTax)}</td>
                         <td className="numeric">{money(r.tax)}</td>
                         <td className="numeric">{money(r.afterTax)}</td>
@@ -840,12 +834,12 @@ export function Commercial({
                 </table>
               </div>
               {p.policy && <p>Standard Commercial Policy v{p.policy.version} · Category percentages in the summary are effective averages where a display group contains different item markups.</p>}
-              {p.itemPricing && <details><summary>Standard item selling prices</summary><div className="table-scroll"><table className="master-table"><thead><tr><th>Item</th><th>Category</th><th>Pre-tax cost</th><th>Standard markup</th><th>Selling before tax</th></tr></thead><tbody>{p.itemPricing.map(l=><tr key={l.key}><td>{l.description}</td><td>{l.category}</td><td>{money(l.cost)}</td><td>{new Decimal(l.markup).toDecimalPlaces(2).toString()}%</td><td>{money(l.beforeTax)}</td></tr>)}</tbody></table></div></details>}
+              {financialManager && p.itemPricing && <details><summary>Standard item selling prices</summary><div className="table-scroll"><table className="master-table"><thead><tr><th>Item</th><th>Category</th><th>Pre-tax cost</th><th>Standard markup</th><th>Selling before tax</th></tr></thead><tbody>{p.itemPricing.map(l=><tr key={l.key}><td>{l.description}</td><td>{l.category}</td><td>{money(l.cost)}</td><td>{new Decimal(l.markup).toDecimalPlaces(2).toString()}%</td><td>{money(l.beforeTax)}</td></tr>)}</tbody></table></div></details>}
               <div className="quote-totals">
-                <p>
+                {financialManager && <p>
                   <span>Approved BOQ cost</span>
                   <strong>PKR {money(p.cost)}</strong>
-                </p>
+                </p>}
                 <p>
                   <span>Selling before tax</span>
                   <strong>PKR {money(p.subtotal)}</strong>

@@ -1481,7 +1481,7 @@ export function Boqs({
                 snapshot={preview.snapshot}
                 pdfUrl={`/api/boqs/drafts/${draft?.id}/costing.pdf?fingerprint=${preview.fingerprint}`}
               />
-              <StandardSellingSummary snapshot={preview.snapshot}/>
+              {["Admin","Management"].includes(session.user.role) && <StandardSellingSummary snapshot={preview.snapshot}/>}
               <div className="save-boq-panel">
                 <p>
                   {preview.snapshot.engineering.releaseReady === false

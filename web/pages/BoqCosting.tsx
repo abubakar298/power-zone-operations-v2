@@ -40,7 +40,7 @@ export function BoqCosting({
           </p>
         </div>
         <div className="summary-card">
-          <span>Budgeted project cost</span>
+          <span>{(s as any).costVisibility ? "Project cost excluding BESS" : "Budgeted project cost"}</span>
           <strong>PKR {format(s.total, 2)}</strong>
           <p>PKR {format(s.perWatt, 2)} / W</p>
         </div>
@@ -79,7 +79,7 @@ export function BoqCosting({
             </tr>
           ))}
           <tr>
-            <th>TOTAL PROJECT COST</th>
+            <th>{(s as any).costVisibility ? "PROJECT COST EXCLUDING BESS" : "TOTAL PROJECT COST"}</th>
             <th className="numeric">{format(s.total, 2)}</th>
             <th className="numeric">{format(s.perWatt, 2)}</th>
           </tr>
@@ -140,9 +140,9 @@ export function BoqCosting({
                 </td>
                 <td>{l.unit}</td>
                 <td className="numeric">
-                  {format(l.rate, Number(l.rate) % 1 ? 4 : 0)}
+                  {(l as any).costRestricted ? "Restricted" : format(l.rate, Number(l.rate) % 1 ? 4 : 0)}
                 </td>
-                <td className="numeric">{format(l.total, 2)}</td>
+                <td className="numeric">{(l as any).costRestricted ? "Restricted" : format(l.total, 2)}</td>
               </tr>
             ))}
           </tbody>

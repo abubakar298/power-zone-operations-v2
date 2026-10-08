@@ -7,7 +7,7 @@ import type { BoqSnapshot } from "./engine.js";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 
-const money = (v: string | number, d = 0) =>
+const money = (v: string | number, d = 0) => v == null ? "Restricted" :
   new Intl.NumberFormat("en-PK", {
     minimumFractionDigits: d,
     maximumFractionDigits: d,
@@ -27,7 +27,7 @@ export function buildCostingPdf(
   const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
   const width = pdf.internal.pageSize.getWidth(),
     margin = 14;
-  const title = number || "Costing preview";
+  const title = `${number || "Costing preview"}${(s as any).costVisibility ? " - Excluding BESS costs" : ""}`;
   pdf.setProperties({
     title: `${title} - ${s.survey.siteName}`,
     author: "Power Zone Engineering & Services",
@@ -140,7 +140,7 @@ export function buildCostingPdf(
     ["Item", "Budgeted Cost (PKR)", "Cost/W"],
     [
       ...s.summary.map((x) => [x.name, money(x.cost), money(x.perWatt, 2)]),
-      ["TOTAL PROJECT COST", money(s.total), money(s.perWatt, 2)],
+      [(s as any).costVisibility ? "PROJECT COST EXCLUDING BESS" : "TOTAL PROJECT COST", money(s.total), money(s.perWatt, 2)],
     ],
   );
   section(

@@ -1,3 +1,4 @@
+import { financialVisibility } from "./http/cost-visibility.js";
 import { cniHttp } from "./commercial/cni-http.js";
 import { DesignRepository } from "./design/repository.js";
 import { backupsHttp } from "./backups/http.js";
@@ -45,6 +46,7 @@ export function createApp(
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", config.trustProxyHops);
+  app.use(financialVisibility);
   app.use(
     helmet({
       strictTransportSecurity: config.production ? undefined : false,

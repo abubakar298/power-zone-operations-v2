@@ -11,7 +11,7 @@ export function SurveyQuantityFields({initial, patch, inverter, quick, onInverte
   useEffect(()=>setValues({...initial, spLoadPanelTotalMetres: initial.spLoadPanelRunMetres == null ? "" : new Decimal(initial.spLoadPanelRunMetres).mul(2).toString()}),[initial]);
   useEffect(()=>setValues(previous=>({...previous,...patch})),[patch]);
   const sp=inverter==="6 kW SP", dual=inverter.startsWith("2×");
-  useEffect(()=>{if(quick)return;setValues(v=>({...v,acInverter16:initial.acInverter16??(dual?"15":"30"),acInverter25:initial.acInverter25??(dual?"20":"0"),spInverterTerminationMetres:initial.spInverterTerminationMetres??"20"}));},[inverter,quick]);
+  useEffect(()=>{if(quick)return;setValues(v=>({...v,acInverter16:initial.acTerminationMode === "Measured" ? initial.acInverter16??(dual?"15":"10") : dual?"15":"10",acInverter25:initial.acTerminationMode === "Measured" ? initial.acInverter25??(dual?"20":"0") : dual?"20":"0",spInverterTerminationMetres:initial.spInverterTerminationMetres??"20"}));},[inverter,quick]);
   const number=(key:string)=>{try{return new Decimal(values[key]||0);}catch{return new Decimal(0);}};
   const metres=(value:Decimal)=>value.toDecimalPlaces(4).toString();
   const input=(key:string,label:string,hint?:string, required=true)=> <label key={key}>{label}<input name={key} aria-label={label} type="number" min={key==="panelQty"?1:key==="panelWattage"?0.0001:0} max={key==="panelQty"?1000000:99999999} step={key==="panelQty"?1:0.0001} required={required} value={values[key]??(["panelQty","panelWattage","spLoadPanelTotalMetres"].includes(key)?"":"0")} onChange={e=>setValues({...values,[key]:e.target.value})}/>{hint&&<small>{hint}</small>}</label>;

@@ -1,3 +1,4 @@
+import { canSeeBessCost, restrictedCostView } from "../http/cost-visibility.js";
 import { instructionsSchema, externalApprovalSchema } from "./instructions.js";
 import { buildCostingPdf } from "./report.js";
 import { Router, type RequestHandler } from "express";
@@ -198,7 +199,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         "Cache-Control": "private, no-store",
       })
       .send(
-        Buffer.from(buildCostingPdf(review.snapshot).output("arraybuffer")),
+        Buffer.from(buildCostingPdf(canSeeBessCost(req.authSession!.user.role)?review.snapshot:restrictedCostView(review.snapshot)).output("arraybuffer")),
       );
   });
   r.get("/:id/history", async (req, res) => {
@@ -240,7 +241,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Cache-Control": "private, no-store",
       })
-      .send(Buffer.from(buildCostingPdf(snapshot).output("arraybuffer")));
+      .send(Buffer.from(buildCostingPdf(canSeeBessCost(req.authSession!.user.role)?snapshot:restrictedCostView(snapshot)).output("arraybuffer")));
   });
   r.get("/:id/costing.pdf", async (req, res) => {
     if (!z.uuid().safeParse(req.params.id).success)
@@ -259,7 +260,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
       .send(
         Buffer.from(
           buildCostingPdf(
-            record.snapshot,
+            canSeeBessCost(req.authSession!.user.role)?record.snapshot:restrictedCostView(record.snapshot),
             record.number,
             record.created_at,
           ).output("arraybuffer"),

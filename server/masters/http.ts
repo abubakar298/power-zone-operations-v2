@@ -1,3 +1,4 @@
+import { canSeeBessCost, isBessEquipment } from "../http/cost-visibility.js";
 import { Router, type RequestHandler } from "express";
 import { z } from "zod";
 import { equalSecrets } from "../auth/crypto.js";
@@ -106,6 +107,7 @@ export function mastersHttp(
       key = z.string().min(1).max(200).safeParse(req.query.key);
     if (!kind.success || !key.success)
       throw new HttpError(400, "Choose a rate or rule to view history.");
+    if(kind.data === "rates" && !canSeeBessCost(req.authSession!.user.role) && isBessEquipment({key:key.data}))throw new HttpError(403,"BESS equipment costs are restricted to Management.");
     res.json({ versions: await repo.history(kind.data, key.data) });
   });
   router.post("/:kind", async (req, res) => {
@@ -125,6 +127,7 @@ export function mastersHttp(
       .safeParse(req.body);
     if (!kind.success || !request.success)
       throw new HttpError(400, "Invalid master record.");
+    if (kind.data === "rates" && isBessEquipment({key:request.data.id}) && !canSeeBessCost(s.user.role))throw new HttpError(403,"BESS equipment costs are restricted to Management.");
     if (!canWriteMaster(s.user.role, kind.data, request.data.id))
       throw new HttpError(
         403,
