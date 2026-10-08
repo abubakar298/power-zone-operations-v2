@@ -18,7 +18,7 @@ for (const quick of [false, true]) test(`Single-phase ${quick ? 'Quick BOQ' : 's
   await page.getByLabel('Panel wattage (W)',{exact:true}).fill('645');
   await page.getByLabel('BESS configuration',{exact:true}).selectOption('6-25');
   await expect(page.getByLabel('Inverter termination · 16 mm² 4-core (m)',{exact:true})).toHaveCount(0);
-  if (!quick) await page.getByLabel('AC load-panel cable route (m)',{exact:true}).fill('12.5');
+  if (!quick) await page.getByLabel('10mm² 1-core AC cable · load-panel termination (m)',{exact:true}).fill('25');
   else await expect(page.getByText(/20 m inverter termination \+ 40 m load-panel conductors/)).toBeVisible();
   for (const [field,label] of [['Solar Panel brand','Any of the Above'],['Inverter brand','Chint Power'],['Battery & BMS brand','Chint Power'],['Cable brand','Newage Cables'],['Switchgear brand','CHINT']])
     await page.getByLabel(field,{exact:true}).selectOption({label});

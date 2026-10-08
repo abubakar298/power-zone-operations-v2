@@ -121,9 +121,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page.getByLabel("Panel wattage (W)", { exact: true }).fill("645");
   await page.getByLabel("6mm² DC cable total (m)", { exact: true }).fill("360");
   await expect(page.getByLabel("Inverter termination · 16 mm² 4-core (m)", {exact: true})).toHaveCount(0);
-  await page
-    .getByLabel("Panel termination · 25 mm² 4-core (m)", { exact: true })
-    .fill("0");
+
   await page.getByLabel("2.5mm² earth cable (m)", { exact: true }).fill("20");
   await page.getByLabel("6mm² earth cable (m)", { exact: true }).fill("90");
   await page.getByLabel("10mm² earth cable (m)", { exact: true }).fill("90");
