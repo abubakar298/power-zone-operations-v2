@@ -58,7 +58,6 @@ export function workflowBoundary(pool: Pool): RequestHandler {
 /** The coordinator owns a document through its originating BOQ/draft, even
  * when management creates the approved revision. UUIDs are never authority. */
 export const resourceOwnership = {
-  cni: "SELECT 1 FROM cni_proposals WHERE id=$1 AND created_by=$2",
   boq: "SELECT 1 FROM boq_revisions r JOIN boqs b ON b.id=r.boq_id JOIN survey_drafts d ON d.id=b.draft_id WHERE r.id=$1 AND (b.created_by=$2 OR d.owner_id=$2 OR r.created_by=$2)",
   pricing:
     "SELECT 1 FROM commercial_pricing_versions p JOIN boq_revisions r ON r.id=p.boq_revision_id JOIN boqs b ON b.id=r.boq_id JOIN survey_drafts d ON d.id=b.draft_id WHERE p.id=$1 AND (p.created_by=$2 OR b.created_by=$2 OR d.owner_id=$2)",
