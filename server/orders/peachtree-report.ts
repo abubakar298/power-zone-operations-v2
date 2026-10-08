@@ -73,7 +73,7 @@ export function appendPeachtreePage(
   pdf.text(
     pdf.splitTextToSize(
       text(
-        `${policy} EPC contains all items outside Solar, Structure, Inverter, Batteries and BMS. This internal phase division does not alter the accepted quotation, IPO payable or tax treatment. Taxes are not classified as accounting profit.`,
+        `${policy} ${d.phases.length===2 && d.phases[0].name==="BESS" ? "BESS contains inverter, batteries and BMS; EPC contains every other project item." : "EPC contains all items outside Solar, Structure, Inverter, Batteries and BMS."} This internal phase division does not alter the accepted quotation, IPO payable or tax treatment. Taxes are not classified as accounting profit.`,
       ),
       180,
     ),

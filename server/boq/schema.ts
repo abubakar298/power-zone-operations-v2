@@ -7,6 +7,7 @@ const quantity = z
   );
 export const surveySchema = z
   .object({
+    family: z.enum(["solar-hybrid", "bess-only"]).optional(),
     sourceMode: z.enum(["Survey", "General quotation"]).optional(),
     customerId: z.number().int().min(0),
     siteName: z.string().trim().min(1).max(200),
@@ -17,8 +18,8 @@ export const surveySchema = z
       .max(30)
       .regex(/^[A-Za-z0-9_-]+$/),
     location: z.string().trim().max(1000),
-    panelQty: z.number().int().min(1).max(1000000),
-    panelWattage: quantity.refine((v) => Number(v) > 0),
+    panelQty: z.number().int().min(0).max(1000000),
+    panelWattage: quantity,
     structure: z.enum(["L1", "L2", "L3", "Elevated"]),
     dcMetres: quantity,
     acInverter16: quantity.optional(),
@@ -42,7 +43,7 @@ export const surveySchema = z
     genset: z.boolean(),
     brands: z
       .object({
-        solar: z.number().int().positive(),
+        solar: z.number().int().min(0).default(0),
         inverter: z.number().int().positive(),
         battery: z.number().int().positive(),
         cable: z.number().int().positive(),

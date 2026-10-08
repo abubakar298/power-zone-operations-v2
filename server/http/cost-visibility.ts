@@ -29,7 +29,7 @@ export function restrictedCostView(value:any, commercial=false):any {
     result.lines=value.lines.map((l:any)=>isBessEquipment(l)?{...restrictedCostView(l),rate:null,total:null,costRestricted:true}:restrictedCostView(l));
     result.summary=value.summary.filter((r:any)=>r.name!=="BESS");
     result.total=value.lines.filter((l:any)=>!isBessEquipment(l)).reduce((n:Decimal,l:any)=>n.plus(l.total),new Decimal(0)).toString();
-    result.perWatt=new Decimal(result.total).div(value.engineering.pvWatts).toFixed(2);
+    result.perWatt=new Decimal(value.engineering.pvWatts).isZero() ? "0.00" : new Decimal(result.total).div(value.engineering.pvWatts).toFixed(2);
   }
   return result;
 }

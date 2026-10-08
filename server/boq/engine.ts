@@ -80,6 +80,8 @@ export interface CostLine {
 }
 export type SelectedBrand = BrandMaster & { alternatives: string[] };
 export function calculate(s: Survey, m: Masters) {
+  const bessOnly=s.family === "bess-only";
+  if(!bessOnly && (s.panelQty<1 || new Decimal(s.panelWattage).lte(0))) throw new HttpError(400,"Enter positive panel quantity and wattage.");
   const customer = m.customers.find(
     (c) => c.id === s.customerId && c.status === "Active",
   );
@@ -103,7 +105,7 @@ export function calculate(s: Survey, m: Masters) {
   if (sp && (config.sku !== sp.inverterSku || config.quantity !== 1 || !new Decimal(config.total_kw).eq(6)))
     throw new HttpError(422, "Single-phase inverter master configuration is inconsistent. Ask an administrator to review it.");
   const allowances =
-    s.sourceMode === "General quotation"
+    !bessOnly && s.sourceMode === "General quotation"
       ? generalAllowances(s.panelQty, s.panelWattage, config.quantity)
       : undefined;
   const rule = (n: number) => {
@@ -120,6 +122,7 @@ export function calculate(s: Survey, m: Masters) {
     cable: "Cable",
     switchgear: "Switchgear",
   })) {
+    if(bessOnly && field === "solar") continue;
     const b = m.brands.find(
       (b) =>
         b.id === s.brands[field as keyof Survey["brands"]] &&
@@ -143,7 +146,7 @@ export function calculate(s: Survey, m: Masters) {
     };
   }
   const dual = config.quantity === 2,
-    pv = new Decimal(s.panelWattage).mul(s.panelQty),
+    pv = bessOnly ? new Decimal(0) : new Decimal(s.panelWattage).mul(s.panelQty),
     modules = new Decimal(s.batteryKwh).div(rule(6));
   if (
     !modules.isInteger() ||
@@ -159,11 +162,11 @@ export function calculate(s: Survey, m: Masters) {
       422,
       "String and battery design limits must be positive.",
     );
-  const spScope = sp ? singlePhaseScope({ bessId: sp.id, panelQty: s.panelQty,
+  const spScope = sp ? singlePhaseScope({ bessId: sp.id, panelQty: bessOnly ? 1 : s.panelQty,
     mode: s.sourceMode ?? "Survey", loadPanelRunMetres: s.spLoadPanelRunMetres,
     rooftopPerString: { fuseWithHolder: rnum(24), dcSpd: rnum(23) } }) : undefined;
   if (spScope && spScope.strings > 2) throw new HttpError(400, "Single-phase design exceeds two MPPT string inputs. Revise the panel design.");
-  const strings = spScope?.strings ?? Math.max(
+  const strings = bessOnly ? 0 : spScope?.strings ?? Math.max(
       1,
       1 + Math.ceil(Math.max(0, s.panelQty - rnum(4)) / rnum(5)),
     ),
@@ -211,19 +214,19 @@ export function calculate(s: Survey, m: Masters) {
   add(sp?.batterySku ?? "BAT-HV-05 KW WO BMS", sp?.batteryModules ?? modules, "BESS", "battery");
   add(sp?.bmsSku ?? "CH-BMS-HV", bms, "BESS", "battery");
   for (const [key, qty] of Object.entries({
-    "6mm² DC Cable Red": allowances
+    "6mm² DC Cable Red": bessOnly ? "0" : allowances
       ? new Decimal(allowances.dcRed)
       : new Decimal(s.dcMetres).div(2),
-    "6mm² DC Cable Black": allowances
+    "6mm² DC Cable Black": bessOnly ? "0" : allowances
       ? new Decimal(allowances.dcBlack)
       : new Decimal(s.dcMetres).div(2),
     "2.5mm² Earthing Cable": allowances?.earth25 ?? s.earth25,
     "6mm² Earthing Cable": allowances?.earth6 ?? s.earth6,
     "10mm² Earthing Cable": allowances?.earth10 ?? s.earth10,
-    "16mm² 4C AC Cable": sp ? "0" : allowances
+    "16mm² 4C AC Cable": sp ? "0" : bessOnly && s.sourceMode === "General quotation" ? (dual ? "15" : "30") : allowances
       ? allowances.ac16
       : new Decimal(s.acTerminationMode === "Fixed" ? (config.quantity === 2 ? "15" : "30") : s.acInverter16 ?? "0").add(s.acPanel16 ?? "0"),
-    "25mm² 4C AC Cable": sp ? "0" : allowances
+    "25mm² 4C AC Cable": sp ? "0" : bessOnly && s.sourceMode === "General quotation" ? (dual ? "20" : "0") : allowances
       ? allowances.ac25
       : new Decimal(s.acTerminationMode === "Fixed" ? (config.quantity === 2 ? "20" : "0") : s.acInverter25 ?? "0").add(s.acPanel25 ?? "0"),
   }))
@@ -231,14 +234,14 @@ export function calculate(s: Survey, m: Masters) {
   if (spScope) {
     add("10mm² 1C AC Cable", new Decimal(s.sourceMode !== "General quotation" && s.acTerminationMode === "Measured" ? s.spInverterTerminationMetres ?? spScope.cable.fixedTotalMetres : spScope.cable.fixedTotalMetres).plus(spScope.cable.loadPanelConductorMetres), "EPC", "cable", "Installation Cost");
     for (const [key, qty] of Object.entries({
-      "500V 2P DC Breaker": spScope.dc.totalBreakers,
-      "DC SPD": spScope.dc.rooftopSpd,
-      "DC Fuse with Holder": spScope.dc.rooftopFuseWithHolder,
+      "500V 2P DC Breaker": bessOnly ? 0 : spScope.dc.totalBreakers,
+      "DC SPD": bessOnly ? 0 : spScope.dc.rooftopSpd,
+      "DC Fuse with Holder": bessOnly ? 0 : spScope.dc.rooftopFuseWithHolder,
       "63A 2P MCB": 1, "32A 2P MCB": 1,
       "32A 2P Breaker Changeover": 1, "63A 1P AC VPD": 1,
     })) add(key, qty, "EPC", "switchgear", "Installation Cost");
     add("SP AC Conduit Accessories and Box", 1, "EPC", undefined, "Installation Cost");
-    add("SP DC Enclosures", 1, "EPC", undefined, "Installation Cost");
+    add("SP DC Enclosures", bessOnly ? 0 : 1, "EPC", undefined, "Installation Cost");
     warnings.push("Single-phase design requires electrical verification before release; DC breaker, AC accessories and DC enclosure allowances are provisional.");
   } else {
   for (const [key, qty] of Object.entries({
@@ -253,10 +256,18 @@ export function calculate(s: Survey, m: Masters) {
     add(key, qty, "EPC", "switchgear", "Installation Cost");
   add("AC & DC Boxes", rule(20), "EPC", undefined, "Installation Cost");
   }
-  add("Earthing Bore", rule(13), "EPC", undefined, "Earthing Cost");
+  add("Earthing Bore", bessOnly ? 1 : rule(13), "EPC", undefined, "Earthing Cost");
   add("Misc. Accessories", rule(21), "EPC", undefined, "Installation Cost");
-  add("Labour", pv, "EPC", undefined, "Electrical Labour");
-  add("Delivery", pv, "EPC", undefined, "Deliveries");
+  if(bessOnly){
+    for(const [key,qty,epc] of [["Labour",config.quantity,"Electrical Labour"],["Delivery",1,"Deliveries"]] as const){
+      const spec=m.items.find(i=>i.key===key);
+      lines.push({key,description:key==="Labour"?"UPS installation per inverter":"Project delivery",brand:"",brandAlternatives:[],specification:spec?.approved_specification??null,specVersion:spec?.version??null,qty:String(qty),unit:key==="Labour"?"Inverter":"Project",rate:"50000",rateVersion:0,rateStatus:"Active",total:new Decimal(qty).mul(50000).toString(),phase:"EPC",epc});
+    }
+  }else{
+    add("Labour", pv, "EPC", undefined, "Electrical Labour");
+    add("Delivery", pv, "EPC", undefined, "Deliveries");
+  }
+  if(bessOnly){const box=lines.find(l=>l.key==="AC & DC Boxes");if(box)box.description="AC protection / distribution boxes";}
   if (s.smartMeter)
     add("Extra Smart Meter", 1, "EPC", undefined, "Installation Cost");
   if (s.genset)
@@ -299,14 +310,14 @@ export function calculate(s: Survey, m: Masters) {
     }
   }
   const total = lines.reduce((a, l) => a.add(l.total), new Decimal(0));
-  const summary = ["Solar Panels", "Structure", "BESS", "EPC"].map((phase) => {
+  const summary = (bessOnly ? ["BESS","EPC"] : ["Solar Panels", "Structure", "BESS", "EPC"]).map((phase) => {
     const cost = lines
       .filter((l) => l.phase === phase)
       .reduce((a, l) => a.add(l.total), new Decimal(0));
     return {
       name: phase,
       cost: cost.toString(),
-      perWatt: cost.div(pv).toFixed(2),
+      perWatt: pv.isZero() ? "0.00" : cost.div(pv).toFixed(2),
     };
   });
   const epc = [
@@ -318,7 +329,7 @@ export function calculate(s: Survey, m: Masters) {
     const cost = lines
       .filter((l) => l.epc === name)
       .reduce((a, l) => a.add(l.total), new Decimal(0));
-    return { name, cost: cost.toString(), perWatt: cost.div(pv).toFixed(2) };
+    return { name, cost: cost.toString(), perWatt: pv.isZero() ? "0.00" : cost.div(pv).toFixed(2) };
   });
   return {
     customer: {
@@ -341,13 +352,13 @@ export function calculate(s: Survey, m: Masters) {
         .toString(),
       ...(spScope ? { singlePhaseScope: spScope, releaseReady: false } : {}),
       bessId: sp?.id ?? `${new Decimal(config.total_kw)}-${s.batteryKwh}`,
-      solutionId: `${pv.div(1000).toDecimalPlaces(1, Decimal.ROUND_HALF_UP)}-${new Decimal(config.total_kw)}-${s.batteryKwh}`,
+      solutionId: bessOnly ? `UPS-${new Decimal(config.total_kw)}-${s.batteryKwh}` : `${pv.div(1000).toDecimalPlaces(1, Decimal.ROUND_HALF_UP)}-${new Decimal(config.total_kw)}-${s.batteryKwh}`,
     },
     lines,
     summary,
     epc,
     total: total.toString(),
-    perWatt: total.div(pv).toFixed(2),
+    perWatt: pv.isZero() ? "0.00" : total.div(pv).toFixed(2),
     warnings,
     rules: m.rules,
     inverterConfig: config,

@@ -179,6 +179,7 @@ export function Boqs({
     setError("");
     setQuantityPatch({});
     setInitial(d.inputs);
+    setBoqFamily(d.inputs.family ?? "solar-hybrid");
     setDraft({ id: d.id, version: d.version });
     setUploads(
       d.inputs.uploadIds.map((id: string, i: number) => ({
@@ -207,6 +208,7 @@ export function Boqs({
       ...(sourceMode === "General quotation"
         ? { sourceMode: "General quotation" }
         : {}),
+      family: boqFamily === "bess-only" ? "bess-only" : "solar-hybrid",
       customerId: baseRevisionId
         ? initial.customerId
         : f.get("customerId")
@@ -215,10 +217,10 @@ export function Boqs({
       siteName: f.get("siteName"),
       siteCode: f.get("siteCode"),
       location: f.get("location"),
-      panelQty: f.get("panelQty") ? Number(f.get("panelQty")) : undefined,
-      panelWattage: f.get("panelWattage"),
-      structure: f.get("structure"),
-      dcMetres: sourceMode === "General quotation" ? "0" : f.get("dcMetres"),
+      panelQty: boqFamily === "bess-only" ? 0 : f.get("panelQty") ? Number(f.get("panelQty")) : undefined,
+      panelWattage: boqFamily === "bess-only" ? "0" : f.get("panelWattage"),
+      structure: boqFamily === "bess-only" ? "L1" : f.get("structure"),
+      dcMetres: boqFamily === "bess-only" ? "0" : sourceMode === "General quotation" ? "0" : f.get("dcMetres"),
       acTerminationMode: sourceMode === "General quotation" ? "Fixed" as const : "Measured" as const,
       acInverter16: f.get("acInverter16") || "0",
       acInverter25: f.get("acInverter25") || "0",
@@ -471,6 +473,7 @@ export function Boqs({
       wattage: original.snapshot.survey.panelWattage,
     });
     setBaseRevisionId(original.id);
+    setBoqFamily(original.snapshot.survey.family ?? "solar-hybrid");
     setInitial({
       ...original.snapshot.survey,
       preparedBy: session.user.displayName,
@@ -1072,13 +1075,13 @@ export function Boqs({
             </>}
           </section>}
           <div className="boq-family-field">
-            <label>BOQ type<select aria-label="BOQ type" value={boqFamily} onChange={e => setBoqFamily(e.target.value)}>
+            <label>BOQ type<select aria-label="BOQ type" value={boqFamily} onChange={e => {setBoqFamily(e.target.value);setPreview(undefined);setNotice("");}}>
               <option value="solar-hybrid">Solar Hybrid Project</option>
               <option value="ci-bess">C&amp;I BESS</option>
-              <option value="bess-only" disabled>BESS Only — coming soon</option>
+              <option value="bess-only">BESS Only (UPS with Installation)</option>
               <option value="single-items" disabled>Single Items — coming soon</option>
             </select></label>
-            <small>Select Solar Hybrid Project or C&I BESS. Each family uses its own form and approval flow.</small>
+            <small>Select the solution family. BESS Only uses the existing quotation and approval workflow.</small>
           </div>
           {baseRevisionId && (
             <label className="source-label">
@@ -1186,7 +1189,7 @@ export function Boqs({
               )}
             </section>
           )}
-          {sourceMode === "General quotation" && (
+          {sourceMode === "General quotation" && boqFamily !== "bess-only" && (
             <section className="detail-panel">
               <h3>General quotation · no survey</h3>
               <p>
@@ -1242,7 +1245,7 @@ export function Boqs({
                 />
               </div>
             </fieldset>
-            {sourceMode === "General quotation" && (
+            {sourceMode === "General quotation" && boqFamily !== "bess-only" && (
               <section className="detail-panel">
                 <h3>Automatic cable allowances</h3>
                 <p>
@@ -1292,15 +1295,15 @@ export function Boqs({
               <legend>
                 2 ·{" "}
                 {sourceMode === "General quotation"
-                  ? "PV capacity & solution"
+                  ? boqFamily === "bess-only" ? "BESS & AC solution" : "PV capacity & solution"
                   : "Survey quantities & solution"}
               </legend>
-              <SurveyQuantityFields key={`${baseRevisionId ?? "new"}-${initial.bessId ?? ""}`} initial={initial} patch={quantityPatch} inverter={inverter} quick={sourceMode === "General quotation"} onInverter={setInverter} />
+              <SurveyQuantityFields key={`${baseRevisionId ?? "new"}-${initial.bessId ?? ""}`} initial={initial} patch={quantityPatch} inverter={inverter} quick={sourceMode === "General quotation"} bessOnly={boqFamily === "bess-only"} onInverter={setInverter} />
             </fieldset>
             <fieldset disabled={busy}>
               <legend>3 · Brands & preparation</legend>
               <div className="survey-grid">
-                {Object.entries(brandFields).map(([k, category]) => (
+                {Object.entries(brandFields).filter(([k])=>boqFamily !== "bess-only" || k !== "solar").map(([k, category]) => (
                   <label key={k}>
                     {category} brand
                     <select

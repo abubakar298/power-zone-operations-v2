@@ -12,6 +12,7 @@ export function BoqCosting({
   createdAt?: string;
   pdfUrl: string;
 }) {
+  const bessOnly=s.survey.family === "bess-only";
   return (
     <section className="boq-costing">
       <div className="panel-heading">
@@ -27,25 +28,24 @@ export function BoqCosting({
       </p>
       <div className="summary-grid">
         <div className="summary-card">
-          <span>PV capacity</span>
-          <strong>{format(s.engineering.pvKwp, 2)} kWp</strong>
+          <span>{bessOnly ? "Solution family" : "PV capacity"}</span>
+          <strong>{bessOnly ? "BESS Only · UPS with Installation" : `${format(s.engineering.pvKwp,2)} kWp`}</strong>
         </div>
         <div className="summary-card">
           <span>Solution ID</span>
           <strong>{s.engineering.solutionId}</strong>
           <p>
             {format(s.engineering.batteryModules, 0)} battery modules ·{" "}
-            {format(s.engineering.bms, 0)} BMS · {format(s.engineering.strings, 0)}{" "}
-            strings
+            {format(s.engineering.bms, 0)} BMS {!bessOnly && <>· {format(s.engineering.strings,0)} strings</>}
           </p>
         </div>
         <div className="summary-card">
           <span>{(s as any).costVisibility ? "Project cost excluding BESS" : "Budgeted project cost"}</span>
           <strong>PKR {format(s.total, 2)}</strong>
-          <p>PKR {format(s.perWatt, 2)} / W</p>
+          {!bessOnly && <p>PKR {format(s.perWatt, 2)} / W</p>}
         </div>
       </div>
-      {s.engineering.singlePhaseScope && (
+      {s.engineering.singlePhaseScope && !bessOnly && (
         <section className="detail-panel">
           <h3>Single-phase calculation basis</h3>
           <p>10mm² single-core AC cable: {s.engineering.singlePhaseScope.cable.fixedTotalMetres} m fixed termination + {s.engineering.singlePhaseScope.cable.loadPanelConductorMetres} m load-panel conductors. Route: {s.engineering.singlePhaseScope.cable.loadPanelRunMetres} m × line and neutral ({s.engineering.singlePhaseScope.cable.loadPanelBasis}).</p>
@@ -75,13 +75,13 @@ export function BoqCosting({
             <tr key={x.name}>
               <td>{x.name}</td>
               <td className="numeric">{format(x.cost, 2)}</td>
-              <td className="numeric">{format(x.perWatt, 2)}</td>
+              <td className="numeric">{bessOnly ? "—" : format(x.perWatt, 2)}</td>
             </tr>
           ))}
           <tr>
             <th>{(s as any).costVisibility ? "PROJECT COST EXCLUDING BESS" : "TOTAL PROJECT COST"}</th>
             <th className="numeric">{format(s.total, 2)}</th>
-            <th className="numeric">{format(s.perWatt, 2)}</th>
+            <th className="numeric">{bessOnly ? "—" : format(s.perWatt, 2)}</th>
           </tr>
         </tbody>
       </table>
@@ -99,7 +99,7 @@ export function BoqCosting({
             <tr key={x.name}>
               <td>{x.name}</td>
               <td className="numeric">{format(x.cost, 2)}</td>
-              <td className="numeric">{format(x.perWatt, 2)}</td>
+              <td className="numeric">{bessOnly ? "—" : format(x.perWatt, 2)}</td>
             </tr>
           ))}
         </tbody>

@@ -122,7 +122,7 @@ export function price(
         ];
       })()
     : [];
-  const allRows = [...rows, ...extraRows];
+  const allRows = [...rows, ...extraRows].filter(r=>boq.survey.family!=="bess-only"||!["solar","structure"].includes(r.key));
   const sum = (field: "beforeTax" | "tax" | "profit") =>
     allRows.reduce((a, r) => a.add(r[field]), D("0"));
   // Keep exact component math, round the two presented tax buckets once.
@@ -179,6 +179,7 @@ export function quotationLines(
   bmsDescription = "IP65 Battery Control and Safety Unit for High Voltage Batteries",
   full = false,
 ): QuoteLine[] {
+  if(s.survey.family === "bess-only") return bessOnlyLines(s, full ? "Full Breakup" : "No Breakup");
   const brand = (field: string) => {
     const b = s.selectedBrands[field];
     return b.name === "Any of the Above" ? b.alternatives.join(" / ") : b.name;
@@ -316,6 +317,7 @@ export function quote(
       "Special discount cannot exceed the quoted total.",
     );
   const netTotal = money(D(total).minus(discount));
+  if(boq.survey.family === "bess-only") return quoteBessOnly(p,boq,input,discount,netTotal,total,subtotal,solarTax,otherTax);
   const lines = quotationLines(boq, bmsDescription, full);
   const scopeCount = lines.length;
   if (input.descriptions && input.descriptions.length !== lines.length)
@@ -488,3 +490,41 @@ export function quote(
   };
 }
 export type QuotationSnapshot = ReturnType<typeof quote>;
+
+/** BESS Only is a presentation of the same approved costing and pricing engine. */
+function bessOnlyLines(boq:BoqSnapshot,presentation:string):QuoteLine[]{
+  const equipment=boq.lines.filter(l=>l.phase==="BESS");
+  const rows:QuoteLine[]=equipment.map(l=>({description:[l.brand,l.specification??l.description].filter(Boolean).join(" "),unit:l.unit,qty:l.qty,group:"bess"}));
+  if(presentation==="Full Breakup") rows.push({description:"AC Earthing Bore",unit:"No.",qty:boq.lines.find(l=>l.key==="Earthing Bore")!.qty,group:"earthing"});
+  const others=boq.lines.filter(l=>l.phase!=="BESS"&&(presentation!=="Full Breakup"||l.key!=="Earthing Bore"));
+  if(others.length)rows.push({description:others.map(l=>`${l.description}${l.brand?` - ${l.brand}`:""} (${l.qty} ${l.unit})`).join("\n"),unit:"LS",qty:"1",group:"balance"});
+  return rows;
+}
+function quoteBessOnly(p:PricingSnapshot,boq:BoqSnapshot,input:QuotationInput,discount:string,netTotal:string,total:string,subtotal:string,solarTax:string,otherTax:string){
+  const presentation=p.input.presentation;
+  const lines=bessOnlyLines(boq,presentation);
+  if(input.descriptions && input.descriptions.length!==lines.length)throw new HttpError(400,"Provide one description for each quotation row.");
+  const amount=(keys:string[])=>{
+    if(p.itemPricing)return p.itemPricing.filter(l=>keys.includes(l.key)).reduce((v,l)=>v.add(p.input.taxMode==="Tax Included"?D(l.beforeTax).add(l.tax):l.beforeTax),D("0"));
+    return boq.lines.filter(l=>keys.includes(l.key)).reduce((v,l)=>{const group=l.phase==="BESS"?"bess":l.epc==="Earthing Cost"?"earthing":l.key==="Additional Item"?"additional":"balance";const row=p.rows.find(r=>r.key===group)!;return v.add(D(l.total).mul(D(row.markup).div(100).add(1)));},D("0"));
+  };
+  const equipment=boq.lines.filter(l=>l.phase==="BESS");
+  lines.forEach((l,i)=>{
+    if(input.descriptions)l.description=input.descriptions[i];
+    if(p.input.taxMode==="Tax Included"&&/\bGST\b|sales tax|tax included/i.test(l.description))throw new HttpError(400,"Remove tax wording from customer descriptions for this presentation.");
+    if(presentation==="No Breakup")return;
+    if(presentation==="Basic Breakup"&&i>0&&i<equipment.length)return;
+    const keys=i<equipment.length?(presentation==="Basic Breakup"?equipment.map(x=>x.key):[equipment[i].key]):l.group==="earthing"?["Earthing Bore"]:boq.lines.filter(x=>x.phase!=="BESS"&&(presentation!=="Full Breakup"||x.key!=="Earthing Bore")).map(x=>x.key);
+    l.amount=money(amount(keys));
+    l.span=presentation==="Basic Breakup"&&i===0?equipment.length:1;
+    if(p.standardDiscountStrategy)l.standardAllowanceBeforeTax=money((p.itemPricing??[]).filter(x=>keys.includes(x.key)&&["bess","other"].includes(x.category)).reduce((v,x)=>v.add(D(x.cost).mul("0.05")),D("0")));
+  });
+  if(presentation!=="No Breakup"){
+    const last=lines.findLast(l=>l.amount!==undefined)!;
+    last.amount=money(D(last.amount!).add(D(p.input.taxMode==="Tax Included"?total:subtotal).sub(lines.reduce((v,l)=>v.add(l.amount??"0"),D("0")))));
+  }
+  const footer=p.input.taxMode==="Tax Included"?[{label:"Total",amount:total}]:[{label:"Subtotal Before Tax",amount:subtotal},{label:"SALES TAX ON OTHER ITEMS @18%",amount:otherTax}];
+  if(p.input.taxMode!=="Tax Included"&&!D(solarTax).isZero())footer.splice(1,0,{label:"SALES TAX ON ADDITIONAL ITEMS @10%",amount:solarTax});
+  footer.push({label:"Special Discount",amount:discount},{label:"Net Total",amount:netTotal});
+  return {engineVersion:1,...(p.standardDiscountStrategy?{standardDiscountStrategy:p.standardDiscountStrategy}:{}),input:{quotedDate:input.quotedDate,validity:input.validity,proposedBy:input.proposedBy,discount},customer:{...p.customer,contactPerson:"",phone:""},siteName:p.siteName,siteCode:p.siteCode,boqNumber:p.boqNumber,solutionId:p.solutionId,presentation,scopeCount:lines.length,subject:"Quotation for BESS Only (UPS with Installation).",lines,footer,notes:NOTES,terms:TERMS};
+}

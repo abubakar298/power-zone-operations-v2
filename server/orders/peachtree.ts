@@ -23,6 +23,11 @@ export function peachtreeDivision(
   const included = pricing.input.taxMode === "Tax Included";
   const field = included ? "total" : "beforeTax";
   const target = D(included ? allocation.total : allocation.subtotal);
+  if(boq.survey.family === "bess-only"){
+    const phases=[{name:"BESS",amount:money(allocation.lines.filter(l=>l.group==="bess").reduce((v,l)=>v.add(l[field]),D("0")))},{name:"EPC",amount:money(allocation.lines.filter(l=>l.group!=="bess").reduce((v,l)=>v.add(l[field]),D("0")))}];
+    if(!D(phases[0].amount).add(phases[1].amount).eq(target))throw new HttpError(422,"BESS/EPC totals do not reconcile with the IPO.");
+    return {version:2,policy:"exact-accepted-quotation-v2",presentation:pricing.input.presentation,taxMode:pricing.input.taxMode,basis:included?"Tax-inclusive selling values":"Selling values excluding tax",effectivePooledMarkup:null,phases,phaseTotal:money(target),ipoBeforeTax:allocation.subtotal,ipoTax:allocation.tax,ipoPayable:allocation.total};
+  }
   const amounts = names.map((_, phase) =>
     allocation.lines
       .filter((_, i) => (phase < 5 ? i === phase : i >= 5))

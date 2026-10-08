@@ -50,7 +50,7 @@ export function buildCostingPdf(
   const metadata = [
     `Customer: ${s.customer.name}`,
     `Site: ${s.survey.siteName} | Code: ${s.survey.siteCode} | Location: ${s.survey.location}`,
-    `PV: ${money(s.engineering.pvKwp, 3)} kWp | Inverter: ${s.survey.inverter} | Battery: ${s.survey.batteryKwh} kWh`,
+    `${s.survey.family === "bess-only" ? "BESS Only (UPS with Installation)" : `PV: ${money(s.engineering.pvKwp,3)} kWp`} | Inverter: ${s.survey.inverter} | Battery: ${s.survey.batteryKwh} kWh`,
     ...(s.generalAllowances
       ? [
           `Source: General quotation without survey | Allowances: ${s.generalAllowances.version}`,
@@ -139,14 +139,14 @@ export function buildCostingPdf(
     "Project Costing Summary",
     ["Item", "Budgeted Cost (PKR)", "Cost/W"],
     [
-      ...s.summary.map((x) => [x.name, money(x.cost), money(x.perWatt, 2)]),
-      [(s as any).costVisibility ? "PROJECT COST EXCLUDING BESS" : "TOTAL PROJECT COST", money(s.total), money(s.perWatt, 2)],
+      ...s.summary.map((x) => [x.name, money(x.cost), s.survey.family === "bess-only" ? "-" : money(x.perWatt, 2)]),
+      [(s as any).costVisibility ? "PROJECT COST EXCLUDING BESS" : "TOTAL PROJECT COST", money(s.total), s.survey.family === "bess-only" ? "-" : money(s.perWatt, 2)],
     ],
   );
   section(
     "EPC Costing Breakup",
     ["Item", "Budgeted Cost (PKR)", "Cost/W"],
-    s.epc.map((x) => [x.name, money(x.cost), money(x.perWatt, 2)]),
+    s.epc.map((x) => [x.name, money(x.cost), s.survey.family === "bess-only" ? "-" : money(x.perWatt, 2)]),
   );
   if (s.warnings.length)
     section(
