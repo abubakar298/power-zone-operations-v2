@@ -1077,7 +1077,7 @@ export function Boqs({
               ? "This revision uses the existing customer and site. Approval saves a new immutable revision."
               : "Search and select a customer, then enter the site name. Use Revision mode for changes to an existing BOQ."}
           </p>
-          {!baseRevisionId && <section aria-label="BOQ entry mode">
+          {!baseRevisionId && <section className="boq-entry-mode" aria-label="BOQ entry mode">
             <label>Document action<select aria-label="Document action" value={revisionMode ? "revision" : "new"} onChange={e => setRevisionMode(e.target.value === "revision")}><option value="new">New BOQ</option><option value="revision">Revise an existing BOQ</option></select></label>
             {revisionMode && <>
               <p>For Management-requested changes, open Revision Requested in your dashboard. To start your own revision, select the original BOQ below.</p>
@@ -1085,6 +1085,15 @@ export function Boqs({
               <label>Original BOQ<select aria-label="Original BOQ" disabled={!revisionCustomer || busy} value="" onChange={async e => { if (!e.target.value) return; setBusy(true); try { const original = await api<any>(`/boqs/${e.target.value}`); reviseSaved(original); setRevisionMode(false); } catch(error) { fail(error); } finally { setBusy(false); } }}><option value="">Select BOQ to load original values</option>{records.filter(r => String(r.customer_id) === revisionCustomer).map(r => <option key={r.id} value={r.id}>{r.number} · {r.site}</option>)}</select></label>
             </>}
           </section>}
+          <div className="boq-family-field">
+            <label>BOQ type<select aria-label="BOQ type" value="solar-hybrid" onChange={() => {}}>
+              <option value="solar-hybrid">Solar Hybrid Project</option>
+              <option value="ci-bess" disabled>C&amp;I BESS — coming soon</option>
+              <option value="bess-only" disabled>BESS Only — coming soon</option>
+              <option value="single-items" disabled>Single Items — coming soon</option>
+            </select></label>
+            <small>Solar Hybrid Project BOQs are currently available. Other families will have their own BOQ forms.</small>
+          </div>
           {baseRevisionId && (
             <label className="source-label">
               Revision source

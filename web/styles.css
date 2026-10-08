@@ -109,3 +109,9 @@
 
 /* Reserve the same heading space in each desktop pair; helper text stays below controls. */
 @media(min-width:701px){.survey-grid label{grid-template-rows:2.8em 46px;line-height:1.4}.ac-panel-fields>small{order:2}.ac-panel-fields>label{order:1}}
+/* Entry choices use explicit label spacing, outside the survey fieldset styles. */
+.boq-entry-mode,.boq-family-field{margin:18px 0;padding:18px 20px;border:1px solid #e7e1ee;border-radius:12px;background:#faf8fd}
+.boq-entry-mode>label,.boq-family-field>label{display:grid;gap:10px;max-width:440px;margin:0;font-size:14px;font-weight:600;line-height:1.5}
+.boq-entry-mode select,.boq-family-field select{display:block;width:100%;height:46px;box-sizing:border-box;padding:10px 12px;border:1px solid #dcd7e9;border-radius:9px;background:white;font:inherit}
+.boq-entry-mode p,.boq-family-field small{display:block;margin:10px 0 0;color:#716a7a;font-size:12px;line-height:1.5}
+.boq-entry-mode>label+label{margin-top:14px}
