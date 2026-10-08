@@ -56,3 +56,16 @@ test("mixed tax categories retain maximum eligible discount and two-decimal resu
   assert.equal(r.proposed.revenue, "1000.00");
   assert.equal(r.maximumDiscount, "2360.00");
 });
+
+test("target markup uses cost rather than sales margin and retains tax allocation", () => {
+  const r = review({ targetMarkup: "15" });
+  assert.equal(r.proposed.revenue, "2760.00");
+  assert.equal(r.proposed.profit, "360.00");
+  assert.equal(r.proposed.profitPercent, "15.00");
+  assert.equal(r.discount, "283.20");
+  assert.equal(r.proposed.payable, "3176.80");
+  assert.deepEqual(review({ discount: r.discount }).proposed, r.proposed);
+  assert.equal(review({ targetMarkup: "25" }).discount, "0.00");
+  assert.throws(() => review({ targetMarkup: "26" }), /price increase/);
+  for (const v of ["-1", "NaN", "1e2", "", "100"]) assert.throws(() => review({ targetMarkup: v }));
+});

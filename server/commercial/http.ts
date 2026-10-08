@@ -176,6 +176,7 @@ export function commercialHttp(
   r.post("/quotations/:id/discount-review", async (req, res) => {
     const v = parse(
       z.union([
+        z.object({ targetMarkup: z.string().regex(/^\d{1,2}(\.\d{1,2})?$/) }).strict(),
         z
           .object({ discount: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/) })
           .strict(),

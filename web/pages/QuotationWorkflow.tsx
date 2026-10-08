@@ -7,13 +7,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api, type Session } from "../api.js";
 import { confirmTransition, confirmRevision, confirmDiscountProposal } from "../confirm.js";
 import type { QuotationSnapshot } from "../../server/commercial/engine.js";
-function useAdjustmentPreview(q: any, session: Session, enabled: boolean, kind: "discount" | "targetMargin", value: string) {
+function useAdjustmentPreview(q: any, session: Session, enabled: boolean, kind: "discount" | "targetMarkup", value: string) {
   const [result, setResult] = useState<any>();
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState("");
   useEffect(() => {
     setResult(undefined); setFailure("");
-    if (!enabled || (kind === "targetMargin" && !value.trim())) { setPending(false); return; }
+    if (!enabled || (kind === "targetMarkup" && !value.trim())) { setPending(false); return; }
     let cancelled = false; setPending(true);
     const timer = setTimeout(() => {
       void api<any>(`/commercial/quotations/${q.id}/discount-review`, {
@@ -50,11 +50,10 @@ export function QuotationWorkflow({
   const [discount, setDiscount] = useState(q.snapshot.input.discount ?? "0");
   const [mode, setMode] = useState<"discount" | "margin">("discount");
   const [targetMargin, setTargetMargin] = useState("");
-  const percentageValid = /^\d{1,2}(\.\d{1,2})?$/.test(targetMargin.trim()) || targetMargin.trim() === "100";
-  const undiscountedPayable = new Decimal(q.snapshot.footer.at(-1).amount).add(q.snapshot.input.discount ?? "0");
-  const percentageAmount = percentageValid ? undiscountedPayable.mul(targetMargin).div(100).toFixed(2) : "";
+  const percentageValid = /^\d{1,2}(\.\d{1,2})?$/.test(targetMargin.trim());
   const lump = useAdjustmentPreview(q, session, manager, "discount", discount);
-  const target = useAdjustmentPreview(q, session, manager && percentageValid, "discount", percentageAmount);
+  const baseline = useAdjustmentPreview(q, session, manager, "discount", q.snapshot.input.discount ?? "0");
+  const target = useAdjustmentPreview(q, session, manager && percentageValid, "targetMarkup", targetMargin);
   const selected = mode === "discount" ? lump : target;
   const metrics = selected.result;
   const calculating = selected.pending;
@@ -73,7 +72,7 @@ export function QuotationWorkflow({
       }
       const choices: Array<{key: "discount" | "margin"; label: string; discount: string; payable: string}> = [];
       if (discount.trim()) choices.push({key: "discount", label: "Discount amount", discount: money(lump.result.discount), payable: money(lump.result.proposed.payable)});
-      if (targetMargin.trim()) choices.push({key: "margin", label: `Discount ${targetMargin}%`, discount: money(target.result.discount), payable: money(target.result.proposed.payable)});
+      if (targetMargin.trim()) choices.push({key: "margin", label: `Target markup ${targetMargin}%`, discount: money(target.result.discount), payable: money(target.result.proposed.payable)});
       const chosen = await confirmDiscountProposal(choices);
       if (!chosen) return;
       setMode(chosen);
@@ -187,17 +186,17 @@ export function QuotationWorkflow({
             Internal preview only. Applicable tax remains included in payable
             and excluded from profit.
           </p>
-          <p>Enter a discount amount, a discount percentage, or both to compare their effects. Choose the proposal only when sending for revision. Saved quotation values remain unchanged.</p>
+          <p>Enter a discount amount, a target markup percentage, or both to compare their effects. Choose the proposal only when sending for revision. Saved quotation values remain unchanged.</p>
           <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 270px), 1fr))", gap: "1rem"}}>
             {(["discount", "margin"] as const).map(choice => {
-              const state = choice === "discount" ? lump : target;
-              return <section key={choice} aria-label={choice === "discount" ? "Discount amount comparison" : "Discount percentage comparison"} className="detail-panel">
-                <h4>{choice === "discount" ? "Discount amount" : "Discount percentage"}</h4>
-                <label>{choice === "discount" ? "Discount amount (PKR)" : "Discount (%)"}
-                  <input aria-label={choice === "discount" ? "Management discount amount (PKR)" : "Discount (%)"} type="number" min="0" max={choice === "margin" ? "100" : undefined} step="0.01" value={choice === "discount" ? discount : targetMargin} onChange={e => choice === "discount" ? setDiscount(e.target.value) : setTargetMargin(e.target.value)} />
+              const state = choice === "discount" ? lump : (targetMargin.trim() ? target : baseline);
+              return <section key={choice} aria-label={choice === "discount" ? "Discount amount comparison" : "Target markup comparison"} className="detail-panel">
+                <h4>{choice === "discount" ? "Discount amount" : "Target markup"}</h4>
+                <label>{choice === "discount" ? "Discount amount (PKR)" : "Target markup (%)"}
+                  <input aria-label={choice === "discount" ? "Management discount amount (PKR)" : "Target markup (%)"} type="number" min="0" max={choice === "margin" ? "99.99" : undefined} step="0.01" value={choice === "discount" ? discount : targetMargin} onChange={e => choice === "discount" ? setDiscount(e.target.value) : setTargetMargin(e.target.value)} />
                 </label>
                 <div aria-live="polite">
-                  {state.pending ? <p>Updating totals…</p> : (choice === "margin" && targetMargin.trim() && !percentageValid) ? <p role="alert">Enter a discount percentage from 0 to 100, with at most two decimal places.</p> : state.failure ? <p role="alert">{state.failure}</p> : state.result ? <div className="table-scroll"><table>
+                  {state.pending ? <p>Updating totals…</p> : (choice === "margin" && targetMargin.trim() && !percentageValid) ? <p role="alert">Enter a target markup percentage from 0 to 100, with at most two decimal places.</p> : state.failure ? <p role="alert">{state.failure}</p> : state.result ? <div className="table-scroll"><table>
                     <thead><tr><th>Measure</th><th>Quoted / budgeted</th><th>After discount</th></tr></thead>
                     <tbody>
                       <tr><th>Budgeted cost (PKR)</th><td>{money(state.result.cost)}</td><td>{money(state.result.cost)}</td></tr>
@@ -206,14 +205,14 @@ export function QuotationWorkflow({
                       <tr><th>Applicable GST (PKR)</th><td>{money(state.result.original.tax)}</td><td>{money(state.result.proposed.tax)}</td></tr>
                       <tr><th>Final payable (PKR)</th><td>{money(state.result.original.payable)}</td><td>{money(state.result.proposed.payable)}</td></tr>
                       <tr><th>Discount amount (PKR)</th><td>{money(q.snapshot.input.discount ?? "0")}</td><td>{money(state.result.discount)}</td></tr>
-                      <tr><th>Profit margin on sales</th><td>{state.result.original.marginPercent ?? "N/A"}%</td><td>{state.result.proposed.marginPercent ?? "N/A"}%</td></tr>
+                      <tr><th>Markup on cost</th><td>{state.result.original.profitPercent ?? "N/A"}%</td><td>{state.result.proposed.profitPercent ?? "N/A"}%</td></tr>
                     </tbody>
                   </table></div> : <p>Enter a discount to compare.</p>}
                 </div>
               </section>;
             })}
           </div>
-          <p>Discount % uses the price before discounts, including applicable GST. Profit excludes GST. Solar remains unchanged under the existing discount allocation policy.</p>
+          <p>Target markup uses approved budgeted cost: pre-tax selling price = cost × (1 + markup %). Profit and markup exclude GST. Solar remains unchanged under the existing discount allocation policy.</p>
           {q.workflow_latest !== false && q.workflow_status === "Submitted" && <>
             <label>Revision instructions<textarea aria-label="Discount revision instructions" maxLength={1700} value={notes} onChange={e => setNotes(e.target.value)} /></label>
             <button disabled={busy || !notes.trim()} onClick={() => void transition("Changes requested")}>Send for revision</button>

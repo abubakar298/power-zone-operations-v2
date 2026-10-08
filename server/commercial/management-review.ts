@@ -2,7 +2,7 @@ import { Decimal } from "decimal.js";
 import { allocateDiscount, type SellingLine } from "../orders/allocation.js";
 import { HttpError } from "../http/errors.js";
 const D = Decimal.clone({ precision: 50, rounding: Decimal.ROUND_HALF_UP });
-export type ReviewAdjustment = { discount: string } | { targetMargin: string };
+export type ReviewAdjustment = { discount: string } | { targetMargin: string } | { targetMarkup: string };
 // Preview only: reuse the approved allocation policy; never mutate saved prices or tax policy.
 export function managementReview(
   source: SellingLine[],
@@ -46,19 +46,21 @@ export function managementReview(
     .filter((l) => l.taxRate === "18" && l.group !== "solar")
     .reduce((s, l) => s.add(l.originalTotal), new D(0));
   let discount: string;
-  if ("targetMargin" in adjustment) {
-    if (!/^\d{1,2}(\.\d{1,2})?$/.test(adjustment.targetMargin))
+  if ("targetMargin" in adjustment || "targetMarkup" in adjustment) {
+    const markup = "targetMarkup" in adjustment;
+    const value = "targetMarkup" in adjustment ? adjustment.targetMarkup : adjustment.targetMargin;
+    if (!/^\d{1,2}(\.\d{1,2})?$/.test(value))
       throw new HttpError(
         422,
-        "Enter a target margin from 0 to 99.99 percent.",
+        "Enter a target percentage from 0 to 99.99.",
       );
-    const target = new D(adjustment.targetMargin);
+    const target = new D(value);
     if (cost.lte(0))
       throw new HttpError(
         422,
-        "Target margin requires a positive approved cost.",
+        "Target pricing requires a positive approved cost.",
       );
-    const requiredRevenue = cost.div(new D(1).minus(target.div(100)));
+    const requiredRevenue = markup ? cost.mul(new D(1).add(target.div(100))) : cost.div(new D(1).minus(target.div(100)));
     if (requiredRevenue.gt(subtotal))
       throw new HttpError(
         422,
@@ -93,11 +95,12 @@ export function managementReview(
   }
   return {
     cost: cost.toFixed(2),
-    basis: "Revenue excluding GST · margin = profit / pre-tax selling price",
+    basis: "Revenue excluding GST · markup = profit / approved cost",
     original: metrics(savedDiscount),
     proposed: metrics(discount),
     discount,
     maximumDiscount: maximum.toFixed(2),
     targetMargin: "targetMargin" in adjustment ? adjustment.targetMargin : null,
+    targetMarkup: "targetMarkup" in adjustment ? adjustment.targetMarkup : null,
   };
 }

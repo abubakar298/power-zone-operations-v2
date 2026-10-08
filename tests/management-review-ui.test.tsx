@@ -55,11 +55,11 @@ test("management controls follow history before PDF and expose both adjustment m
   );
   assert.match(s, /Tax-inclusive quotation/);
   assert.match(s, /Discount amount/);
-  assert.match(s, /Discount percentage/);
+  assert.match(s, /Target markup/);
   assert.match(s, /Management discount amount/);
-  assert.match(s, /aria-label="Discount \(%\)"/);
+  assert.match(s, /aria-label="Target markup \(%\)"/);
   assert.match(s, /Discount amount comparison/);
-  assert.match(s, /Discount percentage comparison/);
+  assert.match(s, /Target markup comparison/);
   assert.doesNotMatch(s, /<select/);
   assert.doesNotMatch(s, /type="radio"|type="checkbox"/);
   assert.match(s, /Send for revision/);
@@ -70,6 +70,6 @@ test("coordinator does not receive management discount or target controls", () =
   const s = html("Coordinator");
   assert.doesNotMatch(
     s,
-    /Management pricing controls|Discount percentage|Management discount amount/,
+    /Management pricing controls|Target markup|Management discount amount/,
   );
 });
