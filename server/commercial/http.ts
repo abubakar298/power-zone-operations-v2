@@ -82,10 +82,28 @@ export function commercialHttp(
       await repo.revisionContext(req.authSession!.user.id, id(req.params.id)),
     ),
   );
-  r.get("/standard-policy", async(req,res)=>res.json(await repo.standardPolicy(req.authSession!.user.id)));
-  r.post("/standard-policy",managementOnly,async(req,res)=>{
-    const v=parse(z.object({expectedVersion:z.number().int().positive(),policy:commercialPolicySchema}).strict(),req.body);
-    res.status(201).json(await repo.saveStandardPolicy(req.authSession!.user.id,v.policy,v.expectedVersion));
+  r.get("/standard-policy", async (req, res) =>
+    res.json(await repo.standardPolicy(req.authSession!.user.id)),
+  );
+  r.post("/standard-policy", managementOnly, async (req, res) => {
+    const v = parse(
+      z
+        .object({
+          expectedVersion: z.number().int().positive(),
+          policy: commercialPolicySchema,
+        })
+        .strict(),
+      req.body,
+    );
+    res
+      .status(201)
+      .json(
+        await repo.saveStandardPolicy(
+          req.authSession!.user.id,
+          v.policy,
+          v.expectedVersion,
+        ),
+      );
   });
   r.get("/pricing", async (req, res) =>
     res.json({ pricing: await repo.pricingList(req.authSession!.user.id) }),
@@ -117,7 +135,9 @@ export function commercialHttp(
     ),
   );
   r.get("/quotations", async (req, res) =>
-    res.json({ quotations: await repo.quotationList(req.authSession!.user.id) }),
+    res.json({
+      quotations: await repo.quotationList(req.authSession!.user.id),
+    }),
   );
   r.post("/quotations/preview", async (req, res) =>
     res.json(
@@ -155,17 +175,18 @@ export function commercialHttp(
   });
   r.post("/quotations/:id/discount-review", async (req, res) => {
     const v = parse(
-      z
-        .object({ discount: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/) })
-        .strict(),
+      z.union([
+        z
+          .object({ discount: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/) })
+          .strict(),
+        z
+          .object({ targetMargin: z.string().regex(/^\d{1,2}(\.\d{1,2})?$/) })
+          .strict(),
+      ]),
       req.body,
     );
     res.json(
-      await repo.discountReview(
-        req.authSession!.user.id,
-        id(req.params.id),
-        v.discount,
-      ),
+      await repo.discountReview(req.authSession!.user.id, id(req.params.id), v),
     );
   });
   r.get("/quotations/:id/copy", async (req, res) => {

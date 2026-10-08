@@ -29,11 +29,16 @@ export function QuotationWorkflow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [discount, setDiscount] = useState(q.snapshot.input.discount ?? "0");
+  const [mode, setMode] = useState<"discount" | "margin">("discount");
+  const [targetMargin, setTargetMargin] = useState("");
+  const adjustmentValue = mode === "discount" ? discount : targetMargin;
   const [metrics, setMetrics] = useState<any>();
   const [calculating, setCalculating] = useState(false);
   useEffect(() => {
     setDiscount(q.snapshot.input.discount ?? "0");
     setMetrics(undefined);
+    setMode("discount");
+    setTargetMargin("");
     setRevision(false);
     setNotes("");
     setError("");
@@ -42,14 +47,19 @@ export function QuotationWorkflow({
     if (!manager) return;
     let cancelled = false;
     setCalculating(true);
+    setMetrics(undefined);
     const timer = setTimeout(() => {
-      void api(`/commercial/quotations/${q.id}/discount-review`, {
-        body: { discount: discount.trim() || "0" },
+      void api<any>(`/commercial/quotations/${q.id}/discount-review`, {
+        body:
+          mode === "margin"
+            ? { targetMargin: targetMargin.trim() }
+            : { discount: discount.trim() || "0" },
         csrf: session.csrfToken,
       })
         .then((value) => {
           if (!cancelled) {
             setMetrics(value);
+            if (mode === "margin") setDiscount(value.discount);
             setError("");
           }
         })
@@ -67,7 +77,7 @@ export function QuotationWorkflow({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [q.id, discount, manager, session.csrfToken]);
+  }, [q.id, mode, adjustmentValue, manager, session.csrfToken]);
   async function transition(kind: string) {
     const proposedChange =
       manager &&
@@ -76,7 +86,8 @@ export function QuotationWorkflow({
       Number(discount || 0) !== Number(q.snapshot.input.discount ?? 0);
     if (
       kind === "Approved" &&
-      (!validDiscount ||
+      ((mode === "margin" && (calculating || !metrics)) ||
+        !validDiscount ||
         Number(discount.trim() || 0) !== Number(q.snapshot.input.discount ?? 0))
     ) {
       setError(
@@ -128,7 +139,9 @@ export function QuotationWorkflow({
     /^\d{1,12}(\.\d{1,2})?$/.test(normalizedDiscount) &&
     new Decimal(normalizedDiscount).lte(gross);
   const snapshot =
-    manager && validDiscount
+    manager &&
+    validDiscount &&
+    (mode === "discount" || (!calculating && metrics))
       ? {
           ...q.snapshot,
           footer: q.snapshot.footer.map((r: any) =>
@@ -156,12 +169,73 @@ export function QuotationWorkflow({
           ))}
         </section>
       )}
-      {renderPreview(
-        snapshot,
-        manager ? discount : undefined,
-        manager ? setDiscount : undefined,
+      {manager && (
+        <section
+          aria-label="Management pricing controls"
+          className="quotation-review-panel"
+        >
+          <h3>
+            {!q.snapshot.footer.some(
+              (r: any) => r.label === "Subtotal Before Tax",
+            )
+              ? "Tax-inclusive quotation"
+              : "GST shown separately"}
+          </h3>
+          <p>
+            Internal preview only. Applicable tax remains included in payable
+            and excluded from profit.
+          </p>
+          <label>
+            Adjustment method
+            <select
+              aria-label="Management adjustment method"
+              value={mode}
+              onChange={(e) => setMode(e.target.value as "discount" | "margin")}
+            >
+              <option value="discount">Lump-sum discount</option>
+              <option value="margin">Target profit margin on sales</option>
+            </select>
+          </label>
+          {mode === "discount" ? (
+            <label>
+              Discount amount (PKR)
+              <input
+                aria-label="Management discount amount (PKR)"
+                type="number"
+                min="0"
+                step="0.01"
+                value={discount}
+                onChange={(e) => setDiscount(e.target.value)}
+              />
+            </label>
+          ) : (
+            <label>
+              Target profit margin (%)
+              <input
+                aria-label="Target profit margin (%)"
+                type="number"
+                min="0"
+                max="99.99"
+                step="0.01"
+                value={targetMargin}
+                onChange={(e) => setTargetMargin(e.target.value)}
+              />
+            </label>
+          )}
+          <p>
+            Margin = profit ÷ selling price before tax. Solar remains unchanged
+            under the existing discount policy.
+          </p>
+          <p aria-live="polite">
+            {calculating
+              ? "Updating totals…"
+              : metrics
+                ? `Calculated discount: PKR ${money(metrics.discount)} · Customer payable: PKR ${money(metrics.proposed.payable)}`
+                : "Enter a valid adjustment to preview its effect."}
+          </p>
+        </section>
       )}
-      <CostingWorkflowHistory review={q} quotation={q} />
+      {renderPreview(snapshot)}
       <section
         className="quotation-review-panel"
         aria-label="Quotation review actions"
@@ -202,7 +276,7 @@ export function QuotationWorkflow({
                       <td>{money(metrics.proposed.payable)}</td>
                     </tr>
                     <tr>
-                      <th>Profit (PKR)</th>
+                      <th>Profit excluding GST (PKR)</th>
                       <td>{money(metrics.original.profit)}</td>
                       <td>{money(metrics.proposed.profit)}</td>
                     </tr>
@@ -212,7 +286,7 @@ export function QuotationWorkflow({
                       <td>{metrics.proposed.profitPercent ?? "N/A"}%</td>
                     </tr>
                     <tr>
-                      <th>Margin % on sales</th>
+                      <th>Margin % on pre-tax sales</th>
                       <td>{metrics.original.marginPercent ?? "N/A"}%</td>
                       <td>{metrics.proposed.marginPercent ?? "N/A"}%</td>
                     </tr>
