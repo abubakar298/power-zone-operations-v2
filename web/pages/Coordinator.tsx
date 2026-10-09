@@ -1,4 +1,5 @@
 import {Button} from "../ui/Button.js";
+import {Field} from "../ui/Field.js";
 import {StatusBadge} from "../ui/StatusBadge.js";
 import { confirmTransition, confirmRevision } from "../confirm.js";
 import { useEffect, useState } from "react";
@@ -21,6 +22,12 @@ export function Coordinator({
   onOpen: (task: any) => void;
 }) {
   const manager = ["Admin", "Management"].includes(session.user.role);
+  const [workGroup, setWorkGroup] = useState("action"),
+    [search, setSearch] = useState(""),
+    [sort, setSort] = useState("priority");
+  const stageLabel = (stage: string) => stage === "Survey & Costing Preparation" ? "Survey & BOQ Preparation" : stage === "Quotation approval" ? "Quotation Approval" : stage === "Revision required" ? "Revision Required" : stage === "Customer confirmation" ? "Customer Confirmation" : stage === "IPO approval" ? "IPO Approval" : stage;
+  const needsAction = (t: any) => [stages[0], stages[2], stages[5]].includes(t.stage);
+  const nextAction = (t: any) => manager ? "Open workflow" : t.stage === stages[2] ? "Revise document" : t.stage === stages[5] ? "Complete handoff" : t.stage === stages[0] ? t.target === "boqs" ? "Prepare BOQ" : t.target === "pricing" ? "Calculate selling price" : "Prepare quotation" : t.stage === stages[3] ? "Record customer confirmation" : "View approval";
   const [scope, setScope] = useState(manager ? "team" : "mine"),
     [data, setData] = useState<any>(),
     [error, setError] = useState(""),
@@ -57,7 +64,7 @@ export function Coordinator({
     };
   }, [scope, tick]);
   const minutes = (d: string) =>
-    Math.max(0, (Date.now() - new Date(d).getTime()) / 60000);
+    Number.isFinite(new Date(d).getTime()) ? Math.max(0, (Date.now() - new Date(d).getTime()) / 60000) : 0;
   const duration = (m: number) =>
     m < 60
       ? `${Math.floor(m)} min`
@@ -73,8 +80,15 @@ export function Coordinator({
     (t: any) =>
       (filter === "All" || t.stage === filter) &&
       (!overdueOnly || overdue(t)) &&
-      (!approvalsOnly || t.responsibility === "Management"),
-  );
+      (!approvalsOnly || t.responsibility === "Management") &&
+      (manager || workGroup === "all" || (workGroup === "action" ? needsAction(t) : !needsAction(t))) &&
+      (!search.trim() || [t.customer, t.site, t.reference, stageLabel(t.stage)].some(v => String(v ?? "").toLowerCase().includes(search.trim().toLowerCase()))),
+  ).sort((a: any,b: any) => {
+    if (sort === "customer") return String(a.customer ?? "").localeCompare(String(b.customer ?? "")) || String(a.site ?? "").localeCompare(String(b.site ?? ""));
+    if (sort === "priority") {const difference=Number(Boolean(overdue(b)))-Number(Boolean(overdue(a)));if(difference)return difference;}
+    const difference=minutes(b.started_at)-minutes(a.started_at);
+    return (sort === "newest" ? -difference : difference) || String(a.id).localeCompare(String(b.id));
+  });
   const [feedbackTask, setFeedbackTask] = useState<any>();
   const [feedback, setFeedback] = useState("");
   const action = async (t: any, kind: string, suppliedNotes?: string) => {
@@ -215,10 +229,10 @@ export function Coordinator({
           <button
             key={stage}
             className={`stage-card ${filter === stage ? "selected" : ""}`}
-            onClick={() => setFilter(filter === stage ? "All" : stage)}
+            onClick={() => {setFilter(filter === stage ? "All" : stage);setWorkGroup("all");}}
             aria-pressed={filter === stage}
           >
-            <span>{stage}</span>
+            <span>{manager ? stage : stageLabel(stage)}</span>
             <strong>
               {
                 (data?.tasks ?? []).filter(
@@ -252,20 +266,23 @@ export function Coordinator({
           </button>
         ))}
       </div>
+      {!manager && <div className="pz-action-row workspace-groups" role="group" aria-label="Work priority">
+        {[["action","Needs My Action"],["waiting","Waiting on Others"]].map(([value,label]) => <Button key={value} variant="neutral" aria-pressed={workGroup === value} onClick={() => {setWorkGroup(value);setFilter("All");}}>{label} ({data ? (data.tasks ?? []).filter((t:any)=>value === "action" ? needsAction(t) : !needsAction(t)).length : "—"})</Button>)}
+      </div>}
       <section className="detail-panel">
         <div className="coordination-heading">
-          <h3>Pending tasks{data ? ` (${visibleTasks.length})` : ""}</h3>
-          <Button variant="neutral" onClick={() => setFilter("All")} aria-pressed={filter === "All"}>All pending tasks</Button>
+          <h3>{manager ? "Pending tasks" : workGroup === "action" ? "My Next Actions" : workGroup === "waiting" ? "Waiting on Others" : "Pending tasks"}{data ? ` (${visibleTasks.length})` : ""}</h3>
+          <Button variant="neutral" onClick={() => {setFilter("All");setWorkGroup("all");}} aria-pressed={filter === "All" && (manager || workGroup === "all")}>All pending tasks</Button>
           <label>
             Stage
-            <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <select value={filter} onChange={(e) => {setFilter(e.target.value);setWorkGroup("all");}}>
               <option>All</option>
               {stages.map((s) => (
-                <option key={s}>{s}</option>
+                <option key={s} value={s}>{manager ? s : stageLabel(s)}</option>
               ))}
             </select>
           </label>
-          <label>
+          <label className="workspace-overdue">
             <input
               type="checkbox"
               checked={overdueOnly}
@@ -274,6 +291,11 @@ export function Coordinator({
             Overdue only
           </label>
         </div>
+        <div className="workspace-filters">
+          <Field id="workspace-search" label="Search work"><input id="workspace-search" type="search" placeholder="Customer, site, document or stage" value={search} onChange={e=>setSearch(e.target.value)}/></Field>
+          <Field id="workspace-sort" label="Sort by"><select id="workspace-sort" value={sort} onChange={e=>setSort(e.target.value)}><option value="priority">Overdue first, then longest waiting</option><option value="oldest">Longest waiting</option><option value="newest">Newest first</option><option value="customer">Customer / site</option></select></Field>
+        </div>
+        {!manager && <p className="workspace-help">{workGroup === "action" ? "Prepare BOQs, complete revisions and send ready departmental handoffs." : workGroup === "waiting" ? "Track Management and customer responses. Open a document when you need to follow up or record confirmation." : "All pending work in the selected basket and filters."}</p>}
         {!data ? (
           <p>Loading pending work…</p>
         ) : data.total === 0 ? (
@@ -283,7 +305,8 @@ export function Coordinator({
             <table className="order-table">
               <thead>
                 <tr>
-                  <th>Document / site</th>
+                  <th>Customer / site</th>
+                  <th>Document</th>
                   <th>Stage / responsibility</th>
                   <th>Stage aging</th>
                   <th>Target / status</th>
@@ -297,9 +320,9 @@ export function Coordinator({
                     className={overdue(t) ? "task-overdue" : ""}
                   >
                     <td>
-                      {t.reference}
+                      <strong>{t.customer || "Customer not entered"}</strong>
                       <br />
-                      {t.site}
+                      {t.site || "Site not entered"}
                       {t.site?.startsWith("SAMPLE") && (
                         <>
                           <br />
@@ -309,8 +332,9 @@ export function Coordinator({
                         </>
                       )}
                     </td>
+                    <td>{t.reference || "Survey draft"}</td>
                     <td>
-                      {t.stage}
+                      {manager ? t.stage : stageLabel(t.stage)}
                       <br />
                       <small>{t.responsibility}</small>
                     </td>
@@ -333,14 +357,14 @@ export function Coordinator({
                           ? "15 min survey → quote target"
                           : "Tracking elapsed time"}
                       <br />
-                      <StatusBadge tone={overdue(t) ? "warning" : "pending"}>{overdue(t) ? "Overdue" : "In progress"}</StatusBadge>
+                      <StatusBadge tone={overdue(t) ? "warning" : "pending"}>{overdue(t) ? "Overdue" : t.responsibility === "Management" ? "Waiting on Management" : t.responsibility === "Customer" ? "Waiting on customer" : "Action required"}</StatusBadge>
                     </td>
                     <td>
                       <Button
                         variant="secondary"
                         onClick={() => onOpen(t)}
                       >
-                        Open workflow
+                        {nextAction(t)}
                       </Button>
                       {t.kind === "Sale confirmation" && (
                         <div className="bucket-actions">
@@ -388,7 +412,7 @@ export function Coordinator({
               </tbody>
             </table>
             {visibleTasks.length === 0 && (
-              <p>No documents match this bucket.</p>
+              <p>No documents match these filters. Try another stage or clear your search and overdue filter.</p>
             )}
           </div>
         )}
