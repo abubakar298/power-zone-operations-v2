@@ -182,69 +182,15 @@ for (const quick of [false, true]) {
         page.getByLabel("Panel quantity", { exact: true }),
       ).toHaveValue("60");
       await button(page, "Calculate & review BOQ").click();
-      if (!quick)
-        await expect(
-          page.getByText("PKR 6,456,786.00", { exact: true }),
-        ).toBeVisible();
-      const submitResponse = page.waitForResponse(
-        (r) =>
-          r.url().endsWith("/api/boqs/reviews") &&
-          r.request().method() === "POST",
-      );
-      await button(page, "Submit for review").click();
-      const review = await (await submitResponse).json();
-      const session = await (
-        await page.request.get("/api/auth/session")
-      ).json();
+      // No separate costing approval: the Coordinator prepares the standard quote.
+      const saveResponse = page.waitForResponse(r => r.url().endsWith("/api/boqs/save") && r.request().method() === "POST");
+      await button(page, "Create quotation").click();
+      expect((await saveResponse).ok()).toBe(true);
+      await page.getByLabel("Price presentation").selectOption(quick ? "No Breakup" : "Full Breakup");
+      await page.getByLabel("Tax presentation").selectOption(quick ? "Tax Included" : "Show Sales Tax Separately");
+      const session = await (await page.request.get("/api/auth/session")).json();
       const h = { Origin: origin, "X-CSRF-Token": session.csrfToken };
-      expect(
-        (
-          await page.request.post(`/api/boqs/reviews/${review.id}/decision`, {
-            headers: h,
-            data: { outcome: "Approved", comments: "" },
-          })
-        ).status(),
-      ).toBe(403);
       await login(manager, `director-${suffix}@example.test`);
-      await manager.getByRole("button", { name: /Costing review/ }).click();
-      await manager
-        .getByRole("row", {
-          name: quick ? /Skardu -2520/ : /Coordinator validation 90901/,
-        })
-        .getByRole("button", { name: "Open workflow" })
-        .click();
-      await manager
-        .getByLabel("Approval quotation format")
-        .selectOption(quick ? "No Breakup" : "Full Breakup");
-      await manager
-        .getByLabel("Approval tax display")
-        .selectOption(quick ? "Tax Included" : "Show Sales Tax Separately");
-      for (const label of [
-        "Solar",
-        "Structure",
-        "BESS",
-        "Earthing",
-        "Balance of systems",
-        "Other items",
-      ])
-        await manager
-          .getByLabel(`Approval ${label} markup %`, { exact: true })
-          .fill("20");
-      await manager
-        .getByLabel("Instructions for quotation")
-        .fill("Approved engineering, use the recorded margins.");
-      await button(manager, "Approve & send to Coordinator").click();
-      await expect(
-        manager.getByRole("heading", { name: /BAFL-.*-R0/ }),
-      ).toBeVisible();
-      await page.reload();
-      await page.getByRole("button", { name: /Quotation preparation/ }).click();
-      await page
-        .getByRole("row", {
-          name: quick ? /Skardu -2520/ : /Coordinator validation 90901/,
-        })
-        .getByRole("button", { name: "Open workflow" })
-        .click();
       await expect(page.getByLabel("Approved BOQ revision")).not.toHaveValue(
         "",
       );
@@ -252,8 +198,7 @@ for (const quick of [false, true]) {
         .getByLabel("Approved BOQ revision")
         .inputValue();
       await button(page, "Calculate selling price").click();
-      await button(page, "Save pricing version").click();
-      await button(page, "Prepare quotation").click();
+      await button(page, "Create quotation").click();
       await expect(
         page.locator(".quotation-pdf-pages canvas").first(),
       ).toBeVisible();
@@ -325,6 +270,7 @@ for (const quick of [false, true]) {
         href,
       ])
         expect((await outsiderContext.request.get(path)).status()).toBe(404);
+      await manager.reload();
       await button(manager, "Dashboard").click();
       await manager.getByRole("button", { name: /Quotation approval/ }).click();
       await manager
@@ -333,7 +279,7 @@ for (const quick of [false, true]) {
         })
         .getByRole("button", { name: "Open workflow" })
         .click();
-      await button(manager, "Approve quotation").click();
+      await button(manager, "Final approve quotation").click();
       await manager
         .getByRole("dialog")
         .getByRole("button", { name: "Confirm and send", exact: true })
@@ -346,23 +292,7 @@ for (const quick of [false, true]) {
       ).toBeVisible();
       await page.reload();
       await page.getByRole("button", { name: /Customer confirmation/ }).click();
-      page.on("dialog", async (d) => {
-        if (d.type() === "prompt")
-          await d.accept("Isolated written acceptance received");
-      });
-      await page
-        .getByRole("row", {
-          name: new RegExp(quick ? "BAFL-2520" : "BAFL-90901"),
-        })
-        .getByRole("button", { name: "Record PO / approval received" })
-        .click();
-      await page.getByRole("button", { name: /IPO preparation/ }).click();
-      await page
-        .getByRole("row", {
-          name: new RegExp(quick ? "BAFL-2520" : "BAFL-90901"),
-        })
-        .getByRole("button", { name: "Open workflow" })
-        .click();
+      await page.getByRole("row", { name: new RegExp(quick ? "BAFL-2520" : "BAFL-90901") }).getByRole("button", {name:"Open workflow",exact:true}).click();
       await expect(page.getByLabel("Accepted quotation")).toHaveValue(quoteId);
       await page
         .getByLabel("Sale confirmation type")
@@ -378,6 +308,7 @@ for (const quick of [false, true]) {
           name: "IPO submission · Awaiting evidence approval",
         }),
       ).toBeVisible();
+      await manager.reload();
       await button(manager, "Dashboard").click();
       await manager.getByRole("button", { name: /IPO approval/ }).click();
       await manager

@@ -3,6 +3,23 @@ import { jsPDF } from "jspdf";
 import { Decimal } from "decimal.js";
 import { readFile } from "node:fs/promises";
 
+async function standardQuote(request: any, headers: Record<string,string>, revisionId: string, format = "Full Breakup", taxDisplay = "Tax Included") {
+  const input = {boqRevisionId:revisionId, presentation:format, taxMode:taxDisplay, preparedBy:"Browser validation"};
+  const preview = await request.post("/api/commercial/pricing/preview", {headers,data:input});
+  expect(preview.ok()).toBe(true);
+  const price = await request.post("/api/commercial/pricing", {headers,data:{...input,fingerprint:(await preview.json()).fingerprint,requestKey:crypto.randomUUID()}});
+  expect(price.ok()).toBe(true);
+  const qinput={pricingId:(await price.json()).id,quotedDate:"2026-10-09",validity:"7 Days",proposedBy:"Browser validation",discount:"0"};
+  const qp=await request.post("/api/commercial/quotations/preview", {headers,data:qinput});
+  expect(qp.ok()).toBe(true);
+  const q=await request.post("/api/commercial/quotations", {headers,data:{...qinput,fingerprint:(await qp.json()).fingerprint,requestKey:crypto.randomUUID()}});
+  expect(q.ok()).toBe(true);
+  const record=await q.json();
+  const submitted=await request.post("/api/coordinator/events",{headers,data:{quotationId:record.id,kind:"Submitted"}});
+  expect(submitted.ok()).toBe(true);
+  return record;
+}
+
 test.beforeEach(async ({ page }) => {
   page.on("dialog", async (dialog) => {
     if (dialog.type() === "confirm") await dialog.accept();
@@ -270,41 +287,12 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     path: "test-results/boq-preview-mobile.png",
     fullPage: true,
   });
-  await page
-    .getByRole("button", { name: "Submit for review", exact: true })
-    .click();
-  await page
-    .getByLabel("Review comments")
-    .fill("Confirm the survey preparation details.");
-  await page
-    .getByRole("button", { name: "Request revision", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Edit requested revision", exact: true })
-    .click();
-  await page
-    .getByLabel("Prepared by", { exact: true })
-    .fill("Abu Bakar Reviewed");
-  await page
-    .getByRole("button", { name: "Calculate & review BOQ", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Submit for review", exact: true })
-    .click();
-  for (const [label, value] of [
-    ["Solar", "20"],
-    ["Structure", "20"],
-    ["BESS", "15"],
-    ["Earthing", "20"],
-    ["Balance of systems", "20"],
-    ["Other items", "20"],
-  ])
-    await page
-      .getByLabel(`Approval ${label} markup %`, { exact: true })
-      .fill(value);
-  await page
-    .getByRole("button", { name: "Approve & send to Coordinator", exact: true })
-    .click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  // Current workflow saves the BOQ directly; Management reviews the quotation.
+  await page.getByRole("button", { name: "Create quotation", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Commercial pricing", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
+  await page.getByRole("button", { name: "BAFL-05850-001-R0", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "BAFL-05850-001-R0", exact: true }),
   ).toBeVisible();
@@ -338,38 +326,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Calculate & review BOQ", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Submit for review", exact: true })
-    .click();
-  await expect(
-    page.getByLabel("Approval Solar markup %", { exact: true }),
-  ).toBeDisabled();
-  await expect(
-    page.getByLabel("Approval Solar markup %", { exact: true }),
-  ).toHaveValue("20");
-  await page
-    .getByRole("checkbox", { name: /Change quotation settings/ })
-    .check();
-  await expect(
-    page.getByLabel("Approval Solar markup %", { exact: true }),
-  ).toBeEnabled();
-  for (const [label, value] of [
-    ["Solar", "20"],
-    ["Structure", "20"],
-    ["BESS", "15"],
-    ["Earthing", "20"],
-    ["Balance of systems", "20"],
-    ["Other items", "20"],
-  ])
-    await page
-      .getByLabel(`Approval ${label} markup %`, { exact: true })
-      .fill(value);
-  await page
-    .getByRole("button", {
-      name: "Approve & create quotation myself",
-      exact: true,
-    })
-    .click();
+  await page.getByRole("button", { name: "Create quotation", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Commercial pricing", exact: true }),
   ).toBeVisible();
@@ -412,12 +369,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   const standardNet = money(standardPreview.snapshot.netTotal);
   const discountedNet = money(new Decimal(standardPreview.snapshot.netTotal).sub("1000.50").toFixed(2));
   await expect(page.getByText(`PKR ${standardNet}`, { exact: true })).toBeVisible();
-  await page
-    .getByRole("button", { name: "Save pricing version", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Prepare quotation", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Create quotation", exact: true }).click();
   await expect(
     page.locator(".quotation-pdf-pages canvas").first(),
   ).toBeVisible();
@@ -536,38 +488,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Calculate & review BOQ", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Submit for review", exact: true })
-    .click();
-  await expect(
-    page.getByLabel("Approval Solar markup %", { exact: true }),
-  ).toBeDisabled();
-  await expect(
-    page.getByLabel("Approval Solar markup %", { exact: true }),
-  ).toHaveValue("20");
-  await page
-    .getByRole("checkbox", { name: /Change quotation settings/ })
-    .check();
-  await expect(
-    page.getByLabel("Approval Solar markup %", { exact: true }),
-  ).toBeEnabled();
-  for (const [label, value] of [
-    ["Solar", "20"],
-    ["Structure", "20"],
-    ["BESS", "15"],
-    ["Earthing", "20"],
-    ["Balance of systems", "20"],
-    ["Other items", "20"],
-  ])
-    await page
-      .getByLabel(`Approval ${label} markup %`, { exact: true })
-      .fill(value);
-  await page
-    .getByRole("button", {
-      name: "Approve & create quotation myself",
-      exact: true,
-    })
-    .click();
+  await page.getByRole("button", { name: "Create quotation", exact: true }).click();
   await page.getByLabel("Price presentation").selectOption("Full Breakup");
   await page
     .getByRole("button", { name: "Calculate selling price", exact: true })
@@ -576,12 +497,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Calculate selling price", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Save pricing version", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Prepare quotation", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Create quotation", exact: true }).click();
   await expect(page.locator(".quote-description")).toHaveCount(17);
   await expect(
     page.locator(".quotation-pdf-pages canvas").first(),
@@ -968,7 +884,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Create account", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("Account created");
+  await expect(page.getByRole("status").filter({hasText:"Account created"})).toContainText("Account created");
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await page.getByLabel("Email address").fill("atif-browser@example.test");
   await page
@@ -999,7 +915,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByText("Survey draft saved", { exact: false }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
-  await page.getByRole("button", { name: /Survey preparation/ }).click();
+  await page.getByRole("button", { name: /Survey & Costing Preparation/ }).click();
   await expect(
     page.getByRole("row", { name: /SAMPLE bucket training/ }),
   ).toBeVisible();
@@ -1021,7 +937,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   ).toBeVisible();
 });
 
-test("management bucket opens a coordinator costing review and isolates approval work", async ({
+test("management bucket opens a standard quotation and isolates approval work", async ({
   page,
 }) => {
   const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? "3180"}`;
@@ -1115,20 +1031,14 @@ test("management bucket opens a coordinator costing review and isolates approval
     headers,
     data: { version: 0, inputs },
   });
-  expect(saved.ok()).toBe(true);
+  expect(saved.ok(),await saved.text()).toBe(true);
   const draft = await saved.json();
   const preview = await (
     await page.request.post("/api/boqs/preview", { headers, data: inputs })
   ).json();
-  const submitted = await page.request.post("/api/boqs/reviews", {
-    headers,
-    data: {
-      draftId: draft.id,
-      version: draft.version,
-      fingerprint: preview.fingerprint,
-    },
-  });
-  expect(submitted.ok()).toBe(true);
+  const savedBoq = await page.request.post("/api/boqs/save", {headers,data:{draftId:draft.id,version:draft.version,fingerprint:preview.fingerprint}});
+  expect(savedBoq.ok()).toBe(true);
+  const quote = await standardQuote(page.request,headers,(await savedBoq.json()).id);
   await page.request.post("/api/auth/logout", { headers });
   const admin = await page.request.post("/api/auth/login", {
     headers: { Origin: origin },
@@ -1171,25 +1081,24 @@ test("management bucket opens a coordinator costing review and isolates approval
   await expect(
     page.getByRole("row", { name: /SAMPLE bucket training/ }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: /Costing review/ }).click();
+  await expect(page.getByRole("button", {name:/Costing review|Quotation preparation/})).toHaveCount(0);
+  await page.getByRole("button", { name: /Quotation approval/ }).click();
   const row = page.getByRole("row", {
     name: /SAMPLE Management bucket review/,
   });
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: "Open workflow" }).click();
   await expect(
-    page.getByRole("heading", { name: /Costing review · Draft version/ }),
+    page.getByRole("heading", { name: "Quotation workflow · Submitted",exact:true }),
   ).toBeVisible();
   await expect(
-    page.getByText(
-      /Demo Sites · SAMPLE Management bucket review · Site code MGRBUCKET/,
-    ),
+    page.getByText(quote.number,{exact:false}).first(),
   ).toBeVisible();
   await page.screenshot({
     path: "test-results/management-bucket-review.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Back to BOQs", exact: true }).click();
+  await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
   await page.getByRole("button", { name: "Quick BOQ · no survey" }).click();
   await page.getByLabel("Customer", {exact: true}).fill("Alfalah");
   await page.getByRole("option", {name: /Alfalah/}).click();
@@ -1231,7 +1140,7 @@ test("management bucket opens a coordinator costing review and isolates approval
   });
 });
 
-test("Coordinator records external approval with screenshots and receives its quotation settings", async ({
+test("Coordinator records external quotation approval with screenshots without revealing BESS costs", async ({
   page,
 }) => {
   const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? "3180"}`;
@@ -1285,79 +1194,29 @@ test("Coordinator records external approval with screenshots and receives its qu
   const p = await (
     await page.request.post("/api/boqs/preview", { headers, data: inputs })
   ).json();
-  const s = await page.request.post("/api/boqs/reviews", {
-    headers,
-    data: { draftId: d.id, version: d.version, fingerprint: p.fingerprint },
-  });
-  expect(s.ok()).toBe(true);
+  const saved = await page.request.post("/api/boqs/save", {headers,data:{draftId:d.id,version:d.version,fingerprint:p.fingerprint}});
+  expect(saved.ok(),await saved.text()).toBe(true);
+  const revisionId=(await saved.json()).id;
+  const quote=await standardQuote(page.request,headers,revisionId);
   await page.goto("/dashboard");
-  await page.getByRole("button", { name: /Costing review/ }).click();
-  await page
-    .getByRole("row", { name: /SAMPLE External chat approval/ })
-    .getByRole("button", { name: "Open workflow" })
-    .click();
-  await expect(
-    page.getByRole("heading", {
-      name: "Record approval received outside the app",
-    }),
-  ).toBeVisible();
-  await page.getByLabel("External approver name").fill("Director Operations");
-  await page
-    .getByLabel("Approval quotation format")
-    .selectOption("Full Breakup");
-  await page.getByLabel("Approval tax display").selectOption("Tax Included");
-  await page.getByLabel("Approval BESS markup %").fill("33");
-  await page
-    .getByLabel("Instructions for quotation")
-    .fill("Approved costing and these quotation settings.");
-  const screenshot = await page.screenshot();
-  await page.getByLabel("Approval screenshots").setInputFiles({
-    name: "sample-approval.png",
-    mimeType: "image/png",
-    buffer: screenshot,
-  });
-  await expect(
-    page.getByText("sample-approval.png", { exact: true }),
-  ).toBeVisible();
-  await page
-    .getByLabel(
-      "I confirm these screenshots approve this exact costing and the quotation instructions entered above.",
-    )
-    .check();
-  await page
-    .getByRole("button", { name: "Record external approval & save BOQ" })
-    .click();
-  await expect(page.getByRole("status")).toContainText(
-    "External costing approval recorded",
-  );
-  await page
-    .getByRole("button", { name: "Create revision draft", exact: true })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "Revise general BOQ", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("87.075 m", { exact: true })).toHaveCount(2);
-  await expect(page.getByLabel("6mm² DC cable total (m)")).toHaveCount(0);
-  await page.getByRole("button", { name: "Back to BOQs", exact: true }).click();
-  await page
-    .getByRole("button", { name: "DEMO-CHATBROWSER-001-R0", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Create quotation", exact: true })
-    .click();
-  await expect(page.getByLabel("Price presentation")).toHaveValue(
-    "Full Breakup",
-  );
-  await expect(
-    page.getByLabel("Tax presentation", { exact: true }),
-  ).toHaveValue("Tax Included");
-  await expect(page.getByLabel("BESS Markup %", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("group", { name: "Standard commercial policy" }))
-    .toContainText("Inverter, battery & BMS 30%");
-  await page.screenshot({
-    path: "test-results/external-approval-pricing.png",
-    fullPage: true,
-  });
+  await page.getByRole("button",{name:/Quotation approval/}).click();
+  await page.getByRole("row",{name:new RegExp(quote.number)}).getByRole("button",{name:"Open workflow",exact:true}).click();
+  await expect(page.getByRole("heading",{name:"Quotation workflow · Submitted",exact:true})).toBeVisible();
+  await page.getByText("Record WhatsApp / verbal approval",{exact:true}).click();
+  await page.getByLabel("Approver name",{exact:true}).fill("Director Operations");
+  await page.getByLabel("Approval remarks",{exact:true}).fill("Approved this exact saved quotation without changes.");
+  await page.getByLabel("Approval screenshot",{exact:true}).setInputFiles({name:"sample-approval.png",mimeType:"image/png",buffer:await page.screenshot()});
+  await expect(page.getByRole("listitem").filter({hasText:"sample-approval.png"})).toBeVisible();
+  await page.getByLabel("I confirm this evidence approves this exact document without changes.").check();
+  await page.getByRole("button",{name:"Record approval & continue",exact:true}).click();
+  await page.getByRole("dialog").getByRole("button",{name:"Confirm and send",exact:true}).click();
+  await expect(page.getByRole("heading",{name:"Quotation workflow · Approved",exact:true})).toBeVisible();
+  const after=await (await page.request.get(`/api/commercial/quotations/${quote.id}`)).json();
+  expect(after.external_approval.approver).toBe("Director Operations");
+  expect(after.snapshot).toEqual(quote.snapshot);
+  expect(JSON.stringify(after)).not.toContain('"bessCost"');
+  await page.screenshot({path:"test-results/external-approval-quotation.png",fullPage:true});
+
 });
 
 test("Inventory and Accounts roles have dedicated queues, original PDFs and isolated progress actions", async ({
@@ -1490,21 +1349,23 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
   expect(login.ok()).toBe(true);
   const session = await login.json();
   const headers = { Origin: origin, "X-CSRF-Token": session.csrfToken };
+  const records=await (await page.request.get("/api/boqs")).json();
+  const base=records.boqs.find((r:any)=>r.number==="DEMO-CHATBROWSER-001-R0");
+  const source=await (await page.request.get(`/api/boqs/${base.id}`)).json();
+  const inputs={...source.snapshot.survey,siteId:undefined,siteName:"SAMPLE Safe cancellation journey",siteCode:"FLOWBROWSER"};
+  const d=await (await page.request.post("/api/boqs/drafts",{headers,data:{version:0,inputs}})).json();
+  const pv=await (await page.request.post("/api/boqs/preview",{headers,data:inputs})).json();
+  const br=await page.request.post("/api/boqs/save",{headers,data:{draftId:d.id,version:d.version,fingerprint:pv.fingerprint}});
+  expect(br.ok(),await br.text()).toBe(true);
+  const boq=await br.json();
   await page.goto("/dashboard");
-  await page.getByRole("button", { name: /Quotation preparation/ }).click();
-  await page
-    .getByRole("row", { name: /SAMPLE External chat approval/ })
-    .getByRole("button", { name: "Open workflow" })
-    .click();
+  await page.getByRole("button", {name:"Survey & BOQ",exact:true}).click();
+  await page.getByRole("button",{name:boq.number,exact:true}).click();
+  await page.getByRole("button",{name:"Create quotation",exact:true}).click();
   await page
     .getByRole("button", { name: "Calculate selling price", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Save pricing version", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Prepare quotation", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Create quotation", exact: true }).click();
   await expect(
     page.locator(".quotation-pdf-pages canvas").first(),
   ).toBeVisible();
@@ -1512,7 +1373,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
     .getByRole("button", { name: "Save quotation version", exact: true })
     .click();
   const quoteHeading = page.getByRole("heading", {
-    name: /^Q-DEMO-CHATBROWSER/,
+    name: /^Q-DEMO-FLOWBROWSER/,
   });
   await expect(quoteHeading).toBeVisible();
   const number = await quoteHeading.innerText();
@@ -1527,7 +1388,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
   expect(quote).toBeTruthy();
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   await page
-    .getByRole("button", { name: /Ready for quotation approval/ })
+    .getByRole("button", { name: /Survey & Costing Preparation/ })
     .click();
   const row = page.getByRole("row", { name: new RegExp(number) });
   await expect(
@@ -1544,7 +1405,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
   ).toBeVisible();
   const unchanged = await (await page.request.get("/api/coordinator")).json();
   expect(unchanged.tasks.find((t: any) => t.id === quote.id).stage).toBe(
-    "Ready for quotation approval",
+    "Survey & Costing Preparation",
   );
   page.on("dialog", async (d) => {
     if (d.type() === "confirm") await d.accept();
@@ -1579,11 +1440,6 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
     ).toBe(true);
     await page.reload();
     await page.getByRole("button", { name: /Customer confirmation/ }).click();
-    await page
-      .getByRole("row", { name: new RegExp(number) })
-      .getByRole("button", { name: "Record PO / approval received" })
-      .click();
-    await page.getByRole("button", { name: /IPO preparation/ }).click();
     await page
       .getByRole("row", { name: new RegExp(number) })
       .getByRole("button", { name: "Open workflow" })
@@ -1823,7 +1679,7 @@ test("quotation page saves and submits, management previews discount and request
         requestKey: crypto.randomUUID(),
       },
     });
-    expect(saved.ok()).toBe(true);
+    expect(saved.ok(),await saved.text()).toBe(true);
     return saved.json();
   }
   const price = await newPricing();
@@ -1874,7 +1730,7 @@ test("quotation page saves and submits, management previews discount and request
     page.getByRole("row", { name: /Markup on cost/ }).first(),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Approve quotation", exact: true })
+    .getByRole("button", { name: "Final approve quotation", exact: true })
     .click();
   await expect(page.getByRole("alert").filter({ hasText: "Request revision" }).first()).toContainText("Request revision");
   await discount.fill("");
@@ -2075,7 +1931,7 @@ test("quotation page saves and submits, management previews discount and request
     "Profit preview temporarily unavailable",
   );
   await expect(
-    page.getByRole("button", { name: "Approve quotation", exact: true }),
+    page.getByRole("button", { name: "Final approve quotation", exact: true }),
   ).toBeEnabled();
   await page
     .getByLabel("Review comments", { exact: true })
@@ -2087,13 +1943,13 @@ test("quotation page saves and submits, management previews discount and request
   const savedDiscount = aq.snapshot.input.discount ?? "0";
   await approvalDiscount.fill(String(Number(savedDiscount) + 1));
   await page
-    .getByRole("button", { name: "Approve quotation", exact: true })
+    .getByRole("button", { name: "Final approve quotation", exact: true })
     .click();
   await expect(page.getByRole("alert").filter({ hasText: "Request revision" }).first()).toContainText("Request revision");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await approvalDiscount.fill(String(savedDiscount));
   await page
-    .getByRole("button", { name: "Approve quotation", exact: true })
+    .getByRole("button", { name: "Final approve quotation", exact: true })
     .click();
   await page
     .getByRole("dialog")
@@ -2107,7 +1963,7 @@ test("quotation page saves and submits, management previews discount and request
     ).workflow_status,
   ).toBe("Submitted");
   await page
-    .getByRole("button", { name: "Approve quotation", exact: true })
+    .getByRole("button", { name: "Final approve quotation", exact: true })
     .click();
   await page
     .getByRole("dialog")
@@ -2298,7 +2154,7 @@ test("Design uploads a physical survey, sends technical requirements without bra
   });
   expect(coord.ok()).toBe(true);
   await page.reload();
-  await page.getByRole("button", { name: /Survey preparation/ }).click();
+  await page.getByRole("button", { name: /Survey & Costing Preparation/ }).click();
   await page
     .getByRole("row")
     .filter({ hasText: "DESIGN workflow site" })
