@@ -45,7 +45,8 @@ button:disabled{cursor:not-allowed}
 @media(max-width:700px){.pz-form-grid{grid-template-columns:1fr}.pz-panel{padding:var(--pz-space-4)}.pz-action-row{align-items:stretch}.pz-action-row .pz-button{flex:1 1 140px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid var(--pz-focus);outline-offset:3px}
-@supports(grid-template-rows:subgrid){.pz-form-grid>.pz-field{grid-row:span 3;grid-template-rows:subgrid}}
+@media(min-width:701px){@supports(grid-template-rows:subgrid){.pz-form-grid>.pz-field{grid-row:span 3;grid-template-rows:subgrid}}}
+@media(max-width:700px){.pz-field small[data-empty=true]{display:none}}
 
 /* Coordinator daily workspace: presentation filters, never workflow states. */
 .workspace-groups{justify-content:flex-start}

@@ -46,12 +46,13 @@ export function appendPeachtreePage(
     columnStyles: { 1: { halign: "right" } },
     head: [["Peachtree job-ledger phase", "Selling value (PKR)"]],
     body: d.phases.map((p) => [p.name, money(p.amount)]),
-    foot: [["PHASE TOTAL", money(d.phaseTotal)]],
+    foot: [["PHASE TOTAL", {content:money(d.phaseTotal),styles:{halign:"right"}}]],
   });
   autoTable(pdf, {
     startY: (pdf as any).lastAutoTable.finalY + 6,
     theme: "plain",
     styles: { fontSize: 9, cellPadding: 2 },
+    columnStyles: { 1: { halign: "right" } },
     body:
       d.version >= 2 && d.taxMode === "Tax Included"
         ? [["IPO payable", money(d.ipoPayable)]]

@@ -22,8 +22,6 @@ export function BessSelector({
         legacyBess(initial.inverter ?? "", Number(initial.batteryKwh)),
     );
   }, [initial.bessId, initial.inverter, initial.batteryKwh]);
-  const [search,setSearch]=useState("");
-  const matches=(v:any)=>v.id===id || `${v.id.replace(/^BESS-/,"")} ${v.inverter??"6 kW SP"} ${v.batteryKwh}`.toLowerCase().includes(search.trim().toLowerCase());
   const sp = singlePhaseConfigurations.find(option => option.id === id);
   const resolve = (value: string) => findBess(value) ?? (() => {
     const entry = singlePhaseConfigurations.find(option => option.id === value);
@@ -31,7 +29,7 @@ export function BessSelector({
   })();
   const b = resolve(id);
   return (
-    <div className="bess-selection"><label>Search BESS IDs<input type="search" aria-label="Search BESS IDs" value={search} onChange={e=>setSearch(e.target.value)} placeholder="ID, inverter size or battery capacity"/></label><label>
+    <label>
       BESS ID
       <select
         name="bessId"
@@ -46,10 +44,10 @@ export function BessSelector({
       >
         <option value="">Select BESS ID</option>
         <optgroup label="Single phase · 6 kW LV">
-          {singlePhaseConfigurations.filter(matches).map(v => <option key={v.id} value={v.id}>{v.id} · 6 kW SP · {v.batteryKwh} kWh</option>)}
+          {singlePhaseConfigurations.map(v => <option key={v.id} value={v.id}>{v.id} · 6 kW SP · {v.batteryKwh} kWh</option>)}
         </optgroup>
         <optgroup label="Three phase · HV">
-        {bessConfigurations.filter(matches).map((v) => (
+        {bessConfigurations.map((v) => (
           <option key={v.id} value={v.id}>
             {v.id.replace(/^BESS-/, "")} · {v.inverter} · {v.batteryKwh} kWh
           </option>
@@ -65,6 +63,6 @@ export function BessSelector({
           kWh battery modules · {b.bmsQty} BMS · {sp ? "LV · Single phase" : "HV"}
         </small>
       )}
-    </label></div>
+    </label>
   );
 }
