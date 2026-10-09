@@ -4,13 +4,15 @@ import { drawReportLogo } from "../reports/branding.js";
 import { cniWhiteLogo, cniReferenceTerms } from "./cni-assets.js";
 import { displayDate } from "../display/dates.js";
 import type { priceCni } from "./cni-policy.js";
+import { buildApprovedCniPdf } from "./cni-approved-report.js";
 export interface CniSnapshot {
  customer:{name:string;contact_person:string;phone:string;address:string;city:string;province:string;email:string};
- siteName:string;pricing:ReturnType<typeof priceCni>;validityDays:number;preparedBy:string;issuedDate:string;
+ siteName:string;pricing:ReturnType<typeof priceCni>;validityDays:number;preparedBy:string;issuedDate:string;pdfTemplate?:string;
 }
 const blue=[52,60,145] as const,red=[229,45,59] as const;
 const money=(v:string)=>new Intl.NumberFormat("en-PK",{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v));
 export function buildCniPdf(s:CniSnapshot,number:string,draft:boolean) {
+ if(s.pdfTemplate === "PHOTON-APPROVED-1")return buildApprovedCniPdf(s,number,draft);
  const p=new jsPDF();const totalKw=s.pricing.quantity*125,totalKwh=s.pricing.quantity*261;
  p.setProperties({title:number,author:"Power Zone"});
  p.setFillColor(...blue);p.rect(0,0,210,297,"F");
