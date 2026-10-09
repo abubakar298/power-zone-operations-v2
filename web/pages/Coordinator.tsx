@@ -1,3 +1,5 @@
+import {Button} from "../ui/Button.js";
+import {StatusBadge} from "../ui/StatusBadge.js";
 import { confirmTransition, confirmRevision } from "../confirm.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
@@ -251,7 +253,7 @@ export function Coordinator({
       <section className="detail-panel">
         <div className="coordination-heading">
           <h3>Pending tasks{data ? ` (${visibleTasks.length})` : ""}</h3>
-          <button type="button" className="workflow-button" onClick={() => setFilter("All")} aria-pressed={filter === "All"}>All pending tasks</button>
+          <Button variant="neutral" onClick={() => setFilter("All")} aria-pressed={filter === "All"}>All pending tasks</Button>
           <label>
             Stage
             <select value={filter} onChange={(e) => setFilter(e.target.value)}>
@@ -329,15 +331,15 @@ export function Coordinator({
                           ? "15 min survey → quote target"
                           : "Tracking elapsed time"}
                       <br />
-                      <strong>{overdue(t) ? "Overdue" : "In progress"}</strong>
+                      <StatusBadge tone={overdue(t) ? "warning" : "pending"}>{overdue(t) ? "Overdue" : "In progress"}</StatusBadge>
                     </td>
                     <td>
-                      <button
-                        className="workflow-button"
+                      <Button
+                        variant="secondary"
                         onClick={() => onOpen(t)}
                       >
                         Open workflow
-                      </button>
+                      </Button>
                       {t.kind === "Sale confirmation" && (
                         <div className="bucket-actions">
                           {t.status ===

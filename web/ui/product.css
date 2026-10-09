@@ -1,0 +1,48 @@
+/* Shared standards; legacy module layouts remain in styles.css. */
+:root{font-family:var(--pz-font)}
+button,input,select,textarea{font:inherit}
+button:disabled{cursor:not-allowed}
+:where(button,a,input,select,textarea,summary):focus-visible{outline:3px solid var(--pz-focus);outline-offset:3px}
+.pz-button{display:inline-flex;align-items:center;justify-content:center;gap:var(--pz-space-2);min-height:var(--pz-control-height);padding:10px 16px;border:1px solid transparent;border-radius:var(--pz-radius-control);font-size:var(--pz-text-sm);font-weight:600;line-height:1.35;text-align:center;text-decoration:none;white-space:normal;cursor:pointer}
+.pz-button.pz-button--primary,.primary{background:var(--pz-primary);color:#fff}
+.pz-button.pz-button--primary:hover,.primary:hover{background:var(--pz-primary-hover)}
+.pz-button.pz-button--secondary{background:var(--pz-secondary-bg);color:var(--pz-secondary-text);border-color:var(--pz-border)}
+.pz-button.pz-button--neutral{background:var(--pz-surface);color:var(--pz-text);border-color:var(--pz-border)}
+.pz-button.pz-button--success{background:var(--pz-success);color:#fff}
+.pz-button.pz-button--warning{background:var(--pz-warning-bg);color:var(--pz-warning);border-color:var(--pz-warning)}
+.pz-button.pz-button--danger{background:var(--pz-danger);color:#fff}
+.pz-button:disabled{background:var(--pz-disabled-bg);color:var(--pz-disabled-text);border-color:var(--pz-border);opacity:1;cursor:not-allowed}
+.pz-button[aria-busy=true]{cursor:progress}
+.pz-status{display:inline-flex;align-items:center;gap:4px;border-radius:6px;padding:4px 8px;font-size:var(--pz-text-xs);font-weight:600;line-height:1.4}
+.pz-status--pending{background:var(--pz-pending-bg);color:var(--pz-pending)}
+.pz-status--success{background:var(--pz-success-bg);color:var(--pz-success)}
+.pz-status--warning{background:var(--pz-warning-bg);color:var(--pz-warning)}
+.pz-status--danger{background:var(--pz-danger-bg);color:var(--pz-danger)}
+.pz-feedback{padding:var(--pz-space-4);border-radius:var(--pz-radius-control);font-size:var(--pz-text-sm)}
+.pz-feedback--success,.success{background:var(--pz-success-bg);color:var(--pz-success)}
+.pz-feedback--danger,.form-error{background:var(--pz-danger-bg);color:var(--pz-danger)}
+.pz-stack{display:grid;gap:var(--pz-space-5)}
+.pz-panel{background:var(--pz-surface);border:1px solid var(--pz-border);border-radius:var(--pz-radius-card);padding:var(--pz-space-5)}
+.pz-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--pz-space-5)}
+.pz-field{display:grid;grid-template-rows:auto auto 1fr;align-content:start;gap:var(--pz-space-2);min-width:0}
+.pz-field label{font-size:var(--pz-text-sm);font-weight:600;color:var(--pz-text)}
+.pz-field :is(input,select,textarea){width:100%;min-height:var(--pz-control-height);padding:10px 12px;border:1px solid var(--pz-border);border-radius:var(--pz-radius-control);background:var(--pz-surface);color:var(--pz-text)}
+.pz-field small{color:var(--pz-muted);font-size:var(--pz-text-xs);line-height:1.5;min-height:18px}
+.pz-action-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:var(--pz-space-3)}
+.pz-numeric,.numeric{font-variant-numeric:tabular-nums;text-align:right}
+.pz-table-scroll{overflow-x:auto;max-width:100%}
+.pz-table{width:100%;border-collapse:collapse;font-size:var(--pz-text-sm)}
+.pz-table th,.pz-table td{padding:12px;border-bottom:1px solid var(--pz-border);vertical-align:top;text-align:left}
+.pz-table :is(th,td).pz-numeric{text-align:right}
+.coordinator-panel .stage-card.selected{background:var(--pz-selected-bg);border-color:var(--pz-selected-border)}
+.coordinator-panel .stage-card small{color:var(--pz-muted)}
+.coordinator-panel .stage-card strong{font-variant-numeric:tabular-nums}
+.coordinator-panel .task-overdue{background:var(--pz-warning-bg)}
+.coordinator-panel .task-overdue strong{color:var(--pz-warning)}
+.coordinator-panel .coordination-heading{flex-wrap:wrap}
+.coordinator-panel .coordination-heading select{min-height:var(--pz-control-height)}
+.coordinator-panel .order-table :is(th,td){font-size:var(--pz-text-sm);padding:12px}
+@media(max-width:700px){.pz-form-grid{grid-template-columns:1fr}.pz-panel{padding:var(--pz-space-4)}.pz-action-row{align-items:stretch}.pz-action-row .pz-button{flex:1 1 140px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid var(--pz-focus);outline-offset:3px}
+@supports(grid-template-rows:subgrid){.pz-form-grid>.pz-field{grid-row:span 3;grid-template-rows:subgrid}}
