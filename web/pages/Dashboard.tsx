@@ -150,9 +150,17 @@ export function Dashboard({
             <div className="nav-label">WORKSPACE</div>
             <nav aria-label="Main navigation">
               <button className={view === "dashboard" ? "nav-active" : ""} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard")}><Icon name="dashboard" />Coordinator Workspace</button>
-              <button className={view === "boqs" ? "nav-active" : ""} aria-current={view === "boqs" ? "page" : undefined} onClick={() => {setRevisionDraftId(undefined);navigate("boqs");}}><Icon name="file" />Create BOQ</button>
               <button className={view === "masters" ? "nav-active" : ""} aria-current={view === "masters" ? "page" : undefined} onClick={() => navigate("masters")}><Icon name="users" />Master Data</button>
             </nav>
+            <details className="project-nav-group">
+              <summary>Project Operations</summary>
+              <nav className="upcoming-nav" aria-label="Project Operations">
+                <button className={view === "boqs" ? "nav-active" : ""} aria-current={view === "boqs" ? "page" : undefined} onClick={() => {setRevisionDraftId(undefined);navigate("boqs");}}><Icon name="file" />Surveys &amp; BOQs</button>
+                <button className={view === "quotes" || view === "pricing" ? "nav-active" : ""} aria-current={view === "quotes" || view === "pricing" ? "page" : undefined} onClick={() => {setPricingRevisionId(undefined);setPricingRequestId(undefined);navigate("quotes");}}><Icon name="file" />Quotations</button>
+                <button className={view === "orders" ? "nav-active" : ""} aria-current={view === "orders" ? "page" : undefined} onClick={() => navigate("orders")}><Icon name="file" />IPOs</button>
+                <button className={view === "operations" ? "nav-active" : ""} aria-current={view === "operations" ? "page" : undefined} onClick={() => {setOperationsIpoId(undefined);navigate("operations");}}><Icon name="file" />BOQs to Operations</button>
+              </nav>
+            </details>
           </> : <>
 
           <div className="nav-label">WORKSPACE</div>
