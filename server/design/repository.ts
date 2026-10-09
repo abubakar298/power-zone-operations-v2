@@ -1,3 +1,4 @@
+import { allocateReference } from "../documents/references.js";
 import { findBess } from "../boq/bess.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -158,6 +159,10 @@ export class DesignRepository {
       if (!parsed.success)
         throw new HttpError(400, parsed.error.issues[0].message);
       const inputs = parsed.data;
+      if(!row.number) {
+        const number=await allocateReference(c,"SSR",id,inputs.customerId,inputs.siteCode);
+        await c.query("UPDATE design_surveys SET number=$2 WHERE id=$1",[id,number]);
+      }
       await this.uploads(c, actor, inputs.uploadIds);
       const customer = (
         await c.query(

@@ -21,7 +21,7 @@ test("C&I standard/revision/discount workflow, immutable history and departmenta
  const post=(path:string,body:object,role="Coordinator")=>request(app).post(`/api/cni${path}`).set("Cookie",users[role].cookie).set("Origin",origin).set("X-CSRF-Token",users[role].csrf).send(body);
  const overview=async(role="Coordinator",team=false)=>(await request(app).get(`/api/coordinator${team?"?scope=team":""}`).set("Cookie",users[role].cookie).expect(200)).body;
  const cniTasks=async(role="Coordinator",team=false)=>(await overview(role,team)).tasks.filter((t:any)=>t.kind==="C&I proposal");
- const base={customerId:3,siteName:"Isolated C&I project",quantity:3,presentation:"Inclusive",discount:"0"};
+ const base={siteCode:"3432",customerId:3,siteName:"Isolated C&I project",quantity:3,presentation:"Inclusive",discount:"0"};
  await request(app).get("/api/cni").expect(401);
  await request(app).post("/api/cni").set("Cookie",users.Coordinator.cookie).set("Origin",origin).send(base).expect(403);
  const saved=(await post("/",base).expect(201)).body;

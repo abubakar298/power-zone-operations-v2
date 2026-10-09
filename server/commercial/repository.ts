@@ -1,3 +1,4 @@
+import { allocateReference, revisedReference, boqIdentity } from "../documents/references.js";
 import {
   managementReview,
   type ReviewAdjustment,
@@ -584,7 +585,9 @@ export class CommercialRepository {
             )
           ).rows[0].version,
         ),
-        number = `Q-${preview.snapshot.boqNumber}-V${version}`;
+        identity = await boqIdentity(c,preview.boqRevisionId),
+        revision = Number((await c.query("SELECT count(*)::integer AS n FROM quotation_versions q JOIN boq_revisions r ON r.id=q.boq_revision_id WHERE r.boq_id=$1",[identity.family_id])).rows[0].n)+1,
+        number = revisedReference(await allocateReference(c,"QT",identity.family_id,identity.customer_id,identity.site_code),revision);
       const row = (
         await c.query(
           "INSERT INTO quotation_versions(id,pricing_id,boq_revision_id,version,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
@@ -634,7 +637,10 @@ export class CommercialRepository {
       const old=snapshot.footer.find((r:any)=>r.label==="Special Discount");
       net.amount=new Decimal(net.amount).add(old.amount).sub(discount).toFixed(2);old.amount=new Decimal(discount).toFixed(2);snapshot.input.discount=old.amount;
       snapshot.managementAdjustment={sourceQuotationId:id,remarks:notes};
-      const next=randomUUID(),version=Number(latest.version)+1,number=`Q-${snapshot.boqNumber}-V${version}`;
+      const next=randomUUID(),version=Number(latest.version)+1;
+      const identity=await boqIdentity(c,q.boq_revision_id);
+      const revision=Number((await c.query("SELECT count(*)::integer AS n FROM quotation_versions v JOIN boq_revisions r ON r.id=v.boq_revision_id WHERE r.boq_id=$1",[identity.family_id])).rows[0].n)+1;
+      const number=revisedReference(await allocateReference(c,"QT",identity.family_id,identity.customer_id,identity.site_code),revision);
       await c.query("INSERT INTO quotation_versions(id,pricing_id,boq_revision_id,version,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",[next,q.pricing_id,q.boq_revision_id,version,number,snapshot,fingerprint(snapshot),randomUUID(),actor]);
       await c.query("INSERT INTO quotation_additional_inputs(quotation_id,input) SELECT $1,input FROM quotation_additional_inputs WHERE quotation_id=$2",[next,id]);
       for(const kind of ["Submitted","Approved"])await c.query("INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by,created_at) VALUES($1,$2,$3,$4,$5,now()+CASE WHEN $3='Approved' THEN interval '1 microsecond' ELSE interval '0 seconds' END)",[randomUUID(),next,kind,notes,actor]);

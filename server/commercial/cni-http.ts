@@ -1,3 +1,4 @@
+import { allocateReference, revisedReference } from "../documents/references.js";
 import { snapshotCniCost, reviewCni } from "./cni-costing.js";
 import { Router, type RequestHandler } from "express";
 import type { Pool } from "pg";
@@ -10,6 +11,7 @@ import { priceCni, cniPolicy } from "./cni-policy.js";
 import { buildCniPdf } from "./cni-report.js";
 const schema=z.object({
  customerId:z.number().int().nonnegative(), siteName:z.string().trim().min(1).max(200),
+ siteCode:z.string().trim().regex(/^[A-Za-z0-9_-]{1,40}$/).optional(),
  quantity:z.number().int().min(1).max(1000), presentation:z.enum(["Inclusive","Separate"]),
  discount:z.string().regex(/^\d{1,14}(\.\d{1,2})?$/).default("0"),
  validityDays:z.number().int().min(1).max(90).default(7),
@@ -42,7 +44,7 @@ export function cniHttp(pool:Pool,requireSession:RequestHandler) {
   const client=await pool.connect();
   try {
    await client.query("BEGIN");
-   const customer=await client.query("SELECT id,name,contact_person,phone,email,address,city,province FROM customers WHERE id=$1 AND status='Active'",[v.customerId]);
+   const customer=await client.query("SELECT id,name,short_code,contact_person,phone,email,address,city,province FROM customers WHERE id=$1 AND status='Active'",[v.customerId]);
    if(!customer.rowCount)throw new HttpError(400,"Select an active customer.");
    const id=v.proposalId??randomUUID();let version=1;
    if(v.proposalId){
@@ -53,8 +55,12 @@ export function cniHttp(pool:Pool,requireSession:RequestHandler) {
     if(last.rows[0].version!==v.expectedVersion)throw new HttpError(409,"This proposal changed. Reload before revising.");
     version=Number(last.rows[0].version)+1;
    } else await client.query("INSERT INTO cni_proposals(id,created_by,customer_id) VALUES($1,$2,$3)",[id,actor.id,v.customerId]);
-   const versionId=randomUUID(),number=`CNI-${id.slice(0,8).toUpperCase()}-V${version}`;
-   const snapshot={customer:customer.rows[0],siteName:v.siteName,pricing,validityDays:v.validityDays,preparedBy:actor.display_name,issuedDate:new Date().toISOString()};
+   const prior=v.proposalId?(await client.query("SELECT number,snapshot FROM cni_proposal_versions WHERE proposal_id=$1 ORDER BY version DESC LIMIT 1",[id])).rows[0]:undefined;
+   const siteCode=v.siteCode??prior?.snapshot.siteCode;
+   if(!siteCode)throw new HttpError(400,"Enter the site code for this proposal.");
+   if(prior?.snapshot.siteCode&&prior.snapshot.siteCode!==siteCode)throw new HttpError(400,"Revision site identity cannot change.");
+   const versionId=randomUUID(),number=prior&&!prior.number.startsWith("CPZ-")?`CNI-${id.slice(0,8).toUpperCase()}-V${version}`:revisedReference(await allocateReference(client,"QT",id,v.customerId,siteCode),version);
+   const snapshot={customer:customer.rows[0],siteName:v.siteName,siteCode,pricing,validityDays:v.validityDays,preparedBy:actor.display_name,issuedDate:new Date().toISOString()};
    await client.query("INSERT INTO cni_proposal_versions(id,proposal_id,version,number,snapshot,internal_cost_snapshot,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)",[versionId,id,version,number,snapshot,snapshotCniCost(v.quantity),actor.id]);
    await client.query("INSERT INTO cni_proposal_actions(id,version_id,action,created_by) VALUES($1,$2,'Approval requested',$3)",[randomUUID(),versionId,actor.id]);
    await client.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)",[actor.id,`C&I ${number}: quotation approval requested`]);
@@ -89,7 +95,7 @@ export function cniHttp(pool:Pool,requireSession:RequestHandler) {
    const instructions=v.recommendedDiscount===undefined?{}:{recommendedDiscount:reviewCni(latest.rows[0].snapshot.pricing,latest.rows[0].internal_cost_snapshot,{discount:v.recommendedDiscount}).recommendedDiscount};
    if(v.action==="Approved"&&v.recommendedDiscount!==undefined&&v.recommendedDiscount!==latest.rows[0].snapshot.pricing.discount){
     const prior=latest.rows[0],snapshot={...prior.snapshot,pricing:priceCni({quantity:prior.snapshot.pricing.quantity,presentation:prior.snapshot.pricing.presentation,taxRate:prior.snapshot.pricing.taxRate,discount:v.recommendedDiscount})};
-    const nextId=randomUUID(),version=prior.version+1,number=prior.number.replace(/-V\d+$/,`-V${version}`);
+    const nextId=randomUUID(),version=prior.version+1,number=prior.number.startsWith("CPZ-")?revisedReference(prior.number,version):prior.number.replace(/-V\d+$/,`-V${version}`);
     await client.query("INSERT INTO cni_proposal_actions(id,version_id,action,remarks,instructions,created_by) VALUES($1,$2,'Revision requested',$3,$4,$5)",[randomUUID(),v.versionId,"Management created adjusted quotation",instructions,req.authSession!.user.id]);
     await client.query("INSERT INTO cni_proposal_versions(id,proposal_id,version,number,snapshot,internal_cost_snapshot,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)",[nextId,id,version,number,snapshot,prior.internal_cost_snapshot,req.authSession!.user.id]);
     await client.query("INSERT INTO cni_proposal_actions(id,version_id,action,remarks,instructions,created_by) VALUES($1,$2,'Approved',$3,$4,$5)",[randomUUID(),nextId,v.remarks,instructions,req.authSession!.user.id]);

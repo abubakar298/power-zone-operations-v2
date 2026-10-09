@@ -339,7 +339,7 @@ for (const quick of [false, true]) {
         .fill("Approved requirements, collect delivery details in Operations.");
       await button(page, "Send BOQ to Operations").click();
       await expect(
-        page.getByRole("heading", { name: /^OPS-BOQ-/ }),
+        page.getByRole("heading", { name: /^CPZ-BOQ-/ }),
       ).toBeVisible();
       await button(page, "Dashboard").click();
       await expect(

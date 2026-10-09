@@ -1,3 +1,4 @@
+import { allocateReference, boqIdentity } from "../documents/references.js";
 import { ownedCondition } from "../http/permissions.js";
 import {
   validateExternal,
@@ -385,15 +386,8 @@ export class OrdersRepository {
           actor,
         ],
       );
-      const serial =
-        Number(
-          (
-            await c.query(
-              "SELECT count(*) AS count FROM internal_purchase_orders",
-            )
-          ).rows[0].count,
-        ) + 1;
-      const number = `IPO-${String(serial).padStart(6, "0")}`;
+      const identity=await boqIdentity(c,preview.snapshot.boqRevisionId);
+      const number=await allocateReference(c,"IPO",id,identity.customer_id,identity.site_code);
       const row = (
         await c.query(
           "INSERT INTO internal_purchase_orders(id,customer_po_id,submission_id,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",

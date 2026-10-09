@@ -210,7 +210,7 @@ test("survey authentication, validation, persisted drafts and concurrent save is
     [200, 200],
   );
   assert.equal(responses[0].body.id, responses[1].body.id);
-  assert.equal(responses[0].body.number, "BAFL-05850-001-R0");
+  assert.match(responses[0].body.number, /^CPZ-BOQ-\d{2}-001-0003-003 \(BAFL-05850\)$/);
   assert.equal(
     (
       await db.pool.query("SELECT code FROM sites WHERE id=$1", [
@@ -384,7 +384,7 @@ test("costing PDF exports require authentication, owned drafts and an unchanged 
     .set("Cookie", cookie)
     .expect(200);
   assert.equal(saved.body.subarray(0, 5).toString(), "%PDF-");
-  assert(saved.headers["content-disposition"].includes(record.number));
+  assert(saved.headers["content-disposition"].includes(record.number.replace(/[^A-Za-z0-9._-]/g,"-")));
 });
 
 test("general quotations derive exact cable allowances server-side without changing surveyed BOQs", () => {

@@ -13,7 +13,7 @@ test('Notification bell resolves authorized C&I approval, preserves direct links
   try {
     const login=await coordinator.request.post('/api/auth/login',{headers:{Origin:origin},data:{email:'notifications-coordinator@example.test',password}});
     const headers={Origin:origin,'X-CSRF-Token':(await login.json()).csrfToken};
-    const created=await coordinator.request.post('/api/cni/',{headers,data:{customerId:3,siteName:'Notification browser site',quantity:1,presentation:'Inclusive',discount:'0'}});
+    const created=await coordinator.request.post('/api/cni/',{headers,data:{customerId:3,siteCode:'NOTIFY',siteName:'Notification browser site',quantity:1,presentation:'Inclusive',discount:'0'}});
     expect(created.status(),await created.text()).toBe(201);
     const proposal=await created.json();
     await page.goto('/dashboard');

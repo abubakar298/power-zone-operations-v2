@@ -326,7 +326,7 @@ test("revision reasons, identities and latest-base checks preserve immutable R0/
     }).expect(200)
   ).body.saved;
   assert.equal(r1.boq_id, r0.boq_id);
-  assert.equal(r1.number, "BAFL-REV001-001-R1");
+  assert.match(r1.number, /^CPZ-BOQ-\d{2}-\d{3}-0003-\d{3}-R1 \(BAFL-REV001\)$/);
   assert.equal(r1.revision_reason, "Updated DC routing");
   await post(manager, `/reviews/${b.s.id}/decision`, {
     outcome: "Approved",
@@ -351,7 +351,7 @@ test("revision reasons, identities and latest-base checks preserve immutable R0/
       comments: "",
     }).expect(200)
   ).body.saved;
-  assert.equal(r2.number, "BAFL-REV001-001-R2");
+  assert.equal(r2.number, r1.number.replace("-R1 ","-R2 "));
   const history = (await get(employee, `/${r2.id}/history`).expect(200)).body
     .revisions;
   assert.deepEqual(

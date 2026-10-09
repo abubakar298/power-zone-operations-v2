@@ -1,3 +1,4 @@
+const referencePattern=(value:string)=>new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));
 import { test, expect } from "@playwright/test";
 import { jsPDF } from "jspdf";
 import { Decimal } from "decimal.js";
@@ -292,9 +293,9 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page.getByRole("button", { name: "Create quotation", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Commercial pricing", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
-  await page.getByRole("button", { name: "BAFL-05850-001-R0", exact: true }).click();
+  await page.getByRole("button", { name: "CPZ-BOQ-26-001-0003-003 (BAFL-05850)", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "BAFL-05850-001-R0", exact: true }),
+    page.getByRole("heading", { name: "CPZ-BOQ-26-001-0003-003 (BAFL-05850)", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("PKR 6,456,786.00", { exact: true })).toBeVisible();
   const savedPdfDownload = page.waitForEvent("download");
@@ -302,7 +303,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .getByRole("link", { name: "Download costing PDF", exact: true })
     .click();
   const savedReport = await savedPdfDownload;
-  expect(savedReport.suggestedFilename()).toBe("BAFL-05850-001-R0-costing.pdf");
+  expect(savedReport.suggestedFilename()).toBe("CPZ-BOQ-26-001-0003-003--BAFL-05850--costing.pdf");
   const savedPdfPath = await savedReport.path();
   expect((await readFile(savedPdfPath!)).subarray(0, 5).toString()).toBe(
     "%PDF-",
@@ -334,14 +335,14 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
   await page
-    .getByRole("button", { name: "BAFL-05850-001-R1", exact: true })
+    .getByRole("button", { name: "CPZ-BOQ-26-001-0003-003-R1 (BAFL-05850)", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "BAFL-05850-001-R1", exact: true }),
+    page.getByRole("heading", { name: "CPZ-BOQ-26-001-0003-003-R1 (BAFL-05850)", exact: true }),
   ).toBeVisible();
   await page
     .getByRole("button", {
-      name: "BAFL-05850-001-R0 · Initial BOQ",
+      name: "CPZ-BOQ-26-001-0003-003 (BAFL-05850) · Initial BOQ",
       exact: true,
     })
     .click();
@@ -424,14 +425,14 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .getByRole("button", { name: "Save quotation version", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Q-BAFL-05850-001-R0-V1", exact: true }),
+    page.getByRole("heading", { name: "CPZ-QT-26-001-0003-003-R1 (BAFL-05850)", exact: true }),
   ).toBeVisible();
   const quotationDownload = page.waitForEvent("download");
   await page
     .getByRole("link", { name: "Download quotation PDF", exact: true })
     .click();
   expect((await quotationDownload).suggestedFilename()).toBe(
-    "Q-BAFL-05850-001-R0-V1-quotation.pdf",
+    "CPZ-QT-26-001-0003-003-R1 (BAFL-05850)-quotation.pdf",
   );
   await page
     .getByRole("button", { name: "Create new quotation version", exact: true })
@@ -458,7 +459,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .getByRole("button", { name: "Save quotation version", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Q-BAFL-05850-001-R0-V2", exact: true }),
+    page.getByRole("heading", { name: "CPZ-QT-26-001-0003-003-R2 (BAFL-05850)", exact: true }),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "Create new quotation version", exact: true })
@@ -508,7 +509,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(page.getByText(/^Customer revision ·/)).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Quotations", exact: true }).click();
-  await page.getByRole("button", { name: /Q-BAFL-05850-001-R2-V1/ }).click();
+  await page.getByRole("button", { name: /CPZ-QT-26-001-0003-003-R3 \(BAFL-05850\)/ }).click();
   await page
     .getByRole("button", { name: "Create new quotation version", exact: true })
     .click();
@@ -545,7 +546,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .getByRole("button", { name: "Toggle navigation", exact: true })
     .click();
   await page.getByRole("button", { name: "Quotations", exact: true }).click();
-  await page.getByRole("button", { name: /Q-BAFL-05850-001-R0-V1/ }).click();
+  await page.getByRole("button", { name: /CPZ-QT-26-001-0003-003-R1 \(BAFL-05850\)/ }).click();
   await expect(page.locator(".quote-metadata")).toContainText("7 Days");
 
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -556,12 +557,12 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     acceptedQuote
       .locator("option")
-      .filter({ hasText: "Q-BAFL-05850-001-R0-V1" }),
+      .filter({ hasText: "CPZ-QT-26-001-0003-003-R1 (BAFL-05850)" }),
   ).toHaveCount(1);
   await acceptedQuote.selectOption(
     (await acceptedQuote
       .locator("option")
-      .filter({ hasText: "Q-BAFL-05850-001-R0-V1" })
+      .filter({ hasText: "CPZ-QT-26-001-0003-003-R1 (BAFL-05850)" })
       .getAttribute("value"))!,
   );
   await expect(page.getByLabel("Sale confirmation type")).toHaveValue("");
@@ -640,13 +641,13 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .getByRole("button", { name: "Customer PO & IPO", exact: true })
     .click();
   await page
-    .getByRole("button", { name: /Q-BAFL-05850-001-R0-V1 · Customer PO ·/ })
+    .getByRole("button", { name: /CPZ-QT-26-001-0003-003-R1 \(BAFL-05850\) · Customer PO ·/ })
     .click();
   await page
     .getByRole("button", { name: "Approve evidence & save IPO" })
     .click();
   await expect(
-    page.getByRole("heading", { name: "IPO-000001 · Saved IPO" }),
+    page.getByRole("heading", { name: "CPZ-IPO-26-001-0003-003 (BAFL-05850) · Saved IPO" }),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "Send IPO to Accounts", exact: true })
@@ -663,7 +664,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .click();
   const ipoDownload = await downloadPromise;
   expect(ipoDownload.suggestedFilename()).toBe(
-    "IPO-000001-IPO-and-Peachtree.pdf",
+    "CPZ-IPO-26-001-0003-003 (BAFL-05850)-IPO-and-Peachtree.pdf",
   );
   const ipoFile = await ipoDownload.path();
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -678,7 +679,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .map((i: any) => i.str ?? "")
     .join(" ");
   expect(packText).toContain("PEACHTREE DIVISION");
-  expect(packText).toContain("IPO-000001");
+  expect(packText).toContain("CPZ-IPO-26-001-0003-003 (BAFL-05850)");
   await packLoadingTask.destroy();
   await ipoDownload.saveAs("test-results/ipo-browser.pdf");
   await page
@@ -694,14 +695,14 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .getByRole("button", { name: "Send BOQ to Operations", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "OPS-BOQ-000001", exact: true }),
+    page.getByRole("heading", { name: "CPZ-BOQ-26-002-0003-003 (BAFL-05850)", exact: true }),
   ).toBeVisible();
   await page.reload();
   await page
     .getByRole("button", { name: "BOQ to Operations", exact: true })
     .click();
   await expect(
-    page.getByRole("cell", { name: /^OPS-BOQ-000001/ }),
+    page.getByRole("cell", { name: /^CPZ-BOQ-26-002-0003-003 \(BAFL-05850\)/ }),
   ).toBeVisible();
   await page
     .getByRole("tab", { name: "Operations · Received BOQs", exact: true })
@@ -1200,7 +1201,7 @@ test("Coordinator records external quotation approval with screenshots without r
   const quote=await standardQuote(page.request,headers,revisionId);
   await page.goto("/dashboard");
   await page.getByRole("button",{name:/Quotation approval/}).click();
-  await page.getByRole("row",{name:new RegExp(quote.number)}).getByRole("button",{name:"Open workflow",exact:true}).click();
+  await page.getByRole("row",{name:referencePattern(quote.number)}).getByRole("button",{name:"Open workflow",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Quotation workflow · Submitted",exact:true})).toBeVisible();
   await page.getByText("Record WhatsApp / verbal approval",{exact:true}).click();
   await page.getByLabel("Approver name",{exact:true}).fill("Director Operations");
@@ -1350,7 +1351,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
   const session = await login.json();
   const headers = { Origin: origin, "X-CSRF-Token": session.csrfToken };
   const records=await (await page.request.get("/api/boqs")).json();
-  const base=records.boqs.find((r:any)=>r.number==="DEMO-CHATBROWSER-001-R0");
+  const base=records.boqs.find((r:any)=>r.number.endsWith(" (DEMO-CHATBROWSER)"));
   const source=await (await page.request.get(`/api/boqs/${base.id}`)).json();
   const inputs={...source.snapshot.survey,siteId:undefined,siteName:"SAMPLE Safe cancellation journey",siteCode:"FLOWBROWSER"};
   const d=await (await page.request.post("/api/boqs/drafts",{headers,data:{version:0,inputs}})).json();
@@ -1373,7 +1374,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
     .getByRole("button", { name: "Save quotation version", exact: true })
     .click();
   const quoteHeading = page.getByRole("heading", {
-    name: /^Q-DEMO-FLOWBROWSER/,
+    name: /^CPZ-QT-.*\(DEMO-FLOWBROWSER\)/,
   });
   await expect(quoteHeading).toBeVisible();
   const number = await quoteHeading.innerText();
@@ -1390,7 +1391,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
   await page
     .getByRole("button", { name: /Survey & Costing Preparation/ })
     .click();
-  const row = page.getByRole("row", { name: new RegExp(number) });
+  const row = page.getByRole("row", { name: referencePattern(number) });
   await expect(
     row.getByRole("button", { name: "Send for approval" }),
   ).toBeVisible();
@@ -1441,7 +1442,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
     await page.reload();
     await page.getByRole("button", { name: /Customer confirmation/ }).click();
     await page
-      .getByRole("row", { name: new RegExp(number) })
+      .getByRole("row", { name: referencePattern(number) })
       .getByRole("button", { name: "Open workflow" })
       .click();
     await expect(page.getByLabel("Accepted quotation")).toHaveValue(quote.id);
@@ -1561,7 +1562,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
       .getByRole("button", { name: /Operations & Accounts Handoff/ })
       .click();
     await page
-      .getByRole("row", { name: new RegExp(ipo.number) })
+      .getByRole("row", { name: referencePattern(ipo.number) })
       .getByRole("button", { name: "Open workflow" })
       .click();
     await expect(
@@ -1578,7 +1579,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
       .getByRole("button", { name: "Send BOQ to Operations", exact: true })
       .click();
     await expect(
-      page.getByRole("heading", { name: /^OPS-BOQ-/ }),
+      page.getByRole("heading", { name: /^CPZ-BOQ-/ }),
     ).toBeVisible();
     const pack = await page.request.get(`/api/orders/${ipo.id}/ipo.pdf`);
     expect(pack.ok()).toBe(true);
@@ -1687,7 +1688,7 @@ test("quotation page saves and submits, management previews discount and request
   await page
     .getByRole("button", { name: "Commercial pricing", exact: true })
     .click();
-  await page.getByRole("button", { name: new RegExp(price.number) }).click();
+  await page.getByRole("button", { name: referencePattern(price.number) }).click();
   await page
     .getByRole("button", { name: "Prepare quotation", exact: true })
     .click();
@@ -1801,7 +1802,7 @@ test("quotation page saves and submits, management previews discount and request
   ).toBe(true);
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   await page.getByRole("button", { name: /Quotation approval/ }).click();
-  const row = page.getByRole("row", { name: new RegExp(q.number) });
+  const row = page.getByRole("row", { name: referencePattern(q.number) });
   // Revision remarks must remain sendable even if the optional profit preview fails.
   await page.route("**/discount-review", (route) =>
     route.fulfill({
@@ -1926,7 +1927,7 @@ test("quotation page saves and submits, management previews discount and request
     }),
   );
   await page.getByRole("button", { name: "Quotations", exact: true }).click();
-  await page.getByRole("button", { name: new RegExp(aq.number) }).click();
+  await page.getByRole("button", { name: referencePattern(aq.number) }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Profit preview temporarily unavailable" }).first()).toContainText(
     "Profit preview temporarily unavailable",
   );

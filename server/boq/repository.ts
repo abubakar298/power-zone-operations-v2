@@ -1,3 +1,4 @@
+import { allocateReference, revisedReference } from "../documents/references.js";
 import { ownedCondition } from "../http/permissions.js";
 import { ReviewRepository } from "./reviews.js";
 import type { Pool, PoolClient } from "pg";
@@ -219,7 +220,7 @@ export class BoqRepository {
         throw new HttpError(400, "Revision identity cannot change.");
       boq = base.boq_id;
       revision = base.revision + 1;
-      number = base.number.replace(/-R\d+$/, `-R${revision}`);
+      number = revisedReference(base.number, revision);
     } else {
       const existingSite = (
         await c.query(
@@ -255,7 +256,7 @@ export class BoqRepository {
         );
       boq = randomUUID();
       revision = 0;
-      number = `${snapshot.customer.shortCode}-${s.siteCode}-001-R0`;
+      number = await allocateReference(c,"BOQ",boq,s.customerId,s.siteCode);
       await c.query(
         "INSERT INTO boqs(id,draft_id,site_id,customer_id,sequence,created_by) VALUES($1,$2,$3,$4,1,$5)",
         [boq, d.id, site, s.customerId, actor],

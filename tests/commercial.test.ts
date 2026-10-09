@@ -19,6 +19,7 @@ import {
 import { pricingSchema, quotationSchema } from "../server/commercial/schema.js";
 import { buildQuotationPdf } from "../server/commercial/report.js";
 import { hashPassword } from "../server/auth/crypto.js";
+import { revisedReference } from "../server/documents/references.js";
 import { Decimal } from "decimal.js";
 import { buildIpoPdf } from "../server/orders/report.js";
 import { fingerprint } from "../server/boq/repository.js";
@@ -350,7 +351,7 @@ test("authentication, fresh role checks, stale previews and duplicate-save prote
   );
   pricing = saved[0].body;
   assert.equal(pricing.id, saved[1].body.id);
-  assert.equal(pricing.number, "CP-BAFL-05850-001-R0-V1");
+  assert.equal(pricing.number, `CP-${boq.number}-V1`);
   await db.pool.query("UPDATE users SET role='Employee' WHERE id=$1", [
     adminId,
   ]);
@@ -381,7 +382,7 @@ test("saved quotation versions retain pricing, customer descriptions and PDF aft
   issued = saved[0].body;
   await post("/quotations/preview", input).expect(409);
   assert.equal(issued.id, saved[1].body.id);
-  assert.equal(issued.number, "Q-BAFL-05850-001-R0-V1");
+  assert.match(issued.number, /^CPZ-QT-\d{2}-001-0003-\d{3}-R1 \(BAFL-05850\)$/);
   await get(`/quotations/${issued.id}/quotation.pdf`, true).expect(403);
   await get(`/quotations/${issued.id}/copy`, true).expect(403);
   await post(
@@ -528,7 +529,7 @@ test("Full Breakup additional cost, markup and tax reconcile and stay internal a
     [
       independentBoq,
       boq.boq_id,
-      boq.number.replace(/-R0$/, "-R1"),
+      revisedReference(boq.number,1),
       boq.snapshot,
       adminId,
     ],
@@ -609,7 +610,7 @@ test("Full Breakup additional cost, markup and tax reconcile and stay internal a
   // New policy pricing requires classified BOQ scope. Keep the historical
   // quote-only-extra compatibility checks against an explicit legacy fixture.
   await post("/quotations/preview", input).expect(422);
-  const legacySnapshot = price(boq.snapshot, boq.number.replace(/-R0$/, "-R1"), pricingInput);
+  const legacySnapshot = price(boq.snapshot, revisedReference(boq.number,1), pricingInput);
   const legacyId = randomUUID();
   await db.pool.query(
     "INSERT INTO commercial_pricing_versions(id,boq_revision_id,version,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,2,$3,$4,$5,$6,$7)",

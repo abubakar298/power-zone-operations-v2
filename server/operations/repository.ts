@@ -1,3 +1,4 @@
+import { allocateReference, boqIdentity } from "../documents/references.js";
 import { ownedCondition } from "../http/permissions.js";
 import { OrdersRepository } from "../orders/repository.js";
 import { randomUUID } from "node:crypto";
@@ -111,7 +112,8 @@ export class OperationsRepository {
           409,
           "Save and review the latest delivery details before issuing to Store.",
         );
-      const number = `STORE-BOQ-${String((await c.query("SELECT count(*)::integer AS n FROM store_boq_issuances")).rows[0].n + 1).padStart(6, "0")}`;
+      const identity=await boqIdentity(c,issuance.snapshot.boqRevisionId);
+      const number=await allocateReference(c,"BOQ",randomUUID(),identity.customer_id,identity.site_code);
       const snapshot = {
         ...issuance.snapshot,
         quotationType:
@@ -387,13 +389,8 @@ export class OperationsRepository {
         notes: input.notes,
         issuedBy: u.display_name,
       };
-      const sequence =
-        (
-          await c.query(
-            "SELECT COUNT(*)::integer AS n FROM operations_boq_issuances",
-          )
-        ).rows[0].n + 1;
-      const number = `OPS-BOQ-${String(sequence).padStart(6, "0")}`;
+      const identity=await boqIdentity(c,snapshot.boqRevisionId);
+      const number=await allocateReference(c,"BOQ",randomUUID(),identity.customer_id,identity.site_code);
       const row = (
         await c.query(
           "INSERT INTO operations_boq_issuances(id,ipo_id,boq_revision_id,number,snapshot,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *",

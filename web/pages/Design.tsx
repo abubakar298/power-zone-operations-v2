@@ -241,6 +241,7 @@ export function Design({ session }: { session: Session }) {
                     )?.name ?? "Customer not selected"}
                     <br />
                     {s.inputs.siteName || "Untitled survey"}
+                    {s.number && <small>{s.number}</small>}
                   </td>
                   <td>{s.designer}</td>
                   <td>
