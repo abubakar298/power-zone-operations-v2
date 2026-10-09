@@ -128,6 +128,7 @@ export function Dashboard({
     task?: any,
   ) {
     if (["dashboard","projects","documents"].includes(view)) setOrigin(view);
+    if (next === "dashboard") window.dispatchEvent(new Event("pz:workspace-open"));
     setBucketTask(task);
     setView(next);
     setMobileOpen(false);

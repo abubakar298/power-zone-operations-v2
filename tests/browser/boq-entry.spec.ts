@@ -1,3 +1,4 @@
+import {openWorkspaceSection} from "./navigation.js";
 import { test, expect } from '@playwright/test';
 
 test('BOQ entry: provisional rates, unified customer search, automatic termination, revision loading', async ({page}) => {
@@ -7,7 +8,7 @@ test('BOQ entry: provisional rates, unified customer search, automatic terminati
   await page.getByLabel('Email address').fill('admin@example.test');
   await page.getByLabel('Password',{exact:true}).fill('browser-test-passphrase-298');
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
-  await page.getByRole('button',{name:'Master data',exact:true}).click();
+  await openWorkspaceSection(page, 'Master data');
   await page.getByRole('tab',{name:/^Rates /}).click();
   await page.getByLabel('Rate review status').selectOption('Under review');
   for (const key of ['SP AC Conduit Accessories and Box','500V 2P DC Breaker','SP DC Enclosures']) {
@@ -16,7 +17,7 @@ test('BOQ entry: provisional rates, unified customer search, automatic terminati
     await expect(row.getByText(/Temporary PKR/)).toBeVisible();
     await expect(row.getByRole('button',{name:`Edit ${key}`,exact:true})).toBeVisible();
   }
-  await page.getByRole('button',{name:'Survey & BOQ',exact:true}).click();
+  await openWorkspaceSection(page, 'Survey & BOQ');
   await page.getByRole('button',{name:'New BOQ',exact:true}).click();
   await expect(page.getByLabel('Find BOQ customer')).toHaveCount(0);
   await expect(page.getByLabel('Existing site')).toHaveCount(0);
@@ -58,7 +59,7 @@ test('BOQ entry: provisional rates, unified customer search, automatic terminati
   const review=await post('/reviews',{draftId:draft.id,version:1,fingerprint:preview.fingerprint});
   const approved=await post(`/reviews/${review.id}/decision`,{outcome:'Approved',comments:'Isolated regression'});
   await page.reload();
-  await page.getByRole('button',{name:'Survey & BOQ',exact:true}).click();
+  await openWorkspaceSection(page, 'Survey & BOQ');
   await page.getByRole('button',{name:'New BOQ',exact:true}).click();
   await page.getByLabel('Document action',{exact:true}).selectOption('revision');
   await expect(customer).toHaveCount(0);

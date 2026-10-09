@@ -1,3 +1,4 @@
+import {openWorkspaceSection} from "./navigation.js";
 import { test, expect } from '@playwright/test';
 for (const quick of [false, true]) test(`Single-phase ${quick ? 'Quick BOQ' : 'survey'} costing preview and quotation preparation`, async ({page}) => {
   const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? '3180'}`;
@@ -7,7 +8,7 @@ for (const quick of [false, true]) test(`Single-phase ${quick ? 'Quick BOQ' : 's
   await page.getByLabel('Email address').fill('admin@example.test');
   await page.getByLabel('Password',{exact:true}).fill('browser-test-passphrase-298');
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
-  await page.getByRole('button',{name:'Survey & BOQ',exact:true}).click();
+  await openWorkspaceSection(page, 'Survey & BOQ');
   await page.getByRole('button',{name:quick ? 'Quick BOQ · no survey' : 'New BOQ',exact:true}).click();
   await page.getByLabel("Customer", {exact: true}).fill("Alfalah");
   await page.getByRole("option", {name: /Alfalah/}).click();

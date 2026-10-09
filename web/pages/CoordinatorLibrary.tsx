@@ -21,8 +21,8 @@ export function CoordinatorLibrary({mode,onOpen,active}:{mode:'projects'|'docume
  <p>{mode==='projects'?'Select a customer and site to find their work and continue the project.':'Find saved documents by reference, customer, site or document type.'}</p>
  <div className="pz-form-grid">
  <Field id="library-search" label="Search references, customers or sites"><input id="library-search" value={query} onChange={e=>setQuery(e.target.value)}/></Field>
- <Field id="library-customer" label="Customer"><select id="library-customer" value={customer} onChange={e=>{setCustomer(e.target.value);setSite('')}}><option value="">All customers</option>{customers.map(c=><option key={c}>{c}</option>)}</select></Field>
- <Field id="library-site" label="Site"><select id="library-site" value={site} onChange={e=>setSite(e.target.value)}><option value="">All sites</option>{sites.map(s=><option key={s}>{s}</option>)}</select></Field>
+ <Field id="library-customer" label="Customer filter"><select id="library-customer" value={customer} onChange={e=>{setCustomer(e.target.value);setSite('')}}><option value="">All customers</option>{customers.map(c=><option key={c}>{c}</option>)}</select></Field>
+ <Field id="library-site" label="Site filter"><select id="library-site" value={site} onChange={e=>setSite(e.target.value)}><option value="">All sites</option>{sites.map(s=><option key={s}>{s}</option>)}</select></Field>
  <Field id="library-type" label="Document type"><select id="library-type" value={type} onChange={e=>setType(e.target.value)}><option value="">All document types</option>{['Survey draft','BOQ','Quotation','C&I proposal','IPO'].map(t=><option key={t}>{t}</option>)}</select></Field>
  </div>
  <div className="pz-action-row"><Button variant="neutral" onClick={()=>{setQuery('');setCustomer('');setSite('');setType('')}}>Clear filters</Button></div>

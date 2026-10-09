@@ -48,10 +48,12 @@ export function Coordinator({
       void load();
     }, 15000);
     window.addEventListener("focus", load);
+    window.addEventListener("pz:workspace-open", load);
     return () => {
       cancelled = true;
       clearInterval(timer);
       window.removeEventListener("focus", load);
+      window.removeEventListener("pz:workspace-open", load);
     };
   }, [scope, tick]);
   const minutes = (d: string) =>

@@ -1,3 +1,4 @@
+import {openWorkspaceSection} from "./navigation.js";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
@@ -84,7 +85,7 @@ for (const quick of [false, true]) {
       await login(page, `atif-${suffix}@example.test`);
       await page.reload();
       await expect(
-        page.getByRole("heading", { name: `Welcome, Atif ${suffix}.` }),
+        page.getByRole("heading", { name: "My Workspace", exact:true }),
       ).toBeVisible();
       for (const path of [
         "/api/director/portfolio",
@@ -94,7 +95,7 @@ for (const quick of [false, true]) {
         "/api/departments/Inventory",
       ])
         expect((await page.request.get(path)).status(), path).toBe(403);
-      await button(page, "Survey & BOQ").click();
+      await openWorkspaceSection(page,"Survey & BOQ");
       await button(page, quick ? "Quick BOQ · no survey" : "New BOQ").click();
       await page.getByLabel("Customer", {exact: true}).fill("Alfalah");
       await page.getByRole("option", {name: /Alfalah/}).click();
@@ -341,7 +342,7 @@ for (const quick of [false, true]) {
       await expect(
         page.getByRole("heading", { name: /^CPZ-BOQ-/ }),
       ).toBeVisible();
-      await button(page, "Dashboard").click();
+      await openWorkspaceSection(page,"Dashboard");
       await expect(
         page.getByRole("heading", { name: "Pending tasks (0)", exact: true }),
       ).toBeVisible();

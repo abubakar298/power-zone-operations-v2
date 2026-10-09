@@ -1,3 +1,4 @@
+import {openWorkspaceSection} from "./navigation.js";
 const referencePattern=(value:string)=>new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));
 import { test, expect } from "@playwright/test";
 import { jsPDF } from "jspdf";
@@ -78,12 +79,12 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("heading", { name: "My account", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await openWorkspaceSection(page, 'Dashboard');
   await page.reload();
   await expect(
     page.getByRole("heading", { name: "Welcome, Abu Bakar Siddique." }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Master data", exact: true }).click();
+  await openWorkspaceSection(page, 'Master data');
   await expect(
     page.getByRole("heading", { name: "Master data", exact: true }),
   ).toBeVisible();
@@ -127,7 +128,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "Version history" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Close history" }).click();
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await openWorkspaceSection(page, 'Dashboard');
   await page.getByRole("button", { name: "Team access", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Send invitation" }),
@@ -135,7 +136,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByText("Email activation pending.", { exact: false }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
+  await openWorkspaceSection(page, 'Survey & BOQ');
   await page.getByRole("button", { name: "New BOQ", exact: true }).click();
   await page.getByLabel("Customer", {exact: true}).fill("Alfalah");
   await page.getByRole("option", {name: /Alfalah/}).click();
@@ -300,7 +301,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   // Current workflow saves the BOQ directly; Management reviews the quotation.
   await page.getByRole("button", { name: "Create quotation", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Commercial pricing", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
+  await openWorkspaceSection(page, 'Survey & BOQ');
   await page.getByRole("button", { name: "CPZ-BOQ-26-001-0003-003 (BAFL-05850)", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "CPZ-BOQ-26-001-0003-003 (BAFL-05850)", exact: true }),
@@ -341,7 +342,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   ).toBeVisible();
   await expect(page.getByLabel("Approved BOQ revision")).not.toHaveValue("");
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
+  await openWorkspaceSection(page, 'Survey & BOQ');
   await page
     .getByRole("button", { name: "CPZ-BOQ-26-001-0003-003-R1 (BAFL-05850)", exact: true })
     .click();
@@ -516,7 +517,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .click();
   await expect(page.getByText(/^Customer revision ·/)).toBeVisible();
   await page.reload();
-  await page.getByRole("button", { name: "Quotations", exact: true }).click();
+  await openWorkspaceSection(page, 'Quotations');
   await page.getByRole("button", { name: /CPZ-QT-26-001-0003-003-R3 \(BAFL-05850\)/ }).click();
   await page
     .getByRole("button", { name: "Create new quotation version", exact: true })
@@ -553,14 +554,12 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page
     .getByRole("button", { name: "Toggle navigation", exact: true })
     .click();
-  await page.getByRole("button", { name: "Quotations", exact: true }).click();
+  await openWorkspaceSection(page, 'Quotations');
   await page.getByRole("button", { name: /CPZ-QT-26-001-0003-003-R1 \(BAFL-05850\)/ }).click();
   await expect(page.locator(".quote-metadata")).toContainText("7 Days");
 
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page
-    .getByRole("button", { name: "Customer PO & IPO", exact: true })
-    .click();
+  await openWorkspaceSection(page, 'Customer PO & IPO');
   const acceptedQuote = page.getByLabel("Accepted quotation");
   await expect(
     acceptedQuote
@@ -645,9 +644,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     }),
   ).toBeVisible();
   await page.reload();
-  await page
-    .getByRole("button", { name: "Customer PO & IPO", exact: true })
-    .click();
+  await openWorkspaceSection(page, 'Customer PO & IPO');
   await page
     .getByRole("button", { name: /CPZ-QT-26-001-0003-003-R1 \(BAFL-05850\) · Customer PO ·/ })
     .click();
@@ -706,9 +703,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "CPZ-BOQ-26-002-0003-003 (BAFL-05850)", exact: true }),
   ).toBeVisible();
   await page.reload();
-  await page
-    .getByRole("button", { name: "BOQ to Operations", exact: true })
-    .click();
+  await openWorkspaceSection(page, 'BOQ to Operations');
   await expect(
     page.getByRole("cell", { name: /^CPZ-BOQ-26-002-0003-003 \(BAFL-05850\)/ }),
   ).toBeVisible();
@@ -734,9 +729,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByText("Delivery details saved by Operations.", { exact: true }),
   ).toBeVisible();
   await page.reload();
-  await page
-    .getByRole("button", { name: "BOQ to Operations", exact: true })
-    .click();
+  await openWorkspaceSection(page, 'BOQ to Operations');
   await page
     .getByRole("tab", { name: "Operations · Received BOQs", exact: true })
     .click();
@@ -775,7 +768,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     fullPage: true,
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await openWorkspaceSection(page, 'Dashboard');
   await expect(
     page.getByRole("heading", { name: "Pending tasks" }),
   ).toBeVisible();
@@ -901,10 +894,10 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .fill("browser-coordinator-only-298");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Welcome, Atif Hameed." }),
+    page.getByRole("heading", { name: "My Workspace", exact:true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Operations Coordination" }),
+    page.getByRole("heading", { name: /^Pending tasks \(/ }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Team access", exact: true }),
@@ -912,7 +905,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("heading", { name: "Work stages" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
+  await openWorkspaceSection(page, 'Survey & BOQ');
   await page.getByRole("button", { name: "New BOQ", exact: true }).click();
   await page
     .getByLabel("New site name", { exact: true })
@@ -923,7 +916,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByText("Survey draft saved", { exact: false }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await openWorkspaceSection(page, 'Dashboard');
   await page.getByRole("button", { name: /Survey & Costing Preparation/ }).click();
   await expect(
     page.getByRole("row", { name: /SAMPLE bucket training/ }),
@@ -934,7 +927,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(page.getByLabel("New site name", { exact: true })).toHaveValue(
     "SAMPLE bucket training",
   );
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await openWorkspaceSection(page, 'Dashboard');
   await page.screenshot({
     path: "test-results/atif-dashboard-desktop.png",
     fullPage: true,
@@ -961,12 +954,13 @@ test("management bucket opens a standard quotation and isolates approval work", 
   const session = await login.json();
   const headers = { Origin: origin, "X-CSRF-Token": session.csrfToken };
   await page.goto("/dashboard");
-  await page.getByRole("button", { name: "Master data", exact: true }).click();
+  await openWorkspaceSection(page, 'Master data');
   await expect(
     page.getByRole("button", { name: "Add customer", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: /^Edit / })).toHaveCount(0);
   for (const name of ["Sites", "Rates", "Items & specifications"]) {
+    if(name==="Rates") await page.getByRole("button",{name:"Rate Master",exact:true}).click();
     await page.getByRole("tab", { name: new RegExp(`^${name} `) }).click();
     await expect(
       page.getByRole("button", { name: /^Edit / }).first(),
@@ -974,7 +968,7 @@ test("management bucket opens a standard quotation and isolates approval work", 
   }
   await page.getByRole("tab", { name: /^Engineering rules / }).click();
   await expect(page.getByRole("button", { name: /^Edit / })).toHaveCount(0);
-  await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
+  await openWorkspaceSection(page, 'Survey & BOQ');
   await page
     .getByRole("button", { name: "Quick BOQ · no survey", exact: true })
     .click();
@@ -1107,7 +1101,7 @@ test("management bucket opens a standard quotation and isolates approval work", 
     path: "test-results/management-bucket-review.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Survey & BOQ", exact: true }).click();
+  await openWorkspaceSection(page, 'Survey & BOQ');
   await page.getByRole("button", { name: "Quick BOQ · no survey" }).click();
   await page.getByLabel("Customer", {exact: true}).fill("Alfalah");
   await page.getByRole("option", {name: /Alfalah/}).click();
@@ -1368,7 +1362,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
   expect(br.ok(),await br.text()).toBe(true);
   const boq=await br.json();
   await page.goto("/dashboard");
-  await page.getByRole("button", {name:"Survey & BOQ",exact:true}).click();
+  await openWorkspaceSection(page, 'Survey & BOQ');
   await page.getByRole("button",{name:boq.number,exact:true}).click();
   await page.getByRole("button",{name:"Create quotation",exact:true}).click();
   await page
@@ -1395,7 +1389,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
   const quotes = await quotesResponse.json();
   const quote = quotes.quotations.find((q: any) => q.number === number);
   expect(quote).toBeTruthy();
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await openWorkspaceSection(page, 'Dashboard');
   await page
     .getByRole("button", { name: /Survey & Costing Preparation/ })
     .click();
@@ -1592,7 +1586,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
     const pack = await page.request.get(`/api/orders/${ipo.id}/ipo.pdf`);
     expect(pack.ok()).toBe(true);
     expect((await pack.body()).subarray(0, 5).toString()).toBe("%PDF-");
-    await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+    await openWorkspaceSection(page, 'Dashboard');
     await page.screenshot({
       path: "test-results/atif-final-workflow-desktop.png",
       fullPage: true,
@@ -1808,7 +1802,7 @@ test("quotation page saves and submits, management previews discount and request
       })
     ).ok(),
   ).toBe(true);
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await openWorkspaceSection(page, 'Dashboard');
   await page.getByRole("button", { name: /Quotation approval/ }).click();
   const row = page.getByRole("row", { name: referencePattern(q.number) });
   // Revision remarks must remain sendable even if the optional profit preview fails.
@@ -1845,7 +1839,7 @@ test("quotation page saves and submits, management previews discount and request
     "Please revise the inverter configuration.",
   );
   await page.unroute("**/discount-review");
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await openWorkspaceSection(page, 'Dashboard');
   await page.getByRole("button", { name: /Quotation approval/ }).click();
   await row
     .getByRole("button", { name: "Request revision", exact: true })
@@ -1934,7 +1928,7 @@ test("quotation page saves and submits, management previews discount and request
       }),
     }),
   );
-  await page.getByRole("button", { name: "Quotations", exact: true }).click();
+  await openWorkspaceSection(page, 'Quotations');
   await page.getByRole("button", { name: referencePattern(aq.number) }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Profit preview temporarily unavailable" }).first()).toContainText(
     "Profit preview temporarily unavailable",
@@ -2269,7 +2263,7 @@ test("Admin downloads an encrypted recovery backup and clears passphrases after 
   expect(bounds.right).toBeLessThanOrEqual(bounds.width + 1);
   await panel.screenshot({ path: "test-results/admin-backup-panel.png" });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.getByRole("button", { name: "Master data", exact: true }).click();
+  await openWorkspaceSection(page, 'Master data');
   await page.getByText("Customer database import", { exact: true }).click();
   const customerRows = [
     {
