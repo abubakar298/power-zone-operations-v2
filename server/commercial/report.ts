@@ -43,7 +43,7 @@ function appendQuotation(
     const total=footer.find(r=>r.label===(included?"Total":"Subtotal Before Tax"));
     if(total)total.amount=new D(total.amount).add(allowance).toFixed(2);
     const index=footer.findIndex(r=>r.label==="Special Discount");
-    footer.splice(included?index:1,0,{label:"Standard Discount",amount:allowance.toFixed(2)});
+    footer.splice(included?index:1,0,{label:"Management-approved discount",amount:allowance.toFixed(2)});
     s={...s,lines,footer};
   }
   const margin = 14;

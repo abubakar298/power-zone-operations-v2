@@ -73,9 +73,9 @@ export function buildApprovedCniPdf(s:CniSnapshot,reference:string,draft:boolean
  header(4,"03 / Commercial offer","A clear, consolidated offer.","One consolidated commercial offer. No component pricing.");
  y=H-230;rect(42,y-45,511,45,blue,5);text(56,y-28,"CPS ES-125kW/261kWh",12,"#FFFFFF",true);text(540,y-28,`${qty} ${qty===1?"CABINET":"CABINETS"}`,11,"#FFFFFF",true,"right");
  const offer=s.pricing.displayedOffer??s.pricing.standardPayable;
- const rows:Array<[string,string]>=[["Standard unit offer price",`PKR ${money(new Decimal(offer).div(qty).toFixed(2))}`],["Quantity",`${qty} ${qty===1?"cabinet":"cabinets"}`],["Offer before standard discount",`PKR ${money(offer)}`]];
- if(s.pricing.standardDiscount)rows.push(["Standard discount",`PKR ${money(s.pricing.standardDiscount)}`]);
- if(new Decimal(s.pricing.discount).gt(0))rows.push([draft?"Proposed Management discount":"Management-approved discount",`PKR ${money(s.pricing.discount)}`]);
+ const rows:Array<[string,string]>=[["Standard unit offer price",`PKR ${money(new Decimal(offer).div(qty).toFixed(2))}`],["Quantity",`${qty} ${qty===1?"cabinet":"cabinets"}`],["Offer before discounts",`PKR ${money(offer)}`]];
+ if(s.pricing.standardDiscount)rows.push(["Management-approved discount",`PKR ${money(s.pricing.standardDiscount)}`]);
+ if(new Decimal(s.pricing.discount).gt(0))rows.push(["Special discount",`PKR ${money(s.pricing.discount)}`]);
  if(s.pricing.presentation==="Separate")rows.push(["Price before GST",`PKR ${money(s.pricing.beforeTax)}`],[`GST ${s.pricing.taxRate}%`,`PKR ${money(s.pricing.tax)}`]);
  rows.push(["Total payable",`PKR ${money(s.pricing.payable)}`]);
  y-=81;const spacing=Math.min(58,340/rows.length);
