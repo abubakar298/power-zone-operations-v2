@@ -46,5 +46,5 @@ export async function projectContext(pool:Pool,actor:string,key:string) {
  const latest=docs[0],customer=catalog.customers.find(c=>String(c.id)===latest.customer_id);
  const site=(await pool.query('SELECT id,name,code,location,status FROM sites WHERE customer_id::text=$1 AND lower(code)=lower($2)',[latest.customer_id,latest.site_code??''])).rows[0]??{name:latest.site,code:latest.site_code,location:latest.location??''};
  const identity=(await pool.query('SELECT site_number FROM document_site_identities WHERE customer_id::text=$1 AND lower(site_code)=lower($2)',[latest.customer_id,latest.site_code??''])).rows[0];
- return {key,customer,site:{...site,site_number:identity?.site_number},families:[...new Set(docs.map(d=>d.family))],documents:docs,attachments:[...attachments,...po],events:events.sort((a,b)=>new Date(a.at).getTime()-new Date(b.at).getTime()||a.id.localeCompare(b.id))};
+ return {key,customer,site:{...site,site_number:identity?.site_number},families:[...new Set(docs.map(d=>d.family))],documents:docs,attachments:[...attachments,...po],events:events.sort((a,b)=>new Date(a.at).getTime()-new Date(b.at).getTime()||Number(b.id.startsWith('saved-'))-Number(a.id.startsWith('saved-'))||a.id.localeCompare(b.id))};
 }

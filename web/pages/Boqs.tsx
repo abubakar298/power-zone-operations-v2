@@ -1,4 +1,3 @@
-import {Button} from "../ui/Button.js";
 import {confirmLeaveWorkspace,useUnsavedChanges} from "../hooks/useUnsavedChanges.js";
 import { DirectProductFields } from "../components/DirectProductFields.js";
 import { StandardSellingSummary } from "../components/StandardSellingSummary.js";
@@ -1177,7 +1176,7 @@ export function Boqs({
               </div>
             </fieldset>
           <div className="boq-family-field">
-            <label>BOQ type<select aria-label="BOQ type" value={boqFamily} onChange={e => selectFamily(e.target.value)}>
+            <label>BOQ type<select aria-label="BOQ type" disabled={busy || !!baseRevisionId} value={boqFamily} onChange={e => selectFamily(e.target.value)}>
               <option value="solar-hybrid">Solar Hybrid Project</option>
               <option value="ci-bess">C&amp;I BESS</option>
               <option value="bess-only">BESS Only (UPS with Installation)</option>

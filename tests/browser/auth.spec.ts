@@ -24,7 +24,7 @@ async function standardQuote(request: any, headers: Record<string,string>, revis
 
 test.beforeEach(async ({ page }) => {
   page.on("dialog", async (dialog) => {
-    if (dialog.type() === "confirm") await dialog.accept();
+    if (["confirm","beforeunload"].includes(dialog.type())) await dialog.accept();
   });
 });
 
@@ -1624,6 +1624,10 @@ test("quotation page saves and submits, management previews discount and request
   page,
 }) => {
   const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? 3180}`;
+  // This focused check can also run independently on a fresh disposable cluster.
+  if((await(await page.request.get('/api/auth/status')).json()).setupRequired){
+    expect((await page.request.post('/api/auth/setup',{headers:{Origin:origin},data:{email:'admin@example.test',displayName:'Browser manager',password:'browser-test-passphrase-298',setupToken:'browser-test-setup-key-isolated-only'}})).status()).toBe(201);
+  }
   const login = await page.request.post("/api/auth/login", {
     headers: { Origin: origin },
     data: {
@@ -1637,6 +1641,16 @@ test("quotation page saves and submits, management previews discount and request
   const pricingList = await (
     await page.request.get("/api/commercial/pricing")
   ).json();
+  if(!pricingList.pricing.length){
+    const masters=await(await page.request.get('/api/masters')).json();
+    const brand=(category:string)=>masters.brands.find((b:any)=>b.category===category&&b.status==='Active').id;
+    const inputs={customerId:3,siteName:'Focused quotation review',siteCode:'FOCUSED',location:'Lahore',panelQty:30,panelWattage:'645',structure:'L2',dcMetres:'120',acInverter16:'10',acInverter25:'0',acPanel16:'20',acPanel25:'0',earth25:'20',earth6:'40',earth10:'40',inverter:'20 kW',batteryKwh:15,smartMeter:false,genset:false,preparedBy:'Browser manager',brands:{solar:brand('Solar Panel'),inverter:brand('Inverter'),battery:brand('Battery & BMS'),cable:brand('Cable'),switchgear:brand('Switchgear')}};
+    const draft=await(await page.request.post('/api/boqs/drafts',{headers,data:{version:0,inputs}})).json();
+    const preview=await(await page.request.post('/api/boqs/preview',{headers,data:inputs})).json();
+    const saved=await page.request.post('/api/boqs/save',{headers,data:{draftId:draft.id,version:draft.version,fingerprint:preview.fingerprint}});expect(saved.ok(),await saved.text()).toBe(true);
+    await standardQuote(page.request,headers,(await saved.json()).id);
+    pricingList.pricing=(await(await page.request.get('/api/commercial/pricing')).json()).pricing;
+  }
   const source = await (
     await page.request.get(
       `/api/commercial/pricing/${pricingList.pricing[0].id}`,
@@ -1690,6 +1704,7 @@ test("quotation page saves and submits, management previews discount and request
   await page
     .getByRole("button", { name: "Commercial pricing", exact: true })
     .click();
+  await page.getByText("Saved pricing versions",{exact:true}).click();
   await page.getByRole("button", { name: referencePattern(price.number) }).click();
   await page
     .getByRole("button", { name: "Prepare quotation", exact: true })

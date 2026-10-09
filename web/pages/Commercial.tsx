@@ -1121,10 +1121,11 @@ export function Commercial({
       )}
       {quotePreview && !savedQuote && (
         <>
+          {!financialManager&&<p>A proposed special discount requires Management approval. Saving or submitting does not approve the quotation.</p>}
           <QuotationView
             snapshot={quotePreview.snapshot}
             discount={quoteInput?.discount}
-            onDiscount={financialManager ? changeQuotationDiscount : undefined}
+            onDiscount={manager ? changeQuotationDiscount : undefined}
             draftInput={quotePdfInput}
             csrf={session.csrfToken}
           />

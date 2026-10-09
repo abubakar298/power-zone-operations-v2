@@ -339,7 +339,7 @@ export function Dashboard({
                                     : "My account"}
             </strong>
           </span>
-          <NotificationCenter session={session} onOpen={task=>{setPricingRevisionId(task.boq_revision_id??undefined);setPricingRequestId(task.request_id??undefined);setRevisionDraftId(task.draft_id??undefined);setOperationsIpoId(task.ipo_id??undefined);navigate(task.target,task);}} />
+          <NotificationCenter session={session} onOpen={task=>{if(!navigate(task.target,task))return;setPricingRevisionId(task.boq_revision_id??undefined);setPricingRequestId(task.request_id??undefined);setRevisionDraftId(task.draft_id??undefined);setOperationsIpoId(task.ipo_id??undefined);}} />
           <div className="account">
             <button
               className="account-trigger"
