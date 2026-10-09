@@ -127,6 +127,7 @@ export function Dashboard({
     setMobileOpen(false);
     setMenuOpen(false);
   }
+  const isCoordinator = session.user.role === "Coordinator";
   const Home = ["Admin", "Management"].includes(session.user.role)
     ? Director
     : Coordinator;
@@ -145,6 +146,15 @@ export function Dashboard({
           </button>
         </div>
         <div className="sidebar-navigation">
+          {isCoordinator ? <>
+            <div className="nav-label">WORKSPACE</div>
+            <nav aria-label="Main navigation">
+              <button className={view === "dashboard" ? "nav-active" : ""} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard")}><Icon name="dashboard" />Coordinator Workspace</button>
+              <button className={view === "boqs" ? "nav-active" : ""} aria-current={view === "boqs" ? "page" : undefined} onClick={() => {setRevisionDraftId(undefined);navigate("boqs");}}><Icon name="file" />Create BOQ</button>
+              <button className={view === "masters" ? "nav-active" : ""} aria-current={view === "masters" ? "page" : undefined} onClick={() => navigate("masters")}><Icon name="users" />Master Data</button>
+            </nav>
+          </> : <>
+
           <div className="nav-label">WORKSPACE</div>
           <nav aria-label="Main navigation">
             <button
@@ -279,6 +289,7 @@ export function Dashboard({
             <br />
             each milestone is verified.
           </p>
+          </>}
         </div>
         <div className="sidebar-bottom">
           <span className="version">POWER ZONE OPERATIONS · V2</span>
@@ -291,7 +302,7 @@ export function Dashboard({
             Workspace <span aria-hidden="true">/</span>{" "}
             <strong>
               {view === "dashboard"
-                ? "Dashboard"
+                ? isCoordinator ? "Coordinator Workspace" : "Dashboard"
                 : view === "design"
                   ? "Design workspace"
                   : view === "masters"
@@ -354,7 +365,7 @@ export function Dashboard({
               <span className="eyebrow">POWER ZONE OPERATIONS</span>
               <h1>
                 {view === "dashboard"
-                  ? `Welcome, ${session.user.displayName}.`
+                  ? isCoordinator ? "Coordinator Workspace" : `Welcome, ${session.user.displayName}.`
                   : view === "design"
                     ? "Design workspace"
                     : view === "masters"
@@ -389,7 +400,7 @@ export function Dashboard({
                           ? "Plan delivery and issue received BOQs to Store."
                           : ["Admin", "Management"].includes(session.user.role)
                             ? "Review approvals and track customer/site budgets."
-                            : "Pending coordination work and recent completed activity."
+                            : "Select a bucket or review all pending tasks."
                   : view === "design"
                     ? "Design workspace"
                     : view === "masters"

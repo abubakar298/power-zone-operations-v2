@@ -155,7 +155,7 @@ export function Coordinator({
         </form>
       )}
 
-      <div className="coordination-heading">
+      {manager && <div className="coordination-heading">
         <div>
           <h2>
             {manager ? "Management document hub" : "Operations Coordination"}
@@ -182,7 +182,7 @@ export function Coordinator({
             </select>
           </label>
         )}
-      </div>
+      </div>}
       {error && (
         <p className="form-error" role="alert">
           {error}
@@ -251,6 +251,7 @@ export function Coordinator({
       <section className="detail-panel">
         <div className="coordination-heading">
           <h3>Pending tasks{data ? ` (${visibleTasks.length})` : ""}</h3>
+          <button type="button" className="workflow-button" onClick={() => setFilter("All")} aria-pressed={filter === "All"}>All pending tasks</button>
           <label>
             Stage
             <select value={filter} onChange={(e) => setFilter(e.target.value)}>
@@ -388,6 +389,7 @@ export function Coordinator({
           </div>
         )}
       </section>
+      {manager && <>
       <h3>Performance and turnaround</h3>
       <div className="summary-grid">
         {["BOQs", "Quotations", "IPOs", "Operations handoffs"].map(
@@ -441,6 +443,7 @@ export function Coordinator({
         are shown separately. Receipt tracking does not replace sale evidence or
         IPO approval.
       </p>
+      </>}
     </section>
   );
 }
