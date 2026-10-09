@@ -1,3 +1,5 @@
+import {Button} from "../ui/Button.js";
+import {CoordinatorLibrary} from "./CoordinatorLibrary.js";
 import {NotificationAdmin} from "../components/NotificationAdmin.js";
 import {NotificationCenter} from "../components/NotificationCenter.js";
 import { lazy, Suspense, useEffect, useState } from "react";
@@ -35,6 +37,7 @@ export function Dashboard({
   const [menuOpen, setMenuOpen] = useState(false),
     [mobileOpen, setMobileOpen] = useState(false);
   const [view, setView] = useState<
+    | "projects" | "documents" | "newboq" | "customers" | "rates"
     | "dashboard"
     | "account"
     | "masters"
@@ -100,6 +103,7 @@ export function Dashboard({
     }
   }
   const [bucketTask, setBucketTask] = useState<any>();
+  const [origin, setOrigin] = useState("dashboard");
   const initials = session.user.displayName
     .split(/\s+/)
     .slice(0, 2)
@@ -108,7 +112,8 @@ export function Dashboard({
     .toUpperCase();
   function navigate(
     next:
-      | "dashboard"
+      | "projects" | "documents" | "newboq" | "customers" | "rates"
+    | "dashboard"
       | "account"
       | "masters"
       | "team"
@@ -122,6 +127,7 @@ export function Dashboard({
       | "orders",
     task?: any,
   ) {
+    if (["dashboard","projects","documents"].includes(view)) setOrigin(view);
     setBucketTask(task);
     setView(next);
     setMobileOpen(false);
@@ -147,20 +153,13 @@ export function Dashboard({
         </div>
         <div className="sidebar-navigation">
           {isCoordinator ? <>
-            <div className="nav-label">WORKSPACE</div>
+            <div className="nav-label">DAILY WORK</div>
             <nav aria-label="Main navigation">
-              <button className={view === "dashboard" ? "nav-active" : ""} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard")}><Icon name="dashboard" />Coordinator Workspace</button>
-              <button className={view === "masters" ? "nav-active" : ""} aria-current={view === "masters" ? "page" : undefined} onClick={() => navigate("masters")}><Icon name="users" />Master Data</button>
+              {([['dashboard','My Workspace','dashboard'],['projects','Projects','site'],['newboq','New BOQ','plus'],['documents','Documents','file'],['customers','Customers & Sites','users'],['rates','Rate Master','rates']] as const).map(([destination,label,icon])=>{
+                const active=view===destination || (['boqs','pricing','quotes','orders','operations'].includes(view)&&origin===destination);
+                return <button key={destination} className={active?'nav-active':''} aria-current={active?'page':undefined} onClick={()=>{setRevisionDraftId(undefined);setPricingRevisionId(undefined);setPricingRequestId(undefined);setOperationsIpoId(undefined);navigate(destination);}}><Icon name={icon}/>{label}</button>;
+              })}
             </nav>
-            <details className="project-nav-group">
-              <summary>Project Operations</summary>
-              <nav className="upcoming-nav" aria-label="Project Operations">
-                <button className={view === "boqs" ? "nav-active" : ""} aria-current={view === "boqs" ? "page" : undefined} onClick={() => {setRevisionDraftId(undefined);navigate("boqs");}}><Icon name="file" />Surveys &amp; BOQs</button>
-                <button className={view === "quotes" || view === "pricing" ? "nav-active" : ""} aria-current={view === "quotes" || view === "pricing" ? "page" : undefined} onClick={() => {setPricingRevisionId(undefined);setPricingRequestId(undefined);navigate("quotes");}}><Icon name="file" />Quotations</button>
-                <button className={view === "orders" ? "nav-active" : ""} aria-current={view === "orders" ? "page" : undefined} onClick={() => navigate("orders")}><Icon name="file" />IPOs</button>
-                <button className={view === "operations" ? "nav-active" : ""} aria-current={view === "operations" ? "page" : undefined} onClick={() => {setOperationsIpoId(undefined);navigate("operations");}}><Icon name="file" />BOQs to Operations</button>
-              </nav>
-            </details>
           </> : <>
 
           <div className="nav-label">WORKSPACE</div>
@@ -309,8 +308,8 @@ export function Dashboard({
           <span className="breadcrumb">
             Workspace <span aria-hidden="true">/</span>{" "}
             <strong>
-              {view === "dashboard"
-                ? isCoordinator ? "Coordinator Workspace" : "Dashboard"
+              {["projects","documents","newboq","customers","rates"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master"} as Record<string,string>)[view] : view === "dashboard"
+                ? isCoordinator ? "My Workspace" : "Dashboard"
                 : view === "design"
                   ? "Design workspace"
                   : view === "masters"
@@ -372,8 +371,8 @@ export function Dashboard({
             <div>
               <span className="eyebrow">POWER ZONE OPERATIONS</span>
               <h1>
-                {view === "dashboard"
-                  ? isCoordinator ? "Coordinator Workspace" : `Welcome, ${session.user.displayName}.`
+                {["projects","documents","newboq","customers","rates"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master"} as Record<string,string>)[view] : view === "dashboard"
+                  ? isCoordinator ? "My Workspace" : `Welcome, ${session.user.displayName}.`
                   : view === "design"
                     ? "Design workspace"
                     : view === "masters"
@@ -397,7 +396,7 @@ export function Dashboard({
                                       : "My account"}
               </h1>
               <p className="dashboard-intro">
-                {view === "dashboard"
+                {["projects","documents","newboq","customers","rates"].includes(view) ? "Select the relevant customer, site or document to continue your work." : view === "dashboard"
                   ? session.user.role === "Design"
                     ? "Prepare technical surveys and send them to Coordination."
                     : session.user.role === "Inventory"
@@ -437,6 +436,8 @@ export function Dashboard({
               {busy ? "Signing out…" : "Sign out"}
             </button>
           </div>
+          {isCoordinator && ["boqs","pricing","quotes","orders","operations"].includes(view) && <Button variant="neutral" onClick={()=>navigate(origin as Parameters<typeof navigate>[0])}>← Back to {origin==="projects"?"Projects":origin==="documents"?"Documents":"My Workspace"}</Button>}
+          {isCoordinator && <div hidden={view!=="projects"&&view!=="documents"}><CoordinatorLibrary active={view==="projects"||view==="documents"} mode={view==="projects"?"projects":"documents"} onOpen={task=>{setRevisionDraftId(task.draft_id);setPricingRevisionId(undefined);setPricingRequestId(undefined);setOperationsIpoId(task.ipo_id);navigate(task.target,task);}} /></div>}
           {error && (
             <p className="form-error" role="alert">
               {error}
@@ -460,8 +461,9 @@ export function Dashboard({
           {view === "dashboard" && session.user.role === "Operations" && (
             <Operations session={session} portal />
           )}
-          {view === "dashboard" &&
+          {(view === "dashboard" || isCoordinator) &&
             ["Admin", "Management", "Coordinator"].includes(session.user.role) && (
+            <div hidden={view!=="dashboard"}>
               <Home
                 session={session}
                 onOpen={(task) => {
@@ -473,8 +475,8 @@ export function Dashboard({
                   navigate(task.target, task);
                 }}
               />
-            )}
-          {(view === "pricing" || view === "quotes") && (bucketTask?.kind === "C&I proposal" ? <CniProposals reviewOnly session={session} masters={{customers:[]}} initialProposalId={bucketTask.id} onLogout={onLogout} onBack={()=>navigate("dashboard")} /> : (
+            </div>) }
+          {(view === "pricing" || view === "quotes") && (bucketTask?.kind === "C&I proposal" ? <CniProposals reviewOnly session={session} masters={{customers:[]}} initialProposalId={bucketTask.id} onLogout={onLogout} onBack={()=>navigate(origin as Parameters<typeof navigate>[0])} /> : (
             <Commercial
               key={view + String(pricingRevisionId) + String(pricingRequestId)}
               session={session}
@@ -500,8 +502,11 @@ export function Dashboard({
               }}
             />
           ))}
-          {view === "boqs" && (
+          {(view === "boqs" || view === "newboq") && (
             <Boqs
+              key={view+String(bucketTask?.id)+String(revisionDraftId)}
+              startNew={view==="newboq"}
+              initialBoqId={bucketTask?.kind==="Saved BOQ" ? bucketTask.id : undefined}
               initialDraftId={revisionDraftId}
               initialCniId={bucketTask?.kind === "C&I proposal" ? bucketTask.id : undefined}
               onPricing={(id) => {
@@ -540,8 +545,8 @@ export function Dashboard({
             <Operations session={session} initialIpoId={operationsIpoId} />
           )}
           {view === "team" && <><Team session={session} onLogout={onLogout} />{session.user.role==="Admin"&&<NotificationAdmin session={session}/>}</>}
-          {view === "masters" && (
-            <Masters session={session} onLogout={onLogout} />
+          {["masters","customers","rates"].includes(view) && (
+            <Masters key={view} initialKind={view==="rates"?"rates":"customers"} allowedKinds={view==="customers"?["customers","sites"]:view==="rates"?["rates","items","brands","rules"]:undefined} session={session} onLogout={onLogout} />
           )}
           {view === "account" && (
             <div

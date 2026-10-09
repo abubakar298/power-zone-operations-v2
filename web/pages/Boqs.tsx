@@ -43,13 +43,13 @@ export function Boqs({
   onLogout,
   onPricing,
   initialDraftId,
-  initialCniId,
+  initialCniId, startNew, initialBoqId,
 }: {
   session: Session;
   onLogout: () => void;
   onPricing?: (id: string) => void;
   initialDraftId?: string;
-  initialCniId?: string;
+  initialCniId?: string; startNew?: boolean; initialBoqId?: string;
 }) {
   const [boqFamily, setBoqFamily] = useState(initialCniId ? "ci-bess" : "solar-hybrid");
   const [masters, setMasters] = useState<any>(),
@@ -118,7 +118,9 @@ export function Boqs({
   useEffect(() => {
     void load()
       .then(async () => {
-        if (initialDraftId) {
+        if (initialBoqId) await openSaved(initialBoqId);
+        else if (startNew) fresh();
+        else if (initialDraftId) {
           const d = await api<{ drafts: any[] }>("/boqs/drafts");
           const row = d.drafts.find((x) => x.id === initialDraftId);
           if (row && row.review_status !== "Awaiting review") resume(row);

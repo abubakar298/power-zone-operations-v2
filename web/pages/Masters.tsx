@@ -105,13 +105,14 @@ const numberFormat = new Intl.NumberFormat("en-PK", {
 });
 export function Masters({
   session,
-  onLogout,
+  onLogout, initialKind="customers", allowedKinds,
 }: {
+  initialKind?: Kind; allowedKinds?: Kind[];
   session: Session;
   onLogout: () => void;
 }) {
   const [data, setData] = useState<Data | null>(null),
-    [kind, setKind] = useState<Kind>("customers"),
+    [kind, setKind] = useState<Kind>(initialKind),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState("All");
   const [error, setError] = useState(""),
@@ -216,7 +217,7 @@ export function Masters({
         role="tablist"
         aria-label="Master data sections"
       >
-        {(Object.keys(titles) as Kind[]).map((k) => (
+        {(allowedKinds ?? Object.keys(titles) as Kind[]).map((k) => (
           <button
             key={k}
             role="tab"

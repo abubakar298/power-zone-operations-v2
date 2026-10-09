@@ -1,4 +1,6 @@
 const paths: Record<string,string> = {
+  plus:'M12 5v14 M5 12h14',
+  rates:'M4 3h16v18H4z M8 7h8 M8 11h2 M14 11h2 M8 15h2 M14 15h2',
   dashboard:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
   users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M16 3a4 4 0 0 1 0 8 M22 21v-2a4 4 0 0 0-3-3.87 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
   site:'M3 21h18 M5 21V7l7-4 7 4v14 M9 21v-6h6v6 M9 9h1 M14 9h1',
