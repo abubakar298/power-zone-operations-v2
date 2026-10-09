@@ -897,7 +897,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("heading", { name: "My Workspace", exact:true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: /^Pending tasks \(/ }),
+    page.getByRole("heading", { name: /^(Pending tasks|My Next Actions) \(/ }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Team access", exact: true }),
@@ -917,12 +917,12 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByText("Survey draft saved", { exact: false }),
   ).toBeVisible();
   await openWorkspaceSection(page, 'Dashboard');
-  await page.getByRole("button", { name: /Survey & Costing Preparation/ }).click();
+  await page.getByRole("button", { name: /Survey & (Costing|BOQ) Preparation/i }).click();
   await expect(
     page.getByRole("row", { name: /SAMPLE bucket training/ }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Open workflow", exact: true })
+    .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/, exact: true })
     .click();
   await expect(page.getByLabel("New site name", { exact: true })).toHaveValue(
     "SAMPLE bucket training",
@@ -1085,12 +1085,12 @@ test("management bucket opens a standard quotation and isolates approval work", 
     page.getByRole("row", { name: /SAMPLE bucket training/ }),
   ).toHaveCount(0);
   await expect(page.getByRole("button", {name:/Costing review|Quotation preparation/})).toHaveCount(0);
-  await page.getByRole("button", { name: /Quotation approval/ }).click();
+  await page.getByRole("button", { name: /Quotation approval/i }).click();
   const row = page.getByRole("row", {
     name: /SAMPLE Management bucket review/,
   });
   await expect(row).toBeVisible();
-  await row.getByRole("button", { name: "Open workflow" }).click();
+  await row.getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/ }).click();
   await expect(
     page.getByRole("heading", { name: "Quotation workflow · Submitted",exact:true }),
   ).toBeVisible();
@@ -1202,8 +1202,8 @@ test("Coordinator records external quotation approval with screenshots without r
   const revisionId=(await saved.json()).id;
   const quote=await standardQuote(page.request,headers,revisionId);
   await page.goto("/dashboard");
-  await page.getByRole("button",{name:/Quotation approval/}).click();
-  await page.getByRole("row",{name:referencePattern(quote.number)}).getByRole("button",{name:"Open workflow",exact:true}).click();
+  await page.getByRole("button",{name:/Quotation approval/i}).click();
+  await page.getByRole("row",{name:referencePattern(quote.number)}).getByRole("button",{name:/^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/,exact:true}).click();
   await expect(page.getByRole("heading",{name:"Quotation workflow · Submitted",exact:true})).toBeVisible();
   await page.getByText("Record WhatsApp / verbal approval",{exact:true}).click();
   await page.getByLabel("Approver name",{exact:true}).fill("Director Operations");
@@ -1391,7 +1391,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
   expect(quote).toBeTruthy();
   await openWorkspaceSection(page, 'Dashboard');
   await page
-    .getByRole("button", { name: /Survey & Costing Preparation/ })
+    .getByRole("button", { name: /Survey & (Costing|BOQ) Preparation/i })
     .click();
   const row = page.getByRole("row", { name: referencePattern(number) });
   await expect(
@@ -1442,10 +1442,10 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
       ).ok(),
     ).toBe(true);
     await page.reload();
-    await page.getByRole("button", { name: /Customer confirmation/ }).click();
+    await page.getByRole("button", { name: /Customer confirmation/i }).click();
     await page
       .getByRole("row", { name: referencePattern(number) })
-      .getByRole("button", { name: "Open workflow" })
+      .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/ })
       .click();
     await expect(page.getByLabel("Accepted quotation")).toHaveValue(quote.id);
     await page
@@ -1565,7 +1565,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
       .click();
     await page
       .getByRole("row", { name: referencePattern(ipo.number) })
-      .getByRole("button", { name: "Open workflow" })
+      .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/ })
       .click();
     await expect(
       page.getByRole("button", { name: "Send IPO to Accounts", exact: true }),
@@ -1803,7 +1803,7 @@ test("quotation page saves and submits, management previews discount and request
     ).ok(),
   ).toBe(true);
   await openWorkspaceSection(page, 'Dashboard');
-  await page.getByRole("button", { name: /Quotation approval/ }).click();
+  await page.getByRole("button", { name: /Quotation approval/i }).click();
   const row = page.getByRole("row", { name: referencePattern(q.number) });
   // Revision remarks must remain sendable even if the optional profit preview fails.
   await page.route("**/discount-review", (route) =>
@@ -1815,7 +1815,7 @@ test("quotation page saves and submits, management previews discount and request
       }),
     }),
   );
-  await row.getByRole("button", { name: "Open workflow", exact: true }).click();
+  await row.getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/, exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Profit preview temporarily unavailable" }).first()).toContainText(
     "Profit preview temporarily unavailable",
   );
@@ -1840,7 +1840,7 @@ test("quotation page saves and submits, management previews discount and request
   );
   await page.unroute("**/discount-review");
   await openWorkspaceSection(page, 'Dashboard');
-  await page.getByRole("button", { name: /Quotation approval/ }).click();
+  await page.getByRole("button", { name: /Quotation approval/i }).click();
   await row
     .getByRole("button", { name: "Request revision", exact: true })
     .click();
@@ -2157,11 +2157,11 @@ test("Design uploads a physical survey, sends technical requirements without bra
   });
   expect(coord.ok()).toBe(true);
   await page.reload();
-  await page.getByRole("button", { name: /Survey & Costing Preparation/ }).click();
+  await page.getByRole("button", { name: /Survey & (Costing|BOQ) Preparation/i }).click();
   await page
     .getByRole("row")
     .filter({ hasText: "DESIGN workflow site" })
-    .getByRole("button", { name: "Open workflow", exact: true })
+    .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/, exact: true })
     .click();
   await expect(
     page.getByRole("heading", {

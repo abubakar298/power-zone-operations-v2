@@ -15,4 +15,7 @@ Management scope/approval controls remain intact. All workflow transitions, perm
 - coordinator-workspace-check.mjs: PASS — six independent counts, priority groups, sorting/search/stage/overdue filters, exact draft and C&I navigation, retained filters, empty state, mobile containment/keyboard focus, GET-only requests.
 - coordinator-navigation-check.mjs: PASS — existing six sidebar destinations and project workflow entry points remain reachable.
 
+- Existing native PostgreSQL auth browser specification: 8/8 PASS (1.1 minutes), preserving quotation/IPO/Operations journey, Management review, Design intake, external approvals/BESS privacy and backup/session controls. Updated selectors recognize the new next-action labels without removing business/security assertions.
+- Live Coordinator verification: six existing tasks reconcile to one actionable and five waiting; exact C&I next-action navigation and return to My Workspace work. No live business writes.
+
 No full backend/browser suite is needed for this targeted presentation increment. No migration or live sample changes are included.

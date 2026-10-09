@@ -273,12 +273,12 @@ for (const quick of [false, true]) {
         expect((await outsiderContext.request.get(path)).status()).toBe(404);
       await manager.reload();
       await button(manager, "Dashboard").click();
-      await manager.getByRole("button", { name: /Quotation approval/ }).click();
+      await manager.getByRole("button", { name: /Quotation approval/i }).click();
       await manager
         .getByRole("row", {
           name: new RegExp(quick ? "BAFL-2520" : "BAFL-90901"),
         })
-        .getByRole("button", { name: "Open workflow" })
+        .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/ })
         .click();
       await button(manager, "Final approve quotation").click();
       await manager
@@ -292,8 +292,8 @@ for (const quick of [false, true]) {
         }),
       ).toBeVisible();
       await page.reload();
-      await page.getByRole("button", { name: /Customer confirmation/ }).click();
-      await page.getByRole("row", { name: new RegExp(quick ? "BAFL-2520" : "BAFL-90901") }).getByRole("button", {name:"Open workflow",exact:true}).click();
+      await page.getByRole("button", { name: /Customer confirmation/i }).click();
+      await page.getByRole("row", { name: new RegExp(quick ? "BAFL-2520" : "BAFL-90901") }).getByRole("button", {name:/^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/,exact:true}).click();
       await expect(page.getByLabel("Accepted quotation")).toHaveValue(quoteId);
       await page
         .getByLabel("Sale confirmation type")
@@ -316,7 +316,7 @@ for (const quick of [false, true]) {
         .getByRole("row", {
           name: new RegExp(quick ? "BAFL-2520" : "BAFL-90901"),
         })
-        .getByRole("button", { name: "Open workflow" })
+        .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/ })
         .click();
       await button(manager, "Approve evidence & save IPO").click();
       await expect(
@@ -328,7 +328,7 @@ for (const quick of [false, true]) {
         .click();
       await page
         .getByRole("row", { name: new RegExp(quick ? "2520" : "90901") })
-        .getByRole("button", { name: "Open workflow" })
+        .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/ })
         .click();
       const pack = page.waitForEvent("download");
       await button(page, "Download IPO & Peachtree PDF").click();
