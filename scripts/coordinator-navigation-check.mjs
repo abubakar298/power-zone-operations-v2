@@ -10,7 +10,7 @@ const masters={customers:[{id:1,name:'Fixture Bank',short_code:'FB',status:'Acti
 const task={id:'draft',kind:'Survey / BOQ',draft_id:'draft',target:'boqs',site:'HQ',reference:'Fixture survey',status:'Draft',stage:'Survey & Costing Preparation',responsibility:'Coordinator',started_at:new Date().toISOString()};
 const routes={
  '/auth/status':{setupRequired:false},'/auth/session':session,'/dashboard':{user:session.user},'/notifications':{notifications:[],unreadCount:0,hasMore:false},'/notifications/preferences':{email_enabled:true},'/masters':masters,
- '/coordinator':{tasks:[task],performance:{},counts:{}},'/boqs':{boqs:[]},'/boqs/drafts':{drafts:[]},'/boqs/reviews':{reviews:[]},'/commercial/quotations':{quotations:[]},'/orders':{orders:[]},'/orders/submissions':{submissions:[]},'/operations/portal':{issuances:[],tasks:[],stageCounts:{}},'/cni':{proposals:[]},'/commercial/pricing':{pricing:[]},'/commercial/standard-policy':{version:1,categories:[]},'/commercial/revision-requests':{requests:[]},
+ '/coordinator/projects':{documents:[]},'/coordinator':{tasks:[task],performance:{},counts:{}},'/boqs':{boqs:[]},'/boqs/drafts':{drafts:[]},'/boqs/reviews':{reviews:[]},'/commercial/quotations':{quotations:[]},'/orders':{orders:[]},'/orders/submissions':{submissions:[]},'/operations/portal':{issuances:[],tasks:[],stageCounts:{}},'/cni':{proposals:[]},'/commercial/pricing':{pricing:[]},'/commercial/standard-policy':{version:1,categories:[]},'/commercial/revision-requests':{requests:[]},
 };
 const unexpected=[];
 await page.route('**/api/**',route=>{const p=new URL(route.request().url()).pathname.replace('/api','');if(!(p in routes))unexpected.push(p);return route.fulfill({json:routes[p]??{}})});

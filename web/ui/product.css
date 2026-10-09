@@ -56,3 +56,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
 .coordinator-panel .coordination-heading .workspace-overdue{flex-direction:row;align-items:center;min-height:var(--pz-control-height)}
 .coordinator-panel .order-table{min-width:900px}
+.project-heading,.project-next{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--pz-space-4)}
+.project-tabs{justify-content:flex-start}.project-tabs .pz-button[aria-pressed=true]{background:var(--pz-selected-bg);border-color:var(--pz-selected-border)}
+.project-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--pz-space-4);margin:0}
+.project-facts dt{font-weight:600;color:var(--pz-muted);font-size:var(--pz-text-sm)}.project-facts dd{margin:8px 0;overflow-wrap:anywhere}
+.project-timeline{padding-left:24px}.project-timeline li{padding:0 0 24px 12px;border-left:2px solid var(--pz-border)}.project-timeline p{margin:8px 0}.project-timeline small{color:var(--pz-muted)}
+.project-attachments{padding:0;list-style:none}.project-attachments li{display:grid;gap:8px;margin-bottom:16px}
+@media(max-width:700px){.project-facts{grid-template-columns:1fr}.project-heading,.project-next{flex-direction:column}}

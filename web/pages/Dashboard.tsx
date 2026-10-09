@@ -103,6 +103,7 @@ export function Dashboard({
     }
   }
   const [bucketTask, setBucketTask] = useState<any>();
+  const [projectContextKey,setProjectContextKey]=useState<string>(),[currentProjectKey,setCurrentProjectKey]=useState<string>();
   const [origin, setOrigin] = useState("dashboard");
   const initials = session.user.displayName
     .split(/\s+/)
@@ -135,6 +136,7 @@ export function Dashboard({
     setMenuOpen(false);
   }
   const isCoordinator = session.user.role === "Coordinator";
+  useEffect(()=>{let alive=true;setCurrentProjectKey(undefined);if(!isCoordinator||!bucketTask)return;void api<any>('/coordinator/projects').then(index=>{const ids=[bucketTask.id,bucketTask.ipo_id,bucketTask.boq_revision_id,bucketTask.draft_id].filter(Boolean);const record=index.documents?.find((d:any)=>ids.includes(d.id)||ids.includes(d.proposal_id));if(alive)setCurrentProjectKey(record?.project_key)}).catch(()=>{});return()=>{alive=false}},[bucketTask,isCoordinator]);
   const Home = ["Admin", "Management"].includes(session.user.role)
     ? Director
     : Coordinator;
@@ -438,7 +440,8 @@ export function Dashboard({
             </button>
           </div>
           {isCoordinator && ["boqs","pricing","quotes","orders","operations"].includes(view) && <Button variant="neutral" onClick={()=>navigate(origin as Parameters<typeof navigate>[0])}>← Back to {origin==="projects"?"Projects":origin==="documents"?"Documents":"My Workspace"}</Button>}
-          {isCoordinator && <div hidden={view!=="projects"&&view!=="documents"}><CoordinatorLibrary active={view==="projects"||view==="documents"} mode={view==="projects"?"projects":"documents"} onOpen={task=>{setRevisionDraftId(task.draft_id);setPricingRevisionId(undefined);setPricingRequestId(undefined);setOperationsIpoId(task.ipo_id);navigate(task.target,task);}} /></div>}
+          {isCoordinator && currentProjectKey && ["boqs","pricing","quotes","orders","operations"].includes(view) && <Button variant="secondary" onClick={()=>{setProjectContextKey(currentProjectKey);navigate("projects")}}>View project</Button>}
+          {isCoordinator && <div hidden={view!=="projects"&&view!=="documents"}><CoordinatorLibrary initialProjectKey={projectContextKey} active={view==="projects"||view==="documents"} mode={view==="projects"?"projects":"documents"} onOpen={task=>{setRevisionDraftId(task.draft_id);setPricingRevisionId(task.boq_revision_id);setPricingRequestId(task.request_id);setOperationsIpoId(task.ipo_id);navigate(task.target,task);}} /></div>}
           {error && (
             <p className="form-error" role="alert">
               {error}

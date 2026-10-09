@@ -1,3 +1,4 @@
+import {projectCatalog,projectContext} from "./projects.js";
 import { ownedCondition } from "../http/permissions.js";
 import {
   validateExternal,
@@ -9,6 +10,8 @@ import { HttpError } from "../http/errors.js";
 import type { Pool } from "pg";
 export class CoordinatorRepository {
   constructor(private pool: Pool) {}
+  async projects(actor:string){return projectCatalog(this.pool,actor);}
+  async project(actor:string,key:string){const context=await projectContext(this.pool,actor,key);const role=(await this.pool.query('SELECT role FROM users WHERE id=$1',[actor])).rows[0]?.role;const view=await this.overview(actor,["Admin","Management"].includes(role));const ids=new Set(context.documents.flatMap(d=>[d.id,d.proposal_id].filter(Boolean)));return {...context,tasks:view.tasks.filter((t:any)=>[t.id,t.boq_revision_id,t.ipo_id,t.draft_id].some(id=>ids.has(id)))};}
   async overview(actor: string, team: boolean) {
     const pending = `WITH pending AS (
  SELECT d.id,'Survey / BOQ'::text AS kind,COALESCE(d.inputs->>'siteName','Survey draft') AS reference,COALESCE(d.inputs->>'siteName','') AS site,CASE WHEN s.id IS NULL THEN 'Draft' WHEN s.outcome IS NULL THEN 'Awaiting review' ELSE 'Changes requested' END AS status,COALESCE(s.decision_at,s.created_at,d.created_at) AS started_at,'boqs'::text AS target,d.id AS draft_id,NULL::uuid AS boq_revision_id,NULL::uuid AS ipo_id,NULL::uuid AS request_id,(SELECT name FROM customers WHERE id::text=d.inputs->>'customerId') AS customer

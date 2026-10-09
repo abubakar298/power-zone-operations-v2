@@ -23,6 +23,8 @@ export function coordinatorHttp(
       );
     next();
   });
+  r.get("/projects",async(req,res)=>res.json(await repo.projects(req.authSession!.user.id)));
+  r.get("/project",async(req,res)=>{const key=z.string().min(1).max(500).safeParse(req.query.key);if(!key.success)throw new HttpError(400,"Select a project.");res.json(await repo.project(req.authSession!.user.id,key.data));});
   r.get("/", async (req, res) => {
     const scope = req.query.scope ?? "mine";
     if (scope !== "mine" && scope !== "team")

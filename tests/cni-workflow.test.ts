@@ -60,6 +60,13 @@ test("C&I standard/revision/discount workflow, immutable history and departmenta
  await post("/",{...base,unitPayable:"1"}).expect(400);
  const revised=(await post("/",{...base,presentation:"Separate",discount:"1000000",proposalId:saved.id,expectedVersion:1}).expect(201)).body;
  assert.equal((await cniTasks()).length,1);assert.equal((await cniTasks())[0].stage,"Quotation approval");assert.equal((await cniTasks())[0].reference,revised.number);
+ const projectIndex=(await request(app).get('/api/coordinator/projects').set('Cookie',users.Coordinator.cookie).expect(200)).body;
+ const projectKey=projectIndex.documents.find((d:any)=>d.proposal_id===saved.id).project_key;
+ const projectView=(await request(app).get('/api/coordinator/project').query({key:projectKey}).set('Cookie',users.Coordinator.cookie).expect(200)).body;
+ assert.equal(projectView.documents.filter((d:any)=>d.resource==='cni').length,2);
+ assert.ok(projectView.documents.every((d:any)=>d.pdf_url.includes(d.id)));
+ assert.doesNotMatch(JSON.stringify(projectView),/internal_cost|unitCostBeforeTax|11000000|33000000/);
+ await request(app).get('/api/coordinator/project').query({key:projectKey}).set('Cookie',users.OtherCoordinator.cookie).expect(404);
  assert.equal(revised.version,2);assert.equal(revised.snapshot.pricing.payable,"50750000.00");
  await post("/",{...base,proposalId:saved.id,expectedVersion:1}).expect(409);
  await post(`/${saved.id}/review`,{versionId:revised.versionId,action:"Approved",remarks:""}).expect(403);
