@@ -7,11 +7,11 @@ import { confirmTransition } from "../confirm.js";
 import { money } from "../numbers.js";
 import { priceCni, cniPolicy } from "../../server/commercial/cni-policy.js";
 import { displayDate } from "../../server/display/dates.js";
-export function CniProposals({session,masters:initialMasters,onBack,onLogout,initialProposalId,reviewOnly=false}:{reviewOnly?:boolean;initialProposalId?:string;session:Session;masters:any;onBack:()=>void;onLogout:()=>void}) {
+export function CniProposals({session,masters:initialMasters,onBack,onLogout,initialProposalId,initialContext,reviewOnly=false}:{reviewOnly?:boolean;initialProposalId?:string;initialContext?:any;session:Session;masters:any;onBack:()=>void;onLogout:()=>void}) {
  const [masters,setMasters]=useState(initialMasters),[addingCustomer,setAddingCustomer]=useState(false),[dirty,setDirty]=useState(false);
  useUnsavedChanges(dirty);
  const [rows,setRows]=useState<any[]>([]),[detail,setDetail]=useState<any>(),[search,setSearch]=useState("");
- const [customerId,setCustomerId]=useState(""),[siteName,setSiteName]=useState(""),[siteCode,setSiteCode]=useState(""),[quantity,setQuantity]=useState("1"),[presentation,setPresentation]=useState<"Inclusive"|"Separate">("Inclusive"),[discount,setDiscount]=useState("0");
+ const [customerId,setCustomerId]=useState(String(initialContext?.customerId??"")),[siteName,setSiteName]=useState(initialContext?.siteName??""),[siteCode,setSiteCode]=useState(initialContext?.siteCode??""),[quantity,setQuantity]=useState("1"),[presentation,setPresentation]=useState<"Inclusive"|"Separate">("Inclusive"),[discount,setDiscount]=useState("0");
  const [busy,setBusy]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState(""),[remarks,setRemarks]=useState("");
  const [editing,setEditing]=useState<{id:string;version:number}>();
  const [editingReview,setEditingReview]=useState(false);

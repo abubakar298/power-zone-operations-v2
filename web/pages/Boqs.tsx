@@ -1,3 +1,5 @@
+import {Button} from "../ui/Button.js";
+import {confirmLeaveWorkspace,useUnsavedChanges} from "../hooks/useUnsavedChanges.js";
 import { DirectProductFields } from "../components/DirectProductFields.js";
 import { StandardSellingSummary } from "../components/StandardSellingSummary.js";
 import { CniProposals } from "./CniProposals.js";
@@ -43,15 +45,16 @@ export function Boqs({
   onLogout,
   onPricing,
   initialDraftId,
-  initialCniId, startNew, initialBoqId,
+  initialCniId, startNew, initialBoqId, initialContext,
 }: {
   session: Session;
   onLogout: () => void;
   onPricing?: (id: string) => void;
   initialDraftId?: string;
-  initialCniId?: string; startNew?: boolean; initialBoqId?: string;
+  initialCniId?: string; startNew?: boolean; initialBoqId?: string; initialContext?:any;
 }) {
   const [boqFamily, setBoqFamily] = useState(initialCniId ? "ci-bess" : "solar-hybrid");
+  const [dirty,setDirty]=useState(false),[cniContext,setCniContext]=useState<any>(initialContext);
   const [masters, setMasters] = useState<any>(),
     [records, setRecords] = useState<any[]>([]),
     [drafts, setDrafts] = useState<any[]>([]),
@@ -94,6 +97,13 @@ export function Boqs({
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [createdCustomerId, setCreatedCustomerId] = useState<string>();
   const form = useRef<HTMLFormElement>(null);
+  useUnsavedChanges(dirty && view === "new" && boqFamily !== "ci-bess");
+  function selectFamily(value:string){
+    if(value===boqFamily)return;
+    if(value==="ci-bess" && dirty&&!confirmLeaveWorkspace())return;
+    if(form.current){const fields=new FormData(form.current);setCniContext({customerId:fields.get('customerId'),siteName:fields.get('siteName'),siteCode:fields.get('siteCode'),location:fields.get('location')});}
+    setBoqFamily(value);setPreview(undefined);setNotice('');setDirty(value!=='ci-bess');
+  }
   async function load() {
     try {
       const [m, b, d, r] = await Promise.all([
@@ -138,6 +148,8 @@ export function Boqs({
       .catch(fail);
   }, []);
   function fresh(mode = "Survey") {
+    if(!confirmLeaveWorkspace())return false;
+    setDirty(false);
     setDesignSource(undefined);
     setCreatedCustomerId(undefined);
     setSourceMode(mode);
@@ -150,7 +162,7 @@ export function Boqs({
     setSpecifications({});
     setTechnicalLines([]);
     setQuantityPatch({});
-    setInitial({});
+    setInitial(initialContext??{});
     setDraft(undefined);
     setUploads([]);
     setOcrText("");
@@ -166,6 +178,7 @@ export function Boqs({
     return true;
   }
   function resume(d: any) {
+    setDirty(false);
     setCreatedCustomerId(undefined);
     setDesignSource(d.design_source);
     setSourceMode(d.inputs.sourceMode ?? "Survey");
@@ -182,6 +195,7 @@ export function Boqs({
     setError("");
     setQuantityPatch({});
     setInitial(d.inputs);
+    setCniContext(d.inputs);
     setBoqFamily(d.inputs.family ?? "solar-hybrid");
     setDraft({ id: d.id, version: d.version });
     setUploads(
@@ -270,6 +284,7 @@ export function Boqs({
       csrf: session.csrfToken,
     });
     setDraft(d);
+    setDirty(false);
     await load();
     return d;
   }
@@ -289,7 +304,7 @@ export function Boqs({
       setPreview(p);
       setTechnicalLines(p.snapshot.lines);
       setNotice(
-        "Review the costing below, then submit it for approval. No new BOQ number has been issued yet.",
+        "Review the BOQ and visible costing below, then create a quotation for Management approval. No new BOQ number has been issued yet.",
       );
     } catch (e) {
       fail(e);
@@ -571,7 +586,7 @@ export function Boqs({
   }
   if (!masters)
     return <p role="status">{error || "Loading project references…"}</p>;
-  if (boqFamily === "ci-bess") return <CniProposals initialProposalId={initialCniId} session={session} onLogout={onLogout} masters={masters} onBack={() => setBoqFamily("solar-hybrid")} />;
+  if (boqFamily === "ci-bess") return <CniProposals initialProposalId={initialCniId} initialContext={cniContext} session={session} onLogout={onLogout} masters={masters} onBack={() => {setBoqFamily("solar-hybrid");setInitial(cniContext??initialContext??{});}} />;
   return (
     <section className="boq-section">
       {addingCustomer && (
@@ -611,7 +626,7 @@ export function Boqs({
           </div>
           <p>
             Select a site or create a new one, review the costing, then save an
-            approved immutable R0.
+            immutable BOQ revision, then prepare its quotation for Management approval.
           </p>
           <section className="detail-panel review-workspace">
             <h3>
@@ -1062,7 +1077,7 @@ export function Boqs({
                   ? "Revise survey & BOQ"
                   : "New survey & BOQ"}
             </h2>
-            <button onClick={() => setView("list")} disabled={busy}>
+            <button onClick={() => {if(confirmLeaveWorkspace()){setDirty(false);setView("list");}}} disabled={busy}>
               Back to BOQs
             </button>
           </div>
@@ -1079,15 +1094,6 @@ export function Boqs({
               <label>Original BOQ<select aria-label="Original BOQ" disabled={!revisionCustomer || busy} value="" onChange={async e => { if (!e.target.value) return; setBusy(true); try { const original = await api<any>(`/boqs/${e.target.value}`); reviseSaved(original); setRevisionMode(false); } catch(error) { fail(error); } finally { setBusy(false); } }}><option value="">Select BOQ to load original values</option>{records.filter(r => String(r.customer_id) === revisionCustomer).map(r => <option key={r.id} value={r.id}>{r.number} · {r.site}</option>)}</select></label>
             </>}
           </section>}
-          <div className="boq-family-field">
-            <label>BOQ type<select aria-label="BOQ type" value={boqFamily} onChange={e => {setBoqFamily(e.target.value);setPreview(undefined);setNotice("");}}>
-              <option value="solar-hybrid">Solar Hybrid Project</option>
-              <option value="ci-bess">C&amp;I BESS</option>
-              <option value="bess-only">BESS Only (UPS with Installation)</option>
-              <option value="direct-product">Direct Product Sale</option>
-            </select></label>
-            <small>Select the solution family. BESS Only uses the existing quotation and approval workflow.</small>
-          </div>
           {baseRevisionId && (
             <label className="source-label">
               Revision source
@@ -1113,6 +1119,74 @@ export function Boqs({
               />
             </label>
           )}
+          {sourceMode === "General quotation" && boqFamily === "solar-hybrid" && (
+            <section className="detail-panel">
+              <h3>General quotation · no survey</h3>
+              <p>
+                Cable quantities are calculated automatically from installed PV
+                wattage. These are allowances, not measured site quantities.
+              </p>
+            </section>
+          )}
+          {designSource && (
+            <aside className="detail-panel" aria-label="Design survey handoff">
+              <h3>Survey received from Design</h3>
+              <p>
+                {designSource.designer} ·{" "}
+                {new Date(designSource.sent_at).toLocaleString()}
+              </p>
+              {designSource.notes && (
+                <p style={{ whiteSpace: "pre-wrap" }}>{designSource.notes}</p>
+              )}
+              <p>
+                Review the uploaded survey, select brands and prepare costing.
+              </p>
+            </aside>
+          )}
+          {!revisionMode && <form
+            ref={form}
+            className="survey-form"
+            onSubmit={calculate}
+            onChange={() => {
+              setDirty(true);
+              setPreview(undefined);
+              setNotice("");
+              if (form.current) {
+                const fields = new FormData(form.current);
+                setPvInput({
+                  qty: Number(fields.get("panelQty")) || 0,
+                  wattage: String(fields.get("panelWattage") || "0"),
+                });
+              }
+            }}
+          >
+            <fieldset disabled={busy}>
+              <legend>1 · Customer & site</legend>
+              <div className="survey-grid">
+                <CustomerSiteFields
+                  masters={masters}
+                  initial={initial}
+                  revision={!!baseRevisionId}
+                  preferredCustomer={createdCustomerId}
+                  onAdd={
+                    canWriteMaster(session.user.role, "customers", "new")
+                      ? () => setAddingCustomer(true)
+                      : undefined
+                  }
+                />
+              </div>
+            </fieldset>
+          <div className="boq-family-field">
+            <label>BOQ type<select aria-label="BOQ type" value={boqFamily} onChange={e => selectFamily(e.target.value)}>
+              <option value="solar-hybrid">Solar Hybrid Project</option>
+              <option value="ci-bess">C&amp;I BESS</option>
+              <option value="bess-only">BESS Only (UPS with Installation)</option>
+              <option value="direct-product">Direct Product Sale</option>
+            </select></label>
+            <small>Select what you are preparing. Only the applicable inputs appear below.</small>
+          </div>
+            {boqFamily !== "direct-product" && <div className="boq-family-field"><label>Input method<select aria-label="Input method" value={sourceMode} disabled={busy || !!designSource} onChange={e=>{setSourceMode(e.target.value);setPreview(undefined);setDirty(true);}}><option value="Survey">Survey · measured site inputs</option><option value="General quotation">Quick BOQ · approved allowances</option></select></label><small>{sourceMode==='Survey'?'Enter measured quantities or upload the survey. Auto-filled inverter allowances remain editable.':'Derived allowances are calculated by the existing approved rules. Check them before preparing a quotation.'}</small></div>}
+            <p className="workspace-help">{boqFamily==='direct-product'?'Select products and quantities. Survey, cables and installation inputs are excluded.':boqFamily==='bess-only'?'Select BESS equipment and AC integration. Solar panels, structures and DC scope are excluded.':'Select PV, BESS and the applicable AC/DC scope. Derived values are identified beside their inputs.'}</p>
           {sourceMode !== "General quotation" && boqFamily !== "direct-product" && (
             <section className="detail-panel upload-panel">
               <h3>Upload survey information</h3>
@@ -1135,8 +1209,10 @@ export function Boqs({
                 <p key={u.id}>
                   <a href={`/api/boqs/uploads/${u.id}`}>{u.filename}</a>{" "}
                   <button
+                    type="button"
                     disabled={busy}
                     onClick={() => {
+                      setDirty(true);
                       setUploads(uploads.filter((x) => x.id !== u.id));
                       setReviewed(false);
                       setPreview(undefined);
@@ -1173,7 +1249,7 @@ export function Boqs({
                           )
                           .join(" · ")}
                       </p>
-                      <button disabled={busy} onClick={applySuggestions}>
+                      <button type="button" disabled={busy} onClick={applySuggestions}>
                         Apply recognised values for review
                       </button>
                     </>
@@ -1194,62 +1270,6 @@ export function Boqs({
               )}
             </section>
           )}
-          {sourceMode === "General quotation" && boqFamily === "solar-hybrid" && (
-            <section className="detail-panel">
-              <h3>General quotation · no survey</h3>
-              <p>
-                Cable quantities are calculated automatically from installed PV
-                wattage. These are allowances, not measured site quantities.
-              </p>
-            </section>
-          )}
-          {designSource && (
-            <aside className="detail-panel" aria-label="Design survey handoff">
-              <h3>Survey received from Design</h3>
-              <p>
-                {designSource.designer} ·{" "}
-                {new Date(designSource.sent_at).toLocaleString()}
-              </p>
-              {designSource.notes && (
-                <p style={{ whiteSpace: "pre-wrap" }}>{designSource.notes}</p>
-              )}
-              <p>
-                Review the uploaded survey, select brands and prepare costing.
-              </p>
-            </aside>
-          )}
-          {!revisionMode && <form
-            ref={form}
-            className="survey-form"
-            onSubmit={calculate}
-            onChange={() => {
-              setPreview(undefined);
-              setNotice("");
-              if (form.current) {
-                const fields = new FormData(form.current);
-                setPvInput({
-                  qty: Number(fields.get("panelQty")) || 0,
-                  wattage: String(fields.get("panelWattage") || "0"),
-                });
-              }
-            }}
-          >
-            <fieldset disabled={busy}>
-              <legend>1 · Customer & site</legend>
-              <div className="survey-grid">
-                <CustomerSiteFields
-                  masters={masters}
-                  initial={initial}
-                  revision={!!baseRevisionId}
-                  preferredCustomer={createdCustomerId}
-                  onAdd={
-                    canWriteMaster(session.user.role, "customers", "new")
-                      ? () => setAddingCustomer(true)
-                      : undefined
-                  }
-                />
-              </div>
-            </fieldset>
             {sourceMode === "General quotation" && boqFamily === "solar-hybrid" && (
               <section className="detail-panel">
                 <h3>Automatic cable allowances</h3>
@@ -1432,8 +1452,7 @@ export function Boqs({
                 <fieldset disabled={busy}>
                   <legend>BOQ revision technical specifications</legend>
                   <p>
-                    Changes are saved in this BOQ revision and require costing
-                    review.
+                    Changes are saved in this BOQ revision and return through quotation approval.
                   </p>
                   {technicalLines
                     .filter((l) => l.key !== "Additional Item")

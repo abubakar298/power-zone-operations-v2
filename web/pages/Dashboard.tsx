@@ -1,3 +1,4 @@
+import {confirmLeaveWorkspace} from "../hooks/useUnsavedChanges.js";
 import {Button} from "../ui/Button.js";
 import {CoordinatorLibrary} from "./CoordinatorLibrary.js";
 import {NotificationAdmin} from "../components/NotificationAdmin.js";
@@ -128,12 +129,14 @@ export function Dashboard({
       | "orders",
     task?: any,
   ) {
+    if(!confirmLeaveWorkspace())return false;
     if (["dashboard","projects","documents"].includes(view)) setOrigin(view);
     if (next === "dashboard") window.dispatchEvent(new Event("pz:workspace-open"));
     setBucketTask(task);
     setView(next);
     setMobileOpen(false);
     setMenuOpen(false);
+    return true;
   }
   const isCoordinator = session.user.role === "Coordinator";
   useEffect(()=>{let alive=true;setCurrentProjectKey(undefined);if(!isCoordinator||!bucketTask)return;void api<any>('/coordinator/projects').then(index=>{const ids=[bucketTask.id,bucketTask.ipo_id,bucketTask.boq_revision_id,bucketTask.draft_id].filter(Boolean);const record=index.documents?.find((d:any)=>ids.includes(d.id)||ids.includes(d.proposal_id));if(alive)setCurrentProjectKey(record?.project_key)}).catch(()=>{});return()=>{alive=false}},[bucketTask,isCoordinator]);
@@ -160,7 +163,7 @@ export function Dashboard({
             <nav aria-label="Main navigation">
               {([['dashboard','My Workspace','dashboard'],['projects','Projects','site'],['newboq','New BOQ','plus'],['documents','Documents','file'],['customers','Customers & Sites','users'],['rates','Rate Master','rates']] as const).map(([destination,label,icon])=>{
                 const active=view===destination || (['boqs','pricing','quotes','orders','operations'].includes(view)&&origin===destination);
-                return <button key={destination} className={active?'nav-active':''} aria-current={active?'page':undefined} onClick={()=>{setRevisionDraftId(undefined);setPricingRevisionId(undefined);setPricingRequestId(undefined);setOperationsIpoId(undefined);navigate(destination);}}><Icon name={icon}/>{label}</button>;
+                return <button key={destination} className={active?'nav-active':''} aria-current={active?'page':undefined} onClick={()=>{if(!navigate(destination))return;setRevisionDraftId(undefined);setPricingRevisionId(undefined);setPricingRequestId(undefined);setOperationsIpoId(undefined);}}><Icon name={icon}/>{label}</button>;
               })}
             </nav>
           </> : <>
@@ -510,6 +513,7 @@ export function Dashboard({
             <Boqs
               key={view+String(bucketTask?.id)+String(revisionDraftId)}
               startNew={view==="newboq"}
+              initialContext={bucketTask?.context}
               initialBoqId={bucketTask?.kind==="Saved BOQ" ? bucketTask.id : undefined}
               initialDraftId={revisionDraftId}
               initialCniId={bucketTask?.kind === "C&I proposal" ? bucketTask.id : undefined}
