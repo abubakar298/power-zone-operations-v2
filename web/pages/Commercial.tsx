@@ -1,3 +1,5 @@
+import {Button} from "../ui/Button.js";
+import {confirmLeaveWorkspace,useUnsavedChanges} from "../hooks/useUnsavedChanges.js";
 import type { CommercialPolicy } from "../../server/commercial/active-policy.js";
 import { money } from "../numbers.js";
 import { SharePdf } from "../components/SharePdf.js";
@@ -250,6 +252,8 @@ export function Commercial({
   const manager = ["Admin", "Management", "Coordinator"].includes(
     session.user.role,
   );
+  const [dirty,setDirty]=useState(false);
+  useUnsavedChanges(dirty);
   const [policy,setPolicy] = useState<CommercialPolicy>();
   const [boqs, setBoqs] = useState<any[]>([]),
     [prices, setPrices] = useState<any[]>([]),
@@ -405,6 +409,7 @@ export function Commercial({
     }
   }
   function update(p: Partial<PricingInput>) {
+    setDirty(true);
     setInput({ ...input, ...p });
     setPreview(undefined);
     setSavedPrice(undefined);
@@ -447,6 +452,7 @@ export function Commercial({
         body: { ...input, fingerprint: preview.fingerprint, requestKey: key },
         csrf: session.csrfToken,
       });
+      setDirty(false);
       setSavedPrice(p);
       await load();
       await prepareQuote({pricingId:p.id,revisionRequestId:input.revisionRequestId,quotedDate:new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Karachi",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()),validity:"7 Days",proposedBy:session.user.displayName});
@@ -456,6 +462,8 @@ export function Commercial({
     });
   }
   async function selectPrice(id: string) {
+    if(!confirmLeaveWorkspace())return;
+    setDirty(false);
     await action(async () => {
       const p = await api<any>(`/commercial/pricing/${id}`);
       setSavedPrice(p);
@@ -514,6 +522,7 @@ export function Commercial({
         body: data,
         csrf: session.csrfToken,
       });
+      setDirty(true);
       setQuoteInput({
         ...data,
         discount: result.snapshot.input.discount,
@@ -568,6 +577,7 @@ export function Commercial({
         },
         csrf: session.csrfToken,
       });
+      setDirty(false);
       setSavedQuote(q);
       setQuoteInput(undefined);
       if (submit) {
@@ -584,6 +594,8 @@ export function Commercial({
     });
   }
   async function openQuote(id: string) {
+    if(!confirmLeaveWorkspace())return;
+    setDirty(false);
     await action(async () => {
       setSavedQuote(await api(`/commercial/quotations/${id}`));
       setQuoteInput(undefined);
@@ -623,6 +635,7 @@ export function Commercial({
     };
   }, [quoteFields]);
   function quoteChange(p: Partial<QuotationInput>) {
+    setDirty(true);
     ++previewSequence.current;
     setQuoteInput({ ...quoteInput!, ...p });
     setQuotePreview((old) => (old ? { ...old, fingerprint: "" } : old));
@@ -632,6 +645,7 @@ export function Commercial({
   function changeQuotationDiscount(value: string) {
     ++previewSequence.current;
     if (!quoteInput || !quotePreview) return;
+    setDirty(true);
     setQuoteInput({ ...quoteInput, discount: value });
     setKey(crypto.randomUUID());
     const footer = quotePreview.snapshot.footer;
@@ -668,12 +682,16 @@ export function Commercial({
     );
   }
   const p = preview?.snapshot;
+  const visibleRows = p?.rows.filter(r=>financialManager || (r.key!=="bess" && r.cost!=null && r.markup!=null)) ?? [];
+  const visibleCost = visibleRows.reduce((sum,r)=>sum.add(r.cost),new Decimal(0)).toFixed(2);
   return (
     <section className="commercial-section">
       <p>
-        Commercial pricing and quotations use the exact approved BOQ revision.
+        Commercial pricing uses the selected saved BOQ revision. Management approves the final quotation.
         Saved versions retain their original inputs and amounts.
       </p>
+      {dirty&&<p role="status">Unsaved quotation preparation changes</p>}
+      {revisionInfo&&<aside className="detail-panel" aria-label="Requested revision"><h3>Requested changes</h3><p>{revisionInfo.origin} · {revisionInfo.reason}</p><p>The revised quotation returns to Management approval before customer confirmation.</p></aside>}
       {error && (
         <p role="alert" className="form-error">
           {error}
@@ -799,13 +817,12 @@ export function Commercial({
               </div>
               <div className="pricing-policy-note"><strong>Power Zone standard pricing{policy ? ` · Policy v${policy.version}` : ""}</strong><p>Selling prices are applied automatically. Saved quotations retain their pricing policy version.</p>{policy?.markups&&<p>Solar panels {policy.markups.solar}% · Structure {policy.markups.structure}% · Earthing bores {policy.markups.earthing}% · Balance of systems {policy.markups.other}%</p>}</div>
             </fieldset>
-            <button className="primary" disabled={busy} type="submit">
-              Calculate selling price
-            </button>
+            <Button variant="primary" loading={busy} type="submit" loadingLabel="Calculating…">Calculate selling price</Button>
           </form>
           {p && (
             <section className="detail-panel">
-              <h3>Internal commercial summary</h3>
+              <h3>{financialManager?"Internal commercial summary":"Non-BESS cost & selling review"}</h3>
+              {!financialManager&&<p>BESS equipment costs and confidential profitability are excluded. The selling totals below include the complete quotation.</p>}
               <div className="table-scroll">
                 <table className="master-table">
                   <thead>
@@ -824,7 +841,7 @@ export function Commercial({
                     </tr>
                   </thead>
                   <tbody>
-                    {p.rows.filter(r=>financialManager||r.key!=="bess").map((r) => (
+                    {visibleRows.map((r) => (
                       <tr key={r.key}>
                         <td>{r.name}</td>
                         <td className="numeric">{money(r.cost)}</td>
@@ -841,6 +858,7 @@ export function Commercial({
               {p.policy && <p>Standard Commercial Policy v{p.policy.version} · Category percentages in the summary are effective averages where a display group contains different item markups.</p>}
               {financialManager && p.itemPricing && <details><summary>Standard item selling prices</summary><div className="table-scroll"><table className="master-table"><thead><tr><th>Item</th><th>Category</th><th>Pre-tax cost</th><th>Standard markup</th><th>Selling before tax</th></tr></thead><tbody>{p.itemPricing.map(l=><tr key={l.key}><td>{l.description}</td><td>{l.category}</td><td>{money(l.cost)}</td><td>{new Decimal(l.markup).toDecimalPlaces(2).toString()}%</td><td>{money(l.beforeTax)}</td></tr>)}</tbody></table></div></details>}
               <div className="quote-totals">
+                {!financialManager&&<p><span>Visible Cost Subtotal — Excludes BESS Equipment</span><strong>PKR {money(visibleCost)}</strong></p>}
                 {financialManager && <p>
                   <span>Approved BOQ cost</span>
                   <strong>PKR {money(p.cost)}</strong>
@@ -881,7 +899,7 @@ export function Commercial({
             </section>
           )}
           <section className="detail-panel">
-            <h3>Saved pricing versions</h3>
+            <details><summary>Saved pricing versions</summary>
             {prices.length ? (
               prices.map((r) => (
                 <button
@@ -896,7 +914,7 @@ export function Commercial({
             ) : (
               <p>No pricing saved yet.</p>
             )}
-          </section>
+          </details></section>
         </>
       )}
       {!manager && section === "pricing" && (
@@ -1097,9 +1115,7 @@ export function Commercial({
                   </fieldset>
                 )}
             </fieldset>
-            <button className="primary" disabled={busy}>
-              Preview quotation
-            </button>
+            <Button variant="secondary" type="submit" loading={busy} loadingLabel="Preparing preview…">Preview quotation</Button>
           </form>
         </>
       )}
@@ -1108,7 +1124,7 @@ export function Commercial({
           <QuotationView
             snapshot={quotePreview.snapshot}
             discount={quoteInput?.discount}
-            onDiscount={manager ? changeQuotationDiscount : undefined}
+            onDiscount={financialManager ? changeQuotationDiscount : undefined}
             draftInput={quotePdfInput}
             csrf={session.csrfToken}
           />
@@ -1121,20 +1137,11 @@ export function Commercial({
               Confirm quotation totals
             </button>
           )}
-          <button
-            className="primary"
-            disabled={busy || !quotePreview.fingerprint}
-            onClick={() => void saveQuote()}
-          >
-            Save quotation version
-          </button>
-          <button
-            className="primary"
-            disabled={busy || !quotePreview.fingerprint}
-            onClick={() => void saveQuote(true)}
-          >
-            Save and send for approval
-          </button>
+          <p>Save draft preserves this quotation version without submission. Submit sends it to Management; customer confirmation becomes available only after approval.</p>
+          <div className="pz-action-row">
+          <Button variant="secondary" loading={busy} disabled={!quotePreview.fingerprint} onClick={() => void saveQuote()}>Save draft quotation</Button>
+          <Button variant="primary" loading={busy} disabled={!quotePreview.fingerprint} onClick={() => void saveQuote(true)}>Save and send for approval</Button>
+          </div>
         </>
       )}
       {savedQuote && (

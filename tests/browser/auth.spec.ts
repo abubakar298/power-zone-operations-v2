@@ -414,7 +414,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.locator(".quotation-pdf-pages canvas").first(),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Save quotation version", exact: true }),
+    page.getByRole("button", { name: "Save draft quotation", exact: true }),
   ).toBeEnabled();
   await inlineDiscount.fill("1000.50");
   await expect(page.locator(".pdf-inline-net")).toHaveText(discountedNet);
@@ -422,7 +422,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByText(`Net Total: PKR ${discountedNet}`, { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Save quotation version", exact: true }),
+    page.getByRole("button", { name: "Save draft quotation", exact: true }),
   ).toBeDisabled();
   await page
     .getByRole("button", { name: "Confirm quotation totals", exact: true })
@@ -431,7 +431,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.locator(".quotation-pdf-pages canvas").first(),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Save quotation version", exact: true })
+    .getByRole("button", { name: "Save draft quotation", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "CPZ-QT-26-001-0003-003-R1 (BAFL-05850)", exact: true }),
@@ -465,7 +465,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .getByRole("button", { name: "Preview quotation", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Save quotation version", exact: true })
+    .getByRole("button", { name: "Save draft quotation", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "CPZ-QT-26-001-0003-003-R2 (BAFL-05850)", exact: true }),
@@ -513,7 +513,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.locator(".quotation-pdf-pages canvas").first(),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Save quotation version", exact: true })
+    .getByRole("button", { name: "Save draft quotation", exact: true })
     .click();
   await expect(page.getByText(/^Customer revision ·/)).toBeVisible();
   await page.reload();
@@ -1373,7 +1373,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
     page.locator(".quotation-pdf-pages canvas").first(),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Save quotation version", exact: true })
+    .getByRole("button", { name: "Save draft quotation", exact: true })
     .click();
   const quoteHeading = page.getByRole("heading", {
     name: /^CPZ-QT-.*\(DEMO-FLOWBROWSER\)/,

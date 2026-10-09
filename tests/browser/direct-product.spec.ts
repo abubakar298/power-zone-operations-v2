@@ -14,5 +14,5 @@ test('Direct Product Sale has product-only inputs and existing quotation prepara
  await page.getByLabel('Price presentation',{exact:true}).selectOption('Full Breakup');await page.getByLabel('Complete BESS package pricing',{exact:true}).selectOption('grouped');
  const pricingResponse=page.waitForResponse(r=>r.url().endsWith('/api/commercial/pricing/preview')&&r.request().method()==='POST');await page.getByRole('button',{name:'Calculate selling price',exact:true}).click();const priced=await pricingResponse;expect(priced.status(),await priced.text()).toBe(200);expect((await priced.json()).snapshot.input.groupBessPackages).toBe(true);
  await page.screenshot({path:'output/direct-product-browser.png',fullPage:true});
- await page.getByRole('button',{name:'Create quotation',exact:true}).click();await expect(page.getByRole('button',{name:'Save quotation version',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Create quotation',exact:true}).click();await expect(page.getByRole('button',{name:'Save draft quotation',exact:true})).toBeVisible();
 });
