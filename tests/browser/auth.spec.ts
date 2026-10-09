@@ -52,6 +52,14 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   ).toBeVisible();
   await page.getByLabel("Email address").fill("admin@example.test");
   await page.getByLabel("Password", { exact: true }).fill("incorrect");
+  const passwordInput = page.getByLabel("Password", { exact: true });
+  await expect(passwordInput).toHaveAttribute("type", "password");
+  await page.getByLabel("Show password", { exact: true }).check();
+  await expect(passwordInput).toHaveAttribute("type", "text");
+  await expect(passwordInput).toHaveValue("incorrect");
+  await page.getByLabel("Show password", { exact: true }).uncheck();
+  await expect(passwordInput).toHaveAttribute("type", "password");
+  await expect(passwordInput).toHaveValue("incorrect");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText(
     "Email or password is incorrect.",

@@ -12,6 +12,7 @@ export function Login({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
@@ -59,11 +60,21 @@ export function Login({
         <input
           id="password"
           name="password"
-          type="password"
+          type={showPassword ? "text" : "password"}
           autoComplete="current-password"
           maxLength={128}
           required
         />
+        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input
+            type="checkbox"
+            checked={showPassword}
+            onChange={(event) => setShowPassword(event.target.checked)}
+            aria-controls="password"
+            style={{ width: "auto", margin: 0 }}
+          />
+          Show password
+        </label>
         {error && (
           <p className="form-error" role="alert">
             {error}
