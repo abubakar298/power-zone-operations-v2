@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-for (const quick of [false, true]) test(`Single-phase ${quick ? 'Quick BOQ' : 'survey'} costing preview and approval lock`, async ({page}) => {
+for (const quick of [false, true]) test(`Single-phase ${quick ? 'Quick BOQ' : 'survey'} costing preview and quotation preparation`, async ({page}) => {
   const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? '3180'}`;
   if ((await (await page.request.get('/api/auth/status')).json()).setupRequired)
     expect((await page.request.post('/api/auth/setup',{headers:{Origin:origin},data:{email:'admin@example.test',displayName:'Isolated admin',password:'browser-test-passphrase-298',setupToken:'browser-test-setup-key-isolated-only'}})).status()).toBe(201);
@@ -35,7 +35,7 @@ for (const quick of [false, true]) test(`Single-phase ${quick ? 'Quick BOQ' : 's
   expect(line('SP AC Conduit Accessories and Box').total).toBe('5000');
   expect(line('SP DC Enclosures').total).toBe('5000');
   expect(line('AC SPD')).toBeUndefined();
-  await expect(page.getByRole('button',{name:'Submit for review',exact:true})).toBeDisabled();
-  await expect(page.getByText(/Single-phase costing preview only/)).toBeVisible();
+  await expect(page.getByRole('button',{name:'Submit for review',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Create quotation',exact:true})).toBeEnabled();
   await page.screenshot({path:`test-results/sp2-${quick?'quick':'survey'}.png`,fullPage:true});
 });

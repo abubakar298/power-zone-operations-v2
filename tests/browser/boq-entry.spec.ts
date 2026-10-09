@@ -37,8 +37,8 @@ test('BOQ entry: provisional rates, unified customer search, automatic terminati
   await expect(page.getByLabel('Panel termination · 16 mm² 4-core (m)',{exact:true})).toHaveCount(0);
   await expect(page.getByLabel('10mm² 1-core AC cable · load-panel termination (m)',{exact:true})).toBeVisible();
   await page.getByLabel('10mm² 1-core AC cable · load-panel termination (m)',{exact:true}).fill('40');
-  await expect(page.getByText('10 m line + 10 m neutral for input; the same for output. Total conductor quantity.')).toBeVisible();
-  await expect(page.getByLabel('AC cable · inverter termination (automatic)',{exact:true})).toHaveValue('20 m · 10mm² 1-core');
+  await expect(page.getByText('20 m input + 20 m output (10 m line + 10 m neutral each). Total: 20 m red + 20 m black.',{exact:false})).toBeVisible();
+  await expect(page.getByLabel('AC cable · inverter termination · 10mm² 1-core (m)',{exact:true})).toHaveValue('20');
   await bess.selectOption('BESS-24-30');
   await expect(page.getByLabel('10mm² 1-core AC cable · load-panel termination (m)',{exact:true})).toHaveCount(0);
   await expect(page.getByLabel('Inverter termination · 16 mm² 4-core (m)',{exact:true})).toHaveCount(0);
@@ -50,7 +50,7 @@ test('BOQ entry: provisional rates, unified customer search, automatic terminati
   const response=await previewResponse; expect(response.status()).toBe(200);
   const preview=await response.json();
   expect(preview.snapshot.lines.find((l:any)=>l.key==='16mm² 4C AC Cable').qty).toBe('15');
-  expect(preview.snapshot.lines.find((l:any)=>l.key==='25mm² 4C AC Cable').qty).toBe('32');
+  expect(preview.snapshot.lines.find((l:any)=>l.key==='25mm² 4C AC Cable').qty).toBe('12');
   const session=await (await page.request.get('/api/auth/session')).json();
   const headers={Origin:origin,'X-CSRF-Token':session.csrfToken};
   const post=async(path:string,data:any)=>{const r=await page.request.post('/api/boqs'+path,{headers,data});expect(r.ok(),await r.text()).toBeTruthy();return r.json();};
