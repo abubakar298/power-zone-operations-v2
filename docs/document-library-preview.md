@@ -9,3 +9,5 @@ Unfinished survey drafts show saved survey fields rather than invented finalized
 Shared DocumentPreview renders PDFs, preserving the current preview appearance. Preview/download share a fetched blob; object URLs are revoked on leaving. Load/authorization errors are shown and Download remains disabled when loading fails.
 
 Verification: application typecheck and production client build PASS. Disposable browser fixtures PASS for five types, downloads, exact C&I version, GET-only behavior and 403 preventing download; no runtime errors. Full unrelated suites not manually repeated.
+
+Live CSP forbids fetching blob URLs. The shared viewer now optionally accepts an already loaded Blob and renders those bytes directly; existing URL-based IPO/evidence previews keep their previous behavior. No CSP or permissions changes. Focused checks also run under connect-src 'self' and verify rendered PDF pages before downloads.

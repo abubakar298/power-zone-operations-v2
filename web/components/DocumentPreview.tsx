@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 /** Read-only authenticated document preview. Existing endpoints enforce access. */
-export function DocumentPreview({url,title,mime="application/pdf"}:{url:string;title:string;mime?:string}) {
+export function DocumentPreview({url,title,mime="application/pdf",data}:{url:string;title:string;mime?:string;data?:Blob}) {
   const host=useRef<HTMLDivElement>(null);
   const [status,setStatus]=useState("Loading document…");
   useEffect(()=>{
@@ -10,9 +10,12 @@ export function DocumentPreview({url,title,mime="application/pdf"}:{url:string;t
     host.current?.replaceChildren();setStatus("Loading document…");
     void(async()=>{
       try{
+        let blob=data;
+        if(!blob){
         const response=await fetch(url,{credentials:"same-origin",cache:"no-store",signal:controller.signal});
         if(!response.ok)throw new Error("Unable to load this document. Use the download link or try again.");
-        const blob=await response.blob();
+        blob=await response.blob();
+        }
         if(blob.type.startsWith("image/")||mime.startsWith("image/")){
           const image=document.createElement("img");image.alt=title;
           const reader=new FileReader();reader.readAsDataURL(blob);await new Promise<void>((resolve,reject)=>{reader.onload=()=>resolve();reader.onerror=()=>reject(new Error("Unable to read attachment."));});
@@ -29,6 +32,7 @@ export function DocumentPreview({url,title,mime="application/pdf"}:{url:string;t
       }catch(e){if(!cancelled)setStatus(e instanceof Error?e.message:"Unable to load document.");}
     })();
     return()=>{cancelled=true;controller.abort();void task?.destroy();};
-  },[url,title,mime]);
+  },[url,title,mime,data]);
   return <section className="ipo-document-preview" aria-label={title}><div className="ipo-preview-heading"><h4>{title}</h4><a href={url} download>Download</a></div>{status&&<p role="status">{status}</p>}<div className="ipo-preview-pages" ref={host}/></section>;
 }
+
