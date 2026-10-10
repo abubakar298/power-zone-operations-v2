@@ -7,6 +7,8 @@ import { InventoryWorkspace } from "./InventoryWorkspace.js";
 import { Departments } from "./Departments.js";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.js";
 import { confirmTransition } from "../confirm.js";
+import { quotationDisplayRows } from "../../server/commercial/quotation-rows.js";
+import { orderCustomerScopeLines } from "../../server/commercial/customer-scope.js";
 import { Decimal } from "decimal.js";
 const phases = ["Solar Panels", "Structure", "Inverter", "Batteries", "BMS"];
 const epcNames = [
@@ -452,6 +454,7 @@ export function AccountsWorkspace({
               <div className="pz-form-grid">
                 <section>
                   <h3>Approved quotation · {selected.quotation?.number}</h3>
+                  <a href={"/api/commercial/quotations/"+selected.quotation?.id+"/quotation.pdf"}>Download approved quotation</a>
                   <div className="table-scroll">
                     <table>
                       <thead>
@@ -461,11 +464,11 @@ export function AccountsWorkspace({
                         </tr>
                       </thead>
                       <tbody>
-                        {selected.quotation?.snapshot.lines?.map(
+                        {quotationDisplayRows(selected.quotation?.snapshot.customerScopeVersion === 1 ? orderCustomerScopeLines(selected.quotation.snapshot.lines,selected.quotation.snapshot.presentation) : (selected.quotation?.snapshot.lines ?? [])).map(
                           (l: any, i: number) => (
                             <tr key={i}>
                               <td>{l.description}</td>
-                              <td className="pz-number">{money(l.amount)}</td>
+                              {l.amount !== undefined ? <td className="pz-number" rowSpan={l.span ?? 1}>{money(l.amount)}</td> : selected.quotation.snapshot.presentation === "No Breakup" ? <td>Included in consolidated offer</td> : null}
                             </tr>
                           ),
                         )}
