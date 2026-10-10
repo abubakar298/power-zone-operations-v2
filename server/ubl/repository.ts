@@ -10,6 +10,10 @@ import {ublBudget,type UblConfiguration} from './engine.js';
 
 export class UblRepository {
  constructor(private pool:Pool){}
+ async sites(actor:string){
+  await this.role(actor);
+  return (await this.pool.query('SELECT o.*,o.po_issued_date::text AS po_issued_date FROM ubl_site_orders o ORDER BY source_row')).rows;
+ }
  async role(actor:string,write=false,c:Pool=this.pool){
   await new CommercialRepository(this.pool).manager(c,actor,!write);
   const role=(await c.query('SELECT role FROM users WHERE id=$1',[actor])).rows[0].role as string;

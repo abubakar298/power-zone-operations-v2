@@ -7,6 +7,7 @@ export function ublHttp(repo:UblRepository,requireSession:RequestHandler){
  const r=Router();r.use(requireSession);
  const config=(value:unknown)=>{const parsed=z.enum(['20-20-30','25-20-30','30-30-40','35-30-40']).safeParse(value);if(!parsed.success)throw new HttpError(404,'UBL configuration not found.');return parsed.data;};
  r.get('/',async(req,res)=>res.json({configurations:await repo.list(req.authSession!.user.id)}));
+ r.get('/sites',async(req,res)=>res.json({sites:await repo.sites(req.authSession!.user.id)}));
  r.get('/:id/source.pdf',async(req,res)=>{const source=await repo.source(req.authSession!.user.id,config(req.params.id));res.set({'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="${source.filename}"`,'Cache-Control':'private, no-store'}).send(source.content);});
  r.get('/:id',async(req,res)=>res.json(await repo.detail(req.authSession!.user.id,config(req.params.id))));
  r.post('/:id/budgets',async(req,res)=>{
