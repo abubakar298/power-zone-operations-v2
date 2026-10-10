@@ -1,3 +1,4 @@
+import {customerScopeItems, earthingScopeDescription} from './customer-scope.js';
 import { standardItemPrices, type CommercialPolicy } from "./active-policy.js";
 import { Decimal } from "decimal.js";
 import type { BoqSnapshot } from "../boq/engine.js";
@@ -230,7 +231,7 @@ export function quotationLines(
       s.engineering.bms,
       "bess",
     );
-  add("Earthing Bore", "No.", qty("Earthing Bore"), "earthing");
+  add(earthingScopeDescription, "No.", qty("Earthing Bore"), "earthing");
   add(
     `6mm² DC Cable Red and Black — ${brand("cable")}`,
     "m",
@@ -243,7 +244,7 @@ export function quotationLines(
     ["10mm² Earthing Cable", s.generalAllowances?.earth10 ?? s.survey.earth10],
   ])
     if (full || D(quantity).gt(0))
-      add(`${key} — ${brand("cable")}`, "m", quantity, "balance");
+      add(`${key} — ${key.startsWith("2.5") ? "Panel to Panel" : key.startsWith("6") ? "DC Side" : "AC Side"} — ${brand("cable")}`, "m", quantity, "balance");
   const ac = ["16mm² 4C AC Cable", "25mm² 4C AC Cable", "10mm² 1C AC Cable"]
     .filter((k) => line(k))
     .map((k) => k)
@@ -288,10 +289,10 @@ export function quotationLines(
   ];
   const firstComposite = rows.findIndex(r => r.description === `${ac} — ${brand("cable")}`);
   detailKeys.forEach((keys,index) => {
-    rows[firstComposite + index].items = s.lines.filter(l=>keys.includes(l.key)).map(quotationItem);
+    rows[firstComposite + index].items = customerScopeItems(s, s.lines.filter(l=>keys.includes(l.key)));
   });
   const dcRow = rows.find(r=>r.description.startsWith("6mm² DC Cable Red and Black"));
-  if(dcRow) dcRow.items = s.lines.filter(l=>["6mm² DC Cable Red","6mm² DC Cable Black"].includes(l.key)).map(quotationItem);
+  if(dcRow) dcRow.items = customerScopeItems(s, s.lines.filter(l=>["6mm² DC Cable Red","6mm² DC Cable Black"].includes(l.key)));
   for(const [description,key] of [["Installation, Testing & Commissioning Labour","Labour"],["Project Delivery / Logistics","Delivery"]]) {
     const row = rows.find(r=>r.description===description), source = line(key);
     if(row && source) row.items = [{description:row.description,unit:source.unit,qty:source.qty}];
@@ -481,6 +482,7 @@ export function quote(
   // Customer snapshot contains selling amounts only; never serialize internal pricing or BOQ specifications.
   return {
     engineVersion: 1,
+    customerScopeVersion: 1,
     ...(p.standardDiscountStrategy ? {standardDiscountStrategy:p.standardDiscountStrategy} : {}),
     input: {
       quotedDate: input.quotedDate,
@@ -513,20 +515,14 @@ export function quote(
 }
 export type QuotationSnapshot = ReturnType<typeof quote>;
 
-function quotationItem(l: BoqSnapshot["lines"][number]) {
-  // Item scope only: keep quantities in their own column and never expose costing.
-  const description = /Cable/.test(l.key) ? l.key : l.specification || l.description;
-  return {description: [description,l.brand].filter(Boolean).join(" — "), unit:l.unit, qty:l.qty};
-}
-
 /** BESS Only is a presentation of the same approved costing and pricing engine. */
 function bessOnlyLines(boq:BoqSnapshot,presentation:string):QuoteLine[]{
   const equipment=boq.lines.filter(l=>l.phase==="BESS");
   const rows:QuoteLine[]=equipment.map(l=>({description:[l.brand,l.specification??l.description].filter(Boolean).join(" "),unit:l.unit,qty:l.qty,group:"bess"}));
   const bore=boq.lines.find(l=>l.key==="Earthing Bore");
-  if(presentation==="Full Breakup" && bore) rows.push({description:"AC Earthing Bore",unit:"No.",qty:bore.qty,group:"earthing"});
+  if(presentation==="Full Breakup" && bore) rows.push({description:earthingScopeDescription,unit:"No.",qty:bore.qty,group:"earthing"});
   const others=boq.lines.filter(l=>l.phase!=="BESS"&&(presentation!=="Full Breakup"||l.key!=="Earthing Bore"));
-  if(others.length)rows.push({description:"Installation and balance of system",unit:"LS",qty:"1",group:"balance",items:others.map(quotationItem)});
+  if(others.length)rows.push({description:"Installation and balance of system",unit:"LS",qty:"1",group:"balance",items:customerScopeItems(boq, others)});
   return rows;
 }
 function quoteBessOnly(p:PricingSnapshot,boq:BoqSnapshot,input:QuotationInput,discount:string,netTotal:string,total:string,subtotal:string,solarTax:string,otherTax:string){

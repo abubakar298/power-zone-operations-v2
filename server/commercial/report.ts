@@ -1,3 +1,4 @@
+import {orderCustomerScopeLines} from './customer-scope.js';
 import { quotationDisplayRows } from "./quotation-rows.js";
 import { displayUnit } from "../boq/unit.js";
 import {
@@ -101,7 +102,7 @@ function appendQuotation(
   pdf.text(text(s.subject), margin, y);
   y += 5;
   const amounts = s.presentation !== "No Breakup";
-  const body = quotationDisplayRows(s.lines).map((r, i) => {
+  const body = quotationDisplayRows("customerScopeVersion" in s && s.customerScopeVersion === 1 ? orderCustomerScopeLines(s.lines, s.presentation) : s.lines).map((r, i) => {
     const cells: any[] = [
       String(i + 1),
       text(r.description),
