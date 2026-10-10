@@ -12,7 +12,9 @@ export class UblRepository {
  constructor(private pool:Pool){}
  async role(actor:string,write=false,c:Pool=this.pool){
   await new CommercialRepository(this.pool).manager(c,actor,!write);
-  return (await c.query('SELECT role FROM users WHERE id=$1',[actor])).rows[0].role as string;
+  const role=(await c.query('SELECT role FROM users WHERE id=$1',[actor])).rows[0].role as string;
+  if(!['Admin','Management'].includes(role))throw new HttpError(403,'UBL Solar is available to Administrator and Management only.');
+  return role;
  }
  async list(actor:string){
   await this.role(actor);

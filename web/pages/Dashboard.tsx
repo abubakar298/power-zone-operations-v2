@@ -224,7 +224,8 @@ export function Dashboard({
           <div className="nav-divider" />
           <div className="nav-label">PROJECT OPERATIONS</div>
           <div className="upcoming-nav" aria-label="Project workspaces">
-            <button className={["customers","ubl"].includes(view)?"nav-active":""} aria-current={["customers","ubl"].includes(view)?"page":undefined} onClick={()=>navigate("customers")}>
+            {["Admin","Management"].includes(session.user.role)&&<button className={view==="ubl"?"nav-active":""} aria-current={view==="ubl"?"page":undefined} onClick={()=>navigate("ubl")}><Icon name="file"/><span>UBL Solar</span></button>}
+            <button className={view==="customers"?"nav-active":""} aria-current={view==="customers"?"page":undefined} onClick={()=>navigate("customers")}>
               <Icon name="users" />
               <span>Customers & Sites</span>
             </button>
@@ -327,7 +328,7 @@ export function Dashboard({
           <span className="breadcrumb">
             Workspace <span aria-hidden="true">/</span>{" "}
             <strong>
-              {["projects","documents","newboq","customers","rates","ubl"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master",ubl:"UBL configurations"} as Record<string,string>)[view] : view === "dashboard"
+              {["projects","documents","newboq","customers","rates","ubl"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master",ubl:"UBL Solar"} as Record<string,string>)[view] : view === "dashboard"
                 ? isCoordinator ? "My Workspace" : "Dashboard"
                 : view === "design"
                   ? "Design workspace"
@@ -390,7 +391,7 @@ export function Dashboard({
             <div>
               <span className="eyebrow">POWER ZONE OPERATIONS</span>
               <h1>
-                {["projects","documents","newboq","customers","rates","ubl"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master",ubl:"UBL configurations"} as Record<string,string>)[view] : view === "dashboard"
+                {["projects","documents","newboq","customers","rates","ubl"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master",ubl:"UBL Solar"} as Record<string,string>)[view] : view === "dashboard"
                   ? isCoordinator ? "My Workspace" : `Welcome, ${session.user.displayName}.`
                   : view === "design"
                     ? "Design workspace"
@@ -564,9 +565,9 @@ export function Dashboard({
           )}
           {view === "team" && <><Team session={session} onLogout={onLogout} />{session.user.role==="Admin"&&<NotificationAdmin session={session}/>}</>}
           {["masters","customers","rates"].includes(view) && (
-            <Masters key={view} initialKind={view==="rates"?"rates":"customers"} allowedKinds={view==="customers"?["customers","sites"]:view==="rates"?["rates","items","brands","rules"]:undefined} session={session} onLogout={onLogout} onOpenUbl={canUseLibrary?()=>navigate("ubl"):undefined} />
+            <Masters key={view} initialKind={view==="rates"?"rates":"customers"} allowedKinds={view==="customers"?["customers","sites"]:view==="rates"?["rates","items","brands","rules"]:undefined} session={session} onLogout={onLogout} onOpenUbl={['Admin','Management'].includes(session.user.role)?()=>navigate("ubl"):undefined} />
           )}
-          {view === "ubl"&&canUseLibrary&&<UblConfigurations session={session} onBack={()=>navigate("customers")}/>}
+          {view === "ubl"&&["Admin","Management"].includes(session.user.role)&&<UblConfigurations session={session} onBack={()=>navigate("customers")}/>}
           {view === "account" && (
             <div
               className={`dashboard-grid ${view === "account" ? "account-view" : ""}`}
