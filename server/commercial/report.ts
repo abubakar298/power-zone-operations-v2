@@ -140,11 +140,17 @@ function appendQuotation(
     columnStyles: {
       0: { cellWidth: 7, halign: "center" },
       1: { cellWidth: amounts ? 129 : 151 },
-      2: { cellWidth: 14 },
+      2: { cellWidth: 14, halign: "center", valign: "middle" },
       3: { cellWidth: 10, halign: "center" },
       ...(amounts
         ? { 4: { cellWidth: 22, halign: "right", valign: "middle" } }
         : {}),
+    },
+    didParseCell(data) {
+      if (data.column.index === 2) {
+        data.cell.styles.halign = "center";
+        data.cell.styles.valign = "middle";
+      }
     },
     rowPageBreak: "avoid",
   });
