@@ -1,4 +1,5 @@
 import {useEffect,useState} from 'react';
+import {Decimal} from 'decimal.js';
 import {api,type Session} from '../api.js';
 import {Button} from '../ui/Button.js';
 import {StatusBadge} from '../ui/StatusBadge.js';
@@ -24,7 +25,7 @@ export function UblConfigurations({session,onBack}:{session:Session;onBack:()=>v
   <div className="pz-action-row"><Button variant="neutral" onClick={onBack}>Back to Customers & Sites</Button></div>
   <div><h2>UBL Hybrid Solar configurations</h2><p>Agreed selling prices, original BOQs, current site amendments and dated budgets for United Bank Limited.</p></div>
   {error&&<p role="alert" className="form-error">{error}</p>}{message&&<p role="status" className="form-success">{message}</p>}
-  <div className="pz-table-scroll"><table className="master-table"><thead><tr><th>PV / inverter / ESS</th><th className="numeric">Agreed total incl. GST (PKR)</th><th className="numeric">Fixed panels excl. GST (PKR)</th><th>Budget</th><th>Action</th></tr></thead><tbody>{list.map(c=><tr key={c.id}><th>{c.id}</th><td className="numeric">{amount(c.fixed_total)}</td><td className="numeric">{amount(c.panel_selling)}</td><td>{c.budget_version?`V${c.budget_version}`:'Not created'}</td><td><Button variant="secondary" onClick={()=>{setId(c.id);setTab('Current BOQ');setMessage('');window.history.replaceState(null,'',`/dashboard#workspace=ubl&configuration=${c.id}`)}}>Open {c.id}</Button></td></tr>)}</tbody></table></div>
+  <div className="pz-table-scroll"><table className="master-table"><thead><tr><th>PV / inverter / ESS</th><th className="numeric">Agreed total incl. GST (PKR)</th><th className="numeric">Panels incl. GST (PKR)</th><th className="numeric">Installation / Everything Else incl. GST (PKR)</th><th>Budget</th><th>Action</th></tr></thead><tbody>{list.map(c=><tr key={c.id}><th>{c.id}</th><td className="numeric">{amount(c.fixed_total)}</td><td className="numeric">{amount(new Decimal(c.panel_selling).mul("1.10").toString())}</td><td className="numeric">{amount(new Decimal(c.fixed_total).sub(new Decimal(c.panel_selling).mul("1.10")).toString())}</td><td>{c.budget_version?`V${c.budget_version}`:'Not created'}</td><td><Button variant="secondary" onClick={()=>{setId(c.id);setTab('Current BOQ');setMessage('');window.history.replaceState(null,'',`/dashboard#workspace=ubl&configuration=${c.id}`)}}>Open {c.id}</Button></td></tr>)}</tbody></table></div>
   {id&&!detail&&<p role="status">Loading saved configuration…</p>}
   {detail&&<><div className="pz-panel pz-stack"><h3>{id} · UBL Hybrid Solar</h3><div className="pz-action-row" role="group" aria-label="UBL configuration sections">{['Current BOQ','Original agreed BOQ','Budget versions','Negotiation history'].map(t=><Button key={t} variant="neutral" aria-pressed={tab===t} onClick={()=>setTab(t)}>{t}</Button>)}</div>
    <p><a href={`/api/ubl/${id}/source.pdf`} download>Download original Financial Proposal R3</a> · Original document preserved.</p>
