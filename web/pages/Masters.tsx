@@ -201,7 +201,7 @@ export function Masters({
       ? numberFormat.format(Number(value))
       : String(value);
   }
-  const rateReview = (r: Row) => r.status === "Needs Rate" || /provisional|temporary|review later/i.test(String(r.notes ?? "")) && ["SP AC Conduit Accessories and Box", "SP DC Enclosures", "500V 2P DC Breaker"].includes(String(r.key));
+  const rateReview = (r: Row) => r.status === "Needs Rate" || /provisional|temporary|review later/i.test(String(r.notes ?? "")) && ["SP AC Conduit Accessories and Box", "SP DC Enclosures", "500V 2P DC Breaker", "63A 4P Changeover"].includes(String(r.key));
   const rows = (data?.[kind] ?? [])
     .filter((r) => filter === "All" || (filter === "Under review" ? rateReview(r) : String(r.status) === filter))
     .filter((r) =>
