@@ -75,3 +75,21 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ubl-sites-table>tbody>tr>th{min-width:210px;max-width:260px;overflow-wrap:normal}
 .ubl-sites-table>tbody>tr>td:last-child{min-width:170px}
 .ubl-sites-table details[open]{white-space:normal;width:420px}
+
+/* UBL portfolio: paired cards preserve metric alignment and precise saved values. */
+.ubl-performance-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+.ubl-performance-card{background:var(--pz-surface);border:1px solid var(--pz-border);border-radius:var(--pz-radius-card);overflow:hidden;min-width:0}
+.ubl-performance-card>header{padding:20px 24px;background:var(--pz-selected-bg);min-height:84px;box-sizing:border-box}
+.ubl-performance-card>header h4{margin:0 0 4px;color:var(--pz-primary);font-size:16px}
+.ubl-performance-actual>header{background:var(--pz-canvas)}
+.ubl-performance-actual>header h4{color:var(--pz-text)}
+.ubl-performance-card>dl{margin:0;padding:0 24px}
+.ubl-performance-card>dl>div{padding:18px 0;min-height:94px;box-sizing:border-box;border-bottom:1px solid var(--pz-border)}
+.ubl-performance-card>dl>div:last-child{border-bottom:0}
+.ubl-performance-card dt{font-size:13px;color:var(--pz-muted);margin-bottom:9px}
+.ubl-performance-card dd{margin:0;text-align:right;font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.ubl-performance-card dd small{font-size:12px;font-weight:400;color:var(--pz-muted)}
+.ubl-performance-profit dd{color:var(--pz-primary)}
+.ubl-performance-actual dd{color:var(--pz-muted)}
+@media(max-width:700px){.ubl-performance-columns{gap:12px}.ubl-performance-card>header{padding:16px;min-height:98px}.ubl-performance-card>dl{padding:0 16px}.ubl-performance-card dd{font-size:18px}}
+@media(max-width:380px){.ubl-performance-columns{grid-template-columns:1fr}}
