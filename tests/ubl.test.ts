@@ -21,6 +21,10 @@ test('UBL originals, amendments, July prices and twelve negotiation stages are i
    assert.deepEqual(d.history.map(h=>h.snapshot.totalIncludingGst),totals[id]);
    assert.equal(d.history.at(-1)!.snapshot.totalIncludingGst,total);
    const original=d.technical[0],current=d.technical.at(-1)!;assert.equal(current.effective_date,null);
+   assert.equal(current.version,4);
+   assert.equal(current.snapshot.rows.some((r:any)=>r.id==='D15'),false);
+   assert.equal(current.snapshot.rows.filter((r:any)=>r.id==='MISC').length,1);
+   if(id.startsWith('30-')||id.startsWith('35-'))assert.equal(current.snapshot.rows.find((r:any)=>r.id==='C3').quantity,'2');
    assert.equal(original.snapshot.rows.find((r:any)=>r.id==='E18').proposalSellingRate,'5980');
    assert.match(current.snapshot.rows.find((r:any)=>r.id==='E18').specification,/100A rotary/);
    assert.equal(current.snapshot.rows.find((r:any)=>r.id==='E19').quantity,'10');
@@ -43,7 +47,9 @@ test('UBL originals, amendments, July prices and twelve negotiation stages are i
    assert.equal(newEstimate.fixedAgreedTotal,total);
    assert.notEqual(newEstimate.combinedKnownBudget,snapshot.combinedKnownBudget);
    assert.ok(new Decimal(newEstimate.panel.currentPurchaseEstimate!).lt(snapshot.panel.currentPurchaseEstimate!));
-   assert.ok(snapshot.issues.some(i=>i.id==='H29'));assert.equal(snapshot.combinedTemplateBudget,null);
+   assert.equal(snapshot.issues.length,0);assert.equal(snapshot.rows.find(r=>r.id==='H29').cost,'3000');assert.ok(snapshot.combinedTemplateBudget);
+   assert.equal(snapshot.rows.find(r=>r.id==='BOX').components[0].quantity,'2');
+   assert.equal(snapshot.rows.find(r=>r.id==='MISC').components[0].quantity,'1');
    const source=await repo.source(manager,id);assert.equal(createHash('sha256').update(source.content).digest('hex'),source.sha256);
    const key=randomUUID(),saved=await repo.refresh(manager,id,0,key,'Initial reference budget');
    assert.equal((await repo.refresh(manager,id,0,key,'Initial reference budget')).id,saved.id);
