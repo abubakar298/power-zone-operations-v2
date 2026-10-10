@@ -8,11 +8,11 @@ import {displayUnit} from '../../server/boq/unit.js';
 
 const amount=(v:string|null|undefined)=>v==null?'Unavailable':money(v);
 function budgetSummary(s:any){
- if(!s)return {cost:null,markup:null,percent:null};
+ if(!s)return {cost:null,selling:null,markup:null,percent:null};
  const cost=s.combinedTemplateBudget==null?null:new Decimal(s.combinedTemplateBudget);
  const selling=new Decimal(s.panel.sellingExcludingGst).add(new Decimal(s.fixedAgreedTotal).sub(s.panel.sellingIncludingGst).div('1.18'));
  const markup=cost?selling.sub(cost):null;
- return {cost:cost?.toString(),markup:markup?.toString(),percent:cost?.gt(0)&&markup?`${decimalDisplay(markup.div(cost).mul(100).toString(),2)}%`:null};
+ return {cost:cost?.toString(),selling:selling.toString(),markup:markup?.toString(),percent:cost?.gt(0)&&markup?`${decimalDisplay(markup.div(cost).mul(100).toString(),2)}%`:null};
 }
 export function UblConfigurations({session,onBack}:{session:Session;onBack:()=>void}){
  const [list,setList]=useState<any[]>([]),[id,setId]=useState(()=>{const value=new URLSearchParams(window.location.hash.slice(1)).get('configuration');return ['20-20-30','25-20-30','30-30-40','35-30-40'].includes(value??'')?value!:''}),[detail,setDetail]=useState<any>(),[tab,setTab]=useState('Current BOQ');
@@ -33,7 +33,7 @@ export function UblConfigurations({session,onBack}:{session:Session;onBack:()=>v
   <div className="pz-action-row"><Button variant="neutral" onClick={onBack}>Back to Customers & Sites</Button></div>
   <div><h2>UBL Hybrid Solar configurations</h2><p>Agreed selling prices, original BOQs, current site amendments and dated budgets for United Bank Limited.</p></div>
   {error&&<p role="alert" className="form-error">{error}</p>}{message&&<p role="status" className="form-success">{message}</p>}
-  <div className="pz-table-scroll"><table className="master-table"><thead><tr><th>UBL option</th><th className="numeric">Budgeted cost (PKR)</th><th className="numeric">Budgeted markup amount (PKR)</th><th className="numeric">Budgeted markup %</th><th>Action</th></tr></thead><tbody>{list.map(c=>{const summary=budgetSummary(c.summary);return <tr key={c.id}><th>{c.id}</th><td className="numeric">{amount(summary.cost)}</td><td className="numeric">{amount(summary.markup)}</td><td className="numeric">{summary.percent??'Unavailable'}</td><td><Button variant="secondary" onClick={()=>{setId(c.id);setTab('Current BOQ');setMessage('');window.history.replaceState(null,'',`/dashboard#workspace=ubl&configuration=${c.id}`)}}>Open {c.id}</Button></td></tr>})}</tbody></table></div>
+  <div className="pz-table-scroll"><table className="master-table"><thead><tr><th>UBL option</th><th className="numeric">Budgeted cost (PKR)</th><th className="numeric">Selling price excl. GST (PKR)</th><th className="numeric">Budgeted markup amount (PKR)</th><th className="numeric">Budgeted markup %</th><th>Action</th></tr></thead><tbody>{list.map(c=>{const summary=budgetSummary(c.summary);return <tr key={c.id}><th>{c.id}</th><td className="numeric">{amount(summary.cost)}</td><td className="numeric">{amount(summary.selling)}</td><td className="numeric">{amount(summary.markup)}</td><td className="numeric">{summary.percent??'Unavailable'}</td><td><Button variant="secondary" onClick={()=>{setId(c.id);setTab('Current BOQ');setMessage('');window.history.replaceState(null,'',`/dashboard#workspace=ubl&configuration=${c.id}`)}}>Open {c.id}</Button></td></tr>})}</tbody></table></div>
   <p>Latest saved budgets, excluding GST. Markup is calculated on cost from the agreed selling price excluding GST. Confidential figures are available only to Management and Administrator.</p>
   {id&&!detail&&<p role="status">Loading saved configuration…</p>}
   {detail&&<><div className="pz-panel pz-stack"><h3>{id} · UBL Hybrid Solar</h3><div className="pz-action-row" role="group" aria-label="UBL configuration sections">{['Current BOQ','Original agreed BOQ','Budget versions','Negotiation history'].map(t=><Button key={t} variant="neutral" aria-pressed={tab===t} onClick={()=>setTab(t)}>{t}</Button>)}</div>
