@@ -55,6 +55,8 @@ export function InventoryWorkspace({
     [review, setReview] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
+    [errorAction, setErrorAction] = useState(""),
+    [returnReason, setReturnReason] = useState(""),
     [message, setMessage] = useState(""),
     [legacy, setLegacy] = useState(false),
     [legacyId, setLegacyId] = useState<string>(),
@@ -96,6 +98,7 @@ export function InventoryWorkspace({
   async function openJob(key: string) {
     setBusy(true);
     setError("");
+    setErrorAction("");
     try {
       const j = await api<any>(
         "/inventory-reconciliation/job?key=" + encodeURIComponent(key),
@@ -121,6 +124,7 @@ export function InventoryWorkspace({
     }
   }
   async function save(stage: string) {
+    setErrorAction("save");
     if (!job || busy) return;
     if (
       stage === "Sent to Accounts" &&
@@ -166,10 +170,7 @@ export function InventoryWorkspace({
     }
   }
   async function upload(file: File) {
-    if (!report) {
-      setError("Save a draft before attaching the report.");
-      return;
-    }
+    setErrorAction("attachment");
     if (file.size > 8 * 1024 * 1024) {
       setError("Attachment must be 8 MB or smaller.");
       return;
@@ -183,15 +184,66 @@ export function InventoryWorkspace({
         f.onerror = () => reject(new Error("Unable to read attachment."));
         f.readAsDataURL(file);
       });
-      await api("/inventory-reconciliation/reports/" + report.id + "/files", {
-        csrf: session.csrfToken,
-        body: { filename: file.name, mediaType: file.type, base64: data },
-      });
+      let targetReport = report;
+      if (!targetReport) {
+        const saved = await api<any>("/inventory-reconciliation/reports", {
+          csrf: session.csrfToken,
+          body: {
+            jobKey: job.key,
+            version: 0,
+            stage: ops ? "IRR Received" : "Draft Reconciliation",
+            entry,
+            requestKey: crypto.randomUUID(),
+          },
+        });
+        targetReport = {
+          id: saved.reportId,
+          version: saved.version,
+          stage: ops ? "IRR Received" : "Draft Reconciliation",
+          job_key: job.key,
+        };
+        setReport(targetReport);
+        setSavedEntry(JSON.stringify(entry));
+      }
+      await api(
+        "/inventory-reconciliation/reports/" + targetReport.id + "/files",
+        {
+          csrf: session.csrfToken,
+          body: { filename: file.name, mediaType: file.type, base64: data },
+        },
+      );
       setDetail(
-        await api<any>("/inventory-reconciliation/reports/" + report.id),
+        await api<any>("/inventory-reconciliation/reports/" + targetReport.id),
       );
       await load();
       setMessage("Attachment saved.");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function returnToInventory() {
+    setErrorAction("return");
+    setError("");
+    if (!returnReason.trim()) {
+      setError("Enter a correction reason.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api("/accounts-workspace/return-report", {
+        csrf: session.csrfToken,
+        body: {
+          id: report.id,
+          version: report.version,
+          notes: returnReason,
+          requestKey: crypto.randomUUID(),
+        },
+      });
+      await load();
+      setJob(undefined);
+      setMessage("Returned to Inventory for correction.");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -295,7 +347,7 @@ export function InventoryWorkspace({
             ? "Operations installation report handoff"
             : tab}
       </h2>
-      {error && (
+      {error && !errorAction && (
         <p role="alert" className="form-error">
           {error}
         </p>
@@ -466,6 +518,29 @@ export function InventoryWorkspace({
                 {entry.receivedReturns || "None entered"}
               </p>
               <ul>{attachmentLinks}</ul>
+              {accounts && report?.stage === "Sent to Accounts" && (
+                <div>
+                  <Field id="irr-return" label="Inventory correction reason">
+                    <textarea
+                      id="irr-return"
+                      value={returnReason}
+                      onChange={(e) => setReturnReason(e.target.value)}
+                    />
+                  </Field>
+                  <Button
+                    variant="warning"
+                    loading={busy}
+                    onClick={() => void returnToInventory()}
+                  >
+                    Return to Inventory
+                  </Button>
+                  {error && errorAction === "return" && (
+                    <p role="alert" className="form-error">
+                      {error}
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="pz-action-row">
                 <Button
                   onClick={() => {
@@ -688,19 +763,24 @@ export function InventoryWorkspace({
               <Field
                 id="irr-file"
                 label="Installation report / evidence"
-                hint="Save a draft first. PDF, PNG or JPEG; 8 MB maximum."
+                hint="Attach the signed installation report. PDF, PNG or JPEG; 8 MB maximum. A draft is saved automatically when needed."
               >
                 <input
                   id="irr-file"
                   type="file"
                   accept="application/pdf,image/png,image/jpeg"
-                  disabled={!report || busy}
+                  disabled={busy}
                   onChange={(e) => {
                     if (e.target.files?.[0]) void upload(e.target.files[0]);
                     e.target.value = "";
                   }}
                 />
               </Field>
+              {error && errorAction === "attachment" && (
+                <p role="alert" className="form-error">
+                  {error}
+                </p>
+              )}
               <ul>{attachmentLinks}</ul>
               <p>
                 AI Review will be added later. Enter and verify report
@@ -722,6 +802,7 @@ export function InventoryWorkspace({
                     disabled={busy}
                     onClick={() => {
                       setError("");
+                      setErrorAction("save");
                       try {
                         reconcile(job.lines, entry);
                         setReview(true);
@@ -735,6 +816,17 @@ export function InventoryWorkspace({
                 )}
               </div>
             </>
+          )}
+          {error && errorAction === "save" && (
+            <p role="alert" className="form-error">
+              {error}
+            </p>
+          )}
+          {detail?.versions[0]?.snapshot.returnReason && (
+            <p role="status">
+              Accounts correction requested:{" "}
+              {detail.versions[0].snapshot.returnReason}
+            </p>
           )}
           {detail && (
             <details>

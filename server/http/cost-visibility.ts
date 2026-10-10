@@ -1,7 +1,7 @@
 import { Decimal } from "decimal.js";
 import type { RequestHandler } from "express";
 
-export const canSeeBessCost = (role?:string) => role === "Admin" || role === "Management";
+export const canSeeBessCost = (role?:string) => role === "Admin" || role === "Management" || role === "Accounts";
 export const isBessEquipment = (value:any) => value?.phase === "BESS" || /^(HYB-|BAT-|CH-BMS-|BMS-)/i.test(String(value?.key??value?.item_key??""));
 
 /** Projection only: authoritative stored costing and financial engines stay intact. */

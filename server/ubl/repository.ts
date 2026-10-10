@@ -12,9 +12,8 @@ export class UblRepository {
  constructor(private pool:Pool){}
  async closedJobs(actor:string){
   await this.role(actor);
-  // Legacy UBL sites have no recorded installation reports or approved Accounts closures yet.
-  // Do not infer closure or actual costs from customer PO status or delivery dates.
-  return {jobs:[],closureWorkflowAvailable:false};
+  const rows=(await this.pool.query(`SELECT j.id,j.snapshot,j.created_at,o.site_name,o.branch_code,o.configuration_id,o.legacy_ipo_number,to_char(j.created_at AT TIME ZONE 'Asia/Karachi','YYYY-MM-DD') AS closed_date FROM (SELECT DISTINCT ON(job_key) * FROM accounts_job_closures ORDER BY job_key,version DESC) j JOIN ubl_site_orders o ON j.job_key='ubl:'||o.site_id WHERE j.stage='Closed' ORDER BY j.created_at DESC`)).rows;
+  return {jobs:rows.map(r=>({id:r.id,siteName:r.site_name,branchCode:r.branch_code,configuration:r.configuration_id,ipoNumber:r.legacy_ipo_number,closedDate:r.closed_date,sellingValue:r.snapshot.summary.selling,actualCost:r.snapshot.summary.actual,budgetedMarkup:r.snapshot.summary.budgetedMarkup,budgetedMarkupPercent:r.snapshot.summary.budgetedMarkupPercent,actualMarkup:r.snapshot.summary.actualMarkup,actualMarkupPercent:r.snapshot.summary.actualMarkupPercent})),closureWorkflowAvailable:true};
  }
  async sites(actor:string){
   await this.role(actor);

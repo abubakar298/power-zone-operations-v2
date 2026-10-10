@@ -65,8 +65,6 @@ test("Inventory workspace: job search, draft, attachment, reconciliation and imm
       exact: true,
     })
     .fill("190");
-  await page.getByRole("button", { name: "Save draft", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Report saved");
   await page
     .getByLabel("Installation report / evidence", { exact: true })
     .setInputFiles({
@@ -106,11 +104,76 @@ test("Inventory workspace: job search, draft, attachment, reconciliation and imm
   ).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.reload();
-  await page.getByRole("button", { name: "Inventory workspace", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Inventory workspace", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Receipts & Reconciliation", exact: true })
     .click();
   await expect(
     page.getByRole("cell", { name: "Sent to Accounts", exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Accounts workspace", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Prepare closure", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: /CHP-320/ })).toBeVisible();
+  for (const phase of [
+    "Solar Panels",
+    "Structure",
+    "Inverter",
+    "Batteries",
+    "BMS",
+    "Electrical Labour",
+    "Earthing Cost",
+    "Deliveries",
+    "Installation Cost",
+  ])
+    await page.getByLabel(phase + " actual cost", { exact: true }).fill("1000");
+  await page
+    .getByLabel("Client acknowledgment reference", { exact: true })
+    .fill("isolated-test acknowledgment");
+  await page
+    .getByLabel("Site photographs reference", { exact: true })
+    .fill("isolated-test photographs");
+  await page
+    .getByLabel("PT costing / supporting records reference", { exact: true })
+    .fill("isolated-test PT");
+  await page
+    .getByLabel("Accounts remarks / cost variance explanation", { exact: true })
+    .fill("Isolated browser fixture only");
+  await page
+    .getByRole("button", { name: "Save closure draft", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Closure draft saved");
+  await page.screenshot({
+    path: "test-results/accounts-closure-desktop.png",
+    fullPage: true,
+  });
+  page.once("dialog", (d) => d.accept());
+  await page
+    .getByRole("button", { name: "Submit closure to Management", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Closure submitted");
+  await page
+    .getByRole("button", { name: "Approve and close job", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Enter the Management decision note",
+  );
+  await page
+    .getByLabel("Management decision note", { exact: true })
+    .fill("Isolated fixture approved");
+  page.once("dialog", (d) => d.accept());
+  await page
+    .getByRole("button", { name: "Approve and close job", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Management decision recorded",
+  );
+  await expect(
+    page.getByRole("button", { name: "Save closure draft", exact: true }),
+  ).toHaveCount(0);
 });

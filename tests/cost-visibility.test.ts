@@ -14,7 +14,7 @@ test("pricing projection preserves non-BESS review and selling totals while remo
 test("outbound HTTP boundary uses authenticated role at send time, including history, pricing, masters and nested handoffs",async()=>{
  const app=express();app.use(financialVisibility);app.use((req,_res,next)=>{(req as any).authSession={user:{role:req.get("X-Fixture-Role")}};next();});
  app.get('/api/boqs/:id',(_req,res)=>res.json({snapshot:boq}));app.get('/api/boqs/:id/history',(_req,res)=>res.json({revisions:[{id:'original',total:'364076'}]}));app.get('/api/commercial/pricing/:id',(_req,res)=>res.json({snapshot:pricing}));app.get('/api/masters',(_req,res)=>res.json({rates:[{key:'BAT-HV-05 KW WO BMS',rate:'231962'},{key:'Cable',rate:'100'}]}));app.get('/api/operations/source',(_req,res)=>res.json({nested:{snapshot:boq}}));
- for(const role of ['Coordinator','Operations','Accounts','Design','Employee']){
+ for(const role of ['Coordinator','Operations','Design','Employee']){
   const get=(path:string)=>request(app).get(path).set('X-Fixture-Role',role);
   assert.equal((await get('/api/boqs/fixture')).body.snapshot.lines[0].rate,null);
   assert.equal((await get('/api/boqs/fixture/history')).body.revisions[0].total,undefined);
@@ -22,7 +22,7 @@ test("outbound HTTP boundary uses authenticated role at send time, including his
   assert.equal((await get('/api/masters')).body.rates.length,1);
   assert.equal((await get('/api/operations/source')).body.nested.snapshot.total,'1000');
  }
- for(const role of ['Admin','Management']){assert.equal((await request(app).get('/api/boqs/fixture').set('X-Fixture-Role',role)).body.snapshot.total,'364076');assert.equal((await request(app).get('/api/commercial/pricing/fixture').set('X-Fixture-Role',role)).body.snapshot.rows[0].markup,'30');}
+ for(const role of ['Admin','Management','Accounts']){assert.equal((await request(app).get('/api/boqs/fixture').set('X-Fixture-Role',role)).body.snapshot.total,'364076');assert.equal((await request(app).get('/api/commercial/pricing/fixture').set('X-Fixture-Role',role)).body.snapshot.rows[0].markup,'30');}
 });
 test('all registered BESS equipment rate families are confidential',()=>{for(const key of ['HYB-SP-006','HYB-3P-020','BAT-LV-05 KW WO BMS','BAT-HV-05 KW WO BMS','CH-BMS-LV','CH-BMS-HV'])assert.ok(isBessEquipment({key}));assert.equal(canSeeBessCost('Coordinator'),false);assert.equal(canSeeBessCost('Management'),true);});
 

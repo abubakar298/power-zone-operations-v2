@@ -1,3 +1,4 @@
+import {AccountsWorkspace} from './AccountsWorkspace.js';
 import {InventoryWorkspace} from './InventoryWorkspace.js';
 import {confirmLeaveWorkspace} from "../hooks/useUnsavedChanges.js";
 import {Button} from "../ui/Button.js";
@@ -472,7 +473,7 @@ export function Dashboard({
           )}
           {(view === "finance" ||
             (view === "dashboard" && session.user.role === "Accounts")) && (
-            <Departments session={session} department="Accounts" initialRecordId={bucketTask?.ipo_id} />
+            <AccountsWorkspace session={session} initialRecordId={bucketTask?.ipo_id} />
           )}
           {view === "dashboard" && session.user.role === "Employee" && (
             <section className="card"><h2>Department access required</h2><p>Your account is active. Ask your administrator to assign your department before starting a workflow.</p></section>

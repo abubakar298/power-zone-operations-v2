@@ -858,6 +858,7 @@ export function Orders({
                           >
                             {o.number}
                           </button>
+                          {o.accounts_review && <p role="status">Accounts: {o.accounts_review.decision} · {o.accounts_review.notes}</p>}
                         </td>
                         <td>{o.customer}</td>
                         <td>{o.po_number}</td>
