@@ -20,7 +20,7 @@ test('UBL originals, amendments, July prices and twelve negotiation stages are i
    const d=await repo.detail(manager,id);assert.equal(d.history.length,3);
    assert.deepEqual(d.history.map(h=>h.snapshot.totalIncludingGst),totals[id]);
    assert.equal(d.history.at(-1)!.snapshot.totalIncludingGst,total);
-   const original=d.technical[0],current=d.technical[1];assert.equal(current.effective_date,null);
+   const original=d.technical[0],current=d.technical.at(-1)!;assert.equal(current.effective_date,null);
    assert.equal(original.snapshot.rows.find((r:any)=>r.id==='E18').proposalSellingRate,'5980');
    assert.match(current.snapshot.rows.find((r:any)=>r.id==='E18').specification,/100A rotary/);
    assert.equal(current.snapshot.rows.find((r:any)=>r.id==='E19').quantity,'10');
@@ -31,6 +31,8 @@ test('UBL originals, amendments, July prices and twelve negotiation stages are i
     assert.match(current.snapshot.rows.find((r:any)=>r.id==='E20').specification,/25 mm/);
     assert.equal(current.snapshot.rows.find((r:any)=>r.id==='E15').quantity,'3');
    }
+   const red=current.snapshot.rows.find((r:any)=>r.id==='D11R'),black=current.snapshot.rows.find((r:any)=>r.id==='D11B');
+   assert.equal(red.quantity,black.quantity);assert.equal(new Decimal(red.quantity).add(black.quantity).toString(),original.snapshot.rows.find((r:any)=>r.id==='D11').quantity);
    const snapshot=ublBudget(current.snapshot as UblConfiguration,masters,policy);
    assert.equal(snapshot.panel.sellingExcludingGst,panel);assert.equal(snapshot.panel.gst,`${tax}.00`);
    assert.equal(new Decimal(snapshot.panel.referenceBudget).toFixed(2),new Decimal(reference).toFixed(2));

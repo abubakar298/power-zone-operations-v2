@@ -16,7 +16,7 @@ export class UblRepository {
  }
  async list(actor:string){
   await this.role(actor);
-  return (await this.pool.query(`SELECT c.id,c.customer_id,c.source,t.version,t.snapshot->>'pvWatts' AS pv_watts,t.snapshot->>'inverterKw' AS inverter_kw,t.snapshot->>'essKwh' AS ess_kwh,h.snapshot->>'totalIncludingGst' AS fixed_total,h.snapshot->>'panelSellingExcludingGst' AS panel_selling,(SELECT max(b.version) FROM ubl_budget_versions b WHERE b.configuration_id=c.id) AS budget_version FROM ubl_configurations c JOIN ubl_technical_versions t ON t.configuration_id=c.id AND t.version=2 JOIN ubl_commercial_history h ON h.configuration_id=c.id AND h.stage='Revised' ORDER BY c.id`)).rows;
+  return (await this.pool.query(`SELECT c.id,c.customer_id,c.source,t.version,t.snapshot->>'pvWatts' AS pv_watts,t.snapshot->>'inverterKw' AS inverter_kw,t.snapshot->>'essKwh' AS ess_kwh,h.snapshot->>'totalIncludingGst' AS fixed_total,h.snapshot->>'panelSellingExcludingGst' AS panel_selling,(SELECT max(b.version) FROM ubl_budget_versions b WHERE b.configuration_id=c.id) AS budget_version FROM ubl_configurations c JOIN ubl_technical_versions t ON t.configuration_id=c.id AND t.version=(SELECT max(v.version) FROM ubl_technical_versions v WHERE v.configuration_id=c.id) JOIN ubl_commercial_history h ON h.configuration_id=c.id AND h.stage='Revised' ORDER BY c.id`)).rows;
  }
  async detail(actor:string,id:string){
   const role=await this.role(actor),configuration=(await this.pool.query('SELECT * FROM ubl_configurations WHERE id=$1',[id])).rows[0];
