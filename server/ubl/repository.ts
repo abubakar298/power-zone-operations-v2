@@ -1,0 +1,61 @@
+import type {Pool} from 'pg';
+import {randomUUID} from 'node:crypto';
+import {CommercialRepository} from '../commercial/repository.js';
+import {MastersRepository} from '../masters/repository.js';
+import {fingerprint} from '../boq/repository.js';
+import {transaction} from '../db/transaction.js';
+import {HttpError} from '../http/errors.js';
+import {canSeeBessCost} from '../http/cost-visibility.js';
+import {ublBudget,type UblConfiguration} from './engine.js';
+
+export class UblRepository {
+ constructor(private pool:Pool){}
+ async role(actor:string,write=false,c:Pool=this.pool){
+  await new CommercialRepository(this.pool).manager(c,actor,!write);
+  return (await c.query('SELECT role FROM users WHERE id=$1',[actor])).rows[0].role as string;
+ }
+ async list(actor:string){
+  await this.role(actor);
+  return (await this.pool.query(`SELECT c.id,c.customer_id,c.source,t.version,t.snapshot->>'pvWatts' AS pv_watts,t.snapshot->>'inverterKw' AS inverter_kw,t.snapshot->>'essKwh' AS ess_kwh,h.snapshot->>'totalIncludingGst' AS fixed_total,h.snapshot->>'panelSellingExcludingGst' AS panel_selling,(SELECT max(b.version) FROM ubl_budget_versions b WHERE b.configuration_id=c.id) AS budget_version FROM ubl_configurations c JOIN ubl_technical_versions t ON t.configuration_id=c.id AND t.version=2 JOIN ubl_commercial_history h ON h.configuration_id=c.id AND h.stage='Revised' ORDER BY c.id`)).rows;
+ }
+ async detail(actor:string,id:string){
+  const role=await this.role(actor),configuration=(await this.pool.query('SELECT * FROM ubl_configurations WHERE id=$1',[id])).rows[0];
+  if(!configuration)throw new HttpError(404,'UBL configuration not found.');
+  let technical=(await this.pool.query('SELECT version,snapshot,effective_date,notes FROM ubl_technical_versions WHERE configuration_id=$1 ORDER BY version',[id])).rows;
+  let history=(await this.pool.query('SELECT stage,agreed_date,snapshot FROM ubl_commercial_history WHERE configuration_id=$1 ORDER BY agreed_date',[id])).rows;
+  let budgets=(await this.pool.query('SELECT b.*,u.display_name AS created_by_name FROM ubl_budget_versions b JOIN users u ON u.id=b.created_by WHERE configuration_id=$1 ORDER BY version DESC',[id])).rows;
+  if(!canSeeBessCost(role)){
+   technical=technical.map(t=>({...t,snapshot:{id:t.snapshot.id,rows:t.snapshot.rows,pvWatts:t.snapshot.pvWatts,inverterKw:t.snapshot.inverterKw,essKwh:t.snapshot.essKwh,source:t.snapshot.source,amendments:t.snapshot.amendments}}));
+   history=history.map(h=>{const {historicalSummaryBudget,...snapshot}=h.snapshot;return {...h,snapshot};});
+   budgets=budgets.map(b=>({...b,notes:'Management budget refresh',snapshot:{configuration:b.snapshot.configuration,technicalVersion:b.snapshot.technicalVersion,costingDate:b.snapshot.costingDate,fixedAgreedTotal:b.snapshot.fixedAgreedTotal,panel:b.snapshot.panel,rows:b.snapshot.rows.filter((r:any)=>r.category!=='bess'),issues:b.snapshot.issues,costVisibility:'Excluding BESS',allocationStatus:b.snapshot.allocation.status}}));
+  }
+  return {configuration,technical,history,budgets,canRefresh:canSeeBessCost(role)};
+ }
+ async refresh(actor:string,id:string,expectedVersion:number,requestKey:string,notes:string){
+  return transaction(this.pool,async c=>{
+   await c.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+   await this.role(actor,true,c as unknown as Pool);
+   await c.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`ubl-budget:${id}`]);
+   const old=(await c.query('SELECT * FROM ubl_budget_versions WHERE request_key=$1',[requestKey])).rows[0];
+   if(old){if(old.configuration_id!==id||old.created_by!==actor||old.notes!==notes)throw new HttpError(409,'This refresh request belongs to different inputs.');return old;}
+   const technical=(await c.query('SELECT snapshot FROM ubl_technical_versions WHERE configuration_id=$1 ORDER BY version DESC LIMIT 1',[id])).rows[0];
+   if(!technical)throw new HttpError(404,'UBL configuration not found.');
+   const latest=Number((await c.query('SELECT COALESCE(max(version),0) AS version FROM ubl_budget_versions WHERE configuration_id=$1',[id])).rows[0].version);
+   if(latest!==expectedVersion)throw new HttpError(409,'A newer budget exists. Reload the configuration before refreshing.');
+   const masters=await new MastersRepository(c as unknown as Pool,true).list();
+   const policy=await new CommercialRepository(this.pool).standardPolicy(actor,c);
+   const snapshot=ublBudget(technical.snapshot as UblConfiguration,masters,policy),uuid=randomUUID();
+   const row=(await c.query('INSERT INTO ubl_budget_versions(id,configuration_id,version,technical_version,snapshot,fingerprint,request_key,notes,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[uuid,id,latest+1,snapshot.technicalVersion,snapshot,fingerprint(snapshot),requestKey,notes,actor])).rows[0];
+   await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`ubl.${id}.budget.v${latest+1}.created`]);
+   return row;
+  }).catch(error=>{
+   if(error?.code==='23505'||error?.code==='40001')throw new HttpError(409,'A concurrent budget refresh completed. Reload the configuration before refreshing.');
+   throw error;
+  });
+ }
+ async source(actor:string,id:string){
+  await this.role(actor);
+  const row=(await this.pool.query('SELECT filename,sha256,content FROM ubl_source_documents WHERE configuration_id=$1',[id])).rows[0];
+  if(!row)throw new HttpError(404,'Source proposal not found.');return row;
+ }
+}

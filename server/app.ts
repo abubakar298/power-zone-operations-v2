@@ -1,3 +1,5 @@
+import {ublHttp} from './ubl/http.js';
+import {UblRepository} from './ubl/repository.js';
 import {notificationWebhook} from "./notifications/webhook.js";
 import {NotificationsRepository} from "./notifications/repository.js";
 import {notificationsHttp} from "./notifications/http.js";
@@ -97,6 +99,7 @@ export function createApp(
     workflowBoundary(pool),
   );
   app.use("/api/cni", express.json({limit:"32kb"}), cniHttp(pool, auth.requireSession));
+  app.use("/api/ubl", express.json({limit:"16kb"}), ublHttp(new UblRepository(pool),auth.requireSession));
   const boqs = new BoqRepository(pool);
   app.use(
     "/api/survey-uploads",

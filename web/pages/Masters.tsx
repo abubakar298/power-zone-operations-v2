@@ -1,3 +1,4 @@
+import {Button} from "../ui/Button.js";
 import { CustomerImport } from "../components/CustomerImport.js";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, type Session } from "../api.js";
@@ -105,9 +106,9 @@ const numberFormat = new Intl.NumberFormat("en-PK", {
 });
 export function Masters({
   session,
-  onLogout, initialKind="customers", allowedKinds,
+  onLogout, initialKind="customers", allowedKinds, onOpenUbl,
 }: {
-  initialKind?: Kind; allowedKinds?: Kind[];
+  initialKind?: Kind; allowedKinds?: Kind[]; onOpenUbl?:()=>void;
   session: Session;
   onLogout: () => void;
 }) {
@@ -364,6 +365,7 @@ export function Masters({
                     ))}
                     {
                       <td className="master-actions">
+                        {kind==="customers"&&row.short_code==="UBL"&&onOpenUbl&&<Button variant="secondary" onClick={onOpenUbl}>UBL configurations</Button>}
                         {canWriteMaster(
                           session.user.role,
                           kind,

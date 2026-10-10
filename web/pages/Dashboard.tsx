@@ -19,6 +19,7 @@ const Commercial = lazy(() => import("./Commercial.js").then(module => ({ defaul
 const Orders = lazy(() => import("./Orders.js").then(module => ({ default: module.Orders })));
 const Boqs = lazy(() => import("./Boqs.js").then(module => ({ default: module.Boqs })));
 const Team = lazy(() => import("./Team.js").then(module => ({ default: module.Team })));
+const UblConfigurations = lazy(() => import("./UblConfigurations.js").then(module=>({default:module.UblConfigurations})));
 const Masters = lazy(() => import("./Masters.js").then(module => ({ default: module.Masters })));
 
 export function Dashboard({
@@ -38,7 +39,7 @@ export function Dashboard({
   const [menuOpen, setMenuOpen] = useState(false),
     [mobileOpen, setMobileOpen] = useState(false);
   const [view, setView] = useState<
-    | "projects" | "documents" | "newboq" | "customers" | "rates"
+    | "ubl" | "projects" | "documents" | "newboq" | "customers" | "rates"
     | "dashboard"
     | "account"
     | "masters"
@@ -115,7 +116,7 @@ export function Dashboard({
     .toUpperCase();
   function navigate(
     next:
-      | "projects" | "documents" | "newboq" | "customers" | "rates"
+      | "ubl" | "projects" | "documents" | "newboq" | "customers" | "rates"
     | "dashboard"
       | "account"
       | "masters"
@@ -143,11 +144,14 @@ export function Dashboard({
   const isCoordinator = session.user.role === "Coordinator";
   const canUseLibrary=["Coordinator","Admin","Management"].includes(session.user.role);
   useEffect(()=>{
+    function followHash(){
     const params=new URLSearchParams(window.location.hash.slice(1)),destination=params.get("workspace");
-    if(!canUseLibrary || !["dashboard","projects","documents"].includes(destination??""))return;
-    setView(destination as "dashboard"|"projects"|"documents");
+    if(!canUseLibrary || !["dashboard","projects","documents","ubl"].includes(destination??""))return;
+    setView(destination as "dashboard"|"projects"|"documents"|"ubl");
     const document=params.get("document");if(document&&/^[0-9a-f-]{36}$/i.test(document))setLinkedDocumentId(document);
     const project=params.get("project");if(project&&project.length<=500)setProjectContextKey(project);
+    }
+    followHash();window.addEventListener("hashchange",followHash);return()=>window.removeEventListener("hashchange",followHash);
   },[canUseLibrary]);
   useEffect(()=>{let alive=true;setCurrentProjectKey(undefined);if(!isCoordinator||!bucketTask)return;void api<any>('/coordinator/projects').then(index=>{const ids=[bucketTask.id,bucketTask.ipo_id,bucketTask.boq_revision_id,bucketTask.draft_id].filter(Boolean);const record=index.documents?.find((d:any)=>ids.includes(d.id)||ids.includes(d.proposal_id));if(alive)setCurrentProjectKey(record?.project_key)}).catch(()=>{});return()=>{alive=false}},[bucketTask,isCoordinator]);
   const Home = ["Admin", "Management"].includes(session.user.role)
@@ -172,7 +176,7 @@ export function Dashboard({
             <div className="nav-label">DAILY WORK</div>
             <nav aria-label="Main navigation">
               {([['dashboard','My Workspace','dashboard'],['projects','Projects','site'],['newboq','New BOQ','plus'],['documents','Documents','file'],['customers','Customers & Sites','users'],['rates','Rate Master','rates']] as const).map(([destination,label,icon])=>{
-                const active=view===destination || (['boqs','pricing','quotes','orders','operations'].includes(view)&&origin===destination);
+                const active=view===destination || (view==="ubl"&&destination==="customers") || (['boqs','pricing','quotes','orders','operations'].includes(view)&&origin===destination);
                 return <button key={destination} className={active?'nav-active':''} aria-current={active?'page':undefined} onClick={()=>{if(!navigate(destination))return;setRevisionDraftId(undefined);setPricingRevisionId(undefined);setPricingRequestId(undefined);setOperationsIpoId(undefined);}}><Icon name={icon}/>{label}</button>;
               })}
             </nav>
@@ -220,7 +224,7 @@ export function Dashboard({
           <div className="nav-divider" />
           <div className="nav-label">PROJECT OPERATIONS</div>
           <div className="upcoming-nav" aria-label="Project workspaces">
-            <button className={view==="customers"?"nav-active":""} aria-current={view==="customers"?"page":undefined} onClick={()=>navigate("customers")}>
+            <button className={["customers","ubl"].includes(view)?"nav-active":""} aria-current={["customers","ubl"].includes(view)?"page":undefined} onClick={()=>navigate("customers")}>
               <Icon name="users" />
               <span>Customers & Sites</span>
             </button>
@@ -323,7 +327,7 @@ export function Dashboard({
           <span className="breadcrumb">
             Workspace <span aria-hidden="true">/</span>{" "}
             <strong>
-              {["projects","documents","newboq","customers","rates"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master"} as Record<string,string>)[view] : view === "dashboard"
+              {["projects","documents","newboq","customers","rates","ubl"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master",ubl:"UBL configurations"} as Record<string,string>)[view] : view === "dashboard"
                 ? isCoordinator ? "My Workspace" : "Dashboard"
                 : view === "design"
                   ? "Design workspace"
@@ -386,7 +390,7 @@ export function Dashboard({
             <div>
               <span className="eyebrow">POWER ZONE OPERATIONS</span>
               <h1>
-                {["projects","documents","newboq","customers","rates"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master"} as Record<string,string>)[view] : view === "dashboard"
+                {["projects","documents","newboq","customers","rates","ubl"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master",ubl:"UBL configurations"} as Record<string,string>)[view] : view === "dashboard"
                   ? isCoordinator ? "My Workspace" : `Welcome, ${session.user.displayName}.`
                   : view === "design"
                     ? "Design workspace"
@@ -411,7 +415,7 @@ export function Dashboard({
                                       : "My account"}
               </h1>
               <p className="dashboard-intro">
-                {["projects","documents","newboq","customers","rates"].includes(view) ? "Select the relevant customer, site or document to continue your work." : view === "dashboard"
+                {["projects","documents","newboq","customers","rates","ubl"].includes(view) ? "Select the relevant customer, site or document to continue your work." : view === "dashboard"
                   ? session.user.role === "Design"
                     ? "Prepare technical surveys and send them to Coordination."
                     : session.user.role === "Inventory"
@@ -560,8 +564,9 @@ export function Dashboard({
           )}
           {view === "team" && <><Team session={session} onLogout={onLogout} />{session.user.role==="Admin"&&<NotificationAdmin session={session}/>}</>}
           {["masters","customers","rates"].includes(view) && (
-            <Masters key={view} initialKind={view==="rates"?"rates":"customers"} allowedKinds={view==="customers"?["customers","sites"]:view==="rates"?["rates","items","brands","rules"]:undefined} session={session} onLogout={onLogout} />
+            <Masters key={view} initialKind={view==="rates"?"rates":"customers"} allowedKinds={view==="customers"?["customers","sites"]:view==="rates"?["rates","items","brands","rules"]:undefined} session={session} onLogout={onLogout} onOpenUbl={canUseLibrary?()=>navigate("ubl"):undefined} />
           )}
+          {view === "ubl"&&canUseLibrary&&<UblConfigurations session={session} onBack={()=>navigate("customers")}/>}
           {view === "account" && (
             <div
               className={`dashboard-grid ${view === "account" ? "account-view" : ""}`}
