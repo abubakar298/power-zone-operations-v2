@@ -95,7 +95,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media(max-width:380px){.ubl-performance-columns{grid-template-columns:1fr}}
 
 /* UBL closed jobs: keep financial comparisons aligned and filters usable on mobile. */
-.ubl-closed-filters{display:grid;grid-template-columns:2fr 1.4fr 1fr 1fr 1fr;gap:16px;align-items:start}
+.ubl-closed-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
+.ubl-closed-filters input,.ubl-closed-filters select{min-width:0;width:100%;box-sizing:border-box}
 .ubl-closed-table{min-width:1100px}
 .ubl-closed-table .numeric{white-space:nowrap;font-variant-numeric:tabular-nums}
 .ubl-closed-table tbody>tr>th{min-width:170px}
