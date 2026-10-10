@@ -24,7 +24,7 @@ export class UblRepository {
   const role=await this.role(actor),configuration=(await this.pool.query('SELECT * FROM ubl_configurations WHERE id=$1',[id])).rows[0];
   if(!configuration)throw new HttpError(404,'UBL configuration not found.');
   let technical=(await this.pool.query('SELECT version,snapshot,effective_date,notes FROM ubl_technical_versions WHERE configuration_id=$1 ORDER BY version',[id])).rows;
-  let history=(await this.pool.query('SELECT stage,agreed_date,snapshot FROM ubl_commercial_history WHERE configuration_id=$1 ORDER BY agreed_date',[id])).rows;
+  let history=(await this.pool.query('SELECT h.stage,h.agreed_date,h.snapshot,b.total_cost AS budgeted_cost,b.panel_rate,b.basis AS cost_basis FROM ubl_commercial_history h LEFT JOIN ubl_history_cost_baselines b ON b.configuration_id=h.configuration_id AND b.stage=h.stage WHERE h.configuration_id=$1 ORDER BY h.agreed_date',[id])).rows;
   let budgets=(await this.pool.query('SELECT b.*,u.display_name AS created_by_name FROM ubl_budget_versions b JOIN users u ON u.id=b.created_by WHERE configuration_id=$1 ORDER BY version DESC',[id])).rows;
   if(!canSeeBessCost(role)){
    technical=technical.map(t=>({...t,snapshot:{id:t.snapshot.id,rows:t.snapshot.rows,pvWatts:t.snapshot.pvWatts,inverterKw:t.snapshot.inverterKw,essKwh:t.snapshot.essKwh,source:t.snapshot.source,amendments:t.snapshot.amendments}}));
