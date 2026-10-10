@@ -13,6 +13,7 @@ export function quotationDisplayRows(lines: QuoteLine[]): QuoteLine[] {
       return parsed.map(match => ({description:match![1], qty:match![2], unit:match![3]}));
     return [{description:line.description,unit:line.unit,qty:line.qty}];
   });
+  const panelQty=lines.filter(line=>line.group==="solar").reduce((sum,line)=>sum.add(line.qty),new Decimal(0));
   return lines.flatMap((line,index) => {
     if(line.items?.length && line.amount!==undefined && line.items.every(i=>i.amount!==undefined)){
       const items=line.items.map(i=>({...i}));
@@ -41,6 +42,7 @@ export function quotationDisplayRows(lines: QuoteLine[]): QuoteLine[] {
   }));
   }).map(row=>{
     const job=/^(Installation, Testing|UPS installation|Single-phase installation|Project delivery)/i.test(row.description);
-    return {...row,unit:job?"JOB":displayUnit(row.unit,row.qty),qty:job?"1":row.qty};
+    const description=row.group==="structure" && panelQty.gt(0) ? `${row.description.replace(/ for [\d,.]+ panels$/i, "")} for ${new Intl.NumberFormat("en-PK", {maximumFractionDigits:4}).format(panelQty.toNumber())} panels` : row.description;
+    return {...row,description,unit:job?"JOB":displayUnit(row.unit,row.qty),qty:job?"1":row.qty};
   });
 }

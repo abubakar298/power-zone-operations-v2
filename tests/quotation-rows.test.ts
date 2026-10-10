@@ -26,3 +26,11 @@ test('customer quote UOMs use MTRS for cables and one JOB for complete installat
  const before=JSON.stringify(lines),rows=quotationDisplayRows(lines);
  assert.deepEqual(rows.map(r=>[r.unit,r.qty,r.amount]),[['MTRS','15','1500.00'],['JOB','1','100000.00'],['JOB','1','50000.00'],['Each','2','500000.00']]);assert.equal(JSON.stringify(lines),before);
 });
+
+test('structure description uses saved quotation panel quantity without changing commercial values',()=>{
+ const lines:QuoteLine[]=[{description:'Solar PV Modules',unit:'No.',qty:'15',group:'solar',amount:'1000.00'},{description:'Elevated Solar Mounting Structure for PV Array',unit:'LS',qty:'1',group:'structure',amount:'500.00'}];
+ const before=JSON.stringify(lines),rows=quotationDisplayRows(lines);
+ assert.equal(rows[1].description,'Elevated Solar Mounting Structure for PV Array for 15 panels');
+ assert.equal(rows[1].qty,'1');assert.equal(rows[1].amount,'500.00');assert.equal(JSON.stringify(lines),before);
+ assert.equal(quotationDisplayRows(rows)[1].description,rows[1].description);
+});
