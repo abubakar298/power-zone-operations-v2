@@ -9,7 +9,7 @@ import type { CniSnapshot } from "./cni-report.js";
 // Coordinates and typography reproduce the owner-approved Photon design preview.
 // The selected template is stored on each immutable quotation snapshot.
 export function buildApprovedCniPdf(s:CniSnapshot,reference:string,draft:boolean) {
- const p=new jsPDF({unit:"pt",format:"a4"});const W=595.28,H=841.89;
+ const p=new jsPDF({unit:"pt",format:"a4",compress:true});const W=595.28,H=841.89;
  const blue="#343C91",red="#E52D3B",ink="#252332",muted="#6F6A7B",light="#F0F2F9";
  const qty=s.pricing.quantity,kw=qty*125,kwh=qty*261;
  const money=(v:string)=>new Decimal(v).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",");

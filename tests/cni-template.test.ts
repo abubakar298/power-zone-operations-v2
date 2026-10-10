@@ -9,7 +9,9 @@ test('new C&I template preserves approved content, tax presentation and historic
  for(const presentation of ['Inclusive','Separate'] as const){
  const pricing=priceCni({quantity:1,discount:'500000',taxRate:'18',presentation});
  const s={...snapshot,pricing};const before=JSON.stringify(s);
- const modern=await pages(buildCniPdf({...s,pdfTemplate:'PHOTON-APPROVED-1'},'CPZ-QT-26-003-0003-001-R1 (TEST-HQ)',false));
+ const compressed=buildCniPdf({...s,pdfTemplate:'PHOTON-APPROVED-1'},'CPZ-QT-26-003-0003-001-R1 (TEST-HQ)',false);
+ assert.ok(compressed.length<2_000_000,`Sharing PDF too large: ${compressed.length}`);
+ const modern=await pages(compressed);
  assert.equal(modern.length,6);assert.match(modern[0],/1 CABINET\b/);assert.doesNotMatch(modern[0],/1 CABINETS/);
  assert.match(modern[1],/Best Regards/);assert.match(modern[1],/Abu Bakar Siddique/);assert.match(modern[1],/YOUR PROPOSED SYSTEM/);
  assert.match(modern[2],/1000 x 1400 x 2400 mm/);assert.match(modern[2],/battery rack/);assert.match(modern[2],/BAU-CPS ES-125kW\/261kWh/);assert.match(modern[2],/EMS\s+Local operation monitoring/);

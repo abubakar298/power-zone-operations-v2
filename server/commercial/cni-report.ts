@@ -13,7 +13,7 @@ const blue=[52,60,145] as const,red=[229,45,59] as const;
 const money=(v:string)=>new Intl.NumberFormat("en-PK",{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v));
 export function buildCniPdf(s:CniSnapshot,number:string,draft:boolean) {
  if(s.pdfTemplate === "PHOTON-APPROVED-1")return buildApprovedCniPdf(s,number,draft);
- const p=new jsPDF();const totalKw=s.pricing.quantity*125,totalKwh=s.pricing.quantity*261;
+ const p=new jsPDF({compress:true});const totalKw=s.pricing.quantity*125,totalKwh=s.pricing.quantity*261;
  p.setProperties({title:number,author:"Power Zone"});
  p.setFillColor(...blue);p.rect(0,0,210,297,"F");
  p.setFillColor(65,74,161);p.triangle(172,0,210,0,210,297,"F");
