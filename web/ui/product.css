@@ -68,3 +68,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* UBL history: shade entire configuration groups; dividers also identify boundaries without color. */
 .ubl-history-table tr.ubl-history-shaded > th,.ubl-history-table tr.ubl-history-shaded > td{background:var(--pz-selected-bg)}
 .ubl-history-table tr.ubl-history-group-start > th,.ubl-history-table tr.ubl-history-group-start > td{border-top:3px solid var(--pz-border)}
+
+/* Legacy UBL reference table: preserve complete IDs and readable amounts. */
+.ubl-sites-table{min-width:1600px}
+.ubl-sites-table>thead>tr>th,.ubl-sites-table>tbody>tr>td{white-space:nowrap}
+.ubl-sites-table>tbody>tr>th{min-width:210px;max-width:260px;overflow-wrap:normal}
+.ubl-sites-table>tbody>tr>td:last-child{min-width:170px}
+.ubl-sites-table details[open]{white-space:normal;width:420px}
