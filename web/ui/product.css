@@ -64,3 +64,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .project-timeline{padding-left:24px}.project-timeline li{padding:0 0 24px 12px;border-left:2px solid var(--pz-border)}.project-timeline p{margin:8px 0}.project-timeline small{color:var(--pz-muted)}
 .project-attachments{padding:0;list-style:none}.project-attachments li{display:grid;gap:8px;margin-bottom:16px}
 @media(max-width:700px){.project-facts{grid-template-columns:1fr}.project-heading,.project-next{flex-direction:column}}
+
+/* UBL history: shade entire configuration groups; dividers also identify boundaries without color. */
+.ubl-history-table tr.ubl-history-shaded > th,.ubl-history-table tr.ubl-history-shaded > td{background:var(--pz-selected-bg)}
+.ubl-history-table tr.ubl-history-group-start > th,.ubl-history-table tr.ubl-history-group-start > td{border-top:3px solid var(--pz-border)}
