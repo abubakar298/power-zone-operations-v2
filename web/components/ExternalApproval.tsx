@@ -1,3 +1,4 @@
+import {Button} from '../ui/Button.js';
 import { useState } from "react";
 import { api, type Session } from "../api.js";
 import { confirmRevision } from "../confirm.js";
@@ -10,6 +11,7 @@ export function ExternalApproval({
   endpoint: string;
   onApproved: (row: any) => Promise<void>;
 }) {
+  const [decisionAt,setDecisionAt]=useState("");
   const [channel, setChannel] = useState("WhatsApp");
   const [approver, setApprover] = useState(""),
     [comments, setComments] = useState(""),
@@ -68,6 +70,7 @@ export function ExternalApproval({
           comments,
           evidenceIds: uploads.map((u) => u.id),
           confirmed,
+          ...(decisionAt?{decisionAt:new Date(decisionAt).toISOString()}:{}),
           ...(endpoint.startsWith("/orders/")
             ? { requestKey: crypto.randomUUID() }
             : {}),
@@ -121,6 +124,7 @@ export function ExternalApproval({
             onChange={(e) => setApprover(e.target.value)}
           />
         </label>
+        <label>Approval decision date / time (if known)<input type="datetime-local" value={decisionAt} onChange={e=>setDecisionAt(e.target.value)}/><small>Leave blank if unavailable. The recording time is saved separately.</small></label>
         <label>
           Approval remarks
           <textarea
@@ -168,7 +172,7 @@ export function ExternalApproval({
           I confirm this evidence approves this exact document without changes.
         </label>
         {error && <p role="alert">{error}</p>}
-        <button
+        <Button variant="primary" type="submit"
           disabled={
             busy ||
             !confirmed ||
@@ -178,7 +182,7 @@ export function ExternalApproval({
           }
         >
           Record approval & continue
-        </button>
+        </Button>
       </form>
     </details>
   );

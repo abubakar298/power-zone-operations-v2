@@ -1,4 +1,4 @@
-import {openWorkspaceSection} from "./navigation.js";
+import {openWorkspaceSection,signOut} from "./navigation.js";
 const referencePattern=(value:string)=>new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));
 import { test, expect } from "@playwright/test";
 import { jsPDF } from "jspdf";
@@ -512,6 +512,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.locator(".quotation-pdf-pages canvas").first(),
   ).toBeVisible();
+  await page.getByLabel("I have reviewed and acknowledge the change in payable.").check();
   await page
     .getByRole("button", { name: "Save draft quotation", exact: true })
     .click();
@@ -559,17 +560,37 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(page.locator(".quote-metadata")).toContainText("7 Days");
 
   await page.setViewportSize({ width: 1440, height: 1000 });
+  // Historical R1 stays readable but must not be offered for a new IPO.
+  await openWorkspaceSection(page, 'Quotations');
+  await page.getByRole("button", { name: /CPZ-QT-26-001-0003-003-R3 \(BAFL-05850\)/ }).click();
+  await page.getByRole("button", {name:"Create new quotation version",exact:true}).click();
+  await page.getByLabel("Quotation revision reason").fill("Finalize current customer quotation for order entry");
+  await page.getByLabel("Requires costing change").selectOption("no");
+  await page.getByRole("button", {name:"Start revision",exact:true}).click();
+  await page.getByRole("dialog").getByRole("button", {name:"Confirm and send",exact:true}).click();
+  await page.getByRole("button", {name:"Preview quotation",exact:true}).click();
+  await page.getByRole("button", {name:"Save draft quotation",exact:true}).click();
+  const authSession=await (await page.request.get('/api/auth/session')).json();
+  const orderHeaders={Origin:new URL(page.url()).origin,'X-CSRF-Token':authSession.csrfToken};
+  const currentQuotes=await (await page.request.get('/api/commercial/quotations')).json();
+  const currentQuote=currentQuotes.quotations.find((q:any)=>q.number==='CPZ-QT-26-001-0003-003-R4 (BAFL-05850)');
+  expect(currentQuote).toBeTruthy();
+  for(const kind of ['Submitted','Approved']){
+    const event=await page.request.post('/api/coordinator/events',{headers:orderHeaders,data:{quotationId:currentQuote.id,kind,acknowledgePriceChange:true}});
+    expect(event.ok()).toBe(true);
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await openWorkspaceSection(page, 'Customer PO & IPO');
   const acceptedQuote = page.getByLabel("Accepted quotation");
   await expect(
     acceptedQuote
       .locator("option")
-      .filter({ hasText: "CPZ-QT-26-001-0003-003-R1 (BAFL-05850)" }),
+      .filter({ hasText: "CPZ-QT-26-001-0003-003-R4 (BAFL-05850)" }),
   ).toHaveCount(1);
   await acceptedQuote.selectOption(
     (await acceptedQuote
       .locator("option")
-      .filter({ hasText: "CPZ-QT-26-001-0003-003-R1 (BAFL-05850)" })
+      .filter({ hasText: "CPZ-QT-26-001-0003-003-R4 (BAFL-05850)" })
       .getAttribute("value"))!,
   );
   await expect(page.getByLabel("Sale confirmation type")).toHaveValue("");
@@ -646,7 +667,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await page.reload();
   await openWorkspaceSection(page, 'Customer PO & IPO');
   await page
-    .getByRole("button", { name: /CPZ-QT-26-001-0003-003-R1 \(BAFL-05850\) · Customer PO ·/ })
+    .getByRole("button", { name: /CPZ-QT-26-001-0003-003-R4 \(BAFL-05850\) · Customer PO ·/ })
     .click();
   await page
     .getByRole("button", { name: "Approve evidence & save IPO" })
@@ -821,7 +842,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     path: "test-results/dashboard-desktop.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await expect(
     page.getByRole("heading", { name: "Welcome back." }),
   ).toBeVisible();
@@ -887,7 +908,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .getByRole("button", { name: "Create account", exact: true })
     .click();
   await expect(page.getByRole("status").filter({hasText:"Account created"})).toContainText("Account created");
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await signOut(page);
   await page.getByLabel("Email address").fill("atif-browser@example.test");
   await page
     .getByLabel("Password", { exact: true })
@@ -933,7 +954,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     fullPage: true,
   });
   expect(errors).toEqual([]);
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await expect(
     page.getByRole("heading", { name: "Welcome back." }),
   ).toBeVisible();
@@ -1610,7 +1631,7 @@ test("Atif completes an approved sample through quotation, IPO and Operations wi
       },
     });
     expect(changed.ok()).toBe(true);
-    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await signOut(page);
     await expect(
       page.getByRole("heading", { name: "Welcome back." }),
     ).toBeVisible();

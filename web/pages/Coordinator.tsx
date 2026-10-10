@@ -28,6 +28,7 @@ export function Coordinator({
   const stageLabel = (stage: string) => stage === "Survey & Costing Preparation" ? "Survey & BOQ Preparation" : stage === "Quotation approval" ? "Quotation Approval" : stage === "Revision required" ? "Revision Required" : stage === "Customer confirmation" ? "Customer Confirmation" : stage === "IPO approval" ? "IPO Approval" : stage;
   const needsAction = (t: any) => [stages[0], stages[2], stages[5]].includes(t.stage);
   const nextAction = (t: any) => manager ? "Open workflow" : t.stage === stages[2] ? "Revise document" : t.stage === stages[5] ? "Complete handoff" : t.stage === stages[0] ? t.target === "boqs" ? "Prepare BOQ" : t.target === "pricing" ? "Calculate selling price" : "Prepare quotation" : t.stage === stages[3] ? "Record customer confirmation" : "View approval";
+  const [includeTraining,setIncludeTraining]=useState(false);
   const [scope, setScope] = useState(manager ? "team" : "mine"),
     [data, setData] = useState<any>(),
     [error, setError] = useState(""),
@@ -40,7 +41,7 @@ export function Coordinator({
     let cancelled = false;
     const load = async () => {
       try {
-        const r = await api<any>(`/coordinator?scope=${scope}`);
+        const r = await api<any>(`/coordinator?scope=${scope}&includeTraining=${includeTraining}`);
         if (!cancelled) {
           setData(r);
           setError("");
@@ -62,7 +63,7 @@ export function Coordinator({
       window.removeEventListener("focus", load);
       window.removeEventListener("pz:workspace-open", load);
     };
-  }, [scope, tick]);
+  }, [scope, tick, includeTraining]);
   const minutes = (d: string) =>
     Number.isFinite(new Date(d).getTime()) ? Math.max(0, (Date.now() - new Date(d).getTime()) / 60000) : 0;
   const duration = (m: number) =>
@@ -206,13 +207,9 @@ export function Coordinator({
           {error}
         </p>
       )}
-      {data?.tasks?.some((t: any) => t.site?.startsWith("SAMPLE")) && (
-        <p>
-          Training samples are included in this view and its performance
-          figures. Their starting ages simulate pending work; subsequent actions
-          are recorded normally.
-        </p>
-      )}
+      {data?.tasks?.some((t: any) => t.training) && <p>Identified training records remain visible for practice. Performance totals exclude them unless selected below.</p>}
+      <label className="approval-filter"><input type="checkbox" checked={includeTraining} onChange={e=>setIncludeTraining(e.target.checked)}/>Include identified training records in performance totals</label>
+      <p className="pz-caption">Waiting times show total elapsed time. Existing targets are unchanged; a business-hours calendar has not been configured.</p>
       <h3>Work stages</h3>
       {manager && (
         <label className="approval-filter">
@@ -332,7 +329,7 @@ export function Coordinator({
                         </>
                       )}
                     </td>
-                    <td>{t.reference || "Survey draft"}</td>
+                    <td>{t.reference || "Survey draft"}{t.kind==="IPO evidence"&&<small>Submission {t.id.slice(0,8)} · PO {t.po_reference||"Not supplied"} · {t.evidence_filename||t.evidence_type} · Received {new Date(t.started_at).toLocaleString()}</small>}{t.training&&<small>Training record</small>}</td>
                     <td>
                       {manager ? t.stage : stageLabel(t.stage)}
                       <br />

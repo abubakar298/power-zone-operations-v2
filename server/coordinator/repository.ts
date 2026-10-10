@@ -1,3 +1,4 @@
+import {Decimal} from "decimal.js";
 import {projectCatalog,projectContext} from "./projects.js";
 import { ownedCondition } from "../http/permissions.js";
 import {
@@ -12,7 +13,21 @@ export class CoordinatorRepository {
   constructor(private pool: Pool) {}
   async projects(actor:string){return projectCatalog(this.pool,actor);}
   async project(actor:string,key:string){const context=await projectContext(this.pool,actor,key);const role=(await this.pool.query('SELECT role FROM users WHERE id=$1',[actor])).rows[0]?.role;const view=await this.overview(actor,["Admin","Management"].includes(role));const ids=new Set(context.documents.flatMap(d=>[d.id,d.proposal_id].filter(Boolean)));return {...context,tasks:view.tasks.filter((t:any)=>[t.id,t.boq_revision_id,t.ipo_id,t.draft_id].some(id=>ids.has(id)))};}
-  async overview(actor: string, team: boolean) {
+  async overview(actor: string, team: boolean, includeTraining = false) {
+    // Explicit sample-batch metadata is the only training classifier.
+    const batches=(await this.pool.query("SELECT records FROM dashboard_sample_batches")).rows;
+    const trainingIds=new Set<string>(batches.flatMap(b=>b.records.flatMap((r:any)=>[r.draftId,r.boqRevisionId,r.pricingId,r.quotationId,r.submissionId,r.ipoId].filter(Boolean))));
+    const trainingCustomers=[...new Set<string>(batches.flatMap(b=>b.records.map((r:any)=>String(r.customerId)).filter((id:string)=>/^\d+$/.test(id))))];
+    const descendants=(await this.pool.query(`WITH training_boq AS (SELECT r.id FROM boq_revisions r JOIN boqs b ON b.id=r.boq_id WHERE b.customer_id::text=ANY($1::text[])),training_quote AS (SELECT q.id FROM quotation_versions q JOIN training_boq b ON b.id=q.boq_revision_id)
+      SELECT id FROM training_boq UNION SELECT id FROM training_quote
+      UNION SELECT id FROM survey_drafts WHERE inputs->>'customerId'=ANY($1::text[])
+      UNION SELECT p.id FROM commercial_pricing_versions p JOIN training_boq b ON b.id=p.boq_revision_id
+      UNION SELECT s.id FROM ipo_submissions s JOIN training_quote q ON q.id::text=s.input->>'quotationId'
+      UNION SELECT i.id FROM internal_purchase_orders i JOIN training_boq b ON b.id::text=i.snapshot->>'boqRevisionId'
+      UNION SELECT o.id FROM operations_boq_issuances o JOIN training_boq b ON b.id=o.boq_revision_id
+      UNION SELECT v.id FROM cni_proposal_versions v JOIN cni_proposals p ON p.id=v.proposal_id WHERE p.customer_id::text=ANY($1::text[])`,[trainingCustomers])).rows;
+    for(const row of descendants)trainingIds.add(row.id);
+    const excluded=includeTraining?[]:[...trainingIds];
     const pending = `WITH pending AS (
  SELECT d.id,'Survey / BOQ'::text AS kind,COALESCE(d.inputs->>'siteName','Survey draft') AS reference,COALESCE(d.inputs->>'siteName','') AS site,CASE WHEN s.id IS NULL THEN 'Draft' WHEN s.outcome IS NULL THEN 'Awaiting review' ELSE 'Changes requested' END AS status,COALESCE(s.decision_at,s.created_at,d.created_at) AS started_at,'boqs'::text AS target,d.id AS draft_id,NULL::uuid AS boq_revision_id,NULL::uuid AS ipo_id,NULL::uuid AS request_id,(SELECT name FROM customers WHERE id::text=d.inputs->>'customerId') AS customer
  FROM survey_drafts d LEFT JOIN LATERAL (SELECT r.id,r.created_at,c.created_at AS decision_at,c.outcome FROM boq_review_submissions r LEFT JOIN boq_review_decisions c ON c.submission_id=r.id WHERE r.draft_id=d.id ORDER BY r.created_at DESC LIMIT 1) s ON true
@@ -43,11 +58,11 @@ export class CoordinatorRepository {
     const activity = (
       await this.pool.query(
         `SELECT
- (SELECT COUNT(*)::integer FROM boq_revisions b WHERE b.created_at>=now()-interval '30 days' AND ($2 OR EXISTS(SELECT 1 FROM boq_draft_finalizations f JOIN survey_drafts d ON d.id=f.draft_id WHERE f.revision_id=b.id AND d.owner_id=$1))) AS boqs,
- (SELECT COUNT(*)::integer FROM quotation_versions WHERE created_at>=now()-interval '30 days' AND ($2 OR created_by=$1)) AS quotations,
- (SELECT COUNT(*)::integer FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE i.created_at>=now()-interval '30 days' AND ($2 OR i.created_by=$1 OR s.created_by=$1)) AS ipos,
- (SELECT COUNT(*)::integer FROM operations_boq_issuances WHERE created_at>=now()-interval '30 days' AND ($2 OR created_by=$1)) AS handoffs`,
-        [actor, team],
+ (SELECT COUNT(*)::integer FROM boq_revisions b WHERE b.created_at>=now()-interval '30 days' AND NOT(b.id=ANY($3::uuid[])) AND ($2 OR EXISTS(SELECT 1 FROM boq_draft_finalizations f JOIN survey_drafts d ON d.id=f.draft_id WHERE f.revision_id=b.id AND d.owner_id=$1))) AS boqs,
+ (SELECT COUNT(*)::integer FROM quotation_versions WHERE created_at>=now()-interval '30 days' AND NOT(id=ANY($3::uuid[])) AND ($2 OR created_by=$1)) AS quotations,
+ (SELECT COUNT(*)::integer FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE i.created_at>=now()-interval '30 days' AND NOT(i.id=ANY($3::uuid[])) AND ($2 OR i.created_by=$1 OR s.created_by=$1)) AS ipos,
+ (SELECT COUNT(*)::integer FROM operations_boq_issuances WHERE created_at>=now()-interval '30 days' AND NOT(id=ANY($3::uuid[])) AND ($2 OR created_by=$1)) AS handoffs`,
+        [actor, team, excluded],
       )
     ).rows[0];
     const stage = (t: any) =>
@@ -83,12 +98,15 @@ export class CoordinatorRepository {
         `SELECT d.id AS draft_id,f.revision_id,
  EXTRACT(EPOCH FROM(COALESCE((SELECT MIN(q.created_at) FROM quotation_versions q WHERE q.boq_revision_id=f.revision_id),now())-d.created_at))-COALESCE((SELECT SUM(EXTRACT(EPOCH FROM(COALESCE(c.created_at,now())-r.created_at))) FROM boq_review_submissions r LEFT JOIN boq_review_decisions c ON c.submission_id=r.id WHERE r.draft_id=d.id),0) AS active_seconds,
  EXISTS(SELECT 1 FROM quotation_versions q WHERE q.boq_revision_id=f.revision_id) AS completed
- FROM survey_drafts d LEFT JOIN boq_draft_finalizations f ON f.draft_id=d.id WHERE ($2 OR d.owner_id=$1)`,
+ FROM survey_drafts d LEFT JOIN boq_draft_finalizations f ON f.draft_id=d.id WHERE ($2 OR d.owner_id=$1) `,
         [actor, team],
       )
     ).rows;
+    const submissionDetails=(await this.pool.query("SELECT s.id,s.input->>'poNumber' AS po_reference,s.snapshot->'document'->>'filename' AS evidence_filename,s.input->>'evidenceType' AS evidence_type FROM ipo_submissions s WHERE s.id=ANY($1::uuid[])",[result.tasks.filter((t:any)=>t.kind==="IPO evidence").map((t:any)=>t.id)])).rows;
     const tasks = result.tasks.map((t: any) => ({
       ...t,
+      ...(submissionDetails.find(s=>s.id===t.id)??{}),
+      training: [t.id,t.draft_id,t.boq_revision_id,t.ipo_id].some(id=>trainingIds.has(id)),
       stage: stage(t),
       target_minutes: targets[stage(t)] ?? null,
       responsibility: [
@@ -120,13 +138,13 @@ export class CoordinatorRepository {
           ? Math.max(0, Number(timing.active_seconds) / 60)
           : null;
     }
-    const completed = timings.filter((v: any) => v.completed);
+    const completed = timings.filter((v: any) => v.completed && (includeTraining || !trainingIds.has(v.draft_id)));
     const intervals = (
       await this.pool.query(
-        `SELECT 'approval' AS kind,EXTRACT(EPOCH FROM(a.created_at-s.created_at))/60 AS minutes FROM coordination_events s JOIN coordination_events a ON a.quotation_id=s.quotation_id AND a.kind IN('Approved','Changes requested') JOIN quotation_versions q ON q.id=s.quotation_id WHERE s.kind='Submitted' AND ($2 OR q.created_by=$1)
- UNION ALL SELECT 'ipo',EXTRACT(EPOCH FROM(s.created_at-e.created_at))/60 FROM coordination_events e JOIN ipo_submissions s ON s.input->>'quotationId'=e.quotation_id::text WHERE e.kind='PO received' AND ($2 OR s.created_by=$1)
- UNION ALL SELECT 'handoff',EXTRACT(EPOCH FROM(o.created_at-i.created_at))/60 FROM operations_boq_issuances o JOIN internal_purchase_orders i ON i.id=o.ipo_id WHERE ($2 OR o.created_by=$1)`,
-        [actor, team],
+        `SELECT 'approval' AS kind,EXTRACT(EPOCH FROM(a.created_at-s.created_at))/60 AS minutes FROM coordination_events s JOIN coordination_events a ON a.quotation_id=s.quotation_id AND a.kind IN('Approved','Changes requested') JOIN quotation_versions q ON q.id=s.quotation_id WHERE s.kind='Submitted' AND ($2 OR q.created_by=$1) AND NOT(q.id=ANY($3::uuid[]))
+ UNION ALL SELECT 'ipo',EXTRACT(EPOCH FROM(s.created_at-e.created_at))/60 FROM coordination_events e JOIN ipo_submissions s ON s.input->>'quotationId'=e.quotation_id::text WHERE e.kind='PO received' AND ($2 OR s.created_by=$1) AND NOT(s.id=ANY($3::uuid[]))
+ UNION ALL SELECT 'handoff',EXTRACT(EPOCH FROM(o.created_at-i.created_at))/60 FROM operations_boq_issuances o JOIN internal_purchase_orders i ON i.id=o.ipo_id WHERE ($2 OR o.created_by=$1) AND NOT(i.id=ANY($3::uuid[]))`,
+        [actor, team, excluded],
       )
     ).rows;
     const metric = (kind: string, target: number) => {
@@ -147,6 +165,8 @@ export class CoordinatorRepository {
         onTime: completed.filter((v: any) => Number(v.active_seconds) <= 900)
           .length,
       },
+      includesTraining: includeTraining,
+      timingBasis: "Elapsed time; existing targets retained",
       targets: {
         quotationApproval: 20,
         ipoPreparation: 15,
@@ -171,6 +191,7 @@ export class CoordinatorRepository {
     kind: string,
     notes: string,
     external?: ExternalEvidence,
+    acknowledgePriceChange=false,
   ) {
     const c = await this.pool.connect();
     try {
@@ -203,6 +224,9 @@ export class CoordinatorRepository {
           throw new HttpError(400, "External evidence records approval only.");
         await validateExternal(c, actor, q.created_by, external);
       }
+      const comparison=q.snapshot?.revision?.comparison;
+      if(kind==="Approved" && !external && comparison?.previousPayable && !new Decimal(comparison.previousPayable).eq(comparison.proposedPayable) && !acknowledgePriceChange)
+        throw new HttpError(409,"Review and acknowledge the changed payable before approving this revision.");
       const previous = (
         await c.query(
           "SELECT * FROM coordination_events WHERE quotation_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1",

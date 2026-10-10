@@ -508,7 +508,7 @@ test("external approval preserves evidence, recorder identity and instructions; 
     "Director Operations",
     randomUUID(),
   );
-  const qi2 = { ...qi, discount: "200", revisionRequestId: revision.id };
+  const qi2 = { ...qi, discount: "200", revisionRequestId: revision.id, acknowledgePriceChange:true };
   const qp2 = await commercial.quotationPreview(employee.id, qi2);
   const q2 = await commercial.quotationSave(
     employee.id,

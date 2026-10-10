@@ -1,3 +1,4 @@
+import {RevisionComparison,hasRevisionPriceChange} from '../components/RevisionComparison.js';
 import {Button} from "../ui/Button.js";
 import {confirmLeaveWorkspace,useUnsavedChanges} from "../hooks/useUnsavedChanges.js";
 import type { CommercialPolicy } from "../../server/commercial/active-policy.js";
@@ -252,6 +253,7 @@ export function Commercial({
   const manager = ["Admin", "Management", "Coordinator"].includes(
     session.user.role,
   );
+  const [priceChangeAcknowledged,setPriceChangeAcknowledged]=useState(false);
   const [dirty,setDirty]=useState(false);
   useUnsavedChanges(dirty);
   const [policy,setPolicy] = useState<CommercialPolicy>();
@@ -504,6 +506,10 @@ export function Commercial({
           fingerprint: source.fingerprint,
         });
       }
+      if(data.revisionRequestId && data.discount===undefined && revisionInfo){
+        const prior=await api<QuotationInput>(`/commercial/quotations/${revisionInfo.source_quotation_id}/copy`);
+        data.discount=prior.discount;
+      }
       if (
         !copy &&
         data.revisionRequestId &&
@@ -531,6 +537,7 @@ export function Commercial({
           .map((l) => l.description),
       });
       setQuotePreview(result);
+      setPriceChangeAcknowledged(false);
       setQuotePdfInput(data);
       setSavedQuote(undefined);
       setKey(crypto.randomUUID());
@@ -552,6 +559,7 @@ export function Commercial({
       });
       if (sequence === previewSequence.current) {
         setQuotePreview(result);
+        setPriceChangeAcknowledged(false);
         setQuotePdfInput(quoteInput);
       }
     });
@@ -571,6 +579,7 @@ export function Commercial({
       const q = await api<any>("/commercial/quotations", {
         body: {
           ...quoteInput,
+          acknowledgePriceChange:priceChangeAcknowledged,
           discount: quoteInput.discount?.trim() || "0",
           fingerprint: quotePreview.fingerprint,
           requestKey: key,
@@ -1138,10 +1147,11 @@ export function Commercial({
               Confirm quotation totals
             </button>
           )}
+          <RevisionComparison snapshot={quotePreview.snapshot} acknowledged={priceChangeAcknowledged} onAcknowledge={setPriceChangeAcknowledged}/>
           <p>Save draft preserves this quotation version without submission. Submit sends it to Management; customer confirmation becomes available only after approval.</p>
           <div className="pz-action-row">
-          <Button variant="secondary" loading={busy} disabled={!quotePreview.fingerprint} onClick={() => void saveQuote()}>Save draft quotation</Button>
-          <Button variant="primary" loading={busy} disabled={!quotePreview.fingerprint} onClick={() => void saveQuote(true)}>Save and send for approval</Button>
+          <Button variant="secondary" loading={busy} disabled={!quotePreview.fingerprint || (hasRevisionPriceChange(quotePreview.snapshot)&&!priceChangeAcknowledged)} onClick={() => void saveQuote()}>Save draft quotation</Button>
+          <Button variant="primary" loading={busy} disabled={!quotePreview.fingerprint || (hasRevisionPriceChange(quotePreview.snapshot)&&!priceChangeAcknowledged)} onClick={() => void saveQuote(true)}>Save and send for approval</Button>
           </div>
         </>
       )}

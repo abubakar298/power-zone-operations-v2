@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { Button } from "../ui/Button.js";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 /** Read-only authenticated document preview. Existing endpoints enforce access. */
 export function DocumentPreview({url,title,mime="application/pdf",data}:{url:string;title:string;mime?:string;data?:Blob}) {
   const host=useRef<HTMLDivElement>(null);
+  const [retry,setRetry]=useState(0);
   const [status,setStatus]=useState("Loading document…");
   useEffect(()=>{
     const controller=new AbortController();let cancelled=false;let task:any;
@@ -32,7 +34,7 @@ export function DocumentPreview({url,title,mime="application/pdf",data}:{url:str
       }catch(e){if(!cancelled)setStatus(e instanceof Error?e.message:"Unable to load document.");}
     })();
     return()=>{cancelled=true;controller.abort();void task?.destroy();};
-  },[url,title,mime,data]);
-  return <section className="ipo-document-preview" aria-label={title}><div className="ipo-preview-heading"><h4>{title}</h4><a href={url} download>Download</a></div>{status&&<p role="status">{status}</p>}<div className="ipo-preview-pages" ref={host}/></section>;
+  },[url,title,mime,data,retry]);
+  return <section className="ipo-document-preview" aria-label={title}><div className="ipo-preview-heading"><h4>{title}</h4><a href={url} download>Download</a></div>{status&&<p role="status">{status}</p>}{status&&status!=="Loading document…"&&<Button variant="secondary" onClick={()=>setRetry(v=>v+1)}>Retry preview</Button>}<div className="ipo-preview-pages" ref={host}/></section>;
 }
 

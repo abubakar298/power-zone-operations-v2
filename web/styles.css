@@ -108,7 +108,7 @@
 .survey-grid{align-items:start}.survey-grid label{align-content:start;grid-template-rows:auto auto}.survey-grid input:not([type=hidden]),.survey-grid select{height:46px;box-sizing:border-box}.survey-grid .pv-total{grid-column:1/-1;margin:0;padding:8px 0;font-size:13px}.ac-panel-fields{display:grid;gap:12px}.survey-grid>button{align-self:start;min-height:46px}
 
 /* Reserve the same heading space in each desktop pair; helper text stays below controls. */
-@media(min-width:701px){.survey-grid label{grid-template-rows:2.8em 46px;line-height:1.4}.ac-panel-fields>small{order:2}.ac-panel-fields>label{order:1}}
+@media(min-width:701px){.survey-grid label{grid-template-rows:minmax(2.8em,auto) 46px;line-height:1.4}.ac-panel-fields>small{order:2}.ac-panel-fields>label{order:1}}
 /* Entry choices use explicit label spacing, outside the survey fieldset styles. */
 .boq-entry-mode,.boq-family-field{margin:18px 0;padding:18px 20px;border:1px solid #e7e1ee;border-radius:12px;background:#faf8fd}
 .boq-entry-mode>label,.boq-family-field>label{display:grid;gap:10px;max-width:440px;margin:0;font-size:14px;font-weight:600;line-height:1.5}
@@ -120,7 +120,7 @@
 
 /* IPO form rows reserve helper space below controls rather than stretching inputs. */
 .order-fields{align-items:start}
-.order-fields>label{align-content:start;grid-template-rows:2.8em 46px auto;line-height:1.4}
+.order-fields>label{align-content:start;grid-template-rows:minmax(2.8em,auto) 46px auto;line-height:1.4}
 .order-fields input,.order-fields select{height:46px;min-height:46px;box-sizing:border-box;font:inherit}
 .order-fields small{font-weight:400;line-height:1.5;color:var(--muted)}
 .ipo-document-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:12px;margin-top:18px}
@@ -144,3 +144,15 @@
 .notification-filters button{border:1px solid #e3ddef;border-radius:8px;background:#fff;color:#5840ad}.notification-filters button.primary{background:#654fe6;color:#fff;border-color:#654fe6}.notification-panel footer input[type=checkbox]{accent-color:#654fe6}@media(max-width:600px){.topbar .account{width:auto}.topbar .breadcrumb{max-width:105px;font-size:11px}.notification-panel{max-height:calc(100dvh - 90px);overflow:auto}}
 
 .project-nav-group{margin-top:18px}.project-nav-group>summary{cursor:pointer;padding:12px;border-radius:8px;color:#51485d;font-size:14px;font-weight:600}.project-nav-group>summary:hover{background:#f2f0fa}.project-nav-group>summary:focus-visible{outline:3px solid #96b6a6;outline-offset:2px}.project-nav-group .upcoming-nav{margin:6px 0 0 10px;padding-left:6px;border-left:1px solid #e3ddff}
+
+/* Long form labels wrap within their column instead of overlapping controls. */
+.survey-grid label,.order-fields>label{min-width:0;overflow-wrap:anywhere}
+.survey-grid label input,.survey-grid label select,.order-fields>label input,.order-fields>label select{min-width:0;max-width:100%}
+
+@supports (grid-template-rows: subgrid) {
+ @media(min-width:701px) {
+  .order-fields>label {grid-row:span 3;grid-template-rows:subgrid;align-content:stretch;}
+  .survey-grid>label {grid-row:span 3;grid-template-rows:subgrid;align-content:stretch;}
+  .survey-grid>label>input,.survey-grid>label>select,.order-fields>label>input,.order-fields>label>select {align-self:start;}
+ }
+}

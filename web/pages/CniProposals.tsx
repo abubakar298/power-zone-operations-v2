@@ -1,3 +1,4 @@
+import { DocumentPreview } from "../components/DocumentPreview.js";
 import { CniFinancialReview } from "../components/CniFinancialReview.js";
 import { NewCustomer } from "../components/NewCustomer.js";
 import { confirmLeaveWorkspace, useUnsavedChanges } from "../hooks/useUnsavedChanges.js";
@@ -55,7 +56,7 @@ export function CniProposals({session,masters:initialMasters,onBack,onLogout,ini
    <button disabled={busy} onClick={()=>{setEditingReview(true);const s=current.snapshot;setEditing({id:detail.id,version:current.version});setCustomerId(String(s.customer.id));setSearch(s.customer.name);setSiteName(s.siteName);setSiteCode(s.siteCode??"");setQuantity(String(s.pricing.quantity));setPresentation(s.pricing.presentation);setDiscount(detail.actions.filter((a:any)=>a.version_id===current.id).at(-1)?.instructions?.recommendedDiscount??s.pricing.discount);setNotice("Original values loaded above. Saving creates a new immutable version.");window.scrollTo({top:0,behavior:"smooth"});}}>Create revision</button>
    {management&&<CniFinancialReview id={detail.id} versionId={current.id} session={session} pending={action==="Approval requested"} onChanged={async()=>{await load();setDetail(await api(`/cni/${detail.id}`));}}/>}
    {management&&action==="Approval requested"&&<div className="revision-request-form"><p>Approval uses the saved quotation price. Send any adjusted price for revision first.</p><label>Review remarks<textarea value={remarks} maxLength={2000} onChange={e=>setRemarks(e.target.value)}/></label><button disabled={busy} onClick={()=>review("Approved")}>Approve quotation</button><button disabled={busy||!remarks.trim()} onClick={()=>review("Revision requested")}>Request revision</button></div>}
-   {reviewOnly&&<iframe title="C&I quotation preview" src={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`} style={{width:"100%",height:800,border:0}}/>}
+   {reviewOnly&&<DocumentPreview title={`C&I quotation · ${current.number}`} url={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`}/>}
    <h4>Document history</h4><ul>{detail.versions.map((v:any)=><li key={v.id}>{v.number} · {displayDate(v.created_at)} · <a href={`/api/cni/${detail.id}/versions/${v.id}/proposal.pdf`} target="_blank" rel="noopener">PDF</a></li>)}</ul>
    <ul>{detail.actions.map((a:any)=><li key={a.id}>{a.action} · {displayDate(a.created_at)} {a.remarks&&`— ${a.remarks}`} {a.instructions?.recommendedDiscount!==undefined&&`· Requested discount PKR ${money(a.instructions.recommendedDiscount)}`}</li>)}</ul>
   </section>}

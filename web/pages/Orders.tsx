@@ -264,6 +264,7 @@ export function Orders({
             {saved.external_approval.approver} ·{" "}
             {saved.external_approval.comments}
           </p>
+          <p>Document: {saved.number} · Recorded by: {saved.external_approval.recorded_by_name??"Not available"} · Recording date: {new Date(saved.external_approval.created_at).toLocaleString()} · Decision date: {saved.external_approval.decision_at?new Date(saved.external_approval.decision_at).toLocaleString():"Not available"}</p>
           {saved.external_approval.evidence?.map((e: any) => (
             <p key={e.id}>
               <a href={`/api/boqs/uploads/${e.id}`}>{e.filename}</a>
@@ -315,13 +316,14 @@ export function Orders({
                   value={input.quotationId ?? ""}
                   onChange={(e) => void act(() => choose(e.target.value))}
                 >
-                  <option value="">Select saved quotation</option>
-                  {quotes.map((q) => (
+                  <option value="">Select approved quotation</option>
+                  {quotes.filter((q) => ["Approved","PO received"].includes(q.workflow_status) && q.workflow_latest && !q.revision_requested).map((q) => (
                     <option key={q.id} value={q.id}>
-                      {q.number} · {q.customer} · {q.site}
+                      {q.number} · Approved · Current · {q.customer} · {q.site}
                     </option>
                   ))}
                 </select>
+                <small>Only the current approved quotation is available. Earlier versions and quotations awaiting revision or approval cannot create a new IPO.</small>
               </label>
               <label>
                 Sale confirmation type
@@ -557,10 +559,11 @@ export function Orders({
               </tfoot>
             </table>
           </div>
+          {saved&&<section className="detail-panel" aria-label="Departmental handoff status"><h3>Departmental handoffs</h3><p>Operations: {saved.operations_handoff?`Sent by ${saved.operations_handoff.sent_by} · ${new Date(saved.operations_handoff.created_at).toLocaleString()} · ${saved.operations_handoff.number}`:"Pending — send the approved BOQ to Operations."}</p><p>Accounts: {saved.accounts_handoff?`Sent by ${saved.accounts_handoff.sent_by} · ${new Date(saved.accounts_handoff.created_at).toLocaleString()}`:"Pending — send the issued IPO to Accounts."}</p></section>}
           <div className="survey-actions ipo-document-actions">
             {saved && onOperations && !initialIpoId && (
               <button onClick={() => onOperations(saved.id)}>
-                Send BOQ to Operations
+                {saved.operations_handoff ? "View Operations handoff" : "Send BOQ to Operations"}
               </button>
             )}
             {!saved && !review && preview && (
@@ -812,10 +815,10 @@ export function Orders({
                     }}
                   >
                     {s.snapshot.quotationNumber} · {s.input.evidenceType} ·{" "}
-                    {s.prepared_by}
+                    {s.prepared_by} · Submission {s.id.slice(0,8)}
                   </button>
                   <small>
-                    {quotationTypeLabel(s.quotationType ?? s.snapshot)}
+                    {quotationTypeLabel(s.quotationType ?? s.snapshot)} · Received {new Date(s.created_at).toLocaleString()} · PO {s.input.poNumber||"Not supplied"} · Evidence {s.snapshot.document?.filename||s.input.evidenceType}
                   </small>
                 </p>
               ))}

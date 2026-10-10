@@ -13,7 +13,10 @@ type State =
   | { kind: "login" }
   | { kind: "authenticated"; session: Session };
 export function App() {
-  const [notificationLink] = useState(()=>/^#notification=[0-9a-f-]{36}$/i.test(window.location.hash)?window.location.hash:"");
+  const [notificationLink] = useState(()=>{
+    const hash=window.location.hash,params=new URLSearchParams(hash.slice(1));
+    return /^#notification=[0-9a-f-]{36}$/i.test(hash)||["dashboard","projects","documents"].includes(params.get("workspace")??"")?hash:"";
+  });
   const [state, setState] = useState<State>({ kind: "loading" });
   const [linkPage, setLinkPage] = useState(
     window.location.pathname === "/account-link"

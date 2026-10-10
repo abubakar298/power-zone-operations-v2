@@ -453,6 +453,7 @@ test("quotation discount overrides pricing without changing the saved pricing or
     validity: "7 Days",
     proposedBy: "Abu Bakar",
     discount: "1000.50",
+    acknowledgePriceChange:true,
   };
   await db.pool.query(
     "UPDATE customers SET contact_person='Test Contact',phone='042-0000000' WHERE id=$1",
@@ -657,6 +658,7 @@ test("Full Breakup additional cost, markup and tax reconcile and stay internal a
       (await get(`/quotations/${savedQ.id}`).expect(200)).body,
     ).includes('"markup"'),
   );
+  for(const kind of ["Submitted","Approved"]) await request(app).post('/api/coordinator/events').set('Origin',origin).set('Cookie',cookie).set('X-CSRF-Token',csrf).send({quotationId:savedQ.id,kind,notes:'Isolated additional-scope approval fixture'}).expect(201);
   await get(`/quotations/${savedQ.id}/copy`, true).expect(403);
   await assert.rejects(
     db.pool.query(
@@ -668,6 +670,13 @@ test("Full Breakup additional cost, markup and tax reconcile and stay internal a
 });
 
 test("customer PO and IPO preserve accepted selling amounts, discount allocation and immutable records", async () => {
+  // IPO entry now requires an approved, current version. Retain the original
+  // financial fixture by deliberately proposing its terms as a new revision.
+  const latest=(await db.pool.query("SELECT id FROM quotation_versions WHERE boq_revision_id=$1 ORDER BY version DESC LIMIT 1",[issued.boq_revision_id])).rows[0];
+  const revisionInput={pricingId:pricing.id,revisionRequestId:await commercialRevision(latest.id),...issued.snapshot.input,acknowledgePriceChange:true};
+  const revisedPreview=(await post('/quotations/preview',revisionInput).expect(200)).body;
+  issued=(await post('/quotations',{...revisionInput,fingerprint:revisedPreview.fingerprint,requestKey:randomUUID()}).expect(201)).body;
+  for(const kind of ["Submitted","Approved"]) await request(app).post('/api/coordinator/events').set('Origin',origin).set('Cookie',cookie).set('X-CSRF-Token',csrf).send({quotationId:issued.id,kind,acknowledgePriceChange:true,notes:'Isolated approval before customer confirmation'}).expect(201);
   const input = {
     quotationId: issued.id,
     poNumber: "TEST-PO-001",
@@ -714,24 +723,9 @@ test("customer PO and IPO preserve accepted selling amounts, discount allocation
     )
   ).rows[0];
   assert.ok(discounted);
-  const dp = (
-    await op("/preview", { ...body, quotationId: discounted.id }).expect(200)
-  ).body;
-  assert.equal(
-    dp.snapshot.allocation.total,
-    discounted.snapshot.footer.at(-1).amount,
-  );
-  assert.ok(new Decimal(dp.snapshot.allocation.originalDiscount).gt(0));
-  assert.equal(dp.snapshot.allocation.lines[0].allocatedDiscount, "0.00");
-  assert.equal(
-    dp.snapshot.allocation.lines
-      .reduce(
-        (v: Decimal, l: any) => v.add(l.allocatedDiscount),
-        new Decimal(0),
-      )
-      .toFixed(2),
-    discounted.snapshot.input.discount,
-  );
+  // A historical discounted version remains readable, but cannot start a new IPO.
+  await op("/preview", { ...body, quotationId: discounted.id }).expect(409);
+  assert.ok(new Decimal(discounted.snapshot.input.discount).gt(0));
   assert.equal(
     p.snapshot.allocation.total,
     issued.snapshot.footer.at(-1).amount,
@@ -1059,6 +1053,7 @@ test("revision routing requires approved separate costing and preserves origin, 
   ).body;
   const qi = {
     pricingId: priced.id,
+    acknowledgePriceChange: true,
     revisionRequestId: started.id,
     quotedDate: "2026-10-06",
     validity: "7 Days",
@@ -1517,7 +1512,7 @@ test("coordination buckets record quotation review and PO receipt with immutable
       .set("Origin", origin)
       .set("Cookie", cookie)
       .set("X-CSRF-Token", csrf)
-      .send({ quotationId: q.id, kind, notes });
+      .send({ quotationId: q.id, kind, notes, acknowledgePriceChange:true });
   await send("Approved").expect(409);
   const first = (await send("Submitted").expect(201)).body;
   assert.equal((await send("Submitted").expect(201)).body.id, first.id);

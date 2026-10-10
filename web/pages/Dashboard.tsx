@@ -105,6 +105,7 @@ export function Dashboard({
   }
   const [bucketTask, setBucketTask] = useState<any>();
   const [projectContextKey,setProjectContextKey]=useState<string>(),[currentProjectKey,setCurrentProjectKey]=useState<string>();
+  const [linkedDocumentId,setLinkedDocumentId]=useState<string>();
   const [origin, setOrigin] = useState("dashboard");
   const initials = session.user.displayName
     .split(/\s+/)
@@ -134,11 +135,20 @@ export function Dashboard({
     if (next === "dashboard") window.dispatchEvent(new Event("pz:workspace-open"));
     setBucketTask(task);
     setView(next);
+    window.history.replaceState(null,"",`/dashboard#workspace=${next}`);
     setMobileOpen(false);
     setMenuOpen(false);
     return true;
   }
   const isCoordinator = session.user.role === "Coordinator";
+  const canUseLibrary=["Coordinator","Admin","Management"].includes(session.user.role);
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.hash.slice(1)),destination=params.get("workspace");
+    if(!canUseLibrary || !["dashboard","projects","documents"].includes(destination??""))return;
+    setView(destination as "dashboard"|"projects"|"documents");
+    const document=params.get("document");if(document&&/^[0-9a-f-]{36}$/i.test(document))setLinkedDocumentId(document);
+    const project=params.get("project");if(project&&project.length<=500)setProjectContextKey(project);
+  },[canUseLibrary]);
   useEffect(()=>{let alive=true;setCurrentProjectKey(undefined);if(!isCoordinator||!bucketTask)return;void api<any>('/coordinator/projects').then(index=>{const ids=[bucketTask.id,bucketTask.ipo_id,bucketTask.boq_revision_id,bucketTask.draft_id].filter(Boolean);const record=index.documents?.find((d:any)=>ids.includes(d.id)||ids.includes(d.proposal_id));if(alive)setCurrentProjectKey(record?.project_key)}).catch(()=>{});return()=>{alive=false}},[bucketTask,isCoordinator]);
   const Home = ["Admin", "Management"].includes(session.user.role)
     ? Director
@@ -210,11 +220,10 @@ export function Dashboard({
           <div className="nav-divider" />
           <div className="nav-label">PROJECT OPERATIONS</div>
           <div className="upcoming-nav" aria-label="Project workspaces">
-            <div>
+            <button className={view==="customers"?"nav-active":""} aria-current={view==="customers"?"page":undefined} onClick={()=>navigate("customers")}>
               <Icon name="users" />
-              <span>Customers & sites</span>
-              <small>Ready</small>
-            </div>
+              <span>Customers & Sites</span>
+            </button>
             {["Admin", "Management", "Coordinator"].includes(session.user.role) && (
               <>
                 <button
@@ -437,14 +446,11 @@ export function Dashboard({
                                       : "Your identity and access to the Power Zone workspace."}
               </p>
             </div>
-            <button className="dark-button" onClick={logout} disabled={busy}>
-              <Icon name="logout" />
-              {busy ? "Signing out…" : "Sign out"}
-            </button>
+
           </div>
           {isCoordinator && ["boqs","pricing","quotes","orders","operations"].includes(view) && <Button variant="neutral" onClick={()=>navigate(origin as Parameters<typeof navigate>[0])}>← Back to {origin==="projects"?"Projects":origin==="documents"?"Documents":"My Workspace"}</Button>}
           {isCoordinator && currentProjectKey && ["boqs","pricing","quotes","orders","operations"].includes(view) && <Button variant="secondary" onClick={()=>{setProjectContextKey(currentProjectKey);navigate("projects")}}>View project</Button>}
-          {isCoordinator && <div hidden={view!=="projects"&&view!=="documents"}><CoordinatorLibrary initialProjectKey={projectContextKey} active={view==="projects"||view==="documents"} mode={view==="projects"?"projects":"documents"} onOpen={task=>{setRevisionDraftId(task.draft_id);setPricingRevisionId(task.boq_revision_id);setPricingRequestId(task.request_id);setOperationsIpoId(task.ipo_id);navigate(task.target,task);}} /></div>}
+          {canUseLibrary && <div hidden={view!=="projects"&&view!=="documents"}><CoordinatorLibrary initialDocumentId={linkedDocumentId} initialProjectKey={projectContextKey} active={view==="projects"||view==="documents"} mode={view==="projects"?"projects":"documents"} onOpen={task=>{setRevisionDraftId(task.draft_id);setPricingRevisionId(task.boq_revision_id);setPricingRequestId(task.request_id);setOperationsIpoId(task.ipo_id);navigate(task.target,task);}} /></div>}
           {error && (
             <p className="form-error" role="alert">
               {error}

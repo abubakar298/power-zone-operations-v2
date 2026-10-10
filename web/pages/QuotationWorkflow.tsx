@@ -1,3 +1,4 @@
+import {RevisionComparison,hasRevisionPriceChange} from '../components/RevisionComparison.js';
 import { BoqCosting } from "./BoqCosting.js";
 import { money } from "../numbers.js";
 import { SharePdf } from "../components/SharePdf.js";
@@ -47,6 +48,7 @@ export function QuotationWorkflow({
   const [costing,setCosting]=useState<any>(),[costingError,setCostingError]=useState("");
   useEffect(()=>{let active=true;setCosting(undefined);setCostingError("");if(manager&&q.boq_revision_id)api<any>(`/boqs/${q.boq_revision_id}`).then(r=>{if(active)setCosting(r);}).catch(e=>{if(active)setCostingError(e.message);});return()=>{active=false;};},[manager,q.boq_revision_id]);
 
+  const [priceAcknowledged,setPriceAcknowledged]=useState(false);
   const [notes, setNotes] = useState("");
   const [revision, setRevision] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -125,6 +127,7 @@ export function QuotationWorkflow({
       ))
     )
       return;
+    if(kind==="Approved"&&hasRevisionPriceChange(q.snapshot)&&!priceAcknowledged){setError("Review and acknowledge the changed payable before approving.");return;}
     setBusy(true);
     setError("");
     try {
@@ -133,7 +136,7 @@ export function QuotationWorkflow({
           ? `${notes.trim()}\nProposed total discount: PKR ${money(actionDiscount || "0")}. Proposed net payable: PKR ${money(actionMetrics.proposed.payable)}.`
           : notes.trim();
       await api("/coordinator/events", {
-        body: { quotationId: q.id, kind, notes: feedback },
+        body: { quotationId: q.id, kind, notes: feedback, acknowledgePriceChange:priceAcknowledged },
         csrf: session.csrfToken,
       });
       onChange(await api(`/commercial/quotations/${q.id}`));
@@ -170,12 +173,14 @@ export function QuotationWorkflow({
       : q.snapshot;
   return (
     <>
+      <RevisionComparison snapshot={q.snapshot} acknowledged={priceAcknowledged} onAcknowledge={manager?setPriceAcknowledged:undefined}/>
       {q.external_approval && (
         <section aria-label="Recorded external approval">
           <strong>External approval recorded</strong>
           <p>
             Method: {q.external_approval.channel} · Approver:{" "}
             {q.external_approval.approver} · {q.external_approval.comments}
+          </p><p>Document: {q.number} · Recorded by: {q.external_approval.recorded_by_name??"Not available"} · Recorded: {new Date(q.external_approval.created_at).toLocaleString()} · Decision date: {q.external_approval.decision_at?new Date(q.external_approval.decision_at).toLocaleString():"Not available"}
           </p>
           {q.external_approval.evidence?.map((e: any) => (
             <p key={e.id}>

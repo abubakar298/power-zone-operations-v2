@@ -402,6 +402,10 @@ export class CommercialRepository {
     c: Pool | PoolClient = this.pool,
     allowExisting = false,
   ) {
+    if(input.revisionRequestId && input.discount===undefined){
+      const prior=(await c.query("SELECT v.snapshot FROM quotation_revision_requests r JOIN quotation_versions v ON v.id=r.source_quotation_id WHERE r.id=$1",[input.revisionRequestId])).rows[0];
+      if(prior) input={...input,discount:prior.snapshot.footer.find((r:any)=>r.label==="Special Discount")?.amount??"0"};
+    }
     const p = await this.pricingGet(actor, input.pricingId, c),
       b = await this.boq(c, p.boq_revision_id),
       customer = (
@@ -515,6 +519,16 @@ export class CommercialRepository {
           requestedBy: revision.requested_by,
           sourceQuotation: revision.source_number,
           costingChanged: revision.costing_change,
+          comparison: {
+            previousPayable: revision.source_snapshot.footer.find((r:any)=>r.label==="Net Total")?.amount,
+            proposedPayable: snapshot.footer.find((r:any)=>r.label==="Net Total")?.amount,
+            previousDiscount: revision.source_snapshot.input.discount??"0",
+            proposedDiscount: snapshot.input.discount,
+            previousFormat: revision.source_snapshot.presentation,
+            proposedFormat: snapshot.presentation,
+            previousTax: revision.source_snapshot.footer.some((r:any)=>r.label==="Total")?"Tax Included":"Show Sales Tax Separately",
+            proposedTax: p.snapshot.input.taxMode,
+          },
         },
       });
     }
@@ -564,6 +578,9 @@ export class CommercialRepository {
           );
         return old;
       }
+      const comparison=(preview.snapshot as any).revision?.comparison;
+      if(comparison?.previousPayable && !new Decimal(comparison.previousPayable).eq(comparison.proposedPayable) && !input.acknowledgePriceChange)
+        throw new HttpError(409,"Acknowledge the previous and proposed payable change before saving this revision.");
       if (
         input.revisionRequestId &&
         (
@@ -621,7 +638,7 @@ export class CommercialRepository {
       return row;
     });
   }
-  async managementFinalQuotation(actor:string,id:string,discount:string,notes:string){
+  async managementFinalQuotation(actor:string,id:string,discount:string,notes:string,acknowledgePriceChange=false){
     await this.manager(this.pool,actor,false);
     await this.discountReview(actor,id,{discount});
     const newId=await transaction(this.pool,async c=>{
@@ -636,6 +653,13 @@ export class CommercialRepository {
       const net=snapshot.footer.find((r:any)=>r.label==="Net Total");
       const old=snapshot.footer.find((r:any)=>r.label==="Special Discount");
       net.amount=new Decimal(net.amount).add(old.amount).sub(discount).toFixed(2);old.amount=new Decimal(discount).toFixed(2);snapshot.input.discount=old.amount;
+      const comparison=snapshot.revision?.comparison;
+      if(comparison){
+        comparison.proposedPayable=net.amount;
+        comparison.proposedDiscount=old.amount;
+        if(comparison.previousPayable && !new Decimal(comparison.previousPayable).eq(net.amount) && !acknowledgePriceChange)
+          throw new HttpError(409,"Review and acknowledge the change in payable before final approval.");
+      }
       snapshot.managementAdjustment={sourceQuotationId:id,remarks:notes};
       const next=randomUUID(),version=Number(latest.version)+1;
       const identity=await boqIdentity(c,q.boq_revision_id);
@@ -652,7 +676,7 @@ export class CommercialRepository {
   async quotationList(actor?: string) {
     return (
       await this.pool.query(
-        `SELECT q.id,q.number,q.version,q.pricing_id,q.boq_revision_id,q.created_at,q.snapshot->>'boqNumber' AS boq_number,q.snapshot->'customer'->>'name' AS customer,q.snapshot->>'siteName' AS site FROM quotation_versions q ${actor ? `WHERE ${ownedCondition("quotation", "q.id", "$1")}` : ""} ORDER BY q.created_at DESC LIMIT 200`,
+        `SELECT q.id,q.number,q.version,q.pricing_id,q.boq_revision_id,q.created_at,(SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS workflow_status,NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS workflow_latest,EXISTS(SELECT 1 FROM quotation_revision_requests r WHERE r.source_quotation_id=q.id) AS revision_requested,q.snapshot->>'boqNumber' AS boq_number,q.snapshot->'customer'->>'name' AS customer,q.snapshot->>'siteName' AS site FROM quotation_versions q ${actor ? `WHERE ${ownedCondition("quotation", "q.id", "$1")}` : ""} ORDER BY q.created_at DESC LIMIT 200`,
         actor ? [actor] : [],
       )
     ).rows;
@@ -668,7 +692,7 @@ export class CommercialRepository {
     row.external_approval =
       (
         await this.pool.query(
-          "SELECT a.*, (SELECT jsonb_agg(jsonb_build_object('id',u.id,'filename',u.filename)) FROM external_document_approval_files f JOIN survey_uploads u ON u.id=f.upload_id WHERE f.approval_id=a.id) AS evidence FROM external_document_approvals a WHERE a.quotation_id=$1",
+          "SELECT a.*, (SELECT display_name FROM users WHERE id=a.recorded_by) AS recorded_by_name, (SELECT jsonb_agg(jsonb_build_object('id',u.id,'filename',u.filename)) FROM external_document_approval_files f JOIN survey_uploads u ON u.id=f.upload_id WHERE f.approval_id=a.id) AS evidence FROM external_document_approvals a WHERE a.quotation_id=$1",
           [id],
         )
       ).rows[0] ?? null;

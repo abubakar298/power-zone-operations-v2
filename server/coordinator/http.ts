@@ -34,7 +34,7 @@ export function coordinatorHttp(
       !["Admin", "Management"].includes(req.authSession!.user.role)
     )
       throw new HttpError(403, "Team overview requires management access.");
-    res.json(await repo.overview(req.authSession!.user.id, scope === "team"));
+    res.json(await repo.overview(req.authSession!.user.id, scope === "team", req.query.includeTraining === "true"));
   });
   r.post("/quotations/:id/external-approval", async (req, res) => {
     if (
@@ -74,6 +74,7 @@ export function coordinatorHttp(
           "PO received",
         ]),
         notes: z.string().trim().max(2000).default(""),
+        acknowledgePriceChange:z.boolean().optional(),
       })
       .strict()
       .safeParse(req.body);
@@ -88,6 +89,8 @@ export function coordinatorHttp(
           v.data.quotationId,
           v.data.kind,
           v.data.notes,
+          undefined,
+          v.data.acknowledgePriceChange,
         ),
       );
   });

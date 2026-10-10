@@ -11,7 +11,7 @@ async function login(page: Page, email: string, password = employeePassword) {
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Sign out", exact: true }),
+    page.locator(".account-trigger"),
   ).toBeVisible();
 }
 const button = (page: Page, name: string) =>

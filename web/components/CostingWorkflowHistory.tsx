@@ -76,7 +76,7 @@ export function CostingWorkflowHistory({
                     </p>
                   )}
                 </td>
-                <td className="numeric">{amount(b.budgeted_cost)}</td>
+                <td className="numeric">{b.budgeted_cost == null ? "Restricted" : amount(b.budgeted_cost)}</td>
                 {showMarkup && <td className="numeric">—</td>}
               </tr>,
               ...b.quotations
@@ -106,7 +106,7 @@ export function CostingWorkflowHistory({
                         </p>
                       )}
                     </td>
-                    <td className="numeric">{amount(b.budgeted_cost)}</td>
+                    <td className="numeric">{b.budgeted_cost == null ? "Restricted" : amount(b.budgeted_cost)}</td>
                     {showMarkup && <td className="numeric">{markup(q)}</td>}
                   </tr>
                 )),

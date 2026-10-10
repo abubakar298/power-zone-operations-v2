@@ -31,6 +31,7 @@ export const pricingSchema = z.object({
 });
 export type PricingInput = z.infer<typeof pricingSchema>;
 export const quotationSchema = z.object({
+  acknowledgePriceChange: z.boolean().optional(),
   revisionRequestId: z.uuid().optional(),
   pricingId: z.uuid(),
   discount: amount.optional(),

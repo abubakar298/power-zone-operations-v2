@@ -11,6 +11,7 @@ export const externalEvidenceObject = z
       .max(10)
       .refine((ids) => new Set(ids).size === ids.length),
     confirmed: z.literal(true),
+    decisionAt:z.iso.datetime({offset:true}).optional(),
   })
   .strict();
 export const externalEvidenceSchema = externalEvidenceObject.refine(
@@ -25,7 +26,7 @@ export async function validateExternal(
   evidence: ExternalEvidence,
 ) {
   const user = (
-    await c.query("SELECT role FROM users WHERE id=$1 AND active FOR SHARE", [
+    await c.query("SELECT role,display_name,email FROM users WHERE id=$1 AND active FOR SHARE", [
       actor,
     ])
   ).rows[0];
@@ -38,6 +39,11 @@ export async function validateExternal(
       403,
       "Record approval only for your own submitted document.",
     );
+  const normalized=(v:string)=>v.trim().toLocaleLowerCase().replace(/\s+/g," ");
+  if(user.role==="Coordinator" && [user.display_name,user.email].some(v=>normalized(v)===normalized(evidence.approver)))
+    throw new HttpError(403,"A Coordinator cannot record themselves as the Management approver.");
+  if(evidence.decisionAt && new Date(evidence.decisionAt).getTime()>Date.now()+60000)
+    throw new HttpError(400,"The approval decision date cannot be in the future.");
   const uploads = await c.query(
     "SELECT id FROM survey_uploads WHERE id=ANY($1::uuid[]) AND owner_id=$2 AND mime IN('image/png','image/jpeg')",
     [evidence.evidenceIds, actor],
@@ -54,7 +60,7 @@ export async function recordExternal(
 ) {
   const row = (
     await c.query(
-      "INSERT INTO external_document_approvals(quotation_id,submission_id,approver,comments,recorded_by,channel) VALUES($1,$2,$3,$4,$5,$6) RETURNING id",
+      "INSERT INTO external_document_approvals(quotation_id,submission_id,approver,comments,recorded_by,channel,decision_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id",
       [
         quotationId,
         submissionId,
@@ -62,6 +68,7 @@ export async function recordExternal(
         evidence.comments,
         actor,
         evidence.channel,
+        evidence.decisionAt??null,
       ],
     )
   ).rows[0];

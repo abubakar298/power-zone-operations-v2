@@ -11,3 +11,9 @@ export async function openWorkspaceSection(page:Page,label:string) {
  }
  await page.getByRole('button',{name:label,exact:true}).click();
 }
+
+export async function signOut(page:Page) {
+ const button=page.getByRole('button',{name:'Sign out',exact:true});
+ if(!(await button.isVisible()))await page.locator('.account-trigger').click();
+ await button.click();
+}

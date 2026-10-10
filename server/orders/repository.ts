@@ -1,3 +1,4 @@
+import { requireEligibleQuotation } from "../commercial/eligibility.js";
 import { allocateReference, boqIdentity } from "../documents/references.js";
 import { ownedCondition } from "../http/permissions.js";
 import {
@@ -33,6 +34,7 @@ export class OrdersRepository {
     );
   }
   async defaults(quotationId: string) {
+    await requireEligibleQuotation(this.pool,quotationId);
     const row = (
       await this.pool.query(
         `SELECT c.*, q.snapshot->'input'->>'proposedBy' AS proposed_by,p.snapshot->'input'->>'presentation' AS presentation,p.snapshot->'input'->>'taxMode' AS tax_mode FROM quotation_versions q JOIN commercial_pricing_versions p ON p.id=q.pricing_id JOIN boq_revisions b ON b.id=q.boq_revision_id JOIN boqs o ON o.id=b.boq_id JOIN customers c ON c.id=o.customer_id WHERE q.id=$1`,
@@ -57,6 +59,7 @@ export class OrdersRepository {
     actor: string,
     input: OrderInput,
     c: Pool | PoolClient = this.pool,
+    reportingOnly = false,
   ) {
     const user = (
       await c.query("SELECT active,display_name FROM users WHERE id=$1", [
@@ -70,6 +73,8 @@ export class OrdersRepository {
       ])
     ).rows[0];
     if (!q) throw new HttpError(404, "Saved quotation not found.");
+    if(reportingOnly) await new CommercialRepository(this.pool).manager(c,actor,false);
+    else await requireEligibleQuotation(c,input.quotationId);
     const p = (
       await c.query("SELECT * FROM commercial_pricing_versions WHERE id=$1", [
         q.pricing_id,
@@ -221,6 +226,10 @@ export class OrdersRepository {
           throw new HttpError(409, "Request key already used.");
         return old;
       }
+      // Identical evidence/input is a repeated intake, even after a page reload
+      // creates a fresh request key. Different orders/amendments retain distinct inputs.
+      const duplicate=(await c.query("SELECT * FROM ipo_submissions WHERE created_by=$1 AND fingerprint=$2 ORDER BY created_at LIMIT 1",[actor,expected])).rows[0];
+      if(duplicate)return duplicate;
       return (
         await c.query(
           "INSERT INTO ipo_submissions(id,input,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
@@ -495,10 +504,11 @@ export class OrdersRepository {
       external_approval:
         (
           await this.pool.query(
-            "SELECT a.*, (SELECT jsonb_agg(jsonb_build_object('id',u.id,'filename',u.filename)) FROM external_document_approval_files f JOIN survey_uploads u ON u.id=f.upload_id WHERE f.approval_id=a.id) AS evidence FROM external_document_approvals a WHERE a.submission_id=$1",
+            "SELECT a.*, (SELECT display_name FROM users WHERE id=a.recorded_by) AS recorded_by_name, (SELECT jsonb_agg(jsonb_build_object('id',u.id,'filename',u.filename)) FROM external_document_approval_files f JOIN survey_uploads u ON u.id=f.upload_id WHERE f.approval_id=a.id) AS evidence FROM external_document_approvals a WHERE a.submission_id=$1",
             [row.submission_id],
           )
         ).rows[0] ?? null,
+      operations_handoff:(await this.pool.query("SELECT o.id,o.number,o.created_at,u.display_name AS sent_by FROM operations_boq_issuances o JOIN users u ON u.id=o.created_by WHERE o.ipo_id=$1",[id])).rows[0]??null,
       accounts_handoff:
         (
           await this.pool.query(

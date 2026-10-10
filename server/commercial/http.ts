@@ -174,8 +174,8 @@ export function commercialHttp(
       .send(buildQuotationPdf(p.snapshot));
   });
   r.post("/quotations/:id/management-final",managementOnly,async(req,res)=>{
-    const value=parse(z.object({discount:z.string().regex(/^\d{1,12}(\.\d{1,2})?$/),notes:z.string().trim().max(1700).default("")}).strict(),req.body);
-    res.status(201).json(await repo.managementFinalQuotation(req.authSession!.user.id,id(req.params.id),value.discount,value.notes));
+    const value=parse(z.object({discount:z.string().regex(/^\d{1,12}(\.\d{1,2})?$/),notes:z.string().trim().max(1700).default(""),acknowledgePriceChange:z.boolean().optional()}).strict(),req.body);
+    res.status(201).json(await repo.managementFinalQuotation(req.authSession!.user.id,id(req.params.id),value.discount,value.notes,value.acknowledgePriceChange));
   });
   r.post("/quotations/:id/discount-review", async (req, res) => {
     const v = parse(

@@ -123,6 +123,7 @@ export class DirectorRepository {
                 salesPerson: r.quotation_snapshot.input.proposedBy,
                 customerAccepted: true,
               }),
+              this.pool,true,
             )
           ).snapshot.peachtree;
       }
@@ -155,6 +156,7 @@ export class DirectorRepository {
               salesPerson: v.snapshot.input.proposedBy,
               customerAccepted: true,
             }),
+            this.pool,true,
           )
         ).snapshot.peachtree;
         const vp = phaseBudgets(

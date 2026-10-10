@@ -86,7 +86,7 @@ test("IPO defaults use current customer data and accepted quotation; Operations 
         [id, `${id}@example.test`, role, password, role],
       );
     const records = await createDashboardSamples(db.pool, owner, manager);
-    const qRecord = records.find((r: any) => r.quotationId)!;
+    const qRecord = records.find((r: any) => r.quotationId && r.stage===7)!;
     const orders = new OrdersRepository(db.pool);
     const before = (
       await db.pool.query(
@@ -97,6 +97,9 @@ test("IPO defaults use current customer data and accepted quotation; Operations 
       "UPDATE customers SET contact_person='Fresh contact',phone='03000000001',email='',address='Fresh billing address' WHERE id=(SELECT b.customer_id FROM quotation_versions q JOIN boq_revisions r ON r.id=q.boq_revision_id JOIN boqs b ON b.id=r.boq_id WHERE q.id=$1)",
       [qRecord.quotationId],
     );
+    for(const record of records.filter((r:any)=>r.quotationId && [3,4,5].includes(r.stage))) {
+      await assert.rejects(orders.defaults(record.quotationId), /approval is required/i);
+    }
     const defaults = await orders.defaults(qRecord.quotationId);
     assert.equal(defaults.contactPerson, "Fresh contact");
     assert.equal(defaults.paymentContact, "Fresh contact");

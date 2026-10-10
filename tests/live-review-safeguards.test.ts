@@ -1,0 +1,62 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {testDatabase} from './database.js';
+import {createDashboardSamples} from '../server/coordinator/samples.js';
+import {CoordinatorRepository} from '../server/coordinator/repository.js';
+import {CommercialRepository} from '../server/commercial/repository.js';
+import {OrdersRepository} from '../server/orders/repository.js';
+import {orderSchema} from '../server/orders/schema.js';
+import {quotationSchema} from '../server/commercial/schema.js';
+import {productBrandCategory} from '../server/boq/product-brand-category.js';
+
+test('live review guards preserve approved amounts, distinguish training, and prevent repeated intake',async()=>{
+ const db=await testDatabase();try{
+  const owner=randomUUID(),manager=randomUUID();
+  for(const [id,role,name] of [[owner,'Coordinator','Atif Fixture'],[manager,'Management','Manager Fixture']])await db.pool.query('INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$5)',[id,`${id}@example.test`,name,'not-a-login-hash',role]);
+  const records=await createDashboardSamples(db.pool,owner,manager);
+  const coordinator=new CoordinatorRepository(db.pool),commercial=new CommercialRepository(db.pool),orders=new OrdersRepository(db.pool);
+  const normal=await coordinator.overview(owner,false),training=await coordinator.overview(owner,false,true);
+  assert.equal(normal.performance.approval.completed,0);
+  assert.ok(training.performance.approval.completed>0);
+  assert.equal(normal.performance.includesTraining,false);
+  assert.equal(normal.tasks.length,training.tasks.length);
+  assert.ok(normal.tasks.every((t:any)=>t.training));
+  const sourceRecord=records.find((r:any)=>r.stage===6)!;
+  const source=await commercial.quotationGet(sourceRecord.quotationId);
+  await orders.defaults(source.id);
+  const input=orderSchema.parse({quotationId:source.id,evidenceType:'Verbal sale confirmation',evidenceNotes:'Isolated approval evidence',orderDate:'2026-10-10',invoiceCompany:'Fixture',salesPerson:'Atif Fixture',customerAccepted:true});
+  const preview=await orders.preview(owner,input),saved=await orders.submit(owner,input,preview.fingerprint,randomUUID());
+  const duplicate=await orders.submit(owner,input,preview.fingerprint,randomUUID());
+  assert.equal(duplicate.id,saved.id);
+  const amendment={...input,evidenceNotes:'Distinct customer amendment'};
+  const ap=await orders.preview(owner,amendment);
+  assert.notEqual((await orders.submit(owner,amendment,ap.fingerprint,randomUUID())).id,saved.id);
+  const request=await commercial.revisionStart(manager,source.id,'Internal management',false,'Presentation-only fixture','Manager Fixture',randomUUID());
+  await assert.rejects(orders.defaults(source.id),/revision request/i);
+  const qi=quotationSchema.parse({pricingId:source.pricing_id,revisionRequestId:request.id,quotedDate:'2026-10-10',validity:source.snapshot.input.validity,proposedBy:'Atif Fixture'});
+  const qp=await commercial.quotationPreview(owner,qi);
+  assert.equal(qp.snapshot.input.discount,source.snapshot.input.discount);
+  assert.equal(qp.snapshot.footer.at(-1)?.amount,source.snapshot.footer.at(-1)?.amount);
+  const changed=quotationSchema.parse({...qi,discount:'1000'}),cp=await commercial.quotationPreview(owner,changed);
+  await assert.rejects(commercial.quotationSave(owner,changed,cp.fingerprint,randomUUID()),/acknowledge/i);
+  const revised=await commercial.quotationSave(owner,{...changed,acknowledgePriceChange:true},cp.fingerprint,randomUUID());
+  await coordinator.event(owner,revised.id,'Submitted','Fixture');
+  await assert.rejects(coordinator.event(manager,revised.id,'Approved','Fixture'),/acknowledge/i);
+  await assert.rejects(commercial.managementFinalQuotation(manager,revised.id,'1000','Review change'),/acknowledge/i);
+  await assert.rejects(coordinator.event(owner,revised.id,'Approved','Fixture'),/management access/i);
+  await assert.rejects(coordinator.event(owner,revised.id,'Approved','Fixture',{channel:'Verbal',approver:'Atif Fixture',comments:'Fixture',evidenceIds:[],confirmed:true}),/cannot record themselves/i);
+  await coordinator.event(manager,revised.id,'Approved','Reviewed material price change',undefined,true);
+  await orders.defaults(revised.id);
+  assert.equal((await commercial.quotationGet(source.id)).snapshot.footer.at(-1)?.amount,source.snapshot.footer.at(-1)?.amount);
+  assert.equal((await orders.submissions(owner)).find((s:any)=>s.id===saved.id)?.snapshot.allocation.total,preview.snapshot.allocation.total);
+ }finally{await db.close();}
+});
+test('direct product brands use the applicable existing engineering categories',()=>{
+ assert.equal(productBrandCategory('HYB-SP-006'),'Inverter');
+ assert.equal(productBrandCategory('CH-BMS-LV'),'Battery & BMS');
+ assert.equal(productBrandCategory('10mm² 1C AC Cable'),'Cable');
+ assert.equal(productBrandCategory('AC MCB 63A, 2-Pole'),'Switchgear');
+ assert.equal(productBrandCategory('Solar PV Modules'),'Solar Panel');
+ assert.equal(productBrandCategory('Unclassified product'),undefined);
+});

@@ -1,3 +1,4 @@
+import {productBrandCategory} from './product-brand-category.js';
 import {Decimal} from 'decimal.js';
 import {HttpError} from '../http/errors.js';
 import {findBess} from './bess.js';
@@ -32,8 +33,8 @@ export function calculateDirectProducts(s:Survey,m:Masters):BoqSnapshot {
     if(/^(Labour|Delivery|Misc\. Accessories|Earthing Bore|Structure -)/.test(component.key))throw new HttpError(400,'Select products only; installation and EPC services do not belong in Direct Product Sale.');
     const quantity=new Decimal(component.qty),bess=/^(HYB-|BAT-|CH-BMS-|BMS-)/.test(component.key);
     if((bess||/meter|MCB|MCCB/i.test(component.key))&&!/cable/i.test(component.key)&&!quantity.isInteger())throw new HttpError(400,`Use a whole quantity for ${component.key}.`);
-    const brand=group.brandId?m.brands.find(b=>b.id===group.brandId&&b.status==='Active'):undefined;
-    if(group.brandId&&!brand)throw new HttpError(400,'Select an active product brand.');
+    const brand=group.brandId?m.brands.find(b=>b.id===group.brandId&&b.status==='Active'&&b.category===productBrandCategory(component.key)):undefined;
+    if(group.brandId&&!brand)throw new HttpError(400,'Select an active brand for this product category.');
     const existing=lines.find(l=>l.key===component.key);
     if(existing){if(existing.brand!==(brand?.name??''))throw new HttpError(400,'The same product cannot use different brands in one BOQ.');existing.qty=new Decimal(existing.qty).add(quantity).toString();existing.total=new Decimal(existing.qty).mul(existing.rate).toString();continue;}
     if(item.status!=='Approved'||!item.approved_specification)warnings.push(`${component.key}: approved specification requires review.`);
