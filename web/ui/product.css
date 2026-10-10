@@ -102,3 +102,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ubl-closed-table tbody>tr>th{min-width:170px}
 @media(max-width:1000px){.ubl-closed-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.ubl-closed-filters{grid-template-columns:1fr}}
+
+.pz-inventory .pz-number{text-align:right;font-variant-numeric:tabular-nums}.pz-inventory .pz-uom{text-align:center}.pz-inventory td input{max-width:120px;text-align:right}.pz-inventory td small{display:block}.pz-inventory section{margin-top:var(--pz-space-6)}
+
+@media print{body.pz-print-irr *{visibility:hidden}body.pz-print-irr .pz-irr-report,body.pz-print-irr .pz-irr-report *{visibility:visible}body.pz-print-irr .pz-irr-report{position:absolute;left:0;top:0;width:100%;border:0}body.pz-print-irr .pz-irr-report button,body.pz-print-irr .pz-irr-report details{display:none}body.pz-print-irr .pz-irr-report .table-scroll{overflow:visible}body.pz-print-irr table{font-size:10px}body.pz-print-irr tr{break-inside:avoid}}

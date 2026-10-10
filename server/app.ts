@@ -1,3 +1,5 @@
+import {inventoryHttp} from './inventory/http.js';
+import {InventoryRepository} from './inventory/repository.js';
 import {ublHttp} from './ubl/http.js';
 import {UblRepository} from './ubl/repository.js';
 import {notificationWebhook} from "./notifications/webhook.js";
@@ -135,6 +137,7 @@ export function createApp(
   );
   // Customer imports are larger than ordinary forms; keep the general limit small.
   app.use("/api/masters/customer-import", express.json({ limit: "2mb" }));
+  app.use("/api/inventory-reconciliation", express.json({limit:"12mb"}), inventoryHttp(new InventoryRepository(pool),auth.requireSession));
   app.use(express.json({ limit: "8kb" }));
   app.get("/api/health", async (_req, res) => {
     try {

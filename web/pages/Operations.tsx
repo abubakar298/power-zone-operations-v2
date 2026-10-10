@@ -1,3 +1,5 @@
+import {InventoryWorkspace} from './InventoryWorkspace.js';
+import {Button} from '../ui/Button.js';
 import { displayUnit } from "../../server/boq/unit.js";
 import { confirmTransition } from "../confirm.js";
 import { quotationTypeLabel } from "../../server/orders/sale-type.js";
@@ -28,6 +30,7 @@ export function Operations({
   initialIpoId?: string;
   portal?: boolean;
 }) {
+  const [irrUpload,setIrrUpload]=useState(false);
   const [orders, setOrders] = useState<any[]>([]),
     [rows, setRows] = useState<any[]>([]),
     [ipoId, setIpoId] = useState(initialIpoId ?? ""),
@@ -248,6 +251,7 @@ export function Operations({
   }
   return (
     <section className="detail-panel operations-panel">
+      {["Admin","Management","Operations"].includes(session.user.role)&&<><Button variant="secondary" onClick={()=>setIrrUpload(!irrUpload)}>Upload installation report to Inventory</Button>{irrUpload&&<InventoryWorkspace session={session} receiveOnly/>}</>}
       {(portal || workspace === "received") && (
         <section aria-label="Operations buckets">
           <h2>Operations delivery portal</h2>

@@ -1,3 +1,4 @@
+import {InventoryWorkspace} from './InventoryWorkspace.js';
 import {confirmLeaveWorkspace} from "../hooks/useUnsavedChanges.js";
 import {Button} from "../ui/Button.js";
 import {CoordinatorLibrary} from "./CoordinatorLibrary.js";
@@ -467,7 +468,7 @@ export function Dashboard({
           )}
           {(view === "inventory" ||
             (view === "dashboard" && session.user.role === "Inventory")) && (
-            <Departments session={session} department="Inventory" />
+            <InventoryWorkspace session={session} />
           )}
           {(view === "finance" ||
             (view === "dashboard" && session.user.role === "Accounts")) && (
