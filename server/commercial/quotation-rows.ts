@@ -1,3 +1,4 @@
+import {displayUnit} from '../boq/unit.js';
 import {Decimal} from 'decimal.js';
 import type { QuoteLine } from './engine.js';
 
@@ -38,5 +39,8 @@ export function quotationDisplayRows(lines: QuoteLine[]): QuoteLine[] {
       span:members.slice(index,index + (line.span ?? 1)).reduce((sum,rows)=>sum+rows.length,0),
     } : {}),
   }));
+  }).map(row=>{
+    const job=/^(Installation, Testing|UPS installation|Single-phase installation|Project delivery)/i.test(row.description);
+    return {...row,unit:job?"JOB":displayUnit(row.unit,row.qty),qty:job?"1":row.qty};
   });
 }
