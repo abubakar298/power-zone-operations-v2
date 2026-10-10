@@ -1,3 +1,4 @@
+import {quotationDisplayRows} from '../server/commercial/quotation-rows.js';
 import {singlePhaseCableDescription} from '../server/boq/ac-cable.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -67,6 +68,7 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  const p=price(b,'UPS-R0',{boqRevisionId:randomUUID(),presentation,taxMode,markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},preparedBy:'Fixture',remarks:''} as any,policy);
  assert.equal(p.solarTax,'0.00');assert.equal(p.rows.find(r=>r.key==='bess')!.markup,'30.000000');
  const q=quote(p,b,{pricingId:randomUUID(),quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture',discount:'11800'});
+ if(presentation==='Full Breakup'){const display=quotationDisplayRows(q.lines);assert(display.every(l=>l.amount!==undefined&&l.span===1));assert.equal(display.reduce((v,l)=>v.add(l.amount!),new Decimal(0)).toFixed(2),taxMode==='Tax Included'?p.total:p.subtotal);}
  assert.equal(q.lines.some(l=>l.group==='solar'||l.group==='structure'),false);assert.equal(q.lines.filter(l=>l.group==='earthing').length,presentation==='Full Breakup'?1:0);assert.equal(q.footer.some(r=>/SOLAR PANEL/.test(r.label)),false);
  if(presentation!=='No Breakup')assert.equal(new Decimal(q.lines.reduce((v,l)=>v.add(l.amount??0),new Decimal(0))).toFixed(2),taxMode==='Tax Included'?p.total:p.subtotal);
  const detailed=quote({...p,input:{...p.input,presentation:'Full Breakup',taxMode:'Show Sales Tax Separately'}},b,{pricingId:randomUUID(),quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture',discount:'11800'});

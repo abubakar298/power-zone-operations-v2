@@ -1,3 +1,4 @@
+import {quotationDisplayRows} from '../server/commercial/quotation-rows.js';
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -281,6 +282,9 @@ test("all presentations reconcile without duplicated BESS/EPC amounts or interna
           taxMode === "Tax Included" ? p.total : p.subtotal,
         );
       } else if (presentation === "Full Breakup") {
+        const displayed=quotationDisplayRows(q.lines);
+        assert(displayed.every(l=>l.amount!==undefined && l.span===1));
+        assert.equal(displayed.reduce((v,l)=>v.add(l.amount!),new Decimal(0)).toFixed(2),taxMode === "Tax Included" ? p.total : p.subtotal);
         assert.equal(q.lines.length, 16);
         assert(q.lines.every((l) => l.amount !== undefined && l.span === 1));
         assert.equal(

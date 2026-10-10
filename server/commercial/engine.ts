@@ -173,11 +173,34 @@ export interface QuoteLine {
   unit: string;
   qty: string;
   group: "solar" | "structure" | "bess" | "earthing" | "balance" | "additional";
-  items?: { description: string; unit: string; qty: string }[];
+  items?: { description: string; unit: string; qty: string; amount?: string; offerAllowance?: string }[];
   amount?: string;
   standardAllowanceBeforeTax?: string;
   span?: number;
 }
+function priceCustomerItems(boq:BoqSnapshot,p:PricingSnapshot,line:QuoteLine,keys:string[]) {
+  if(!line.items?.length || line.amount===undefined)return;
+  const scope=boq.lines.filter(l=>keys.includes(l.key));
+  line.items=customerScopeItems(boq,scope,(sources,fraction)=>{
+    let selling=D("0"),allowance=D("0");
+    for(const source of sources){
+      const item=p.itemPricing?.find(i=>i.key===source.key);
+      const group=source.phase==="BESS"?"bess":source.phase==="Solar Panels"?"solar":source.epc==="Earthing Cost"?"earthing":source.key==="Additional Item"?"additional":"balance";
+      const category=p.rows.find(r=>r.key===group)!;
+      const before=item?D(item.beforeTax):D(source.total).mul(D(category.markup).div(100).add(1));
+      const taxRate=item?.taxRate??category.taxRate;
+      const factor=p.input.taxMode==="Tax Included"?D(taxRate).div(100).add(1):D("1");
+      selling=selling.add(before.mul(factor));
+      if(p.standardDiscountStrategy && item && ["bess","other"].includes(item.category))allowance=allowance.add(D(item.cost).mul("0.05").mul(factor));
+    }
+    return {amount:money(selling.mul(fraction)),offerAllowance:money(allowance.mul(fraction))};
+  });
+  if(line.items.length){
+    const last=line.items.at(-1)!;
+    last.amount=money(D(last.amount!).add(D(line.amount).sub(line.items.reduce((v,i)=>v.add(i.amount??"0"),D("0")))));
+  }
+}
+
 export function quotationLines(
   s: BoqSnapshot,
   bmsDescription = "IP65 Battery Control and Safety Unit for High Voltage Batteries",
@@ -394,6 +417,7 @@ export function quote(
         ),
       );
   }
+  let fullSourceKeys:string[][]=[];
   if (full) {
     // Each source cost belongs to exactly one customer row. Protection stays combined.
     const keys = [
@@ -425,6 +449,7 @@ export function quote(
       ["Delivery"],
     ];
     if (boq.survey.additionalItem) keys.push(["Additional Item"]);
+    fullSourceKeys=keys;
     const covered = new Set(keys.flat());
     if (boq.lines.some((l) => !covered.has(l.key)))
       throw new HttpError(
@@ -479,6 +504,7 @@ export function quote(
       400,
       "Remove tax wording from the additional item description.",
     );
+  if(full) lines.forEach((l,i)=>priceCustomerItems(boq,p,l,fullSourceKeys[i]??[]));
   // Customer snapshot contains selling amounts only; never serialize internal pricing or BOQ specifications.
   return {
     engineVersion: 1,
@@ -548,6 +574,7 @@ function quoteBessOnly(p:PricingSnapshot,boq:BoqSnapshot,input:QuotationInput,di
     const last=lines.findLast(l=>l.amount!==undefined)!;
     last.amount=money(D(last.amount!).add(D(p.input.taxMode==="Tax Included"?total:subtotal).sub(lines.reduce((v,l)=>v.add(l.amount??"0"),D("0")))));
   }
+  if(presentation==="Full Breakup")for(const l of lines)if(l.items)priceCustomerItems(boq,p,l,boq.lines.filter(x=>x.phase!=="BESS"&&x.key!=="Earthing Bore").map(x=>x.key));
   const footer=p.input.taxMode==="Tax Included"?[{label:"Total",amount:total}]:[{label:"Subtotal Before Tax",amount:subtotal},{label:"SALES TAX ON OTHER ITEMS @18%",amount:otherTax}];
   if(p.input.taxMode!=="Tax Included"&&!D(solarTax).isZero())footer.splice(1,0,{label:"SALES TAX ON ADDITIONAL ITEMS @10%",amount:solarTax});
   footer.push({label:"Special Discount",amount:discount},{label:"Net Total",amount:netTotal});
