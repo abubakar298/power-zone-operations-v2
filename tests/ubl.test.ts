@@ -41,6 +41,7 @@ test('UBL originals, amendments, July prices and twelve negotiation stages are i
    const newEstimate=ublBudget(current.snapshot,cheaper,policy);
    assert.equal(newEstimate.panel.referenceBudget,snapshot.panel.referenceBudget);
    assert.equal(newEstimate.fixedAgreedTotal,total);
+   assert.notEqual(newEstimate.combinedKnownBudget,snapshot.combinedKnownBudget);
    assert.ok(new Decimal(newEstimate.panel.currentPurchaseEstimate!).lt(snapshot.panel.currentPurchaseEstimate!));
    assert.ok(snapshot.issues.some(i=>i.id==='H29'));assert.equal(snapshot.combinedTemplateBudget,null);
    const source=await repo.source(manager,id);assert.equal(createHash('sha256').update(source.content).digest('hex'),source.sha256);
