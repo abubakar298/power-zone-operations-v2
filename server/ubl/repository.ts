@@ -10,6 +10,12 @@ import {ublBudget,type UblConfiguration} from './engine.js';
 
 export class UblRepository {
  constructor(private pool:Pool){}
+ async closedJobs(actor:string){
+  await this.role(actor);
+  // Legacy UBL sites have no recorded installation reports or approved Accounts closures yet.
+  // Do not infer closure or actual costs from customer PO status or delivery dates.
+  return {jobs:[],closureWorkflowAvailable:false};
+ }
  async sites(actor:string){
   await this.role(actor);
   return (await this.pool.query('SELECT o.*,o.po_issued_date::text AS po_issued_date FROM ubl_site_orders o ORDER BY source_row')).rows;
