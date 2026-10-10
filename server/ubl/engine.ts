@@ -5,7 +5,7 @@ import type {BoqSnapshot,CostLine,Masters} from '../boq/engine.js';
 const Exact=Decimal.clone({precision:50});
 const D=(v:string)=>new Exact(v);
 const money=(v:Decimal)=>v.toDecimalPlaces(2,Decimal.ROUND_HALF_UP).toFixed(2);
-export interface UblScopeRow {id:string;description:string;brands:string;specification:string;unit:string;quantity:string;proposalSellingRate:string|null;proposalTax:string|null;proposalSellingTotal:string|null;bundle:string|null;deferred?:boolean;routeAllowance?:string}
+export interface UblScopeRow {id:string;description:string;brands:string;specification:string;unit:string;quantity:string;proposalSellingRate:string|null;proposalTax:string|null;proposalSellingTotal:string|null;bundle:string|null;deferred?:boolean;includedIn?:string;routeAllowance?:string}
 export interface UblConfiguration {id:string;option:string;pvWatts:string;inverterKw:string;essKwh:string;source:{filename:string;sha256:string;proposalStageFinalTotal:string};originalBoq:UblScopeRow[];currentBoq:UblScopeRow[];currentTechnicalVersion:number;amendments:{date:null;dateLabel:string;notes:string}[];history:{stage:string;date:string;totalIncludingGst:string;panelSellingExcludingGst:string;historicalSummaryBudget:string;technicalVersion:number}[]}
 export interface AllocationLine {id:string;cost:string;standardMarkupAmount:string;taxRate:string}
 /** Scale monetary markup, never costs. Tax groups come from the existing policy engine. */
@@ -25,7 +25,7 @@ export function panelActual(selling:string,referenceBudget:string,actualCost:str
  return {profit:money(D(selling).sub(actual)),markup:actual.gt(0)?D(selling).sub(actual).div(actual).mul(100).toString():null,saving:scopeUnchanged?money(D(referenceBudget).sub(actual)):null,scopeUnchanged};
 }
 function components(row:UblScopeRow,c:UblConfiguration):{key:string;quantity:string}[]{
- const keys:Record<string,string>={BOX:'AC & DC Boxes',MISC:'Misc. Accessories',D11R:'6mm² DC Cable Red',D11B:'6mm² DC Cable Black',H29:'UBL Internet',B2:'Structure - Elevated',D5:'DC Breaker',D6:'DC Fuse with Holder',D7:'DC SPD',D8:'DC Breaker',E15:'100A 4P MCCB',E16:c.inverterKw==='20'?'63A 4P MCB':'100A 4P MCCB',E17:'AC SPD',E18:'100A Rotary Changeover with Box',E19:'16mm² 4C AC Cable',E20:c.inverterKw==='20'?'16mm² 4C AC Cable':'25mm² 4C AC Cable',F24:'Earthing Bore',F25:'2.5mm² Earthing Cable',F26:'6mm² Earthing Cable',F27:'10mm² Earthing Cable',G27:'Extra Smart Meter',H28:'Genset Synchronisation with Battery SOC',I29:'Labour'};
+ const keys:Record<string,string>={BOX:'AC & DC Boxes',MISC:'Misc. Accessories',D11R:'6mm² DC Cable Red',D11B:'6mm² DC Cable Black',H29:'UBL Internet',B2:'Structure - Elevated',D5:'DC Breaker',D6:'DC Fuse with Holder',D7:'DC SPD',D8:'DC Breaker',E15:'100A 4P MCCB',E16:c.inverterKw==='20'?'63A 4P MCB':'100A 4P MCCB',E17:'AC SPD',E18:'100A Rotary Changeover with Box',E19:'16mm² 4C AC Cable',E20:c.inverterKw==='20'?'16mm² 4C AC Cable':'25mm² 4C AC Cable',F24:c.currentTechnicalVersion>=5?'UBL Earthing Bore':'Earthing Bore',F25:'2.5mm² Earthing Cable',F26:'6mm² Earthing Cable',F27:'10mm² Earthing Cable',G27:'Extra Smart Meter',H28:c.currentTechnicalVersion>=5?'UBL Genset Synchronisation':'Genset Synchronisation with Battery SOC',I29:'Labour'};
  if(row.id==='C3')return [{key:`HYB-3P-${(c.inverterKw==='30'&&c.currentTechnicalVersion>=4?'15':c.inverterKw).padStart(3,'0')}`,quantity:row.quantity}];
  if(row.id==='C4')return [{key:'BAT-HV-05 KW WO BMS',quantity:D(c.essKwh).div(5).toString()},{key:'CH-BMS-HV',quantity:D(c.essKwh).div(20).ceil().toString()}];
  if(keys[row.id])return [{key:keys[row.id],quantity:row.quantity}];
@@ -42,11 +42,11 @@ export function ublBudget(c:UblConfiguration,m:Masters,policy:CommercialPolicy){
  for(const row of c.currentBoq){
   if(row.id==='A1')continue;
   if(row.deferred){issues.push({id:row.id,reason:'Internet retained in original scope; costing and commercial allocation deferred. No current allowance is assumed.'});rows.push({...row,cost:null,components:[],status:'Deferred'});continue;}
-  const parts=components(row,c),priced=parts.map(p=>{const rate=m.rates.find(r=>r.key===p.key&&r.status!=='Inactive'&&r.rate!==null);return {...p,rate:rate?.rate??null,rateVersion:rate?.version??null,rateStatus:rate?.status??null,rateUnit:rate?.unit??null,cost:rate?D(p.quantity).mul(rate.rate!).toString():null};});
+  const parts=row.includedIn?[]:components(row,c),priced=parts.map(p=>{const rate=m.rates.find(r=>r.key===p.key&&r.status!=='Inactive'&&r.rate!==null);return {...p,rate:rate?.rate??null,rateVersion:rate?.version??null,rateStatus:rate?.status??null,rateUnit:rate?.unit??null,cost:rate?D(p.quantity).mul(rate.rate!).toString():null};});
   const resolved=priced.every(p=>p.cost!==null),category:PolicyCategory=row.id==='C3'||row.id==='C4'?'bess':row.id==='B2'?'structure':row.id==='F24'?'earthing':'other';
   if(!resolved)issues.push({id:row.id,reason:`Missing verified cost mapping/rate: ${priced.filter(p=>p.cost===null).map(p=>p.key).join(', ')}. Proposal rates are selling rates, not purchase costs.`});
   const cost=resolved?priced.reduce((n,p)=>n.add(p.cost!),D('0')):null;
-  rows.push({...row,category,cost:cost?.toString()??null,components:priced,status:resolved?'Budgeted':'Unresolved'});
+  rows.push({...row,category,cost:cost?.toString()??null,components:priced,status:row.includedIn?'Included with inverter — no separate cost':resolved?'Budgeted':'Unresolved'});
   if(cost){aliases[row.id]=category;costLines.push({key:row.id,description:row.description,brand:row.brands,brandAlternatives:[],specification:row.specification,specVersion:null,qty:row.quantity,unit:row.unit,rate:cost.div(row.quantity).toString(),rateVersion:0,rateStatus:'UBL frozen reference',total:cost.toString(),phase:category==='bess'?'BESS':'EPC',epc:category==='earthing'?'Earthing Cost':''});}
  }
  const knownCost=costLines.reduce((n,l)=>n.add(l.total),D('0'));

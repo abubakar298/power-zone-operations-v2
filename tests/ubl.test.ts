@@ -21,7 +21,7 @@ test('UBL originals, amendments, July prices and twelve negotiation stages are i
    assert.deepEqual(d.history.map(h=>h.snapshot.totalIncludingGst),totals[id]);
    assert.equal(d.history.at(-1)!.snapshot.totalIncludingGst,total);
    const original=d.technical[0],current=d.technical.at(-1)!;assert.equal(current.effective_date,null);
-   assert.equal(current.version,4);
+   assert.equal(current.version,5);
    assert.equal(current.snapshot.rows.some((r:any)=>r.id==='D15'),false);
    assert.equal(current.snapshot.rows.filter((r:any)=>r.id==='MISC').length,1);
    if(id.startsWith('30-')||id.startsWith('35-'))assert.equal(current.snapshot.rows.find((r:any)=>r.id==='C3').quantity,'2');
@@ -48,7 +48,10 @@ test('UBL originals, amendments, July prices and twelve negotiation stages are i
    assert.notEqual(newEstimate.combinedKnownBudget,snapshot.combinedKnownBudget);
    assert.ok(new Decimal(newEstimate.panel.currentPurchaseEstimate!).lt(snapshot.panel.currentPurchaseEstimate!));
    assert.equal(snapshot.issues.length,0);assert.equal(snapshot.rows.find(r=>r.id==='H29').cost,'3000');assert.ok(snapshot.combinedTemplateBudget);
-   assert.equal(snapshot.rows.find(r=>r.id==='BOX').components[0].quantity,'2');
+   assert.equal(snapshot.rows.find(r=>r.id==='BOX').components[0].quantity,'1');
+   assert.equal(snapshot.rows.find(r=>r.id==='G27').cost,'0');assert.equal(snapshot.rows.find(r=>r.id==='G27').components.length,0);
+   assert.equal(snapshot.rows.find(r=>r.id==='F24').cost,'60000');
+   assert.equal(snapshot.rows.find(r=>r.id==='H28').cost,'10000');
    assert.equal(snapshot.rows.find(r=>r.id==='MISC').components[0].quantity,'1');
    const source=await repo.source(manager,id);assert.equal(createHash('sha256').update(source.content).digest('hex'),source.sha256);
    const key=randomUUID(),saved=await repo.refresh(manager,id,0,key,'Initial reference budget');
