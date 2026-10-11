@@ -1,5 +1,4 @@
 import { fingerprint } from "../boq/repository.js";
-import { Decimal } from "decimal.js";
 import type { Pool } from "pg";
 import { randomUUID } from "node:crypto";
 import { transaction } from "../db/transaction.js";
@@ -82,36 +81,12 @@ export class InventoryRepository {
         {
           if (l.item === "Elevated structure") rate = "26";
           if (l.item === "Installation including delivery" && s.legacy_ipo_number === "320") rate = "5.75";
+          // Fixed original proposal selling rates by cable SKU; do not infer unit rates from rounded invoice totals.
           const refs: Record<string, string> = {
-            "DC cable red 6mm²": new Decimal("188080")
-              .div("360")
-              .div("1.18")
-              .toString(),
-            "DC cable black 6mm²": new Decimal("188080")
-              .div("360")
-              .div("1.18")
-              .toString(),
-            "16mm² 4C inverter cable": new Decimal("37996")
-              .div("10")
-              .div("1.18")
-              .toString(),
-            "16mm² 4C load cable": "3220",
-            "25mm² 4C load cable": new Decimal("118071")
-              .div("20")
-              .div("1.18")
-              .toString(),
-            "2.5mm² earth panel to panel": new Decimal("2728")
-              .div("15")
-              .div("1.18")
-              .toString(),
-            "6mm² DC earth": new Decimal("23368")
-              .div("60")
-              .div("1.18")
-              .toString(),
-            "10mm² AC earth": new Decimal("40710")
-              .div("60")
-              .div("1.18")
-              .toString(),
+            "DC cable red 6mm²": "443", "DC cable black 6mm²": "443",
+            "16mm² 4C inverter cable": "3220", "16mm² 4C load cable": "3220",
+            "25mm² 4C load cable": "5003", "2.5mm² earth panel to panel": "154",
+            "6mm² DC earth": "330", "10mm² AC earth": "575",
           };
           if (refs[l.item] !== undefined) rate = String(refs[l.item]);
         }
