@@ -84,6 +84,9 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
     });
     await assert.rejects(repo.job(users.Inventory, j.key), /Accounts access/);
     const job = await repo.job(users.Accounts, j.key);
+    assert.equal(job.identity?.customer_code, "UBL");
+    assert.equal(job.identity?.configuration_id, "35-30-40");
+    assert.ok(job.identity?.branch_code);
     assert.equal(job.phaseSelling["Solar Panels"], "1540000.00");
     assert.equal(job.phaseSelling.EPC, "1018459.68");
     assert.equal(job.selling, "6714576.27");

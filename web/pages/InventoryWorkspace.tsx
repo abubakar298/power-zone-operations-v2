@@ -1,3 +1,4 @@
+import { jobLabel } from "../components/job-label.js";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
@@ -255,7 +256,7 @@ export function InventoryWorkspace({
     setMessage("");
   }
   const filteredJobs = jobs.filter((j) =>
-    `${j.job_id} ${j.site_name} ${j.branch_code}`
+    jobLabel(j)
       .toLowerCase()
       .includes(search.toLowerCase()),
   );
@@ -361,7 +362,7 @@ export function InventoryWorkspace({
           <div className="section-heading">
             <div>
               <h3>
-                {job.jobId} · {job.title}
+                {jobLabel(job)}
               </h3>
               <p>
                 {job.source.configuration ?? job.source.kind} ·{" "}
@@ -904,9 +905,7 @@ export function InventoryWorkspace({
                     {visible.map((t) => (
                       <tr key={t.id}>
                         <td>
-                          {t.jobId}
-                          <br />
-                          {t.title}
+                          {jobLabel(t)}
                         </td>
                         <td>{t.bucket}</td>
                         <td>
@@ -994,7 +993,7 @@ export function InventoryWorkspace({
                       <tbody>
                         {filteredJobs.slice(0, 50).map((j) => (
                           <tr key={j.key}>
-                            <td>{j.job_id}</td>
+                            <td>{jobLabel(j)}</td>
                             <td>{j.site_name}</td>
                             <td>
                               <Button
@@ -1049,16 +1048,14 @@ export function InventoryWorkspace({
                         (r) =>
                           (!accounts || r.stage === "Sent to Accounts") &&
                           (!bucket || r.stage === bucket) &&
-                          `${r.job_id} ${r.site_name}`
+                          jobLabel(r)
                             .toLowerCase()
                             .includes(search.toLowerCase()),
                       )
                       .map((r) => (
                         <tr key={r.id}>
                           <td>
-                            {r.job_id}
-                            <br />
-                            {r.site_name}
+                            {jobLabel(r)}
                           </td>
                           <td>
                             {r.stage === "IRR Received" && !r.has_files && !r.has_bulk_source

@@ -1,3 +1,4 @@
+import { jobLabel } from "../components/job-label.js";
 import {ProjectCheckpoints} from './ProjectCheckpoints.js';
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
@@ -394,9 +395,7 @@ export function AccountsWorkspace({
                 {received.map((r) => (
                   <tr key={r.id}>
                     <td>
-                      {r.job_id}
-                      <br />
-                      {r.site_name}
+                      {jobLabel(r)}
                     </td>
                     <td>Inventory reconciliation received</td>
                     <td>
@@ -411,9 +410,7 @@ export function AccountsWorkspace({
                   .map((c: any) => (
                     <tr key={c.id}>
                       <td>
-                        {c.snapshot.jobId}
-                        <br />
-                        {c.snapshot.title}
+                        {jobLabel(c.snapshot)}
                       </td>
                       <td>{c.stage}</td>
                       <td>
@@ -750,9 +747,7 @@ export function AccountsWorkspace({
                 {reports.map((r) => (
                   <tr key={r.id}>
                     <td>
-                      {r.job_id}
-                      <br />
-                      {r.site_name}
+                      {jobLabel(r)}
                     </td>
                     <td>
                       {data.closures.find((c: any) => c.job_key === r.job_key)
@@ -773,7 +768,7 @@ export function AccountsWorkspace({
       {tab === "Job Closure" && job && (
         <article className="detail-panel">
           <h3>
-            {job.jobId} · {job.title}
+            {jobLabel(job)}
           </h3>
           <p>
             {latest?.stage ?? "New closure"} · {job.basis}

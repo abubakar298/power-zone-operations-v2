@@ -1,3 +1,4 @@
+import { jobLabel } from "../components/job-label.js";
 import { ClosureIndicators } from "../components/ClosurePerformance.js";
 import { Button } from "../ui/Button.js";
 import { AccountsWorkspace } from "./AccountsWorkspace.js";
@@ -100,7 +101,7 @@ export function Director({
               .map((c) => (
                 <article className="detail-panel" key={c.id}>
                   <h4>
-                    {c.snapshot.jobId} · {c.snapshot.title}
+                    {jobLabel(c.snapshot)}
                   </h4>
                   <p>
                     {c.stage === "Closed"

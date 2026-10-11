@@ -6,6 +6,7 @@ import { transaction } from "../db/transaction.js";
 import { HttpError } from "../http/errors.js";
 import { fingerprint } from "../boq/repository.js";
 import { phaseBudgets } from "../director/repository.js";
+import { InventoryRepository } from "../inventory/repository.js";
 import { ublIpoSample } from "../ubl/ipo-sample.js";
 import { DepartmentRepository } from "../departments/repository.js";
 export const phases = [
@@ -99,12 +100,14 @@ export class AccountsRepository {
         "SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures ORDER BY job_key,version DESC",
       )
     ).rows;
+    const identities = await new InventoryRepository(this.pool).jobs(actor);
     return {
       ipos: ipo.map((i) => ({
         ...i,
         accountsReview: reviews.find((r) => r.ipo_id === i.id),
       })),
-      closures,
+      closures: closures.map(c => ({ ...c, snapshot: { ...c.snapshot,
+        identity: identities.find(j => j.key === c.job_key) } })),
     };
   }
   async comparison(actor: string, id: string) {
@@ -399,6 +402,7 @@ export class AccountsRepository {
     }
     return {
       configurationComparison,
+      identity: (await new InventoryRepository(this.pool).jobs(actor)).find(j => j.key === key),
       jobKey: key,
       jobId: irr.snapshot.jobId,
       title: irr.snapshot.title,

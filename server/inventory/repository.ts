@@ -33,12 +33,12 @@ export class InventoryRepository {
     await this.access(actor);
     const ubl = (
       await this.pool.query(
-        "SELECT 'ubl:'||site_id AS key,'CHP-'||legacy_ipo_number AS job_id,site_name,configuration_id,branch_code FROM ubl_site_orders WHERE status='Active'",
+        "SELECT 'ubl:'||site_id AS key,'CHP-'||legacy_ipo_number AS job_id,'UBL' AS customer_code,site_name,configuration_id,branch_code FROM ubl_site_orders WHERE status='Active'",
       )
     ).rows;
     const regular = (
       await this.pool.query(
-        "SELECT 'ipo:'||id AS key,CASE WHEN number ~ '^CPZ-IPO-[0-9]{2}-[0-9]+' THEN 'CHP-'||split_part(number,'-',4) ELSE number END AS job_id,snapshot->>'siteName' AS site_name,snapshot->>'solutionId' AS configuration_id,snapshot->>'siteCode' AS branch_code FROM internal_purchase_orders ORDER BY created_at DESC LIMIT 500",
+        "SELECT 'ipo:'||id AS key,CASE WHEN number ~ '^CPZ-IPO-[0-9]{2}-[0-9]+' THEN 'CHP-'||split_part(number,'-',4) ELSE number END AS job_id,snapshot->'customer'->>'shortCode' AS customer_code,snapshot->>'siteName' AS site_name,snapshot->>'solutionId' AS configuration_id,snapshot->>'siteCode' AS branch_code FROM internal_purchase_orders ORDER BY created_at DESC LIMIT 500",
       )
     ).rows;
     return [...ubl, ...regular];
@@ -61,6 +61,8 @@ export class InventoryRepository {
       source = {
         kind: "UBL saved baseline",
         configuration: s.configuration_id,
+        customerCode: "UBL",
+        branchCode: s.branch_code,
         po: s.po_number,
         pricingStage: s.pricing_stage,
       };
@@ -126,6 +128,9 @@ export class InventoryRepository {
       title = i.snapshot.siteName;
       source = {
         kind: "Approved IPO / BOQ",
+        customerCode: i.snapshot.customer?.shortCode,
+        branchCode: i.snapshot.siteCode,
+        configuration: i.snapshot.solutionId,
         ipoId: i.id,
         quotation: i.snapshot.quotationNumber,
       };
@@ -192,11 +197,12 @@ export class InventoryRepository {
   }
   async list(actor: string) {
     await this.access(actor);
+    const identities = await this.jobs(actor);
     return (
       await this.pool.query(
         "SELECT r.id,r.job_key,v.version,v.stage,EXISTS(SELECT 1 FROM inventory_report_files f WHERE f.report_id=r.id) AS has_files,(v.snapshot->'source'->'bulkIrr' IS NOT NULL) AS has_bulk_source,v.snapshot->'source'->'bulkIrr'->'flags' AS review_flags,v.snapshot->'source'->'bulkIrr'->>'reference' AS bulk_reference,(SELECT x->>'net' FROM jsonb_array_elements(v.snapshot->'reconciliation'->'sections') x WHERE x->>'group'='cable') AS cable_net,v.created_at,v.snapshot->>'jobId' AS job_id,v.snapshot->>'title' AS site_name,u.display_name AS recorded_by FROM inventory_reports r JOIN LATERAL(SELECT * FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true JOIN users u ON u.id=v.created_by WHERE r.job_key NOT LIKE 'archived-sample:%' ORDER BY v.created_at DESC",
       )
-    ).rows;
+    ).rows.map(r => ({ ...r, ...identities.find(j => j.key === r.job_key) }));
   }
   async detail(actor: string, id: string) {
     await this.access(actor);

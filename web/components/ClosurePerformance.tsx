@@ -115,6 +115,10 @@ export function ClosureCostTables({
   const average = job.configurationComparison?.averageActualMarkupPercent;
   const cells = (name: string, b: any, a: Decimal | null, totalRow = false) => (
     <>
+      <td className="pz-number">{name === "Total" ? money(job.selling)
+        : name === "BESS subtotal" && job.phaseSelling && ["Inverter", "Batteries", "BMS"].every(p => job.phaseSelling[p] != null)
+          ? money(["Inverter", "Batteries", "BMS"].reduce((v,p) => v.add(job.phaseSelling[p]), new Decimal(0)).toString())
+          : job.phaseSelling?.[name] != null ? money(job.phaseSelling[name]) : "Not available"}</td>
       <td className="pz-number">{money(b)}</td>
       <td className="pz-number">
         {readonly || totalRow ? (
@@ -168,6 +172,7 @@ export function ClosureCostTables({
   const headers = (
     <tr>
       <th>PT phase</th>
+      <th>Agreed selling price<br />excl. GST</th>
       <th>
         Budgeted cost
         <br />
@@ -188,7 +193,7 @@ export function ClosureCostTables({
     <>
       <h3>PT phase performance · excluding GST</h3>
       <div className="table-scroll">
-        <table className="closure-performance-table">
+        <table className="closure-performance-table closure-pt-table">
           <thead>{headers}</thead>
           <tbody>
             {ptNames.slice(0, 5).map((p) => (
