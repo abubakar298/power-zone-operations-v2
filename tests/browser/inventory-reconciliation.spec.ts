@@ -126,12 +126,10 @@ test("Inventory workspace: job search, draft, attachment, reconciliation and imm
     "Inverter",
     "Batteries",
     "BMS",
-    "Electrical Labour",
-    "Earthing Cost",
-    "Deliveries",
-    "Installation Cost",
   ])
     await page.getByLabel(phase + " actual cost", { exact: true }).fill("1000");
+  await page.getByLabel("EPC actual total, excluding GST", { exact: true }).fill("4000");
+  await expect(page.getByRole("heading", { name: "Potential invoice adjustment impact · excluding GST" })).toBeVisible();
   await page
     .getByLabel("Client acknowledgment reference", { exact: true })
     .fill("isolated-test acknowledgment");

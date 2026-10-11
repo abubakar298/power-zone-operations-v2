@@ -220,6 +220,54 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       entry: ent2,
       requestKey: randomUUID(),
     });
+    const aggregateInput = {
+      ...input,
+      jobKey: j2.key,
+      epc: {},
+      epcAggregate: "693330",
+      requestKey: randomUUID(),
+    };
+    const aggregateDraft = await repo.saveClosure(
+      users.Accounts,
+      aggregateInput,
+    );
+    assert.equal(aggregateDraft.snapshot.actualEpc, "693330.00");
+    assert.notEqual(aggregateDraft.snapshot.summary.actual, null);
+    assert.equal(aggregateDraft.snapshot.complete, true);
+    assert.equal(aggregateDraft.snapshot.epcBreakdownComplete, false);
+    await assert.rejects(
+      repo.saveClosure(users.Accounts, {
+        ...aggregateInput,
+        version: 1,
+        stage: "Awaiting Management",
+        photos: "",
+        requestKey: randomUUID(),
+      }),
+      /Complete actual costs/,
+    );
+    await assert.rejects(
+      repo.saveClosure(users.Accounts, {
+        ...aggregateInput,
+        epc: job.epcBudget,
+        version: 1,
+        requestKey: randomUUID(),
+      }),
+      /must equal/,
+    );
+    const aggregateSubmitted = await repo.saveClosure(users.Accounts, {
+      ...aggregateInput,
+      version: 1,
+      stage: "Awaiting Management",
+      requestKey: randomUUID(),
+    });
+    assert.equal(aggregateSubmitted.stage, "Awaiting Management");
+    await repo.decision(users.Management, {
+      id: aggregateSubmitted.id,
+      version: 2,
+      decision: "Returned for Revision",
+      notes: "isolated review",
+      requestKey: randomUUID(),
+    });
     await repo.returnReport(users.Accounts, {
       id: d2.reportId,
       version: 2,

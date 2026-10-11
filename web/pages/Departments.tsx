@@ -1,3 +1,4 @@
+import { DocumentDownload } from "../components/DocumentPreview.js";
 import { displayUnit } from "../../server/boq/unit.js";
 import { money } from "../numbers.js";
 import { confirmTransition } from "../confirm.js";
@@ -46,7 +47,7 @@ export function Departments({
 }: {
   session: Session;
   department: Department;
-  initialRecordId?:string;
+  initialRecordId?: string;
 }) {
   const [records, setRecords] = useState<RecordRow[]>([]),
     [bucket, setBucket] = useState(stages[department][0]),
@@ -84,7 +85,12 @@ export function Departments({
       clearInterval(timer);
     };
   }, [department]);
-  useEffect(()=>{if(initialRecordId&&loaded){const row=records.find(r=>r.id===initialRecordId);if(row)void open(row);}},[initialRecordId,loaded]);
+  useEffect(() => {
+    if (initialRecordId && loaded) {
+      const row = records.find((r) => r.id === initialRecordId);
+      if (row) void open(row);
+    }
+  }, [initialRecordId, loaded]);
   async function open(row: RecordRow) {
     setSelected(row);
     setHistory([]);
@@ -278,7 +284,7 @@ export function Departments({
                         </td>
                         <td>{i.brand}</td>
                         <td>
-                          {i.qty} {displayUnit(i.unit,i.qty)}
+                          {i.qty} {displayUnit(i.unit, i.qty)}
                         </td>
                       </tr>
                     ))}
@@ -304,13 +310,11 @@ export function Departments({
                 {selected.snapshot.input?.poNumber || "N/A"}
               </p>
               <p>
-                <a
-                  target="_blank"
-                  rel="noreferrer"
-                  href={`/api/orders/${selected.id}/ipo.pdf`}
-                >
-                  Download IPO &amp; Peachtree PDF
-                </a>
+                <DocumentDownload
+                  url={`/api/orders/${selected.id}/ipo.pdf`}
+                  title={`${selected.number}-IPO-and-PT`}
+                  label="Download IPO & PT PDF"
+                />
               </p>
               {selected.division && (
                 <>
@@ -330,9 +334,7 @@ export function Departments({
                       {selected.division.phases.map((p: any) => (
                         <tr key={p.name}>
                           <td>{p.name}</td>
-                          <td>
-                            {money(p.amount)}
-                          </td>
+                          <td>{money(p.amount)}</td>
                         </tr>
                       ))}
                     </tbody>

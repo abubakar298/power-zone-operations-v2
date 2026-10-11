@@ -29,6 +29,7 @@ export const closureSchema = z
     stage: z.enum(["Draft", "Awaiting Management"]),
     actual: z.record(z.string(), amount.or(z.literal(""))),
     epc: z.record(z.string(), amount.or(z.literal(""))),
+    epcAggregate: amount.or(z.literal("")).optional(),
     remarks: z.string().trim().max(4000),
     acknowledgment: z.string().trim().max(1000),
     photos: z.string().trim().max(1000),
@@ -373,9 +374,29 @@ export class AccountsRepository {
     const complete = keys.every(
       (k) => (input.actual[k] ?? input.epc[k] ?? "") !== "",
     );
+    const epcTotal = epcNames.reduce(
+      (s, n) => s.add(input.epc[n] || "0"),
+      D("0"),
+    );
+    if (
+      complete &&
+      (input.epcAggregate ?? "") !== "" &&
+      !epcTotal.eq(input.epcAggregate!)
+    )
+      throw new HttpError(
+        400,
+        "EPC category costs must equal the recorded EPC total.",
+      );
+    const financialComplete =
+      phases
+        .slice(0, 5)
+        .every(
+          (n) => input.actual[n] !== undefined && input.actual[n] !== "",
+        ) &&
+      (complete || (input.epcAggregate ?? "") !== "");
     if (
       input.stage === "Awaiting Management" &&
-      (!complete ||
+      (!financialComplete ||
         !input.remarks ||
         !input.acknowledgment ||
         !input.photos ||
@@ -385,24 +406,24 @@ export class AccountsRepository {
         400,
         "Complete actual costs, remarks, client acknowledgment, site photographs and PT references before submission.",
       );
-    const epcTotal = epcNames.reduce(
-      (s, n) => s.add(input.epc[n] || "0"),
-      D("0"),
-    );
+    const financialEpc = complete ? epcTotal : D(input.epcAggregate || "0");
     const actualTotal = phases
       .slice(0, 5)
-      .reduce((s, n) => s.add(input.actual[n] || "0"), epcTotal);
+      .reduce((s, n) => s.add(input.actual[n] || "0"), financialEpc);
     const budgetTotal = phases.reduce((s, n) => s.add(job.budget[n]), D("0"));
     const snapshot = {
       ...job,
       history: undefined,
       input,
-      complete,
-      actualEpc: m(epcTotal),
+      complete: financialComplete,
+      epcBreakdownComplete: epcNames.every(
+        (n) => input.epc[n] !== undefined && input.epc[n] !== "",
+      ),
+      actualEpc: financialComplete ? m(financialEpc) : null,
       summary: financialSummary(
         job.selling,
         m(budgetTotal),
-        complete ? m(actualTotal) : null,
+        financialComplete ? m(actualTotal) : null,
       ),
     };
     return transaction(this.pool, async (c) => {

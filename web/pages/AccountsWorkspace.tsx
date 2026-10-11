@@ -9,6 +9,7 @@ import { useUnsavedChanges } from "../hooks/useUnsavedChanges.js";
 import { confirmTransition } from "../confirm.js";
 import { quotationDisplayRows } from "../../server/commercial/quotation-rows.js";
 import { orderCustomerScopeLines } from "../../server/commercial/customer-scope.js";
+import { DocumentPreview } from "../components/DocumentPreview.js";
 import { Decimal } from "decimal.js";
 const phases = ["Solar Panels", "Structure", "Inverter", "Batteries", "BMS"];
 const epcNames = [
@@ -32,6 +33,7 @@ export function AccountsWorkspace({
     [selected, setSelected] = useState<any>(),
     [job, setJob] = useState<any>(),
     [actual, setActual] = useState<Record<string, string>>({}),
+    [epcAggregate, setEpcAggregate] = useState(""),
     [epc, setEpc] = useState<Record<string, string>>({}),
     [remarks, setRemarks] = useState(""),
     [ack, setAck] = useState(""),
@@ -45,7 +47,7 @@ export function AccountsWorkspace({
     [message, setMessage] = useState(""),
     [saved, setSaved] = useState(""),
     [legacy, setLegacy] = useState(false);
-  const input = { actual, epc, remarks, ack, photos, pt };
+  const input = { actual, epc, epcAggregate, remarks, ack, photos, pt };
   const dirty = !!job && JSON.stringify(input) !== saved;
   useUnsavedChanges(dirty);
   const manager = ["Admin", "Management"].includes(session.user.role);
@@ -141,6 +143,7 @@ export function AccountsWorkspace({
       const v = {
         actual: i?.actual ?? {},
         epc: i?.epc ?? {},
+        epcAggregate: i?.epcAggregate ?? "",
         remarks: i?.remarks ?? "",
         ack: i?.acknowledgment ?? "",
         photos: i?.photos ?? "",
@@ -149,6 +152,7 @@ export function AccountsWorkspace({
       setJob(j);
       setActual(v.actual);
       setEpc(v.epc);
+      setEpcAggregate(v.epcAggregate);
       setRemarks(v.remarks);
       setAck(v.ack);
       setPhotos(v.photos);
@@ -184,6 +188,7 @@ export function AccountsWorkspace({
           stage,
           actual,
           epc,
+          epcAggregate,
           remarks,
           acknowledgment: ack,
           photos,
@@ -256,9 +261,15 @@ export function AccountsWorkspace({
   let actualTotal: Decimal | null = null,
     epcTotal = new Decimal(0);
   try {
-    epcTotal = total(epc, epcNames);
+    const splitComplete = epcNames.every(
+      (k) => epc[k] !== undefined && epc[k] !== "",
+    );
+    epcTotal = splitComplete
+      ? total(epc, epcNames)
+      : new Decimal(epcAggregate || "0");
     if (
-      [...phases, ...epcNames].every((k) => (actual[k] ?? epc[k] ?? "") !== "")
+      phases.every((k) => actual[k] !== undefined && actual[k] !== "") &&
+      (splitComplete || epcAggregate !== "")
     )
       actualTotal = total(actual, phases).add(epcTotal);
   } catch {}
@@ -452,75 +463,105 @@ export function AccountsWorkspace({
                   : "Reconciliation needs attention"}
               </p>
               <div className="pz-form-grid">
-                <section>
-                  <h3>Approved quotation · {selected.quotation?.number}</h3>
-                  <a href={"/api/commercial/quotations/"+selected.quotation?.id+"/quotation.pdf"}>Download approved quotation</a>
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Description</th>
-                          <th>Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {quotationDisplayRows(selected.quotation?.snapshot.customerScopeVersion === 1 ? orderCustomerScopeLines(selected.quotation.snapshot.lines,selected.quotation.snapshot.presentation) : (selected.quotation?.snapshot.lines ?? [])).map(
-                          (l: any, i: number) => (
-                            <tr key={i}>
-                              <td>{l.description}</td>
-                              {l.amount !== undefined ? <td className="pz-number" rowSpan={l.span ?? 1}>{money(l.amount)}</td> : selected.quotation.snapshot.presentation === "No Breakup" ? <td>Included in consolidated offer</td> : null}
-                            </tr>
-                          ),
-                        )}
-                        {selected.quotation?.snapshot.footer?.map(
-                          (l: any, i: number) => (
-                            <tr key={"f" + i}>
-                              <th>{l.label}</th>
-                              <td className="pz-number">{money(l.amount)}</td>
-                            </tr>
-                          ),
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-                <section>
-                  <h3>IPO · Approved selling amounts</h3>
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Description</th>
-                          <th>Amount including GST</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selected.ipo.snapshot.allocation.lines.map(
-                          (l: any, i: number) => (
-                            <tr key={i}>
-                              <td>{l.description}</td>
-                              <td className="pz-number">{money(l.total)}</td>
-                            </tr>
-                          ),
-                        )}
-                        <tr>
-                          <th>Payable</th>
-                          <td className="pz-number">
-                            {money(selected.ipo.snapshot.allocation.total)}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <a
-                    href={"/api/orders/" + selected.ipo.id + "/ipo.pdf"}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Download IPO
-                  </a>
-                </section>
+                {selected.quotation?.id ? (
+                  <DocumentPreview
+                    title={"Approved quotation " + selected.quotation.number}
+                    url={
+                      "/api/commercial/quotations/" +
+                      selected.quotation.id +
+                      "/quotation.pdf"
+                    }
+                  />
+                ) : (
+                  <section>
+                    <h3>Approved quotation</h3>
+                    <p>Not available</p>
+                  </section>
+                )}
+                <DocumentPreview
+                  title={"IPO and PT " + selected.ipo.number}
+                  url={"/api/orders/" + selected.ipo.id + "/ipo.pdf"}
+                />
               </div>
+              <details>
+                <summary>Selling amount comparison</summary>
+                <div className="pz-form-grid">
+                  <section>
+                    <h3>Approved quotation · {selected.quotation?.number}</h3>
+
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Description</th>
+                            <th>Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {quotationDisplayRows(
+                            selected.quotation?.snapshot
+                              .customerScopeVersion === 1
+                              ? orderCustomerScopeLines(
+                                  selected.quotation.snapshot.lines,
+                                  selected.quotation.snapshot.presentation,
+                                )
+                              : (selected.quotation?.snapshot.lines ?? []),
+                          ).map((l: any, i: number) => (
+                            <tr key={i}>
+                              <td>{l.description}</td>
+                              {l.amount !== undefined ? (
+                                <td className="pz-number" rowSpan={l.span ?? 1}>
+                                  {money(l.amount)}
+                                </td>
+                              ) : selected.quotation.snapshot.presentation ===
+                                "No Breakup" ? (
+                                <td>Included in consolidated offer</td>
+                              ) : null}
+                            </tr>
+                          ))}
+                          {selected.quotation?.snapshot.footer?.map(
+                            (l: any, i: number) => (
+                              <tr key={"f" + i}>
+                                <th>{l.label}</th>
+                                <td className="pz-number">{money(l.amount)}</td>
+                              </tr>
+                            ),
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                  <section>
+                    <h3>IPO · Approved selling amounts</h3>
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Description</th>
+                            <th>Amount including GST</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selected.ipo.snapshot.allocation.lines.map(
+                            (l: any, i: number) => (
+                              <tr key={i}>
+                                <td>{l.description}</td>
+                                <td className="pz-number">{money(l.total)}</td>
+                              </tr>
+                            ),
+                          )}
+                          <tr>
+                            <th>Payable</th>
+                            <td className="pz-number">
+                              {money(selected.ipo.snapshot.allocation.total)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </div>
+              </details>
               <h3>Discount allocation summary</h3>
               <p>
                 Solar has zero discount. Allocation is preserved from the
@@ -788,9 +829,8 @@ export function AccountsWorkspace({
                   <th>EPC</th>
                   <td className="pz-number">{money(job.budget.EPC)}</td>
                   <td className="pz-number">
-                    {epcNames.every(
-                      (p) => epc[p] !== undefined && epc[p] !== "",
-                    )
+                    {epcAggregate !== "" ||
+                    epcNames.every((p) => epc[p] !== undefined && epc[p] !== "")
                       ? money(epcTotal.toString())
                       : "Not entered"}
                   </td>
@@ -799,6 +839,21 @@ export function AccountsWorkspace({
               </tbody>
             </table>
           </div>
+          <Field
+            id="closure-epc-total"
+            label="EPC actual total, excluding GST"
+            hint="Save the known total while the category split is pending. The category split is optional. When provided, all categories must reconcile with this total."
+          >
+            <input
+              id="closure-epc-total"
+              type="number"
+              min="0"
+              step="0.01"
+              disabled={readonly}
+              value={epcAggregate}
+              onChange={(e) => setEpcAggregate(e.target.value)}
+            />
+          </Field>
           <h3>EPC actual-cost details</h3>
           <div className="table-scroll">
             <table>
@@ -898,6 +953,61 @@ export function AccountsWorkspace({
               </tbody>
             </table>
           </div>
+          {actualTotal && (
+            <section>
+              <h3>Potential invoice adjustment impact · excluding GST</h3>
+              <p>
+                Scenario only, pending authorized invoice adjustment. This does
+                not post an invoice or change the approved selling price.
+              </p>
+              <table>
+                <tbody>
+                  <tr>
+                    <th>Reconciliation adjustment</th>
+                    <td className="pz-number">
+                      {money(job.reconciliation.net)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Selling price after potential adjustment</th>
+                    <td className="pz-number">
+                      {money(
+                        new Decimal(job.selling)
+                          .add(job.reconciliation.net)
+                          .toString(),
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Actual markup after potential adjustment</th>
+                    <td className="pz-number">
+                      {money(
+                        new Decimal(job.selling)
+                          .add(job.reconciliation.net)
+                          .sub(actualTotal)
+                          .toString(),
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Actual markup % after potential adjustment</th>
+                    <td className="pz-number">
+                      {actualTotal.isZero()
+                        ? "Not available"
+                        : money(
+                            new Decimal(job.selling)
+                              .add(job.reconciliation.net)
+                              .sub(actualTotal)
+                              .div(actualTotal)
+                              .mul(100)
+                              .toString(),
+                          ) + "%"}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+          )}
           <h3>Inventory reconciliation</h3>
           <p>
             Potential adjustment without GST: {money(job.reconciliation.net)} ·
