@@ -12,12 +12,12 @@ export class UblRepository {
  constructor(private pool:Pool){}
  async closedJobs(actor:string){
   await this.role(actor);
-  const rows=(await this.pool.query(`SELECT j.id,j.snapshot,j.created_at,o.site_name,o.branch_code,o.configuration_id,o.legacy_ipo_number,to_char(j.created_at AT TIME ZONE 'Asia/Karachi','YYYY-MM-DD') AS closed_date FROM (SELECT DISTINCT ON(job_key) * FROM accounts_job_closures ORDER BY job_key,version DESC) j JOIN ubl_site_orders o ON j.job_key='ubl:'||o.site_id WHERE j.stage='Closed' ORDER BY j.created_at DESC`)).rows;
+  const rows=(await this.pool.query(`SELECT j.id,j.snapshot,j.created_at,o.site_name,o.branch_code,o.configuration_id,o.legacy_ipo_number,to_char(j.created_at AT TIME ZONE 'Asia/Karachi','YYYY-MM-DD') AS closed_date FROM (SELECT DISTINCT ON(job_key) * FROM accounts_job_closures ORDER BY job_key,version DESC) j JOIN ubl_effective_site_orders o ON j.job_key='ubl:'||o.site_id WHERE j.stage='Closed' ORDER BY j.created_at DESC`)).rows;
   return {jobs:rows.map(r=>({id:r.id,siteName:r.site_name,branchCode:r.branch_code,configuration:r.configuration_id,ipoNumber:r.legacy_ipo_number,closedDate:r.closed_date,sellingValue:r.snapshot.summary.selling,actualCost:r.snapshot.summary.actual,budgetedMarkup:r.snapshot.summary.budgetedMarkup,budgetedMarkupPercent:r.snapshot.summary.budgetedMarkupPercent,actualMarkup:r.snapshot.summary.actualMarkup,actualMarkupPercent:r.snapshot.summary.actualMarkupPercent})),closureWorkflowAvailable:true};
  }
  async sites(actor:string){
   await this.role(actor);
-  return (await this.pool.query('SELECT o.*,o.po_issued_date::text AS po_issued_date FROM ubl_site_orders o ORDER BY source_row')).rows;
+  return (await this.pool.query('SELECT o.*,o.po_issued_date::text AS po_issued_date FROM ubl_effective_site_orders o ORDER BY source_row')).rows;
  }
  async role(actor:string,write=false,c:Pool=this.pool){
   await new CommercialRepository(this.pool).manager(c,actor,!write);
@@ -33,7 +33,7 @@ export class UblRepository {
   const role=await this.role(actor),configuration=(await this.pool.query('SELECT * FROM ubl_configurations WHERE id=$1',[id])).rows[0];
   if(!configuration)throw new HttpError(404,'UBL configuration not found.');
   let technical=(await this.pool.query('SELECT version,snapshot,effective_date,notes FROM ubl_technical_versions WHERE configuration_id=$1 ORDER BY version',[id])).rows;
-  let history=(await this.pool.query('SELECT h.stage,h.agreed_date,h.snapshot,b.total_cost AS budgeted_cost,b.panel_rate,b.basis AS cost_basis FROM ubl_commercial_history h LEFT JOIN ubl_history_cost_baselines b ON b.configuration_id=h.configuration_id AND b.stage=h.stage WHERE h.configuration_id=$1 ORDER BY h.agreed_date',[id])).rows;
+  let history=(await this.pool.query('SELECT h.stage,h.agreed_date,h.snapshot,b.total_cost AS budgeted_cost,b.panel_rate,b.basis AS cost_basis FROM ubl_commercial_history h LEFT JOIN ubl_effective_history_costs b ON b.configuration_id=h.configuration_id AND b.stage=h.stage WHERE h.configuration_id=$1 ORDER BY h.agreed_date',[id])).rows;
   let budgets=(await this.pool.query('SELECT b.*,u.display_name AS created_by_name FROM ubl_budget_versions b JOIN users u ON u.id=b.created_by WHERE configuration_id=$1 ORDER BY version DESC',[id])).rows;
   if(!canSeeBessCost(role)){
    technical=technical.map(t=>({...t,snapshot:{id:t.snapshot.id,rows:t.snapshot.rows,pvWatts:t.snapshot.pvWatts,inverterKw:t.snapshot.inverterKw,essKwh:t.snapshot.essKwh,source:t.snapshot.source,amendments:t.snapshot.amendments}}));

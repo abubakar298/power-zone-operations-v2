@@ -24,8 +24,8 @@ test('38 legacy UBL PO/site links preserve pricing exceptions, frozen costing an
   }
   const byCode=(code:string)=>rows.find(r=>r.branch_code===code)!;
   for(const code of ['2261','2673'])assert.equal(byCode(code).pricing_stage,'Negotiated');
-  assert.equal(byCode('2261').baseline.budgetedCost,'5574161');assert.equal(byCode('2673').baseline.budgetedCost,'4085143');
-  assert.equal(byCode('1072').configuration_id,'20-20-30');assert.equal(byCode('1072').baseline.budgetedCost,'3954243');assert.match(byCode('1072').notes,/installed in error/);
+  assert.equal(byCode('2261').baseline.budgetedCost,'5434800');assert.equal(byCode('2673').baseline.budgetedCost,'3972700');
+  assert.equal(byCode('1072').configuration_id,'20-20-30');assert.equal(byCode('1072').baseline.budgetedCost,'3840750');assert.match(byCode('1072').notes,/installed in error/);
   assert.equal(byCode('1683').status,'Cancelled');assert.equal(byCode('2756').baseline,null);assert.equal(byCode('2756').legacy_ipo_number,'315');
   assert.equal(byCode('0152').legacy_ipo_number,'286');assert.equal(byCode('2673').po_issued_date,'2026-05-13');
   await assert.rejects(repo.sites(coordinator),/Administrator and Management/);

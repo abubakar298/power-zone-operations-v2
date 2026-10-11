@@ -250,7 +250,7 @@ export class AccountsRepository {
     if (/^ubl:\d+$/.test(key)) {
       const s = (
         await this.pool.query(
-          "SELECT baseline FROM ubl_site_orders WHERE site_id=$1",
+          "SELECT baseline FROM ubl_effective_site_orders WHERE site_id=$1",
           [key.slice(4)],
         )
       ).rows[0];
@@ -273,12 +273,12 @@ export class AccountsRepository {
                     : "EPC",
         epc: /earthing bore/i.test(l.item)
           ? "Earthing Cost"
-          : /Installation including/.test(l.item)
+          : /Installation including|Electrical labour/i.test(l.item)
             ? "Electrical Labour"
-            : "Installation Cost",
+            : /Delivery\/logistics/i.test(l.item) ? "Deliveries" : "Installation Cost",
       }));
       basis =
-        "Saved UBL site budget; installation includes delivery. Approved selling price remains fixed pending authorized invoice adjustments.";
+        "Saved UBL site budget; labour and delivery are separate. Approved selling price remains fixed pending authorized invoice adjustments.";
     } else {
       const i = (
         await this.pool.query(
@@ -356,9 +356,9 @@ export class AccountsRepository {
           `
         SELECT j.snapshot FROM
           (SELECT DISTINCT ON(job_key) * FROM accounts_job_closures ORDER BY job_key,version DESC) j
-        JOIN ubl_site_orders o ON j.job_key='ubl:'||o.site_id
+        JOIN ubl_effective_site_orders o ON j.job_key='ubl:'||o.site_id
         WHERE j.stage='Closed' AND j.job_key<>$1
-          AND o.configuration_id=(SELECT configuration_id FROM ubl_site_orders WHERE site_id=$2)
+          AND o.configuration_id=(SELECT configuration_id FROM ubl_effective_site_orders WHERE site_id=$2)
       `,
           [key, key.slice(4)],
         )

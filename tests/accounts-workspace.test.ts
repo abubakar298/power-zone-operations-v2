@@ -88,8 +88,8 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       closedJobs: 0,
       averageActualMarkupPercent: null,
     });
-    assert.equal(job.budget.Inverter, "760028.00");
-    assert.equal(job.budget.Batteries, "1855696.00");
+    assert.equal(job.budget.Inverter, "770000.00");
+    assert.equal(job.budget.Batteries, "1720000.00");
     const input = {
       jobKey: j.key,
       version: 0,
