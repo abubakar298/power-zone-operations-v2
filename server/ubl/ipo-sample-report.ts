@@ -17,7 +17,7 @@ export function ublIpoSamplePdf(s:ReturnType<typeof ublIpoSample>, kind:'ipo'|'p
   ['Site',s.siteName,'Branch code',s.branchCode],
   ['Configuration',s.configuration,'Pricing stage',stage],
   ['Region',s.region,'Main city',s.mainCity||'Not entered'],
-  ['PO issue date',s.poIssuedDate,'Document status',s.documentStatus==='Historical registered'?'Historical registered - not invoiced':'Review sample - not issued'],
+  ['PO issue date',s.poIssuedDate,'Document status',s.documentStatus==='Historical registered'?'Historical registered':'Review sample - not issued'],
   ['Quotation type','UBL Solar - Show Sales Tax Separately','','']
  ]});
  autoTable(pdf,{startY:(pdf as any).lastAutoTable.finalY+4,theme:'grid',margin:{left:14,right:14,bottom:reportBottomMargin},styles:{fontSize:7,cellPadding:1.3},headStyles:{fillColor:[61,63,146],fontSize:7},head:[['Description','Qty','Unit','Net rate','Amount','Tax %','Tax','Total']],columnStyles:{0:{cellWidth:66},1:{halign:'center',cellWidth:10},2:{halign:'center',cellWidth:10},3:{halign:'right'},4:{halign:'right'},5:{halign:'center',cellWidth:9},6:{halign:'right'},7:{halign:'right'}},body:s.billing.map(r=>[r.name,r.name==='Solar Panels'?new Decimal(s.agreedWatts??35000).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,','):'1',r.name==='Solar Panels'?'W':'LS',r.name==='Solar Panels'?money(String(s.panelSellingRate??44)):money(r.sellingExcludingGst),money(r.sellingExcludingGst),r.gstRate.replace('%',''),money(r.gst),money(r.payable)])});
