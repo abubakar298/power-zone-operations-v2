@@ -405,6 +405,18 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       }),
       /Accounts access/,
     );
+    // Sample archival is reversible and new real versions remain monotonic.
+    await db.pool.query("INSERT INTO archived_sample_closures SELECT id,'test sample archive',now() FROM accounts_job_closures WHERE job_key=$1",[j.key]);
+    await db.pool.query("UPDATE inventory_reports SET job_key='archived-sample:'||job_key||':'||id WHERE job_key=$1",[j.key]);
+    assert.equal((await repo.overview(users.Accounts)).closures.some((x:any)=>x.job_key===j.key),false);
+    assert.equal((await inv.list(users.Inventory)).some((x:any)=>x.job_key.startsWith('archived-sample:')),false);
+    const real=await inv.save(users.Inventory,{jobKey:j.key,version:0,stage:'Draft Reconciliation',entry,requestKey:randomUUID()});
+    await inv.upload(users.Inventory,real.reportId,'real-fixture.pdf','application/pdf',Buffer.from('%PDF-1.4 fixture').toString('base64'));
+    await inv.save(users.Inventory,{jobKey:j.key,version:1,stage:'Sent to Accounts',entry,requestKey:randomUUID()});
+    const resumed=await repo.job(users.Accounts,j.key);
+    assert.equal(resumed.history.length,0);
+    const newClosure=await repo.saveClosure(users.Accounts,{...input,version:0,stage:'Draft',requestKey:randomUUID()});
+    assert.ok(newClosure.version>1);
   } finally {
     await db.close();
   }

@@ -186,7 +186,7 @@ export class InventoryRepository {
     await this.access(actor);
     return (
       await this.pool.query(
-        "SELECT r.id,r.job_key,v.version,v.stage,EXISTS(SELECT 1 FROM inventory_report_files f WHERE f.report_id=r.id) AS has_files,v.created_at,v.snapshot->>'jobId' AS job_id,v.snapshot->>'title' AS site_name,u.display_name AS recorded_by FROM inventory_reports r JOIN LATERAL(SELECT * FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true JOIN users u ON u.id=v.created_by ORDER BY v.created_at DESC",
+        "SELECT r.id,r.job_key,v.version,v.stage,EXISTS(SELECT 1 FROM inventory_report_files f WHERE f.report_id=r.id) AS has_files,v.created_at,v.snapshot->>'jobId' AS job_id,v.snapshot->>'title' AS site_name,u.display_name AS recorded_by FROM inventory_reports r JOIN LATERAL(SELECT * FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true JOIN users u ON u.id=v.created_by WHERE r.job_key NOT LIKE 'archived-sample:%' ORDER BY v.created_at DESC",
       )
     ).rows;
   }

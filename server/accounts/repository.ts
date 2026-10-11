@@ -95,7 +95,7 @@ export class AccountsRepository {
     ).rows;
     const closures = (
       await this.pool.query(
-        "SELECT DISTINCT ON(job_key) * FROM accounts_job_closures ORDER BY job_key,version DESC",
+        "SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures ORDER BY job_key,version DESC",
       )
     ).rows;
     return {
@@ -345,7 +345,7 @@ export class AccountsRepository {
     );
     const history = (
       await this.pool.query(
-        "SELECT j.*,u.display_name AS recorded_by FROM accounts_job_closures j JOIN users u ON u.id=j.created_by WHERE job_key=$1 ORDER BY version DESC",
+        "SELECT j.*,u.display_name AS recorded_by FROM accounts_active_job_closures j JOIN users u ON u.id=j.created_by WHERE job_key=$1 ORDER BY version DESC",
         [key],
       )
     ).rows;
@@ -355,7 +355,7 @@ export class AccountsRepository {
         await this.pool.query(
           `
         SELECT j.snapshot FROM
-          (SELECT DISTINCT ON(job_key) * FROM accounts_job_closures ORDER BY job_key,version DESC) j
+          (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures ORDER BY job_key,version DESC) j
         JOIN ubl_effective_site_orders o ON j.job_key='ubl:'||o.site_id
         WHERE j.stage='Closed' AND j.job_key<>$1
           AND o.configuration_id=(SELECT configuration_id FROM ubl_effective_site_orders WHERE site_id=$2)
@@ -480,7 +480,7 @@ export class AccountsRepository {
       ]);
       const old = (
         await c.query(
-          "SELECT * FROM accounts_job_closures WHERE request_key=$1",
+          "SELECT * FROM accounts_active_job_closures WHERE request_key=$1",
           [input.requestKey],
         )
       ).rows[0];
@@ -495,7 +495,7 @@ export class AccountsRepository {
       await this.currentReport(c, input.jobKey, job.reportVersionId);
       const latest = (
         await c.query(
-          "SELECT * FROM accounts_job_closures WHERE job_key=$1 ORDER BY version DESC LIMIT 1",
+          "SELECT * FROM accounts_active_job_closures WHERE job_key=$1 ORDER BY version DESC LIMIT 1",
           [input.jobKey],
         )
       ).rows[0];
@@ -510,7 +510,7 @@ export class AccountsRepository {
             randomUUID(),
             input.jobKey,
             job.reportVersionId,
-            input.version + 1,
+            (await c.query("SELECT COALESCE(max(version),0)+1 AS next FROM accounts_job_closures WHERE job_key=$1",[input.jobKey])).rows[0].next,
             input.stage,
             snapshot,
             input.requestKey,
@@ -557,7 +557,7 @@ export class AccountsRepository {
       }
       const closure = (
         await c.query(
-          "SELECT stage FROM accounts_job_closures WHERE job_key=$1 ORDER BY version DESC LIMIT 1",
+          "SELECT stage FROM accounts_active_job_closures WHERE job_key=$1 ORDER BY version DESC LIMIT 1",
           [r.job_key],
         )
       ).rows[0];
@@ -624,7 +624,7 @@ export class AccountsRepository {
     return transaction(this.pool, async (c) => {
       await this.access(actor, c, true);
       const source = (
-        await c.query("SELECT * FROM accounts_job_closures WHERE id=$1", [
+        await c.query("SELECT * FROM accounts_active_job_closures WHERE id=$1", [
           input.id,
         ])
       ).rows[0];
@@ -634,7 +634,7 @@ export class AccountsRepository {
       ]);
       const old = (
         await c.query(
-          "SELECT * FROM accounts_job_closures WHERE request_key=$1",
+          "SELECT * FROM accounts_active_job_closures WHERE request_key=$1",
           [input.requestKey],
         )
       ).rows[0];
@@ -648,7 +648,7 @@ export class AccountsRepository {
       }
       const latest = (
         await c.query(
-          "SELECT * FROM accounts_job_closures WHERE job_key=$1 ORDER BY version DESC LIMIT 1",
+          "SELECT * FROM accounts_active_job_closures WHERE job_key=$1 ORDER BY version DESC LIMIT 1",
           [source.job_key],
         )
       ).rows[0];

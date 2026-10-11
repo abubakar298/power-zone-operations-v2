@@ -1,3 +1,5 @@
+import {projectCheckpointsHttp} from './projects/http.js';
+import {ProjectCheckpointsRepository} from './projects/repository.js';
 import {accountsHttp as accountsWorkspaceHttp} from './accounts/http.js';
 import {AccountsRepository as AccountsWorkspaceRepository} from './accounts/repository.js';
 import {inventoryHttp} from './inventory/http.js';
@@ -103,6 +105,7 @@ export function createApp(
     workflowBoundary(pool),
   );
   app.use("/api/cni", express.json({limit:"32kb"}), cniHttp(pool, auth.requireSession));
+  app.use("/api/project-checkpoints", express.json({limit:"32kb"}), projectCheckpointsHttp(new ProjectCheckpointsRepository(pool),auth.requireSession));
   app.use("/api/ubl", express.json({limit:"16kb"}), ublHttp(new UblRepository(pool),auth.requireSession));
   const boqs = new BoqRepository(pool);
   app.use(

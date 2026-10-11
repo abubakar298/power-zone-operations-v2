@@ -1,3 +1,4 @@
+import {ProjectCheckpoints} from './ProjectCheckpoints.js';
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
 import { Button } from "../ui/Button.js";
@@ -303,6 +304,7 @@ export function AccountsWorkspace({
         {[
           "My Workspace",
           "IPO Review",
+          "Project checkpoints",
           "Inventory Reconciliations",
           "Job Closure",
           "Invoicing",
@@ -318,6 +320,7 @@ export function AccountsWorkspace({
         ))}
       </div>
       <h2>{tab}</h2>
+      {tab === "Project checkpoints" && <ProjectCheckpoints session={session} mode="Accounts"/>}
       {error && !errorAction && (
         <p role="alert" className="form-error">
           {error}

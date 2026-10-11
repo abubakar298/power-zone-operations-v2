@@ -1,3 +1,4 @@
+import {ProjectCheckpoints} from './ProjectCheckpoints.js';
 import {InventoryWorkspace} from './InventoryWorkspace.js';
 import {Button} from '../ui/Button.js';
 import { displayUnit } from "../../server/boq/unit.js";
@@ -31,6 +32,7 @@ export function Operations({
   portal?: boolean;
 }) {
   const [irrUpload,setIrrUpload]=useState(false);
+  const [checkpoints,setCheckpoints]=useState(false);
   const [orders, setOrders] = useState<any[]>([]),
     [rows, setRows] = useState<any[]>([]),
     [ipoId, setIpoId] = useState(initialIpoId ?? ""),
@@ -251,6 +253,8 @@ export function Operations({
   }
   return (
     <section className="detail-panel operations-panel">
+      <Button variant="secondary" onClick={()=>setCheckpoints(!checkpoints)} aria-expanded={checkpoints}>Installation checkpoints</Button>
+      {checkpoints&&<ProjectCheckpoints session={session}/>}
       {["Admin","Management","Operations"].includes(session.user.role)&&<><Button variant="secondary" onClick={()=>setIrrUpload(!irrUpload)}>Upload installation report to Inventory</Button>{irrUpload&&<InventoryWorkspace session={session} receiveOnly/>}</>}
       {(portal || workspace === "received") && (
         <section aria-label="Operations buckets">
