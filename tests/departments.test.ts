@@ -265,6 +265,12 @@ test("Department queues enforce roles, ordered Inventory progress, concurrency, 
         (await agent.post(route).set("Origin", config.origin).send({})).status,
         403,
       );
+    const beforeArchive = await repo.portal(accounts, "Accounts");
+    await db.pool.query("INSERT INTO archived_sample_ipos(ipo_id,reason,source_record) SELECT id,'Test-only archive',to_jsonb(i) FROM internal_purchase_orders i WHERE id=$1", [source.ipoId]);
+    assert.equal((await repo.portal(accounts, "Accounts")).records.length, beforeArchive.records.length - 1);
+    assert.equal((await db.pool.query("SELECT count(*)::int AS n FROM internal_purchase_orders WHERE id=$1", [source.ipoId])).rows[0].n, 1);
+    await db.pool.query("UPDATE archived_sample_ipos SET restored_at=now() WHERE ipo_id=$1", [source.ipoId]);
+    assert.equal((await repo.portal(accounts, "Accounts")).records.length, beforeArchive.records.length);
   } finally {
     await db.close();
   }
