@@ -93,7 +93,10 @@ export async function createDashboardSamples(
       // Synthetic ages are set at initial INSERT only; immutable history is never updated.
       const insert =
         /^(INSERT INTO (?:survey_drafts|boq_review_submissions|boq_review_decisions|boq_revisions|commercial_pricing_versions|quotation_versions|coordination_events|ipo_submissions|internal_purchase_orders)\s*\()([^)]*)(\)\s*VALUES\s*\()([^)]*)(\))/i;
-      if (insert.test(sql)) {
+      if (sql.includes("clock_timestamp()")) {
+        sql = sql.replace("clock_timestamp()", `'${timestamp.toISOString()}'`);
+        timestamp = new Date(timestamp.getTime() + 60000);
+      } else if (insert.test(sql)) {
         sql = sql.replace(
           insert,
           `$1$2,created_at$3$4,'${timestamp.toISOString()}'$5`,

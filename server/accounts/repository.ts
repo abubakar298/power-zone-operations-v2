@@ -348,7 +348,36 @@ export class AccountsRepository {
         [key],
       )
     ).rows;
+    let configurationComparison = null;
+    if (/^ubl:\d+$/.test(key)) {
+      const peers = (
+        await this.pool.query(
+          `
+        SELECT j.snapshot FROM
+          (SELECT DISTINCT ON(job_key) * FROM accounts_job_closures ORDER BY job_key,version DESC) j
+        JOIN ubl_site_orders o ON j.job_key='ubl:'||o.site_id
+        WHERE j.stage='Closed' AND j.job_key<>$1
+          AND o.configuration_id=(SELECT configuration_id FROM ubl_site_orders WHERE site_id=$2)
+      `,
+          [key, key.slice(4)],
+        )
+      ).rows;
+      const percentages = peers
+        .map((r) => r.snapshot.summary.actualMarkupPercent)
+        .filter((v) => v !== null && v !== undefined);
+      configurationComparison = {
+        closedJobs: percentages.length,
+        averageActualMarkupPercent: percentages.length
+          ? m(
+              percentages
+                .reduce((sum: Decimal, v: string) => sum.add(v), D("0"))
+                .div(percentages.length),
+            )
+          : null,
+      };
+    }
     return {
+      configurationComparison,
       jobKey: key,
       jobId: irr.snapshot.jobId,
       title: irr.snapshot.title,

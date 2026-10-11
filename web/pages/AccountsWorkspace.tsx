@@ -887,6 +887,95 @@ export function AccountsWorkspace({
               </tbody>
             </table>
           </div>
+          <h3>EPC variance · excluding GST</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Budgeted EPC</th>
+                <th>Actual EPC</th>
+                <th>Cost variance (actual − budget)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="pz-number">{money(job.budget.EPC)}</td>
+                <td className="pz-number">
+                  {actualTotal ? money(epcTotal.toString()) : "Not entered"}
+                </td>
+                <td className="pz-number">
+                  {actualTotal
+                    ? money(epcTotal.sub(job.budget.EPC).toString())
+                    : "Not entered"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Positive variance means higher cost; negative variance means a
+            saving. Detailed EPC categories remain optional.
+          </p>
+          {job.configurationComparison && (
+            <section>
+              <h3>Markup compared with closed jobs in this configuration</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>This job actual markup %</th>
+                    <th>Closed-job average markup %</th>
+                    <th>Difference (percentage points)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="pz-number">
+                      {actualTotal && !actualTotal.isZero()
+                        ? money(
+                            new Decimal(job.selling)
+                              .sub(actualTotal)
+                              .div(actualTotal)
+                              .mul(100)
+                              .toString(),
+                          ) + "%"
+                        : "Not entered"}
+                    </td>
+                    <td className="pz-number">
+                      {job.configurationComparison
+                        .averageActualMarkupPercent === null
+                        ? "No other closed jobs yet"
+                        : money(
+                            job.configurationComparison
+                              .averageActualMarkupPercent,
+                          ) + "%"}
+                    </td>
+                    <td className="pz-number">
+                      {actualTotal &&
+                      !actualTotal.isZero() &&
+                      job.configurationComparison.averageActualMarkupPercent !==
+                        null
+                        ? money(
+                            new Decimal(job.selling)
+                              .sub(actualTotal)
+                              .div(actualTotal)
+                              .mul(100)
+                              .sub(
+                                job.configurationComparison
+                                  .averageActualMarkupPercent,
+                              )
+                              .toString(),
+                          )
+                        : "Not available"}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p>
+                Arithmetic average of {job.configurationComparison.closedJobs}{" "}
+                other Management-approved closed jobs in the same configuration.
+                Uses approved selling values; potential invoice adjustments are
+                shown separately below.
+              </p>
+            </section>
+          )}
           <h3>Closure summary · excluding GST</h3>
           <div className="table-scroll">
             <table>

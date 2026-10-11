@@ -1810,12 +1810,7 @@ test("external chat approvals require owned screenshots and exact submitted vers
     }).expect(201)
   ).body;
   evidence.evidenceIds = [upload.id];
-  await post(endpoint, evidence).expect(409); // Approval cannot precede submission.
-  await post("/api/coordinator/events", {
-    quotationId: qid,
-    kind: "Submitted",
-    notes: "",
-  }).expect(201);
+  await post(endpoint, evidence).expect(201); // Prior Management instruction approves the saved version without another wait.
   await post("/api/coordinator/events", {
     quotationId: qid,
     kind: "Approved",
@@ -1823,7 +1818,6 @@ test("external chat approvals require owned screenshots and exact submitted vers
   }).expect(403); // Ordinary manager approval stays protected.
   await post(endpoint, { ...evidence, confirmed: false }).expect(400);
   await post(endpoint, { ...evidence, evidenceIds: [] }).expect(400);
-  await post(endpoint, evidence).expect(201);
   await post(endpoint, evidence).expect(409);
   const read = (
     await request(app)

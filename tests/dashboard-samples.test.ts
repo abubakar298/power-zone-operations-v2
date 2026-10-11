@@ -29,7 +29,7 @@ test("training batch creates 20 usable staged records atomically and is idempote
     assert.equal(view.total, 20);
     assert.ok(view.tasks.every((task: any) => typeof task.customer === "string" && task.customer.length > 0), "every pending type includes its customer name");
     assert.equal((await new CoordinatorRepository(db.pool).overview(randomUUID(), false)).total, 0, "customer metadata cannot widen ownership scope");
-    assert.equal(Object.keys(view.stageCounts).length, 6);
+    assert.equal(Object.keys(view.stageCounts).length, 7);
     assert.equal(Object.values(view.stageCounts).reduce((sum: number, count: any) => sum + count, 0), 20);
     assert.ok(view.tasks.every((task: any) => task.site.startsWith("SAMPLE")));
     assert.ok(

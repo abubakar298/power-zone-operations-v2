@@ -23,8 +23,14 @@ export function coordinatorHttp(
       );
     next();
   });
-  r.get("/projects",async(req,res)=>res.json(await repo.projects(req.authSession!.user.id)));
-  r.get("/project",async(req,res)=>{const key=z.string().min(1).max(500).safeParse(req.query.key);if(!key.success)throw new HttpError(400,"Select a project.");res.json(await repo.project(req.authSession!.user.id,key.data));});
+  r.get("/projects", async (req, res) =>
+    res.json(await repo.projects(req.authSession!.user.id)),
+  );
+  r.get("/project", async (req, res) => {
+    const key = z.string().min(1).max(500).safeParse(req.query.key);
+    if (!key.success) throw new HttpError(400, "Select a project.");
+    res.json(await repo.project(req.authSession!.user.id, key.data));
+  });
   r.get("/", async (req, res) => {
     const scope = req.query.scope ?? "mine";
     if (scope !== "mine" && scope !== "team")
@@ -34,7 +40,13 @@ export function coordinatorHttp(
       !["Admin", "Management"].includes(req.authSession!.user.role)
     )
       throw new HttpError(403, "Team overview requires management access.");
-    res.json(await repo.overview(req.authSession!.user.id, scope === "team", req.query.includeTraining === "true"));
+    res.json(
+      await repo.overview(
+        req.authSession!.user.id,
+        scope === "team",
+        req.query.includeTraining === "true",
+      ),
+    );
   });
   r.post("/quotations/:id/external-approval", async (req, res) => {
     if (
@@ -59,6 +71,43 @@ export function coordinatorHttp(
         ),
       );
   });
+  r.get("/dispatch", async (req, res) => {
+    const v = z
+      .object({
+        quotationId: z.uuid().optional(),
+        cniVersionId: z.uuid().optional(),
+      })
+      .strict()
+      .refine((v) => !!v.quotationId !== !!v.cniVersionId)
+      .safeParse(req.query);
+    if (!v.success) throw new HttpError(400, "Select a quotation.");
+    res.json({
+      record: await repo.dispatchRecord(req.authSession!.user.id, v.data),
+    });
+  });
+  r.post("/dispatch", async (req, res) => {
+    if (
+      !equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken)
+    )
+      throw new HttpError(403, "Refresh and try again.");
+    const v = z
+      .object({
+        quotationId: z.uuid().optional(),
+        cniVersionId: z.uuid().optional(),
+        recipient: z.enum(["Customer", "Salesperson"]),
+        notes: z.string().trim().min(1).max(2000),
+        confirmed: z.literal(true),
+      })
+      .strict()
+      .refine((v) => !!v.quotationId !== !!v.cniVersionId)
+      .safeParse(req.body);
+    if (!v.success)
+      throw new HttpError(
+        400,
+        "Confirm delivery and enter the recipient details.",
+      );
+    res.status(201).json(await repo.dispatch(req.authSession!.user.id, v.data));
+  });
   r.post("/events", async (req, res) => {
     if (
       !equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken)
@@ -74,7 +123,7 @@ export function coordinatorHttp(
           "PO received",
         ]),
         notes: z.string().trim().max(2000).default(""),
-        acknowledgePriceChange:z.boolean().optional(),
+        acknowledgePriceChange: z.boolean().optional(),
       })
       .strict()
       .safeParse(req.body);

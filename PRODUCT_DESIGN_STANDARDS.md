@@ -81,7 +81,7 @@ Use existing Decimal formatting. Money: comma thousands separators and exactly2 
 - Mobile: touch targets44px, wrapped action groups, no hover-only essential controls. Respect prefers-reduced-motion.
 
 ## Reuse and scope
-Coordinator Workspace demonstrates shared Buttons (All pending tasks neutral, Open workflow secondary), StatusBadge (Overdue warning, In progress pending), semantic bucket selection, readable captions/table padding, tabular counts and responsive filtering. Its six buckets and original workflow logic remain unchanged.
+Coordinator Workspace demonstrates shared Buttons (All pending tasks neutral, Open workflow secondary), StatusBadge (Overdue warning, In progress pending), semantic bucket selection, readable captions/table padding, tabular counts and responsive filtering. The original six workflow buckets remain available. An approved quotation awaiting-send bucket was added by explicit Management instruction on 11 October 2026; sending is recorded separately from approval.
 
 Existing financial engine, customer data, rates, permissions, document history, PDF templates and approval requirements are out of scope. This milestone does not claim every historical screen meets every standard or certify all accessibility conditions. Apply standards to future/modified shared interfaces; refine remaining screens in explicitly authorized milestones.
 

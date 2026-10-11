@@ -278,7 +278,7 @@ for (const quick of [false, true]) {
         .getByRole("row", {
           name: new RegExp(quick ? "BAFL-2520" : "BAFL-90901"),
         })
-        .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/ })
+        .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|Confirm quotation sent|View approval)$/ })
         .click();
       await button(manager, "Final approve quotation").click();
       await manager
@@ -292,8 +292,15 @@ for (const quick of [false, true]) {
         }),
       ).toBeVisible();
       await page.reload();
+      await page.getByRole("button",{name:/Approved quotations awaiting send/i}).click();
+      await page.getByRole("row",{name:new RegExp(quick ? "BAFL-2520" : "BAFL-90901")}).getByRole("button",{name:"Confirm quotation sent",exact:true}).click();
+      await page.getByLabel("Recipient and delivery details").fill("Sent to customer in isolated browser journey");
+      await page.getByLabel("I have sent this approved version to the selected recipient.").check();
+      await page.getByRole("button",{name:"Mark quotation sent",exact:true}).click();
+      await expect(page.getByText(/Marked sent to Customer:/)).toBeVisible();
+      await page.reload();
       await page.getByRole("button", { name: /Customer confirmation/i }).click();
-      await page.getByRole("row", { name: new RegExp(quick ? "BAFL-2520" : "BAFL-90901") }).getByRole("button", {name:/^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/,exact:true}).click();
+      await page.getByRole("row", { name: new RegExp(quick ? "BAFL-2520" : "BAFL-90901") }).getByRole("button", {name:/^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|Confirm quotation sent|View approval)$/,exact:true}).click();
       await expect(page.getByLabel("Accepted quotation")).toHaveValue(quoteId);
       await page
         .getByLabel("Sale confirmation type")
@@ -316,7 +323,7 @@ for (const quick of [false, true]) {
         .getByRole("row", {
           name: new RegExp(quick ? "BAFL-2520" : "BAFL-90901"),
         })
-        .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/ })
+        .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|Confirm quotation sent|View approval)$/ })
         .click();
       await button(manager, "Approve evidence & save IPO").click();
       await expect(
@@ -328,7 +335,7 @@ for (const quick of [false, true]) {
         .click();
       await page
         .getByRole("row", { name: new RegExp(quick ? "2520" : "90901") })
-        .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|View approval)$/ })
+        .getByRole("button", { name: /^(Open workflow|Prepare BOQ|Calculate selling price|Prepare quotation|Revise document|Complete handoff|Record customer confirmation|Confirm quotation sent|View approval)$/ })
         .click();
       const pack = page.waitForEvent("download");
       await button(page, "Download IPO & Peachtree PDF").click();

@@ -1,3 +1,4 @@
+import { AccountsWorkspace } from "./AccountsWorkspace.js";
 import { money } from "../numbers.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
@@ -13,7 +14,18 @@ export function Director({
     [customer, setCustomer] = useState(""),
     [data, setData] = useState<any>(),
     [selected, setSelected] = useState(""),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [closureCount, setClosureCount] = useState<number>();
+  useEffect(() => {
+    void api<any>("/accounts-workspace")
+      .then((d) =>
+        setClosureCount(
+          d.closures.filter((c: any) => c.stage === "Awaiting Management")
+            .length,
+        ),
+      )
+      .catch(() => setClosureCount(undefined));
+  }, [tab]);
   useEffect(() => {
     let active = true;
     setError("");
@@ -56,7 +68,9 @@ export function Director({
               onClick={() => setTab(t)}
             >
               {t}
-              {t === "Job closing" ? " · 0" : ""}
+              {t === "Job closing" && closureCount !== undefined
+                ? ` · ${closureCount}`
+                : ""}
             </button>
           ))}
         </div>
@@ -67,15 +81,7 @@ export function Director({
         </p>
       )}
       {tab === "Approvals" && <Coordinator session={session} onOpen={onOpen} />}
-      {tab === "Job closing" && (
-        <section className="detail-panel">
-          <h3>Jobs awaiting Director sign-off</h3>
-          <p>
-            No closing requests have been received. Accounts job-closing
-            submissions will be connected in the Accounts milestone.
-          </p>
-        </section>
-      )}
+      {tab === "Job closing" && <AccountsWorkspace session={session} />}
       {tab === "Customer & site budgets" && (
         <section className="detail-panel">
           <h3>Customer & site portfolio</h3>

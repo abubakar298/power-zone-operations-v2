@@ -1,4 +1,4 @@
-import {Button} from '../ui/Button.js';
+import { Button } from "../ui/Button.js";
 import { useState } from "react";
 import { api, type Session } from "../api.js";
 import { confirmRevision } from "../confirm.js";
@@ -6,12 +6,14 @@ export function ExternalApproval({
   session,
   endpoint,
   onApproved,
+  preauthorized = false,
 }: {
+  preauthorized?: boolean;
   session: Session;
   endpoint: string;
   onApproved: (row: any) => Promise<void>;
 }) {
-  const [decisionAt,setDecisionAt]=useState("");
+  const [decisionAt, setDecisionAt] = useState("");
   const [channel, setChannel] = useState("WhatsApp");
   const [approver, setApprover] = useState(""),
     [comments, setComments] = useState(""),
@@ -70,7 +72,9 @@ export function ExternalApproval({
           comments,
           evidenceIds: uploads.map((u) => u.id),
           confirmed,
-          ...(decisionAt?{decisionAt:new Date(decisionAt).toISOString()}:{}),
+          ...(decisionAt
+            ? { decisionAt: new Date(decisionAt).toISOString() }
+            : {}),
           ...(endpoint.startsWith("/orders/")
             ? { requestKey: crypto.randomUUID() }
             : {}),
@@ -86,10 +90,15 @@ export function ExternalApproval({
   }
   return (
     <details className="detail-panel">
-      <summary>Record WhatsApp / verbal approval</summary>
+      <summary>
+        {preauthorized
+          ? "Use Management-approved discount instruction"
+          : "Record WhatsApp / verbal approval"}
+      </summary>
       <p>
-        Attach approval of this exact submitted version. If the approval
-        requires changes, create a revision first.
+        Attach Management approval of this exact saved version, including its
+        special discount and final payable. First-issued R1 quotations can use a
+        prior instruction. If the values differ, save a revision first.
       </p>
       <form
         aria-label="WhatsApp approval evidence"
@@ -106,7 +115,7 @@ export function ExternalApproval({
             onChange={(e) => setChannel(e.target.value)}
           >
             <option>WhatsApp</option>
-            <option>Verbal</option>
+            {!preauthorized && <option>Verbal</option>}
           </select>
         </label>
         {channel === "Verbal" && (
@@ -124,7 +133,17 @@ export function ExternalApproval({
             onChange={(e) => setApprover(e.target.value)}
           />
         </label>
-        <label>Approval decision date / time (if known)<input type="datetime-local" value={decisionAt} onChange={e=>setDecisionAt(e.target.value)}/><small>Leave blank if unavailable. The recording time is saved separately.</small></label>
+        <label>
+          Approval decision date / time (if known)
+          <input
+            type="datetime-local"
+            value={decisionAt}
+            onChange={(e) => setDecisionAt(e.target.value)}
+          />
+          <small>
+            Leave blank if unavailable. The recording time is saved separately.
+          </small>
+        </label>
         <label>
           Approval remarks
           <textarea
@@ -172,7 +191,9 @@ export function ExternalApproval({
           I confirm this evidence approves this exact document without changes.
         </label>
         {error && <p role="alert">{error}</p>}
-        <Button variant="primary" type="submit"
+        <Button
+          variant="primary"
+          type="submit"
           disabled={
             busy ||
             !confirmed ||
