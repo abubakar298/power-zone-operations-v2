@@ -117,3 +117,5 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pz-accounts .closure-performance-table th:first-child{width:15%}
 .pz-accounts .closure-performance-table input[type=number]{min-width:0;max-width:100%;padding:6px 3px;font-size:12px;box-sizing:border-box}
 @media(max-width:700px){.pz-accounts .closure-performance-table{min-width:850px}}
+
+.pz-ubl-workflow table small{display:block;color:var(--pz-muted);margin-top:4px}.pz-ubl-workflow .pz-action-row{flex-wrap:wrap}.pz-ubl-workflow dl>div{display:grid;grid-template-columns:minmax(140px,1fr) 2fr;gap:16px;padding:8px 0;border-bottom:1px solid var(--pz-border)}.pz-ubl-workflow dd{margin:0;overflow-wrap:anywhere}.pz-ubl-workflow table{width:100%;table-layout:fixed}.pz-ubl-workflow th,.pz-ubl-workflow td{overflow-wrap:anywhere}.pz-ubl-workflow textarea{min-height:90px}@media(max-width:700px){.pz-ubl-workflow table{min-width:700px}.pz-ubl-workflow dl>div{grid-template-columns:1fr;gap:4px}}

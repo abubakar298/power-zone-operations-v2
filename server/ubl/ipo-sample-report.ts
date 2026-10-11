@@ -8,7 +8,8 @@ const money=(v:string)=>new Decimal(v).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/
 const right=(v:string)=>({content:money(v),styles:{halign:'right' as const}});
 export function ublIpoSamplePdf(s:ReturnType<typeof ublIpoSample>, kind:'ipo'|'pt'|'pack'='pack'){
  const pdf=new jsPDF({unit:'mm',format:'a4',compress:true});
- const reference=`IPO ${s.legacyIpoNumber} / IPO & Peachtree Division / ${s.documentStatus==='Historical registered'?'HISTORICAL REGISTERED':'REVIEW SAMPLE'}`;
+ const workflow=s.documentStatus==='Submitted to Accounts';
+ const reference=`IPO ${s.legacyIpoNumber} / IPO & Peachtree Division / ${s.documentStatus==='Historical registered'?'HISTORICAL REGISTERED':workflow?'SUBMITTED TO ACCOUNTS':'REVIEW SAMPLE'}`;
  const stage=s.pricingStage==='Revised'?'Final / Revised':s.pricingStage;
  drawReportLogo(pdf);pdf.setFontSize(12);pdf.text('INTERNAL PURCHASE ORDER',14,37);pdf.setFontSize(8);pdf.text('POWER ZONE ENGINEERING & SERVICES (PVT) LIMITED',14,42);
  autoTable(pdf,{startY:46,theme:'grid',margin:{left:14,right:14,bottom:reportBottomMargin},styles:{fontSize:7,cellPadding:1.4},columnStyles:{0:{cellWidth:27},1:{cellWidth:64},2:{cellWidth:27},3:{cellWidth:64}},body:[
@@ -17,7 +18,7 @@ export function ublIpoSamplePdf(s:ReturnType<typeof ublIpoSample>, kind:'ipo'|'p
   ['Site',s.siteName,'Branch code',s.branchCode],
   ['Configuration',s.configuration,'Pricing stage',stage],
   ['Region',s.region,'Main city',s.mainCity||'Not entered'],
-  ['PO issue date',s.poIssuedDate,'Document status',s.documentStatus==='Historical registered'?'Historical registered':'Review sample - not issued'],
+  ['PO issue date',s.poIssuedDate,'Document status',s.documentStatus==='Historical registered'?'Historical registered':workflow?'Submitted to Accounts - awaiting acceptance':'Review sample - not issued'],
   ['Quotation type','UBL Solar - Show Sales Tax Separately','','']
  ]});
  autoTable(pdf,{startY:(pdf as any).lastAutoTable.finalY+4,theme:'grid',margin:{left:14,right:14,bottom:reportBottomMargin},styles:{fontSize:7,cellPadding:1.3},headStyles:{fillColor:[61,63,146],fontSize:7},head:[['Description','Qty','Unit','Net rate','Amount','Tax %','Tax','Total']],columnStyles:{0:{cellWidth:66},1:{halign:'center',cellWidth:10},2:{halign:'center',cellWidth:10},3:{halign:'right'},4:{halign:'right'},5:{halign:'center',cellWidth:9},6:{halign:'right'},7:{halign:'right'}},body:s.billing.map(r=>[r.name,r.name==='Solar Panels'?new Decimal(s.agreedWatts??35000).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,','):'1',r.name==='Solar Panels'?'W':'LS',r.name==='Solar Panels'?money(String(s.panelSellingRate??44)):money(r.sellingExcludingGst),money(r.sellingExcludingGst),r.gstRate.replace('%',''),money(r.gst),money(r.payable)])});
@@ -26,7 +27,7 @@ export function ublIpoSamplePdf(s:ReturnType<typeof ublIpoSample>, kind:'ipo'|'p
   ['Solar panel sales tax @10%',right(s.billing[0].gst)],
   ['Installations sales tax @18%',right(s.billing[1].gst)],
   ['GRAND TOTAL (PKR)',{content:money(s.totalPayable),styles:{halign:'right',fontStyle:'bold'}}],
-  ['Remarks',{content:'Panel wattage is subject to availability. Confirm actual installed wattage against the verified IRR before invoicing. Panel invoicing uses actual watts at the agreed rate; installations balance the approved total. Cable adjustments require separate authorization. '+(s.documentStatus==='Historical registered'?'Historical registration; no invoice or Accounts handoff.':'Review sample - not issued.'),styles:{halign:'left'}}]
+  ['Remarks',{content:'Panel wattage is subject to availability. Confirm actual installed wattage against the verified IRR before invoicing. Panel invoicing uses actual watts at the agreed rate; installations balance the approved total. Cable adjustments require separate authorization. '+(s.documentStatus==='Historical registered'?'Historical registration; no invoice or Accounts handoff.':workflow?'IPO submitted to Accounts; invoice and confirmed BOQ issuance remain separate.':'Review sample - not issued.'),styles:{halign:'left'}}]
  ]});
  pdf.addPage();drawReportLogo(pdf);pdf.setFontSize(12);pdf.text('PEACHTREE DIVISION',14,38);pdf.setFontSize(9);pdf.text('POWER ZONE ENGINEERING & SERVICES (PVT) LIMITED',14,44);
  autoTable(pdf,{startY:50,theme:'plain',styles:{fontSize:9,cellPadding:2},body:[['Job / IPO',`CHP-${s.legacyIpoNumber}`],['Customer PO',s.poNumber],['Customer',s.customer],['Site / branch',`${s.siteName} / ${s.branchCode}`],['Configuration / pricing stage',`${s.configuration} / ${stage}`],['Entry basis','Selling values excluding tax'],['Quotation type','UBL Solar - Show Sales Tax Separately']]});

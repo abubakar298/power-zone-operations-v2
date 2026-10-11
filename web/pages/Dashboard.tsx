@@ -1,3 +1,4 @@
+import {UblWorkflow} from './UblWorkflow.js';
 import {AccountsWorkspace} from './AccountsWorkspace.js';
 import {InventoryWorkspace} from './InventoryWorkspace.js';
 import {confirmLeaveWorkspace} from "../hooks/useUnsavedChanges.js";
@@ -41,7 +42,7 @@ export function Dashboard({
   const [menuOpen, setMenuOpen] = useState(false),
     [mobileOpen, setMobileOpen] = useState(false);
   const [view, setView] = useState<
-    | "ubl" | "projects" | "documents" | "newboq" | "customers" | "rates"
+    | "ubl-workflow" | "ubl" | "projects" | "documents" | "newboq" | "customers" | "rates"
     | "dashboard"
     | "account"
     | "masters"
@@ -118,7 +119,7 @@ export function Dashboard({
     .toUpperCase();
   function navigate(
     next:
-      | "ubl" | "projects" | "documents" | "newboq" | "customers" | "rates"
+      | "ubl-workflow" | "ubl" | "projects" | "documents" | "newboq" | "customers" | "rates"
     | "dashboard"
       | "account"
       | "masters"
@@ -148,6 +149,7 @@ export function Dashboard({
   useEffect(()=>{
     function followHash(){
     const params=new URLSearchParams(window.location.hash.slice(1)),destination=params.get("workspace");
+    if(destination==="ubl-workflow"&&["Admin","Management","Coordinator","Design","Operations","Accounts"].includes(session.user.role)){setView("ubl-workflow");return;}
     if(!canUseLibrary || !["dashboard","projects","documents","ubl"].includes(destination??""))return;
     setView(destination as "dashboard"|"projects"|"documents"|"ubl");
     const document=params.get("document");if(document&&/^[0-9a-f-]{36}$/i.test(document))setLinkedDocumentId(document);
@@ -223,6 +225,7 @@ export function Dashboard({
               Team access
             </button>
           )}
+          {["Admin","Management","Coordinator","Design","Operations","Accounts"].includes(session.user.role)&&<button className={view==="ubl-workflow"?"nav-active":""} aria-current={view==="ubl-workflow"?"page":undefined} onClick={()=>navigate("ubl-workflow")}><Icon name="file"/><span>UBL Site Workflow</span></button>}
           <div className="nav-divider" />
           <div className="nav-label">PROJECT OPERATIONS</div>
           <div className="upcoming-nav" aria-label="Project workspaces">
@@ -330,7 +333,7 @@ export function Dashboard({
           <span className="breadcrumb">
             Workspace <span aria-hidden="true">/</span>{" "}
             <strong>
-              {["projects","documents","newboq","customers","rates","ubl"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master",ubl:"UBL Solar"} as Record<string,string>)[view] : view === "dashboard"
+              {["projects","documents","newboq","customers","rates","ubl","ubl-workflow"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master",ubl:"UBL Solar","ubl-workflow":"UBL Site Workflow"} as Record<string,string>)[view] : view === "dashboard"
                 ? isCoordinator ? "My Workspace" : "Dashboard"
                 : view === "design"
                   ? "Design workspace"
@@ -393,7 +396,7 @@ export function Dashboard({
             <div>
               <span className="eyebrow">POWER ZONE OPERATIONS</span>
               <h1>
-                {["projects","documents","newboq","customers","rates","ubl"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master",ubl:"UBL Solar"} as Record<string,string>)[view] : view === "dashboard"
+                {["projects","documents","newboq","customers","rates","ubl","ubl-workflow"].includes(view) ? ({projects:"Projects",documents:"Documents",newboq:"New BOQ",customers:"Customers & Sites",rates:"Rate Master",ubl:"UBL Solar","ubl-workflow":"UBL Site Workflow"} as Record<string,string>)[view] : view === "dashboard"
                   ? isCoordinator ? "My Workspace" : `Welcome, ${session.user.displayName}.`
                   : view === "design"
                     ? "Design workspace"
@@ -418,7 +421,7 @@ export function Dashboard({
                                       : "My account"}
               </h1>
               <p className="dashboard-intro">
-                {["projects","documents","newboq","customers","rates","ubl"].includes(view) ? "Select the relevant customer, site or document to continue your work." : view === "dashboard"
+                {["projects","documents","newboq","customers","rates","ubl","ubl-workflow"].includes(view) ? "Select the relevant customer, site or document to continue your work." : view === "dashboard"
                   ? session.user.role === "Design"
                     ? "Prepare technical surveys and send them to Coordination."
                     : session.user.role === "Inventory"
@@ -569,6 +572,7 @@ export function Dashboard({
           {["masters","customers","rates"].includes(view) && (
             <Masters key={view} initialKind={view==="rates"?"rates":"customers"} allowedKinds={view==="customers"?["customers","sites"]:view==="rates"?["rates","items","brands","rules"]:undefined} session={session} onLogout={onLogout} onOpenUbl={['Admin','Management'].includes(session.user.role)?()=>navigate("ubl"):undefined} />
           )}
+          {view === "ubl-workflow"&&<UblWorkflow session={session}/>}
           {view === "ubl"&&["Admin","Management"].includes(session.user.role)&&<UblConfigurations session={session} onBack={()=>navigate("customers")}/>}
           {view === "account" && (
             <div

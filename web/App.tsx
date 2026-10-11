@@ -15,7 +15,7 @@ type State =
 export function App() {
   const [notificationLink] = useState(()=>{
     const hash=window.location.hash,params=new URLSearchParams(hash.slice(1));
-    return /^#notification=[0-9a-f-]{36}$/i.test(hash)||["dashboard","projects","documents","ubl"].includes(params.get("workspace")??"")?hash:"";
+    return /^#notification=[0-9a-f-]{36}$/i.test(hash)||["dashboard","projects","documents","ubl","ubl-workflow"].includes(params.get("workspace")??"")?hash:"";
   });
   const [state, setState] = useState<State>({ kind: "loading" });
   const [linkPage, setLinkPage] = useState(
