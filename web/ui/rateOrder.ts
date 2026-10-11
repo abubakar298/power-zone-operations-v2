@@ -7,7 +7,7 @@ function rank(key: string): number[] {
     const capacity = Number(k.match(/(?:hyb-(?:sp|3p)-)(\d+)/)?.[1] ?? size);
     return [0, 0, capacity];
   }
-  if (/bat-|battery/.test(k) && !/cable|bms/.test(k)) return [0, /lv|low voltage/.test(k) ? 1 : 2, size];
+  if (/bat-|battery/.test(k) && !/cable|synchron/.test(k)) return [0, /lv|low voltage/.test(k) ? 1 : 2, size];
   if (/bms/.test(k)) return [0, /lv|low voltage/.test(k) ? 3 : 4, size];
   if (/cable/.test(k)) {
     const family = /earthing|earth cable/.test(k) ? 1 : /dc/.test(k) ? 0 : /4c|4.core/.test(k) ? 3 : 2;
