@@ -6,6 +6,7 @@ import { transaction } from "../db/transaction.js";
 import { HttpError } from "../http/errors.js";
 import { fingerprint } from "../boq/repository.js";
 import { phaseBudgets } from "../director/repository.js";
+import { ublIpoSample } from "../ubl/ipo-sample.js";
 import { DepartmentRepository } from "../departments/repository.js";
 export const phases = [
   "Solar Panels",
@@ -247,6 +248,7 @@ export class AccountsRepository {
         "Inventory reconciliation has not been received by Accounts.",
       );
     let lines: any[], selling: string, basis: string;
+    let phaseSelling: Record<string, string> = {};
     if (/^ubl:\d+$/.test(key)) {
       const s = (
         await this.pool.query(
@@ -256,6 +258,14 @@ export class AccountsRepository {
       ).rows[0];
       if (!s?.baseline) throw new HttpError(404, "Saved budget unavailable.");
       selling = s.baseline.sellingExcludingGst;
+      const document = (await this.pool.query(
+        "SELECT snapshot FROM ubl_site_document_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1", [key.slice(4)],
+      )).rows[0];
+      if (document) {
+        const pt = ublIpoSample({ ...document.snapshot, status: "Active" });
+        phaseSelling = Object.fromEntries(pt.phases.map(p => [p.name, p.sellingExcludingGst]));
+        selling = pt.totalSellingExcludingGst;
+      }
       lines = s.baseline.items.map((l: any) => ({
         key: l.item,
         cost: String(l.total_ex_gst),
@@ -295,6 +305,8 @@ export class AccountsRepository {
       ).rows[0];
       if (!b) throw new HttpError(409, "Saved BOQ budget unavailable.");
       selling = i.snapshot.allocation.subtotal;
+      if (i.snapshot.peachtree?.taxMode !== "Tax Included")
+        phaseSelling = Object.fromEntries((i.snapshot.peachtree?.phases ?? []).map((p: any) => [p.name, p.amount]));
       const savedPhases = phaseBudgets(
         b.snapshot,
         [],
@@ -394,6 +406,7 @@ export class AccountsRepository {
       entry: irr.snapshot.entry,
       reconciliation: irr.snapshot.reconciliation,
       selling,
+      phaseSelling,
       budget,
       epcBudget,
       basis,

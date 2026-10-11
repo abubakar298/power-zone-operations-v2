@@ -145,12 +145,18 @@ export function ClosureCostTables({
       <td className="pz-number">
         {totalRow && name === "Total"
           ? markupPercent(job.selling, b)
-          : "Not available"}
+          : markupPercent(name === "BESS subtotal"
+              ? (job.phaseSelling && ["Inverter", "Batteries", "BMS"].every(p => job.phaseSelling[p] != null)
+                  ? ["Inverter", "Batteries", "BMS"].reduce((v, p) => v.add(job.phaseSelling[p]), new Decimal(0)).toString() : null)
+              : job.phaseSelling?.[name], b)}
       </td>
       <td className="pz-number">
         {totalRow && name === "Total"
           ? markupPercent(job.selling, a?.toString())
-          : "Not available"}
+          : markupPercent(name === "BESS subtotal"
+              ? (job.phaseSelling && ["Inverter", "Batteries", "BMS"].every(p => job.phaseSelling[p] != null)
+                  ? ["Inverter", "Batteries", "BMS"].reduce((v, p) => v.add(job.phaseSelling[p]), new Decimal(0)).toString() : null)
+              : job.phaseSelling?.[name], a?.toString())}
       </td>
       <td className="pz-number">
         {totalRow && name === "Total" && average != null
