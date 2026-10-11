@@ -172,6 +172,24 @@ export class InventoryRepository {
     }
     return {reports:result,reference:'Given in bulk by Abu Bakar — 11 October 2026',sentToAccounts:false};
   }
+  async confirmBulkEquipment(actor:string) {
+    const role=await this.access(actor,true);
+    if(!['Admin','Management'].includes(role))throw new HttpError(403,'Management access required to record this confirmation.');
+    const received=(await this.list(actor)).filter(r=>r.has_bulk_source);
+    if(received.length!==22)throw new HttpError(409,'Receive all 22 bulk IRRs before recording this confirmation.');
+    const results=[];
+    for(const r of received){
+      const d=await this.detail(actor,r.id),latest=d.versions[0];
+      if(latest.snapshot.source.bulkIrr.equipmentConfirmation==='abu-bakar-equipment-panels-2026-10-11'){results.push({jobId:r.job_id,unchanged:true});continue;}
+      if(latest.stage!=='Draft Reconciliation')throw new HttpError(409,`${r.job_id} is not an Inventory draft; review its workflow before changing it.`);
+      const job=await this.job(actor,r.job_key),entry:ReportEntry=structuredClone(latest.snapshot.entry);
+      for(const l of job.lines)if(/^(HYB-|HV 5kWh battery$|HV BMS$|UBL genset synchronization$)/.test(l.key))entry.usage[l.key]=l.approved;
+      entry.panelCount=job.bulkEntry!.panelCount;entry.panelWattage=job.bulkEntry!.panelWattage;
+      entry.remarks=entry.remarks.split('\n').filter((line:string)=>!line.startsWith('Unconfirmed items / IRR evidence needed:')).join('\n')+'\n'+job.source.bulkIrr.flags.filter((f:string)=>f.startsWith('Panel count and watts')||f.startsWith('Inverter, battery')||f.startsWith('Unconfirmed items / IRR evidence needed:')).join('\n');
+      results.push({jobId:r.job_id,...await this.save(actor,{jobKey:r.job_key,version:latest.version,stage:'Draft Reconciliation',entry,requestKey:randomUUID()})});
+    }
+    return {reports:results,sentToAccounts:false};
+  }
   async list(actor: string) {
     await this.access(actor);
     return (

@@ -37,6 +37,7 @@ export function inventoryHttp(
   r.get("/reports/:id", async (req, res) =>
     res.json(await repo.detail(req.authSession!.user.id, id(req.params.id))),
   );
+  r.post("/bulk-confirm-equipment",async(req,res)=>res.json(await repo.confirmBulkEquipment(req.authSession!.user.id)));
   r.post("/bulk-received", async(req,res)=>res.json(await repo.receiveBulk(req.authSession!.user.id)));
   r.post("/reports", async (req, res) => {
     const input = z
