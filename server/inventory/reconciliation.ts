@@ -25,6 +25,7 @@ export const entrySchema = z
     end: z.string().max(10),
     panelCount: qty,
     panelWattage: qty,
+    installedWatts: qty.optional(),
     usage: z.record(z.string().max(200), qty),
     remarks: z.string().max(4000),
     expectedReturns: z.string().max(2000),
@@ -47,7 +48,7 @@ export function reconcile(lines: InventoryLine[], entry: ReportEntry) {
   const watts =
     entry.panelCount && entry.panelWattage
       ? D(entry.panelCount).mul(entry.panelWattage).toString()
-      : null;
+      : entry.installedWatts || null;
   const rows = lines.map((l) => {
     const actual = l.group === "watt" ? watts : entry.usage[l.key];
     const installed = actual === undefined || actual === "" ? null : actual;

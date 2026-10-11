@@ -286,7 +286,7 @@ export function InventoryWorkspace({
       .filter(
         (r) =>
           r.stage !== "Sent to Accounts" &&
-          (r.stage !== "IRR Received" || r.has_files),
+          (r.stage !== "IRR Received" || r.has_files || r.has_bulk_source),
       )
       .map((r) => ({
         ...r,
@@ -352,10 +352,12 @@ export function InventoryWorkspace({
           {error}
         </p>
       )}
+      {!job && !accounts && !ops && ['Admin','Management'].includes(session.user.role) && tab==='Receipts & Reconciliation' && <div className="pz-panel"><p>Verified bulk IRRs · Given in bulk by Abu Bakar — 11 October 2026. Original source preserved; received and draft report versions only.</p><Button variant="secondary" loading={busy} onClick={async()=>{setBusy(true);setErrorAction('bulk');setError('');try{const r=await api<any>('/inventory-reconciliation/bulk-received',{csrf:session.csrfToken,body:{}});setMessage(`${r.reports.length} IRRs received and reconciliation reports prepared. None sent to Accounts.`);await load();}catch(e){setError((e as Error).message)}finally{setBusy(false)}}}>Receive and prepare 22 verified IRRs</Button>{errorAction==='bulk'&&error&&<p role="alert" className="form-error">{error}</p>}</div>}
       {message && <p role="status">{message}</p>}
       {!loaded && !error && <p role="status">Loading Inventory records…</p>}
       {job ? (
         <article className="detail-panel pz-irr-report">
+          {job.source.bulkIrr && <div className="pz-panel"><strong>{job.source.bulkIrr.reference}</strong><p><a href={job.source.bulkIrr.sourceUrl} target="_blank" rel="noreferrer">Original bulk IRR source</a> · Supplied by Abu Bakar; not a site-team submission.</p><details><summary>Review flags and unconfirmed items</summary><ul>{job.source.bulkIrr.flags.map((f:string)=><li key={f}>{f}</li>)}</ul><p>Panel count and individual panel wattage await IRR evidence; total installed watts are recorded from the verified summary. No invoice adjustment has been posted.</p></details><details><summary>Original received quantities</summary><div className="pz-table-scroll"><table><thead><tr><th>Original item / unit</th><th className="numeric">Used quantity</th></tr></thead><tbody>{job.source.bulkIrr.originalRows.map((r:any[],i:number)=><tr key={i}><td>{r[1]}</td><td className="numeric">{decimalDisplay(String(r[2]))}</td></tr>)}</tbody></table></div><p>Corrections supplied later by Abu Bakar are recorded separately above; original source quantities remain in history.</p></details></div>}
           <div className="section-heading">
             <div>
               <h3>
@@ -590,6 +592,7 @@ export function InventoryWorkspace({
                 </Field>
                 {job.lines.some((l: InventoryLine) => l.group === "watt") && (
                   <>
+                    {job.source.bulkIrr && <Field id="irr-total-watts" label="Verified total installed watts"><input id="irr-total-watts" type="number" min="0" value={entry.installedWatts??''} onChange={e=>update('installedWatts',e.target.value)}/></Field>}
                     <Field id="irr-panels" label="Installed panel quantity">
                       <input
                         id="irr-panels"
@@ -1024,7 +1027,7 @@ export function InventoryWorkspace({
                       reports.filter(
                         (r) =>
                           r.stage === b &&
-                          (b !== "IRR Received" || r.has_files),
+                          (b !== "IRR Received" || r.has_files || r.has_bulk_source),
                       ).length
                     }
                   </Button>
@@ -1036,7 +1039,7 @@ export function InventoryWorkspace({
                     <tr>
                       <th>Job / Site</th>
                       <th>Stage</th>
-                      <th>Received / saved</th>
+                      <th>Cable adjustment excl. GST</th><th>Review</th><th>Received / saved</th>
                       <th>Action</th>
                     </tr>
                   </thead>
@@ -1058,10 +1061,11 @@ export function InventoryWorkspace({
                             {r.site_name}
                           </td>
                           <td>
-                            {r.stage === "IRR Received" && !r.has_files
+                            {r.stage === "IRR Received" && !r.has_files && !r.has_bulk_source
                               ? "Awaiting attachment"
                               : r.stage}
                           </td>
+                          <td className="numeric">{r.has_bulk_source ? money(r.cable_net??'0') : '—'}<br/><span className="pz-caption">{r.has_bulk_source?'Potential adjustment':''}</span></td><td>{r.has_bulk_source?<><strong>Review required</strong><br/><span className="pz-caption">{r.bulk_reference}<br/>Invoice differences remain under review</span></>:'—'}</td>
                           <td>
                             {new Date(r.created_at).toLocaleString("en-PK", {
                               timeZone: "Asia/Karachi",

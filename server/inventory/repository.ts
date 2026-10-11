@@ -10,6 +10,7 @@ import {
   type InventoryLine,
   type ReportEntry,
 } from "./reconciliation.js";
+import { bulkEntry, verifiedGroups, BULK_IRR_ID } from "./bulk-irr.js";
 export class InventoryRepository {
   constructor(private pool: Pool) {}
   async access(actor: string, write = false) {
@@ -46,6 +47,7 @@ export class InventoryRepository {
   async job(actor: string, key: string) {
     await this.access(actor);
     let lines: InventoryLine[], title: string, jobId: string, source: any;
+    let bulk: ReturnType<typeof bulkEntry> = null;
     if (/^ubl:\d+$/.test(key)) {
       const s = (
         await this.pool.query(
@@ -75,11 +77,11 @@ export class InventoryRepository {
         let tax = "18";
         if (l.item === "Solar panels") {
           tax = "10";
-          if (s.legacy_ipo_number === "320") rate = "44";
+          rate = s.pricing_stage === "Revised" ? "44" : "33";
         }
-        if (s.legacy_ipo_number === "320") {
+        {
           if (l.item === "Elevated structure") rate = "26";
-          if (l.item === "Installation including delivery") rate = "5.75";
+          if (l.item === "Installation including delivery" && s.legacy_ipo_number === "320") rate = "5.75";
           const refs: Record<string, string> = {
             "DC cable red 6mm²": new Decimal("188080")
               .div("360")
@@ -93,6 +95,7 @@ export class InventoryRepository {
               .div("10")
               .div("1.18")
               .toString(),
+            "16mm² 4C load cable": "3220",
             "25mm² 4C load cable": new Decimal("118071")
               .div("20")
               .div("1.18")
@@ -124,18 +127,9 @@ export class InventoryRepository {
           group,
         };
       });
-      // Preserve the original separate DC BOQ lines, but allow the legacy report's combined measurement without inventing a colour split.
-      if (s.legacy_ipo_number === "320") {
-        const red = lines.find((l) => l.key === "DC cable red 6mm²")!,
-          black = lines.find((l) => l.key === "DC cable black 6mm²")!;
-        lines = lines.filter((l) => l !== red && l !== black);
-        lines.push({
-          ...red,
-          key: "DC red + black combined",
-          description: "DC red + black 6mm² combined",
-          approved: String(Number(red.approved) + Number(black.approved)),
-        });
-      }
+      const progress=(await this.pool.query("SELECT snapshot FROM project_source_links WHERE job_key=$1",[key])).rows[0]?.snapshot?.site;
+      bulk=bulkEntry(String(s.legacy_ipo_number),lines,{start:progress?.project_start_date,end:progress?.completion_date});
+      if(bulk) source.bulkIrr=bulk.provenance;
     } else if (/^ipo:[0-9a-f-]{36}$/.test(key)) {
       const i = (
         await this.pool.query(
@@ -178,15 +172,36 @@ export class InventoryRepository {
       title,
       source,
       lines,
+      bulkEntry: bulk?.entry,
       rateBasis:
         "Original proposal reference; potential adjustments are not approved invoice values",
     };
+  }
+  async receiveBulk(actor:string) {
+    const role=await this.access(actor,true);
+    if(!['Admin','Management'].includes(role))throw new HttpError(403,'Management access required for the bulk source import.');
+    const result=[];
+    for(const group of verifiedGroups){
+      const site=(await this.pool.query("SELECT site_id FROM ubl_site_orders WHERE legacy_ipo_number=$1 AND status='Active'",[group.ipo])).rows[0];
+      if(!site)throw new HttpError(422,`Active job CHP-${group.ipo} not found.`);
+      const key='ubl:'+site.site_id,job=await this.job(actor,key);
+      const existing=(await this.pool.query("SELECT r.id,v.version,v.stage,v.snapshot FROM inventory_reports r JOIN LATERAL(SELECT * FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true WHERE r.job_key=$1",[key])).rows[0];
+      if(existing){
+        if(existing.snapshot.source?.bulkIrr?.importId!==BULK_IRR_ID)throw new HttpError(409,`CHP-${group.ipo} already has an Inventory report; review it before importing.`);
+        if(existing.stage!=='IRR Received'){result.push({jobId:job.jobId,stage:existing.stage,unchanged:true});continue;}
+      }
+      let version=existing?.version??0;
+      if(!existing){await this.save(actor,{jobKey:key,version:0,stage:'IRR Received',entry:job.bulkEntry!,requestKey:randomUUID()});version=1;}
+      const saved=await this.save(actor,{jobKey:key,version,stage:'Draft Reconciliation',entry:job.bulkEntry!,requestKey:randomUUID()});
+      result.push({jobId:job.jobId,...saved});
+    }
+    return {reports:result,reference:'Given in bulk by Abu Bakar — 11 October 2026',sentToAccounts:false};
   }
   async list(actor: string) {
     await this.access(actor);
     return (
       await this.pool.query(
-        "SELECT r.id,r.job_key,v.version,v.stage,EXISTS(SELECT 1 FROM inventory_report_files f WHERE f.report_id=r.id) AS has_files,v.created_at,v.snapshot->>'jobId' AS job_id,v.snapshot->>'title' AS site_name,u.display_name AS recorded_by FROM inventory_reports r JOIN LATERAL(SELECT * FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true JOIN users u ON u.id=v.created_by WHERE r.job_key NOT LIKE 'archived-sample:%' ORDER BY v.created_at DESC",
+        "SELECT r.id,r.job_key,v.version,v.stage,EXISTS(SELECT 1 FROM inventory_report_files f WHERE f.report_id=r.id) AS has_files,(v.snapshot->'source'->'bulkIrr' IS NOT NULL) AS has_bulk_source,v.snapshot->'source'->'bulkIrr'->'flags' AS review_flags,v.snapshot->'source'->'bulkIrr'->>'reference' AS bulk_reference,(SELECT x->>'net' FROM jsonb_array_elements(v.snapshot->'reconciliation'->'sections') x WHERE x->>'group'='cable') AS cable_net,v.created_at,v.snapshot->>'jobId' AS job_id,v.snapshot->>'title' AS site_name,u.display_name AS recorded_by FROM inventory_reports r JOIN LATERAL(SELECT * FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true JOIN users u ON u.id=v.created_by WHERE r.job_key NOT LIKE 'archived-sample:%' ORDER BY v.created_at DESC",
       )
     ).rows;
   }
