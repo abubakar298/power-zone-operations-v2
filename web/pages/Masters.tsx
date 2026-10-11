@@ -1,3 +1,4 @@
+import { compareRateItems } from "../ui/rateOrder.js";
 import {Button} from "../ui/Button.js";
 import { CustomerImport } from "../components/CustomerImport.js";
 import { useEffect, useState, type FormEvent } from "react";
@@ -211,6 +212,7 @@ export function Masters({
           .includes(query.toLowerCase()),
       ),
     );
+  if (kind === "rates") rows.sort((a, b) => compareRateItems(String(a.key), String(b.key)));
   return (
     <section className="masters" aria-label="Master data">
       <div
