@@ -14,6 +14,9 @@ test('36 immutable historical IPO/PT registrations reconcile and preserve except
   for(const [id,role] of [[actor,'Management'],[coord,'Coordinator']])await db.pool.query('INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$5)',[id,`${id}@example.test`,role,'fixture-only',role]);
   const repo=new UblRepository(db.pool),sites=await repo.sites(actor);
   assert.equal(sites.filter(s=>s.document_version===1).length,36);
+  const jatli=sites.find(s=>s.legacy_ipo_number==='298');
+  assert.ok(jatli.irr_review_flags.some((f:string)=>f.includes('7,788.30')&&f.startsWith('Invoice reconciliation discrepancy')));
+  assert.equal(sites.filter(s=>s.irr_review_flags.some((f:string)=>f.startsWith('Invoice reconciliation discrepancy'))).length,1);
   for(const site of sites){
    if(site.status!=='Active'){await assert.rejects(repo.document(actor,site.site_id),/No registered/);continue;}
    const {snapshot:s}=await repo.document(actor,site.site_id);

@@ -17,7 +17,7 @@ export class UblRepository {
  }
  async sites(actor:string){
   await this.role(actor);
-  return (await this.pool.query(`SELECT o.*,o.po_issued_date::text AS po_issued_date,(SELECT max(d.version) FROM ubl_site_document_versions d WHERE d.site_id=o.site_id) AS document_version,v.snapshot->'source'->'bulkIrr'->'flags' AS irr_review_flags FROM ubl_effective_site_orders o LEFT JOIN inventory_reports r ON r.job_key='ubl:'||o.site_id LEFT JOIN LATERAL(SELECT snapshot FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true ORDER BY source_row`)).rows;
+  return (await this.pool.query(`SELECT o.*,o.po_issued_date::text AS po_issued_date,(SELECT max(d.version) FROM ubl_site_document_versions d WHERE d.site_id=o.site_id) AS document_version,COALESCE(v.snapshot->'source'->'bulkIrr'->'flags','[]'::jsonb)||COALESCE((SELECT jsonb_agg(a.message ORDER BY a.created_at) FROM ubl_documentation_alerts a WHERE a.site_id=o.site_id AND a.status='Open'),'[]'::jsonb) AS irr_review_flags FROM ubl_effective_site_orders o LEFT JOIN inventory_reports r ON r.job_key='ubl:'||o.site_id LEFT JOIN LATERAL(SELECT snapshot FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true ORDER BY source_row`)).rows;
  }
  async document(actor:string,siteId:number){
   await this.role(actor);
