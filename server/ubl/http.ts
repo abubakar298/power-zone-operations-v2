@@ -2,6 +2,8 @@ import {Router,type RequestHandler} from 'express';
 import {z} from 'zod';
 import {equalSecrets} from '../auth/crypto.js';
 import {HttpError} from '../http/errors.js';
+import {ublIpoSample} from './ipo-sample.js';
+import {ublIpoSamplePdf} from './ipo-sample-report.js';
 import {UblRepository} from './repository.js';
 export function ublHttp(repo:UblRepository,requireSession:RequestHandler){
  const r=Router();r.use(requireSession);
@@ -9,6 +11,13 @@ export function ublHttp(repo:UblRepository,requireSession:RequestHandler){
  r.get('/',async(req,res)=>res.json({configurations:await repo.list(req.authSession!.user.id)}));
  r.get('/closed-jobs',async(req,res)=>res.json(await repo.closedJobs(req.authSession!.user.id)));
  r.get('/sites',async(req,res)=>res.json({sites:await repo.sites(req.authSession!.user.id)}));
+ r.get('/sites/:siteId/:kind.pdf',async(req,res)=>{
+  const id=z.coerce.number().int().positive().safeParse(req.params.siteId),kind=z.enum(['ipo','pt','pack']).safeParse(req.params.kind);
+  if(!id.success||!kind.success)throw new HttpError(404,'UBL document not found.');
+  const row=await repo.document(req.authSession!.user.id,id.data),s=row.snapshot;
+  const sample=ublIpoSample({...s,status:'Active',documentStatus:s.status,agreedWatts:s.agreedWatts,panelSellingRate:s.panelSellingRate});
+  res.set({'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="CHP-${s.legacy_ipo_number}-${kind.data}-v${row.version}.pdf"`,'Cache-Control':'private, no-store'}).send(ublIpoSamplePdf(sample,kind.data));
+ });
  r.get('/:id/source.pdf',async(req,res)=>{const source=await repo.source(req.authSession!.user.id,config(req.params.id));res.set({'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="${source.filename}"`,'Cache-Control':'private, no-store'}).send(source.content);});
  r.get('/:id',async(req,res)=>res.json(await repo.detail(req.authSession!.user.id,config(req.params.id))));
  r.post('/:id/budgets',async(req,res)=>{
