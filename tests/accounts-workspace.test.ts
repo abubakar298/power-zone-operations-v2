@@ -84,7 +84,10 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
     });
     await assert.rejects(repo.job(users.Inventory, j.key), /Accounts access/);
     const job = await repo.job(users.Accounts, j.key);
-    assert.deepEqual(job.configurationComparison,{closedJobs:0,averageActualMarkupPercent:null});
+    assert.deepEqual(job.configurationComparison, {
+      closedJobs: 0,
+      averageActualMarkupPercent: null,
+    });
     assert.equal(job.budget.Inverter, "760028.00");
     assert.equal(job.budget.Batteries, "1855696.00");
     const input = {
@@ -101,6 +104,27 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       ptReference: "PT fixture reference",
       requestKey: randomUUID(),
     };
+    await assert.rejects(
+      repo.saveClosure(users.Accounts, {
+        ...input,
+        epcDetails: true,
+        epcAggregate: "1",
+        stage: "Awaiting Management",
+        requestKey: randomUUID(),
+      }),
+      /EPC category costs must equal/,
+    );
+    await assert.rejects(
+      repo.saveClosure(users.Accounts, {
+        ...input,
+        epc: {},
+        epcDetails: true,
+        epcAggregate: "100",
+        stage: "Awaiting Management",
+        requestKey: randomUUID(),
+      }),
+      /Enter every EPC category/,
+    );
     const saved = await repo.saveClosure(users.Accounts, input);
     assert.equal((await repo.saveClosure(users.Accounts, input)).id, saved.id);
     await assert.rejects(
@@ -155,16 +179,75 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       requestKey: randomUUID(),
     });
     assert.equal(closed.stage, "Closed");
-    assert.deepEqual((await repo.job(users.Accounts,j.key)).configurationComparison,{closedJobs:0,averageActualMarkupPercent:null},"Current job is excluded from its peer comparison");
-    const peer=(await db.pool.query("SELECT site_id FROM ubl_site_orders WHERE configuration_id=(SELECT configuration_id FROM ubl_site_orders WHERE site_id=$1) AND site_id<>$1 LIMIT 1",[j.key.slice(4)])).rows[0];
-    await db.pool.query("INSERT INTO accounts_job_closures(id,job_key,report_version_id,version,stage,snapshot,request_key,created_by) VALUES($1,$2,$3,1,'Closed',$4,$5,$6)",[randomUUID(),'ubl:'+peer.site_id,closed.report_version_id,{summary:{actualMarkupPercent:'21.11'}},randomUUID(),users.Management]);
-    assert.deepEqual((await repo.job(users.Accounts,j.key)).configurationComparison,{closedJobs:1,averageActualMarkupPercent:'21.11'});
+    assert.deepEqual(
+      (await repo.job(users.Accounts, j.key)).configurationComparison,
+      { closedJobs: 0, averageActualMarkupPercent: null },
+      "Current job is excluded from its peer comparison",
+    );
+    const peer = (
+      await db.pool.query(
+        "SELECT site_id FROM ubl_site_orders WHERE configuration_id=(SELECT configuration_id FROM ubl_site_orders WHERE site_id=$1) AND site_id<>$1 LIMIT 1",
+        [j.key.slice(4)],
+      )
+    ).rows[0];
+    await db.pool.query(
+      "INSERT INTO accounts_job_closures(id,job_key,report_version_id,version,stage,snapshot,request_key,created_by) VALUES($1,$2,$3,1,'Closed',$4,$5,$6)",
+      [
+        randomUUID(),
+        "ubl:" + peer.site_id,
+        closed.report_version_id,
+        {
+          summary: {
+            actual: "100000",
+            actualMarkup: "21110",
+            actualMarkupPercent: "21.11",
+          },
+        },
+        randomUUID(),
+        users.Management,
+      ],
+    );
+    assert.deepEqual(
+      (await repo.job(users.Accounts, j.key)).configurationComparison,
+      { closedJobs: 1, averageActualMarkupPercent: "21.11" },
+    );
+    const peer2 = (
+      await db.pool.query(
+        "SELECT site_id FROM ubl_site_orders WHERE configuration_id=(SELECT configuration_id FROM ubl_site_orders WHERE site_id=$1) AND site_id<>$1 AND site_id<>$2 LIMIT 1",
+        [j.key.slice(4), peer.site_id],
+      )
+    ).rows[0];
+    await db.pool.query(
+      "INSERT INTO accounts_job_closures(id,job_key,report_version_id,version,stage,snapshot,request_key,created_by) VALUES($1,$2,$3,1,'Closed',$4,$5,$6)",
+      [
+        randomUUID(),
+        "ubl:" + peer2.site_id,
+        closed.report_version_id,
+        {
+          summary: {
+            actual: "300000",
+            actualMarkup: "150000",
+            actualMarkupPercent: "50.00",
+          },
+        },
+        randomUUID(),
+        users.Management,
+      ],
+    );
+    assert.deepEqual(
+      (await repo.job(users.Accounts, j.key)).configurationComparison,
+      { closedJobs: 2, averageActualMarkupPercent: "42.78" },
+      "Average is weighted by actual cost, not an average of percentages",
+    );
 
     const portfolio = await new UblRepository(db.pool).closedJobs(
       users.Management,
     );
-    assert.equal(portfolio.jobs.length, 2);
-    assert.equal(portfolio.jobs.find((x:any)=>x.id===closed.id)?.actualCost, closed.snapshot.summary.actual);
+    assert.equal(portfolio.jobs.length, 3);
+    assert.equal(
+      portfolio.jobs.find((x: any) => x.id === closed.id)?.actualCost,
+      closed.snapshot.summary.actual,
+    );
     await assert.rejects(
       repo.returnReport(users.Accounts, {
         id: draft.reportId,

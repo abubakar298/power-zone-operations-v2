@@ -30,6 +30,7 @@ export const closureSchema = z
     actual: z.record(z.string(), amount.or(z.literal(""))),
     epc: z.record(z.string(), amount.or(z.literal(""))),
     epcAggregate: amount.or(z.literal("")).optional(),
+    epcDetails: z.boolean().optional(),
     remarks: z.string().trim().max(4000),
     acknowledgment: z.string().trim().max(1000),
     photos: z.string().trim().max(1000),
@@ -362,17 +363,25 @@ export class AccountsRepository {
           [key, key.slice(4)],
         )
       ).rows;
-      const percentages = peers
-        .map((r) => r.snapshot.summary.actualMarkupPercent)
-        .filter((v) => v !== null && v !== undefined);
+      const completePeers = peers.filter(
+        (r) =>
+          r.snapshot.summary.actual !== null &&
+          r.snapshot.summary.actual !== undefined &&
+          r.snapshot.summary.actualMarkup !== null &&
+          r.snapshot.summary.actualMarkup !== undefined,
+      );
+      const peerCost = completePeers.reduce(
+        (sum: Decimal, r: any) => sum.add(r.snapshot.summary.actual),
+        D("0"),
+      );
+      const peerMarkup = completePeers.reduce(
+        (sum: Decimal, r: any) => sum.add(r.snapshot.summary.actualMarkup),
+        D("0"),
+      );
       configurationComparison = {
-        closedJobs: percentages.length,
-        averageActualMarkupPercent: percentages.length
-          ? m(
-              percentages
-                .reduce((sum: Decimal, v: string) => sum.add(v), D("0"))
-                .div(percentages.length),
-            )
+        closedJobs: completePeers.length,
+        averageActualMarkupPercent: peerCost.gt(0)
+          ? m(peerMarkup.div(peerCost).mul(100))
           : null,
       };
     }
@@ -403,6 +412,15 @@ export class AccountsRepository {
     const complete = keys.every(
       (k) => (input.actual[k] ?? input.epc[k] ?? "") !== "",
     );
+    if (
+      input.epcDetails === true &&
+      input.stage === "Awaiting Management" &&
+      (!complete || !input.epcAggregate)
+    )
+      throw new HttpError(
+        400,
+        "Enter every EPC category and the PT EPC total when EPC details are selected.",
+      );
     const epcTotal = epcNames.reduce(
       (s, n) => s.add(input.epc[n] || "0"),
       D("0"),

@@ -10,6 +10,11 @@ import { confirmTransition } from "../confirm.js";
 import { quotationDisplayRows } from "../../server/commercial/quotation-rows.js";
 import { orderCustomerScopeLines } from "../../server/commercial/customer-scope.js";
 import { DocumentPreview } from "../components/DocumentPreview.js";
+import {
+  ClosureCostTables,
+  ClosureIndicators,
+  installationDays,
+} from "../components/ClosurePerformance.js";
 import { Decimal } from "decimal.js";
 const phases = ["Solar Panels", "Structure", "Inverter", "Batteries", "BMS"];
 const epcNames = [
@@ -21,9 +26,11 @@ const epcNames = [
 export function AccountsWorkspace({
   session,
   initialRecordId,
+  initialJobKey,
 }: {
   session: Session;
   initialRecordId?: string;
+  initialJobKey?: string;
 }) {
   const [tab, setTab] = useState(
       initialRecordId ? "IPO Review" : "My Workspace",
@@ -34,6 +41,7 @@ export function AccountsWorkspace({
     [job, setJob] = useState<any>(),
     [actual, setActual] = useState<Record<string, string>>({}),
     [epcAggregate, setEpcAggregate] = useState(""),
+    [epcDetails, setEpcDetails] = useState(false),
     [epc, setEpc] = useState<Record<string, string>>({}),
     [remarks, setRemarks] = useState(""),
     [ack, setAck] = useState(""),
@@ -47,7 +55,16 @@ export function AccountsWorkspace({
     [message, setMessage] = useState(""),
     [saved, setSaved] = useState(""),
     [legacy, setLegacy] = useState(false);
-  const input = { actual, epc, epcAggregate, remarks, ack, photos, pt };
+  const input = {
+    actual,
+    epc,
+    epcAggregate,
+    epcDetails,
+    remarks,
+    ack,
+    photos,
+    pt,
+  };
   const dirty = !!job && JSON.stringify(input) !== saved;
   useUnsavedChanges(dirty);
   const manager = ["Admin", "Management"].includes(session.user.role);
@@ -65,6 +82,7 @@ export function AccountsWorkspace({
     void load()
       .then(() => {
         if (initialRecordId) void openIpo(initialRecordId);
+        if (initialJobKey) void openJob(initialJobKey);
       })
       .catch((e) => setError(e.message));
   }, []);
@@ -143,7 +161,10 @@ export function AccountsWorkspace({
       const v = {
         actual: i?.actual ?? {},
         epc: i?.epc ?? {},
-        epcAggregate: i?.epcAggregate ?? "",
+        epcAggregate: i?.epcAggregate ?? j.history[0]?.snapshot.actualEpc ?? "",
+        epcDetails:
+          i?.epcDetails ??
+          epcNames.every((n) => i?.epc?.[n] !== undefined && i.epc[n] !== ""),
         remarks: i?.remarks ?? "",
         ack: i?.acknowledgment ?? "",
         photos: i?.photos ?? "",
@@ -153,6 +174,7 @@ export function AccountsWorkspace({
       setActual(v.actual);
       setEpc(v.epc);
       setEpcAggregate(v.epcAggregate);
+      setEpcDetails(v.epcDetails);
       setRemarks(v.remarks);
       setAck(v.ack);
       setPhotos(v.photos);
@@ -187,8 +209,9 @@ export function AccountsWorkspace({
           version: latest?.version ?? 0,
           stage,
           actual,
-          epc,
+          epc: epcDetails ? epc : {},
           epcAggregate,
+          epcDetails,
           remarks,
           acknowledgment: ack,
           photos,
@@ -261,15 +284,10 @@ export function AccountsWorkspace({
   let actualTotal: Decimal | null = null,
     epcTotal = new Decimal(0);
   try {
-    const splitComplete = epcNames.every(
-      (k) => epc[k] !== undefined && epc[k] !== "",
-    );
-    epcTotal = splitComplete
-      ? total(epc, epcNames)
-      : new Decimal(epcAggregate || "0");
+    epcTotal = new Decimal(epcAggregate || "0");
     if (
       phases.every((k) => actual[k] !== undefined && actual[k] !== "") &&
-      (splitComplete || epcAggregate !== "")
+      epcAggregate !== ""
     )
       actualTotal = total(actual, phases).add(epcTotal);
   } catch {}
@@ -756,226 +774,33 @@ export function AccountsWorkspace({
           </h3>
           <p>
             {latest?.stage ?? "New closure"} · {job.basis}
+            {latest && <> · Prepared by {latest.recorded_by}</>}
           </p>
           <p>
-            Installation: {job.entry.start} → {job.entry.end}
+            Installation: {job.entry.start} → {job.entry.end} · Net days:{" "}
+            {installationDays(job.entry) ?? "Not available"} (inclusive)
           </p>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>PT phase</th>
-                  <th>Budgeted cost, excluding GST</th>
-                  <th>Actual cost, excluding GST</th>
-                  <th>Variance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {phases.map((p) => (
-                  <tr key={p}>
-                    <th>{p}</th>
-                    <td className="pz-number">{money(job.budget[p])}</td>
-                    <td>
-                      <input
-                        aria-label={p + " actual cost"}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        disabled={readonly}
-                        value={actual[p] ?? ""}
-                        onChange={(e) =>
-                          setActual({ ...actual, [p]: e.target.value })
-                        }
-                      />
-                    </td>
-                    <td className="pz-number">
-                      {actual[p]
-                        ? money(
-                            new Decimal(actual[p])
-                              .sub(job.budget[p])
-                              .toString(),
-                          )
-                        : "Not entered"}
-                    </td>
-                  </tr>
-                ))}
-                <tr>
-                  <th>BESS subtotal</th>
-                  <td className="pz-number">
-                    {money(
-                      total(job.budget, [
-                        "Inverter",
-                        "Batteries",
-                        "BMS",
-                      ]).toString(),
-                    )}
-                  </td>
-                  <td className="pz-number">
-                    {["Inverter", "Batteries", "BMS"].every(
-                      (p) => actual[p] !== undefined && actual[p] !== "",
-                    )
-                      ? money(
-                          total(actual, [
-                            "Inverter",
-                            "Batteries",
-                            "BMS",
-                          ]).toString(),
-                        )
-                      : "Not entered"}
-                  </td>
-                  <td />
-                </tr>
-                <tr>
-                  <th>EPC</th>
-                  <td className="pz-number">{money(job.budget.EPC)}</td>
-                  <td className="pz-number">
-                    {epcAggregate !== "" ||
-                    epcNames.every((p) => epc[p] !== undefined && epc[p] !== "")
-                      ? money(epcTotal.toString())
-                      : "Not entered"}
-                  </td>
-                  <td />
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <Field
-            id="closure-epc-total"
-            label="EPC actual total, excluding GST"
-            hint="Save the known total while the category split is pending. The category split is optional. When provided, all categories must reconcile with this total."
-          >
-            <input
-              id="closure-epc-total"
-              type="number"
-              min="0"
-              step="0.01"
-              disabled={readonly}
-              value={epcAggregate}
-              onChange={(e) => setEpcAggregate(e.target.value)}
+          {manager && (
+            <ClosureIndicators
+              budget={budgetTotal.toString()}
+              actual={actualTotal?.toString() ?? null}
+              selling={job.selling}
+              average={job.configurationComparison?.averageActualMarkupPercent}
+              entry={job.entry}
             />
-          </Field>
-          <h3>EPC actual-cost details</h3>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>EPC category</th>
-                  <th>Budgeted cost</th>
-                  <th>Actual cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {epcNames.map((p) => (
-                  <tr key={p}>
-                    <th>{p}</th>
-                    <td className="pz-number">{money(job.epcBudget[p])}</td>
-                    <td>
-                      <input
-                        aria-label={p + " actual cost"}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        disabled={readonly}
-                        value={epc[p] ?? ""}
-                        onChange={(e) =>
-                          setEpc({ ...epc, [p]: e.target.value })
-                        }
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <h3>EPC variance · excluding GST</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Budgeted EPC</th>
-                <th>Actual EPC</th>
-                <th>Cost variance (actual − budget)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="pz-number">{money(job.budget.EPC)}</td>
-                <td className="pz-number">
-                  {actualTotal ? money(epcTotal.toString()) : "Not entered"}
-                </td>
-                <td className="pz-number">
-                  {actualTotal
-                    ? money(epcTotal.sub(job.budget.EPC).toString())
-                    : "Not entered"}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <p>
-            Positive variance means higher cost; negative variance means a
-            saving. Detailed EPC categories remain optional.
-          </p>
-          {job.configurationComparison && (
-            <section>
-              <h3>Markup compared with closed jobs in this configuration</h3>
-              <table>
-                <thead>
-                  <tr>
-                    <th>This job actual markup %</th>
-                    <th>Closed-job average markup %</th>
-                    <th>Difference (percentage points)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="pz-number">
-                      {actualTotal && !actualTotal.isZero()
-                        ? money(
-                            new Decimal(job.selling)
-                              .sub(actualTotal)
-                              .div(actualTotal)
-                              .mul(100)
-                              .toString(),
-                          ) + "%"
-                        : "Not entered"}
-                    </td>
-                    <td className="pz-number">
-                      {job.configurationComparison
-                        .averageActualMarkupPercent === null
-                        ? "No other closed jobs yet"
-                        : money(
-                            job.configurationComparison
-                              .averageActualMarkupPercent,
-                          ) + "%"}
-                    </td>
-                    <td className="pz-number">
-                      {actualTotal &&
-                      !actualTotal.isZero() &&
-                      job.configurationComparison.averageActualMarkupPercent !==
-                        null
-                        ? money(
-                            new Decimal(job.selling)
-                              .sub(actualTotal)
-                              .div(actualTotal)
-                              .mul(100)
-                              .sub(
-                                job.configurationComparison
-                                  .averageActualMarkupPercent,
-                              )
-                              .toString(),
-                          )
-                        : "Not available"}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <p>
-                Arithmetic average of {job.configurationComparison.closedJobs}{" "}
-                other Management-approved closed jobs in the same configuration.
-                Uses approved selling values; potential invoice adjustments are
-                shown separately below.
-              </p>
-            </section>
           )}
+          <ClosureCostTables
+            job={job}
+            actual={actual}
+            epc={epc}
+            epcAggregate={epcAggregate}
+            details={epcDetails}
+            readonly={readonly}
+            onActual={(name, value) => setActual({ ...actual, [name]: value })}
+            onEpc={(name, value) => setEpc({ ...epc, [name]: value })}
+            onAggregate={setEpcAggregate}
+            onDetails={setEpcDetails}
+          />
           <h3>Closure summary · excluding GST</h3>
           <div className="table-scroll">
             <table>
@@ -1106,46 +931,71 @@ export function AccountsWorkspace({
             This does not change approved selling values. Invoicing and
             authorized adjustment posting are deferred.
           </p>
-          <div className="pz-form-grid">
-            <Field id="closure-ack" label="Client acknowledgment reference">
-              <input
-                id="closure-ack"
-                disabled={readonly}
-                value={ack}
-                onChange={(e) => setAck(e.target.value)}
-              />
-            </Field>
-            <Field id="closure-photos" label="Site photographs reference">
-              <input
-                id="closure-photos"
-                disabled={readonly}
-                value={photos}
-                onChange={(e) => setPhotos(e.target.value)}
-              />
-            </Field>
-            <Field
-              id="closure-pt"
-              label="PT costing / supporting records reference"
-            >
-              <input
-                id="closure-pt"
-                disabled={readonly}
-                value={pt}
-                onChange={(e) => setPt(e.target.value)}
-              />
-            </Field>
-            <Field
-              id="closure-remarks"
-              label="Accounts remarks / cost variance explanation"
-            >
-              <textarea
-                id="closure-remarks"
-                disabled={readonly}
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-              />
-            </Field>
-          </div>
+          {readonly ? (
+            <section className="detail-panel">
+              <h3>Accounts remarks & supporting documents</h3>
+              <p>{remarks || "No remarks provided."}</p>
+              <details>
+                <summary>
+                  Client acknowledgment, site photos & PT references
+                </summary>
+                <p>
+                  <strong>Client acknowledgment:</strong>{" "}
+                  {ack || "Not available"}
+                </p>
+                <p>
+                  <strong>Site photos:</strong> {photos || "Not available"}
+                </p>
+                <p>
+                  <strong>PT supporting records:</strong>{" "}
+                  {pt || "Not available"}
+                </p>
+              </details>
+            </section>
+          ) : (
+            <>
+              <div className="pz-form-grid">
+                <Field id="closure-ack" label="Client acknowledgment reference">
+                  <input
+                    id="closure-ack"
+                    disabled={readonly}
+                    value={ack}
+                    onChange={(e) => setAck(e.target.value)}
+                  />
+                </Field>
+                <Field id="closure-photos" label="Site photographs reference">
+                  <input
+                    id="closure-photos"
+                    disabled={readonly}
+                    value={photos}
+                    onChange={(e) => setPhotos(e.target.value)}
+                  />
+                </Field>
+                <Field
+                  id="closure-pt"
+                  label="PT costing / supporting records reference"
+                >
+                  <input
+                    id="closure-pt"
+                    disabled={readonly}
+                    value={pt}
+                    onChange={(e) => setPt(e.target.value)}
+                  />
+                </Field>
+                <Field
+                  id="closure-remarks"
+                  label="Accounts remarks / cost variance explanation"
+                >
+                  <textarea
+                    id="closure-remarks"
+                    disabled={readonly}
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                  />
+                </Field>
+              </div>
+            </>
+          )}
           {!readonly && (
             <div className="pz-action-row">
               <Button

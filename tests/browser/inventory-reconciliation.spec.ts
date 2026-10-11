@@ -128,8 +128,19 @@ test("Inventory workspace: job search, draft, attachment, reconciliation and imm
     "BMS",
   ])
     await page.getByLabel(phase + " actual cost", { exact: true }).fill("1000");
-  await page.getByLabel("EPC actual total, excluding GST", { exact: true }).fill("4000");
-  await expect(page.getByRole("heading", { name: "Potential invoice adjustment impact · excluding GST" })).toBeVisible();
+  await page.getByLabel("EPC actual cost", { exact: true }).fill("4000");
+  await page
+    .getByLabel("Enter EPC actual cost details", { exact: true })
+    .check();
+  await expect(page.getByRole("alert")).toContainText("EPC detail must match");
+  await page
+    .getByLabel("Enter EPC actual cost details", { exact: true })
+    .uncheck();
+  await expect(
+    page.getByRole("heading", {
+      name: "Potential invoice adjustment impact · excluding GST",
+    }),
+  ).toBeVisible();
   await page
     .getByLabel("Client acknowledgment reference", { exact: true })
     .fill("isolated-test acknowledgment");

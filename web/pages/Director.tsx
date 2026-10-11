@@ -1,3 +1,5 @@
+import { ClosureIndicators } from "../components/ClosurePerformance.js";
+import { Button } from "../ui/Button.js";
 import { AccountsWorkspace } from "./AccountsWorkspace.js";
 import { money } from "../numbers.js";
 import { useEffect, useState } from "react";
@@ -15,15 +17,18 @@ export function Director({
     [data, setData] = useState<any>(),
     [selected, setSelected] = useState(""),
     [error, setError] = useState(""),
-    [closureCount, setClosureCount] = useState<number>();
+    [closureCount, setClosureCount] = useState<number>(),
+    [closures, setClosures] = useState<any[]>([]),
+    [jobKey, setJobKey] = useState<string>();
   useEffect(() => {
     void api<any>("/accounts-workspace")
-      .then((d) =>
+      .then((d) => {
+        setClosures(d.closures);
         setClosureCount(
           d.closures.filter((c: any) => c.stage === "Awaiting Management")
             .length,
-        ),
-      )
+        );
+      })
       .catch(() => setClosureCount(undefined));
   }, [tab]);
   useEffect(() => {
@@ -80,8 +85,69 @@ export function Director({
           {error}
         </p>
       )}
-      {tab === "Approvals" && <Coordinator session={session} onOpen={onOpen} />}
-      {tab === "Job closing" && <AccountsWorkspace session={session} />}
+      {tab === "Approvals" && (
+        <>
+          <section className="detail-panel">
+            <h3>Job closure performance</h3>
+            {closures
+              .filter((c) =>
+                ["Awaiting Management", "Closed"].includes(c.stage),
+              )
+              .sort((a, b) =>
+                String(b.created_at).localeCompare(String(a.created_at)),
+              )
+              .slice(0, 5)
+              .map((c) => (
+                <article className="detail-panel" key={c.id}>
+                  <h4>
+                    {c.snapshot.jobId} · {c.snapshot.title}
+                  </h4>
+                  <p>
+                    {c.stage === "Closed"
+                      ? "Closed · Management approved"
+                      : "Awaiting your approval · excluded from closed-job performance"}
+                  </p>
+                  <ClosureIndicators
+                    budget={c.snapshot.summary.budget}
+                    actual={c.snapshot.summary.actual}
+                    selling={c.snapshot.summary.selling}
+                    average={
+                      c.snapshot.configurationComparison
+                        ?.averageActualMarkupPercent
+                    }
+                    entry={c.snapshot.entry}
+                  />
+                  {c.snapshot.reconciliation && (
+                    <p>
+                      Potential invoice adjustment: PKR{" "}
+                      {money(c.snapshot.reconciliation.gross)} including GST ·
+                      pending authorization
+                    </p>
+                  )}
+                  <Button
+                    onClick={() => {
+                      setJobKey(c.job_key);
+                      setTab("Job closing");
+                    }}
+                  >
+                    Review closure report
+                  </Button>
+                </article>
+              ))}
+            {!closures.some((c) => c.stage === "Awaiting Management") && (
+              <p>No job closures awaiting your approval.</p>
+            )}
+          </section>
+          <Coordinator session={session} onOpen={onOpen} />
+        </>
+      )}
+      {tab === "Job closing" && (
+        <AccountsWorkspace
+          key={jobKey ?? "queue"}
+          session={session}
+          initialJobKey={jobKey}
+        />
+      )}
       {tab === "Customer & site budgets" && (
         <section className="detail-panel">
           <h3>Customer & site portfolio</h3>
