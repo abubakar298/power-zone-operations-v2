@@ -1,6 +1,6 @@
 # Milestone 2 — reviewed master data
 
-Imported the supplied workbook master records: 286 customers (IDs 0–285), four sites, 25 brand selections, 33 rate keys, 21 engineering settings, six inverter configurations and seven costing classifications. Source checksum is stored in master_imports and data/reference-masters.json. Excel's cached 25,150 changeover rate is used; the blank inactive rate is SQL NULL. Rates retain Active / Needs Rate / Inactive independently of their numeric values.
+Imported the supplied workbook master records: 286 customers (IDs 0–285), four sites, 25 brand selections, 33 rate keys, 21 engineering settings, six inverter configurations and seven costing classifications. Source checksum is stored in master_imports and tests/fixtures/reference-masters.json. Excel's cached 25,150 changeover rate is used; the blank inactive rate is SQL NULL. Rates retain Active / Needs Rate / Inactive independently of their numeric values.
 
 Customers, sites, brands, rates, rules and items have searchable authenticated screens. Only Admin can edit or create customers. Customer short codes are case-insensitively unique. Existing customer IDs and site customer relationships cannot be changed. New sites are deferred to the New BOQ workflow. The handover does not define a Management/Employee master-write matrix, so both roles have read-only access for now.
 

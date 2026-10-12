@@ -8,7 +8,7 @@ Preserve the existing Power Zone identity: restrained purple actions, white card
 Implementation sources:
 - `web/ui/design-tokens.css`: semantic colors, type, spacing, radius and sizing.
 - `web/ui/product.css`: common layouts and control treatments.
-- `web/ui/Button.tsx`, `StatusBadge.tsx`, `Field.tsx`, `FinancialValue.tsx`: reusable React controls.
+- `web/ui/Button.tsx`, `StatusBadge.tsx`, `Field.tsx`: reusable React controls. Financial values are formatted with `decimalDisplay` from `web/numbers.ts` inside a `pz-numeric` span.
 - `web/main.tsx`: loads legacy styles first, then tokens and shared standards.
 - `web/numbers.ts`: existing precise Decimal display formatting; reuse rather than introduce another formatter.
 - `web/AGENTS.md`: frontend implementation requirements for future changes.
