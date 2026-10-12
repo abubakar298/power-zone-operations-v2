@@ -549,6 +549,8 @@ export class UblWorkflowRepository {
         [
           "submit",
           "headsup",
+          "sample-accept",
+          "sample-return",
           "revision-pending",
           "defer",
           "decline",
@@ -723,8 +725,14 @@ export class UblWorkflowRepository {
           branch_code: r.branch_code,
           region: r.source.branch?.Region ?? "",
           main_city: r.source.branch?.Cluster ?? "",
-          legacy_ipo_number: action === "sample" ? "SAMPLE - NOT ASSIGNED" : d.ipoNumber ?? "Pending",
-          po_number: action === "sample" ? "Not received - review sample" : d.poNumber ?? "Pending",
+          legacy_ipo_number:
+            action === "sample"
+              ? "SAMPLE - NOT ASSIGNED"
+              : (d.ipoNumber ?? "Pending"),
+          po_number:
+            action === "sample"
+              ? "Not received - review sample"
+              : (d.poNumber ?? "Pending"),
           po_issued_date: d.poDate ?? "Pending",
           agreedWatts: Number(d.configuration.split("-")[0]) * 1000,
           panelSellingRate: d.pricingStage === "Revised" ? 44 : 33,
@@ -750,19 +758,20 @@ export class UblWorkflowRepository {
           .div(sample.budgetedCost)
           .mul(100)
           .toFixed(2);
-        if (action !== "sample") await this.makeDocument(
-          c,
-          actor,
-          r,
-          "Recommendation",
-          {
-            sample,
-            baseline: base,
-            label:
-              "Verified technical recommendation - customer sending evidence remains separate",
-          },
-          d,
-        );
+        if (action !== "sample")
+          await this.makeDocument(
+            c,
+            actor,
+            r,
+            "Recommendation",
+            {
+              sample,
+              baseline: base,
+              label:
+                "Verified technical recommendation - customer sending evidence remains separate",
+            },
+            d,
+          );
         if (["ipo", "sample"].includes(action)) {
           await this.makeDocument(
             c,
@@ -838,6 +847,14 @@ export class UblWorkflowRepository {
           [id, action === "advance" ? "Provisional" : "Confirmed", doc.id],
         );
         d.recipientId = input.recipientId;
+      }
+      if (["sample-accept", "sample-return"].includes(action)) {
+        d.sampleReviewDecision =
+          action === "sample-accept"
+            ? "Approved sample"
+            : "Returned sample for revision";
+        d.sampleReviewNotes = input.notes;
+        d.sampleReviewedBy = actor;
       }
       if (action === "return") {
         d.returnReason = input.notes;

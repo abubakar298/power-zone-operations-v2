@@ -136,3 +136,16 @@ export function validateSubmission(entry: ReportEntry, lines: InventoryLine[]) {
   if (entry.extra.some((e) => e.used === ""))
     throw new HttpError(400, "Enter the additional material quantities.");
 }
+
+// Quantity variances outside cables are retained for reporting, never used as invoice impact.
+export function cableInvoiceAdjustment(reconciliation: any) {
+  const cable = reconciliation?.sections?.find((s: any) => s.group === "cable");
+  return cable
+    ? {
+        net: cable.net,
+        gst: cable.gst,
+        gross: cable.gross,
+        complete: cable.complete,
+      }
+    : { net: null, gst: null, gross: null, complete: false };
+}

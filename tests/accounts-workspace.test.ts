@@ -148,8 +148,47 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       }),
       /Complete actual costs/,
     );
+    await assert.rejects(
+      repo.uploadEvidence(
+        users.Inventory,
+        j.key,
+        "pt.png",
+        "image/png",
+        Buffer.from("not PNG").toString("base64"),
+      ),
+      /Accounts access/,
+    );
+    await assert.rejects(
+      repo.uploadEvidence(
+        users.Accounts,
+        j.key,
+        "pt.png",
+        "image/png",
+        Buffer.from("not PNG").toString("base64"),
+      ),
+      /PNG or JPEG/,
+    );
+    const ptFile = await repo.uploadEvidence(
+      users.Accounts,
+      j.key,
+      "pt.png",
+      "image/png",
+      Buffer.from("89504e470d0a1a0a", "hex").toString("base64"),
+    );
+    const evidenceInput = { ...input, ptAttachmentId: ptFile.id };
+    for (const kind of ["Client acknowledgment", "Site photographs"])
+      await db.pool.query(
+        "INSERT INTO job_closure_evidence(id,job_key,kind,filename,media_type,content,sha256,created_by) VALUES($1,$2,$3,'qc.png','image/png',$4,'fixture',$5)",
+        [
+          randomUUID(),
+          j.key,
+          kind,
+          Buffer.from("89504e470d0a1a0a", "hex"),
+          users.Admin,
+        ],
+      );
     const submitted = await repo.saveClosure(users.Accounts, {
-      ...input,
+      ...evidenceInput,
       version: 1,
       stage: "Awaiting Management",
       requestKey: randomUUID(),
@@ -173,7 +212,7 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
     });
     assert.equal(returned.version, 3);
     const again = await repo.saveClosure(users.Accounts, {
-      ...input,
+      ...evidenceInput,
       version: 3,
       stage: "Awaiting Management",
       requestKey: randomUUID(),
@@ -350,8 +389,27 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       }),
       /must equal/,
     );
+    const ptFile2 = await repo.uploadEvidence(
+      users.Accounts,
+      j2.key,
+      "pt2.png",
+      "image/png",
+      Buffer.from("89504e470d0a1a0a", "hex").toString("base64"),
+    );
+    for (const kind of ["Client acknowledgment", "Site photographs"])
+      await db.pool.query(
+        "INSERT INTO job_closure_evidence(id,job_key,kind,filename,media_type,content,sha256,created_by) VALUES($1,$2,$3,'qc.png','image/png',$4,'fixture',$5)",
+        [
+          randomUUID(),
+          j2.key,
+          kind,
+          Buffer.from("89504e470d0a1a0a", "hex"),
+          users.Admin,
+        ],
+      );
     const aggregateSubmitted = await repo.saveClosure(users.Accounts, {
       ...aggregateInput,
+      ptAttachmentId: ptFile2.id,
       version: 1,
       stage: "Awaiting Management",
       requestKey: randomUUID(),
@@ -413,17 +471,56 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       /Accounts access/,
     );
     // Sample archival is reversible and new real versions remain monotonic.
-    await db.pool.query("INSERT INTO archived_sample_closures SELECT id,'test sample archive',now() FROM accounts_job_closures WHERE job_key=$1",[j.key]);
-    await db.pool.query("UPDATE inventory_reports SET job_key='archived-sample:'||job_key||':'||id WHERE job_key=$1",[j.key]);
-    assert.equal((await repo.overview(users.Accounts)).closures.some((x:any)=>x.job_key===j.key),false);
-    assert.equal((await inv.list(users.Inventory)).some((x:any)=>x.job_key.startsWith('archived-sample:')),false);
-    const real=await inv.save(users.Inventory,{jobKey:j.key,version:0,stage:'Draft Reconciliation',entry,requestKey:randomUUID()});
-    await inv.upload(users.Inventory,real.reportId,'real-fixture.pdf','application/pdf',Buffer.from('%PDF-1.4 fixture').toString('base64'));
-    await inv.save(users.Inventory,{jobKey:j.key,version:1,stage:'Sent to Accounts',entry,requestKey:randomUUID()});
-    const resumed=await repo.job(users.Accounts,j.key);
-    assert.equal(resumed.history.length,0);
-    const newClosure=await repo.saveClosure(users.Accounts,{...input,version:0,stage:'Draft',requestKey:randomUUID()});
-    assert.ok(newClosure.version>1);
+    await db.pool.query(
+      "INSERT INTO archived_sample_closures SELECT id,'test sample archive',now() FROM accounts_job_closures WHERE job_key=$1",
+      [j.key],
+    );
+    await db.pool.query(
+      "UPDATE inventory_reports SET job_key='archived-sample:'||job_key||':'||id WHERE job_key=$1",
+      [j.key],
+    );
+    assert.equal(
+      (await repo.overview(users.Accounts)).closures.some(
+        (x: any) => x.job_key === j.key,
+      ),
+      false,
+    );
+    assert.equal(
+      (await inv.list(users.Inventory)).some((x: any) =>
+        x.job_key.startsWith("archived-sample:"),
+      ),
+      false,
+    );
+    const real = await inv.save(users.Inventory, {
+      jobKey: j.key,
+      version: 0,
+      stage: "Draft Reconciliation",
+      entry,
+      requestKey: randomUUID(),
+    });
+    await inv.upload(
+      users.Inventory,
+      real.reportId,
+      "real-fixture.pdf",
+      "application/pdf",
+      Buffer.from("%PDF-1.4 fixture").toString("base64"),
+    );
+    await inv.save(users.Inventory, {
+      jobKey: j.key,
+      version: 1,
+      stage: "Sent to Accounts",
+      entry,
+      requestKey: randomUUID(),
+    });
+    const resumed = await repo.job(users.Accounts, j.key);
+    assert.equal(resumed.history.length, 0);
+    const newClosure = await repo.saveClosure(users.Accounts, {
+      ...input,
+      version: 0,
+      stage: "Draft",
+      requestKey: randomUUID(),
+    });
+    assert.ok(newClosure.version > 1);
   } finally {
     await db.close();
   }

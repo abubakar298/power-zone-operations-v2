@@ -1,3 +1,4 @@
+import { cableInvoiceAdjustment } from "../../server/inventory/reconciliation.js";
 import { jobLabel } from "../components/job-label.js";
 import { ClosureIndicators } from "../components/ClosurePerformance.js";
 import { Button } from "../ui/Button.js";
@@ -100,9 +101,7 @@ export function Director({
               .slice(0, 5)
               .map((c) => (
                 <article className="detail-panel" key={c.id}>
-                  <h4>
-                    {jobLabel(c.snapshot)}
-                  </h4>
+                  <h4>{jobLabel(c.snapshot)}</h4>
                   <p>
                     {c.stage === "Closed"
                       ? "Closed · Management approved"
@@ -120,9 +119,11 @@ export function Director({
                   />
                   {c.snapshot.reconciliation && (
                     <p>
-                      Potential invoice adjustment: PKR{" "}
-                      {money(c.snapshot.reconciliation.gross)} including GST ·
-                      pending authorization
+                      Potential cable invoice adjustment: PKR{" "}
+                      {money(
+                        cableInvoiceAdjustment(c.snapshot.reconciliation).gross,
+                      )}{" "}
+                      including GST · pending authorization
                     </p>
                   )}
                   <Button

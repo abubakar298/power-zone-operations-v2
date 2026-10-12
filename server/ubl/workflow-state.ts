@@ -16,6 +16,8 @@ export const ublConfigurations = [
   "35-30-40",
 ] as const;
 export type WorkflowAction =
+  | "sample-accept"
+  | "sample-return"
   | "sample"
   | "save"
   | "identity"
@@ -44,7 +46,9 @@ export function transition(
     !can(
       action === "verify"
         ? ["Design"]
-        : ["accept", "return"].includes(action)
+        : ["accept", "return", "sample-accept", "sample-return"].includes(
+              action,
+            )
           ? ["Accounts"]
           : action === "acknowledge"
             ? ["Operations"]
@@ -54,10 +58,22 @@ export function transition(
     )
   )
     throw new HttpError(403, "Your department cannot perform this action.");
+  if (["sample-accept", "sample-return"].includes(action)) {
+    if (!data.accountsReviewSample)
+      throw new HttpError(409, "No review sample has been received.");
+    return stage;
+  }
   if (action === "sample") {
-    if (!manager) throw new HttpError(403, "Only Management can send a review sample.");
-    if (stage !== ublStages[3] || !ublConfigurations.includes(data.configuration))
-      throw new HttpError(422, "A heads-up with a standard configuration is required for this sample.");
+    if (!manager)
+      throw new HttpError(403, "Only Management can send a review sample.");
+    if (
+      stage !== ublStages[3] ||
+      !ublConfigurations.includes(data.configuration)
+    )
+      throw new HttpError(
+        422,
+        "A heads-up with a standard configuration is required for this sample.",
+      );
     return stage;
   }
   if (action === "revision-pending") {

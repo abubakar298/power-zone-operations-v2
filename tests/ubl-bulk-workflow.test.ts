@@ -195,14 +195,36 @@ test("Reviewed bulk import is audited, idempotent, canonical and traverses IPO/A
     let version = 1;
     await repo.action(ids.Admin, go.id, version++, "sample", {});
     const sampleDetail = await repo.detail(ids.Accounts, go.id);
-    const sampleDoc = sampleDetail.documents.find((d: any) => d.kind === "IPO / PT review sample");
+    const sampleDoc = sampleDetail.documents.find(
+      (d: any) => d.kind === "IPO / PT review sample",
+    );
     assert.ok(sampleDoc);
     assert.equal(sampleDetail.request.stage, ublStages[3]);
     assert.equal(sampleDetail.request.data.technicalVerified, false);
     assert.equal(sampleDetail.request.data.poNumber, undefined);
     assert.equal(sampleDetail.request.data.ipoNumber, null);
     assert.equal(sampleDoc.snapshot.reviewOnly, true);
-    assert.equal((await db.pool.query("SELECT count(*) FROM ubl_workflow_demand")).rows[0].count, "0");
+    await assert.rejects(
+      repo.action(ids.Design, go.id, version, "sample-accept", {
+        notes: "review",
+      }),
+      /department/,
+    );
+    await repo.action(ids.Accounts, go.id, version++, "sample-accept", {
+      notes: "Sample layout checked",
+    });
+    const approvedSample = await repo.detail(ids.Accounts, go.id);
+    assert.equal(approvedSample.request.stage, ublStages[3]);
+    assert.equal(
+      approvedSample.request.data.sampleReviewDecision,
+      "Approved sample",
+    );
+    assert.equal(approvedSample.request.data.poNumber, undefined);
+    assert.equal(
+      (await db.pool.query("SELECT count(*) FROM ubl_workflow_demand")).rows[0]
+        .count,
+      "0",
+    );
     await assert.rejects(
       repo.action(ids.Coordinator, go.id, version, "advance", {
         recipientId: ids.Operations,

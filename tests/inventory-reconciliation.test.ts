@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { testDatabase } from "./database.js";
 import { InventoryRepository } from "../server/inventory/repository.js";
 import {
+  cableInvoiceAdjustment,
   reconcile,
   validateSubmission,
   type ReportEntry,
@@ -52,6 +53,19 @@ test("Installed wattage, mixed GST and cable adjustments reconcile without alter
   assert.equal(r.sections[1].net, "9660.00");
   assert.equal(r.sections[1].gst, "1738.80");
   assert.equal(r.net, "30560.00");
+  assert.deepEqual(cableInvoiceAdjustment(r), {
+    net: "9660.00",
+    gst: "1738.80",
+    gross: "11398.80",
+    complete: true,
+  });
+  assert.equal(
+    cableInvoiceAdjustment(
+      reconcile(lines, { ...entry, usage: { cable: "5" } }),
+    ).net,
+    "-16100.00",
+  );
+  assert.equal(cableInvoiceAdjustment({ net: "999" }).net, null);
   assert.equal(r.gross, "34388.80");
   assert.equal(lines[0].approved, "35000");
   assert.equal(

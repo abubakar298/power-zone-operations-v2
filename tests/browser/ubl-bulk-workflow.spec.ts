@@ -73,6 +73,19 @@ test("Reviewed UBL batch imports once, retains survey stage and exposes evidence
   await expect(page.locator("table tbody tr")).toContainText(
     "Installation reportedly nearing completion",
   );
+  await page.getByLabel("Search site, branch, job ID or configuration").fill("1967");
+  await page.getByRole("button", {name:"Open site",exact:true}).click();
+  await page.getByRole("button", {name:"Send review-only IPO / PT sample to Accounts",exact:true}).click();
+  await expect(page.getByRole("link",{name:"IPO / PT review sample · version 1"})).toBeVisible();
+  await page.getByRole("button", {name:"Accounts workspace",exact:true}).click();
+  await page.getByRole("button", {name:"IPOs to review 1",exact:true}).click();
+  await page.getByRole("button", {name:"Review IPO & PT",exact:true}).click();
+  await expect(page.getByRole("img",{name:"IPO and PT · page 1"})).toBeVisible();
+  await page.getByLabel("Accounts review remarks / revision reason").fill("Review sample layout accepted");
+  await page.getByRole("button",{name:"Approve IPO",exact:true}).click();
+  await expect(page.getByRole("status").filter({hasText:"Approved sample"})).toBeVisible();
+  await page.getByRole("button",{name:"UBL Site Workflow",exact:true}).click();
+  await expect(page.getByRole("button",{name:"Heads-up Received—Preparation Pending 10",exact:true})).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page
     .getByLabel("Search site, branch, job ID or configuration")

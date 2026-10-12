@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { cableInvoiceAdjustment } from "../inventory/reconciliation.js";
+import { createHash, randomUUID } from "node:crypto";
 import { Decimal } from "decimal.js";
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
@@ -37,6 +38,7 @@ export const closureSchema = z
     acknowledgment: z.string().trim().max(1000),
     photos: z.string().trim().max(1000),
     ptReference: z.string().trim().max(1000),
+    ptAttachmentId: z.uuid().nullable().optional(),
     requestKey: z.uuid(),
   })
   .strict();
@@ -102,13 +104,22 @@ export class AccountsRepository {
     ).rows;
     const identities = await new InventoryRepository(this.pool).jobs(actor);
     return {
-      reviewSamples: (await this.pool.query("SELECT d.id,d.version,d.created_at,r.site_name,r.branch_code,r.data->>'configuration' AS configuration FROM ubl_workflow_documents d JOIN ubl_workflow_requests r ON r.id=d.request_id WHERE d.kind='IPO / PT review sample' AND r.data->>'accountsReviewSample'='true' ORDER BY d.created_at DESC")).rows,
+      reviewSamples: (
+        await this.pool.query(
+          "SELECT DISTINCT ON(r.id) d.id,d.version,d.created_at,r.id AS request_id,r.version AS request_version,r.stage,r.site_name,r.branch_code,r.data->>'configuration' AS configuration,r.data->>'sampleReviewDecision' AS review_decision,d.kind FROM ubl_workflow_documents d JOIN ubl_workflow_requests r ON r.id=d.request_id WHERE (d.kind='IPO / PT review sample' AND r.data->>'accountsReviewSample'='true') OR (d.kind='IPO / PT' AND r.stage IN('IPO Submitted—Awaiting Accounts','Accounts Accepted—BOQ Issuance Pending')) ORDER BY r.id,CASE WHEN d.kind='IPO / PT' THEN 0 ELSE 1 END,d.created_at DESC",
+        )
+      ).rows,
       ipos: ipo.map((i) => ({
         ...i,
         accountsReview: reviews.find((r) => r.ipo_id === i.id),
       })),
-      closures: closures.map(c => ({ ...c, snapshot: { ...c.snapshot,
-        identity: identities.find(j => j.key === c.job_key) } })),
+      closures: closures.map((c) => ({
+        ...c,
+        snapshot: {
+          ...c.snapshot,
+          identity: identities.find((j) => j.key === c.job_key),
+        },
+      })),
     };
   }
   async comparison(actor: string, id: string) {
@@ -262,12 +273,17 @@ export class AccountsRepository {
       ).rows[0];
       if (!s?.baseline) throw new HttpError(404, "Saved budget unavailable.");
       selling = s.baseline.sellingExcludingGst;
-      const document = (await this.pool.query(
-        "SELECT snapshot FROM ubl_site_document_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1", [key.slice(4)],
-      )).rows[0];
+      const document = (
+        await this.pool.query(
+          "SELECT snapshot FROM ubl_site_document_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1",
+          [key.slice(4)],
+        )
+      ).rows[0];
       if (document) {
         const pt = ublIpoSample({ ...document.snapshot, status: "Active" });
-        phaseSelling = Object.fromEntries(pt.phases.map(p => [p.name, p.sellingExcludingGst]));
+        phaseSelling = Object.fromEntries(
+          pt.phases.map((p) => [p.name, p.sellingExcludingGst]),
+        );
         selling = pt.totalSellingExcludingGst;
       }
       lines = s.baseline.items.map((l: any) => ({
@@ -289,7 +305,9 @@ export class AccountsRepository {
           ? "Earthing Cost"
           : /Installation including|Electrical labour/i.test(l.item)
             ? "Electrical Labour"
-            : /Delivery\/logistics/i.test(l.item) ? "Deliveries" : "Installation Cost",
+            : /Delivery\/logistics/i.test(l.item)
+              ? "Deliveries"
+              : "Installation Cost",
       }));
       basis =
         "Saved UBL site budget; labour and delivery are separate. Approved selling price remains fixed pending authorized invoice adjustments.";
@@ -310,7 +328,12 @@ export class AccountsRepository {
       if (!b) throw new HttpError(409, "Saved BOQ budget unavailable.");
       selling = i.snapshot.allocation.subtotal;
       if (i.snapshot.peachtree?.taxMode !== "Tax Included")
-        phaseSelling = Object.fromEntries((i.snapshot.peachtree?.phases ?? []).map((p: any) => [p.name, p.amount]));
+        phaseSelling = Object.fromEntries(
+          (i.snapshot.peachtree?.phases ?? []).map((p: any) => [
+            p.name,
+            p.amount,
+          ]),
+        );
       const savedPhases = phaseBudgets(
         b.snapshot,
         [],
@@ -403,13 +426,17 @@ export class AccountsRepository {
     }
     return {
       configurationComparison,
-      identity: (await new InventoryRepository(this.pool).jobs(actor)).find(j => j.key === key),
+      identity: (await new InventoryRepository(this.pool).jobs(actor)).find(
+        (j) => j.key === key,
+      ),
       jobKey: key,
       jobId: irr.snapshot.jobId,
       title: irr.snapshot.title,
       reportVersionId: irr.id,
       entry: irr.snapshot.entry,
       reconciliation: irr.snapshot.reconciliation,
+      invoiceAdjustment: cableInvoiceAdjustment(irr.snapshot.reconciliation),
+      evidence: await this.evidence(actor, key),
       selling,
       phaseSelling,
       budget,
@@ -417,6 +444,71 @@ export class AccountsRepository {
       basis,
       history,
     };
+  }
+  async evidence(actor: string, key: string) {
+    await this.access(actor);
+    return (
+      await this.pool.query(
+        "SELECT id,job_key,kind,filename,media_type,sha256,created_at,created_by FROM job_closure_evidence WHERE job_key=$1 ORDER BY created_at",
+        [key],
+      )
+    ).rows;
+  }
+  async uploadEvidence(
+    actor: string,
+    key: string,
+    filename: string,
+    mime: string,
+    base64: string,
+  ) {
+    await this.access(actor);
+    const jobs = await new InventoryRepository(this.pool).jobs(actor);
+    if (!jobs.some((j) => j.key === key))
+      throw new HttpError(404, "Job not found.");
+    const latest = (
+      await this.pool.query(
+        "SELECT stage FROM accounts_active_job_closures WHERE job_key=$1 ORDER BY version DESC LIMIT 1",
+        [key],
+      )
+    ).rows[0];
+    if (["Awaiting Management", "Closed"].includes(latest?.stage))
+      throw new HttpError(409, "Submitted closure evidence is read-only.");
+    const bytes = Buffer.from(base64, "base64");
+    const signature =
+      mime === "image/png"
+        ? bytes.subarray(0, 8).toString("hex") === "89504e470d0a1a0a"
+        : mime === "image/jpeg" &&
+          bytes.subarray(0, 3).toString("hex") === "ffd8ff";
+    if (!signature || bytes.length < 1 || bytes.length > 8388608)
+      throw new HttpError(400, "Attach a PNG or JPEG screenshot up to 8 MB.");
+    const id = randomUUID();
+    await this.pool.query(
+      "INSERT INTO job_closure_evidence(id,job_key,kind,filename,media_type,content,sha256,created_by) VALUES($1,$2,'PT costing screenshot',$3,$4,$5,$6,$7)",
+      [
+        id,
+        key,
+        filename,
+        mime,
+        bytes,
+        createHash("sha256").update(bytes).digest("hex"),
+        actor,
+      ],
+    );
+    await this.pool.query(
+      "INSERT INTO audit_log(user_id,action) VALUES($1,$2)",
+      [actor, "accounts.pt-screenshot:" + id],
+    );
+    return { id };
+  }
+  async evidenceFile(actor: string, id: string) {
+    await this.access(actor);
+    const row = (
+      await this.pool.query("SELECT * FROM job_closure_evidence WHERE id=$1", [
+        id,
+      ])
+    ).rows[0];
+    if (!row) throw new HttpError(404, "Evidence not found.");
+    return row;
   }
   async saveClosure(actor: string, input: z.infer<typeof closureSchema>) {
     await this.access(actor);
@@ -463,13 +555,16 @@ export class AccountsRepository {
       input.stage === "Awaiting Management" &&
       (!financialComplete ||
         !input.remarks ||
-        !input.acknowledgment ||
-        !input.photos ||
-        !input.ptReference)
+        !job.evidence.some((e: any) => e.kind === "Client acknowledgment") ||
+        !job.evidence.some((e: any) => e.kind === "Site photographs") ||
+        !job.evidence.some(
+          (e: any) =>
+            e.kind === "PT costing screenshot" && e.id === input.ptAttachmentId,
+        ))
     )
       throw new HttpError(
         400,
-        "Complete actual costs, remarks, client acknowledgment, site photographs and PT references before submission.",
+        "Complete actual costs and remarks, attach the PT costing screenshot, and await client acknowledgment and site photographs from QC before submission.",
       );
     const financialEpc = complete ? epcTotal : D(input.epcAggregate || "0");
     const actualTotal = phases
@@ -528,7 +623,12 @@ export class AccountsRepository {
             randomUUID(),
             input.jobKey,
             job.reportVersionId,
-            (await c.query("SELECT COALESCE(max(version),0)+1 AS next FROM accounts_job_closures WHERE job_key=$1",[input.jobKey])).rows[0].next,
+            (
+              await c.query(
+                "SELECT COALESCE(max(version),0)+1 AS next FROM accounts_job_closures WHERE job_key=$1",
+                [input.jobKey],
+              )
+            ).rows[0].next,
             input.stage,
             snapshot,
             input.requestKey,
@@ -642,9 +742,10 @@ export class AccountsRepository {
     return transaction(this.pool, async (c) => {
       await this.access(actor, c, true);
       const source = (
-        await c.query("SELECT * FROM accounts_active_job_closures WHERE id=$1", [
-          input.id,
-        ])
+        await c.query(
+          "SELECT * FROM accounts_active_job_closures WHERE id=$1",
+          [input.id],
+        )
       ).rows[0];
       if (!source) throw new HttpError(404, "Closure not found.");
       await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [

@@ -1,5 +1,6 @@
+import { cableInvoiceAdjustment } from "../../server/inventory/reconciliation.js";
 import { jobLabel } from "../components/job-label.js";
-import {ProjectCheckpoints} from './ProjectCheckpoints.js';
+import { ProjectCheckpoints } from "./ProjectCheckpoints.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
 import { Button } from "../ui/Button.js";
@@ -50,6 +51,7 @@ export function AccountsWorkspace({
     [ack, setAck] = useState(""),
     [photos, setPhotos] = useState(""),
     [pt, setPt] = useState(""),
+    [ptAttachmentId, setPtAttachmentId] = useState<string | null>(null),
     [notes, setNotes] = useState(""),
     [search, setSearch] = useState(""),
     [busy, setBusy] = useState(false),
@@ -67,6 +69,7 @@ export function AccountsWorkspace({
     ack,
     photos,
     pt,
+    ptAttachmentId,
   };
   const dirty = !!job && JSON.stringify(input) !== saved;
   useUnsavedChanges(dirty);
@@ -103,6 +106,7 @@ export function AccountsWorkspace({
     setJob(undefined);
     setSelected(undefined);
     setSamplePreview(undefined);
+    setNotes("");
     setError("");
     setMessage("");
   }
@@ -110,6 +114,7 @@ export function AccountsWorkspace({
     setBusy(true);
     try {
       setSamplePreview(undefined);
+      setNotes("");
       setSelected(await api("/accounts-workspace/ipos/" + id));
       setTab("IPO Review");
       setNotes("");
@@ -174,6 +179,7 @@ export function AccountsWorkspace({
         ack: i?.acknowledgment ?? "",
         photos: i?.photos ?? "",
         pt: i?.ptReference ?? "",
+        ptAttachmentId: i?.ptAttachmentId ?? null,
       };
       setJob(j);
       setActual(v.actual);
@@ -184,9 +190,104 @@ export function AccountsWorkspace({
       setAck(v.ack);
       setPhotos(v.photos);
       setPt(v.pt);
+      setPtAttachmentId(v.ptAttachmentId);
       setSaved(JSON.stringify(v));
       setTab("Job Closure");
       setError("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function reviewWorkflowIpo(approve: boolean) {
+    if (!samplePreview || busy) return;
+    setErrorAction("workflow-ipo");
+    setError("");
+    if (!notes.trim()) {
+      setError("Enter the Accounts review remarks or revision reason.");
+      return;
+    }
+    if (
+      !confirmTransition(
+        approve ? "Approve IPO" : "Return IPO for revision",
+        samplePreview.kind === "IPO / PT review sample"
+          ? "Record this review-only sample decision? This does not issue a live job."
+          : "Record Accounts review of this saved IPO?",
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const sample = samplePreview.kind === "IPO / PT review sample";
+      await api(`/ubl-workflow/${samplePreview.request_id}/action`, {
+        csrf: session.csrfToken,
+        body: {
+          version: samplePreview.request_version,
+          action: sample
+            ? approve
+              ? "sample-accept"
+              : "sample-return"
+            : approve
+              ? "accept"
+              : "return",
+          input: { notes },
+        },
+      });
+      const refreshed = await api<any>("/accounts-workspace");
+      setData(refreshed);
+      setSamplePreview(
+        refreshed.reviewSamples.find(
+          (r: any) => r.request_id === samplePreview.request_id,
+        ),
+      );
+      setMessage(
+        approve
+          ? "Accounts IPO review approved."
+          : "IPO returned for revision.",
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function attachPt(file: File) {
+    if (!job || busy) return;
+    setErrorAction("pt-upload");
+    setError("");
+    if (
+      !["image/png", "image/jpeg"].includes(file.type) ||
+      file.size > 8388608
+    ) {
+      setError("Attach a PNG or JPEG screenshot up to 8 MB.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1]);
+        reader.onerror = () => reject(new Error("Unable to read screenshot."));
+        reader.readAsDataURL(file);
+      });
+      const result = await api<any>("/accounts-workspace/evidence", {
+        csrf: session.csrfToken,
+        body: {
+          jobKey: job.jobKey,
+          filename: file.name,
+          mediaType: file.type,
+          base64,
+        },
+      });
+      const refreshed = await api<any>(
+        "/accounts-workspace/job?key=" + encodeURIComponent(job.jobKey),
+      );
+      setJob({ ...job, evidence: refreshed.evidence });
+      setPtAttachmentId(result.id);
+      setMessage(
+        "PT costing screenshot attached. Save the draft to include it in the closure.",
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -221,6 +322,7 @@ export function AccountsWorkspace({
           acknowledgment: ack,
           photos,
           ptReference: pt,
+          ptAttachmentId,
           requestKey: crypto.randomUUID(),
         },
       });
@@ -324,7 +426,9 @@ export function AccountsWorkspace({
         ))}
       </div>
       <h2>{tab}</h2>
-      {tab === "Project checkpoints" && <ProjectCheckpoints session={session} mode="Accounts"/>}
+      {tab === "Project checkpoints" && (
+        <ProjectCheckpoints session={session} mode="Accounts" />
+      )}
       {error && !errorAction && (
         <p role="alert" className="form-error">
           {error}
@@ -339,7 +443,12 @@ export function AccountsWorkspace({
                 "IPOs to review",
                 data.ipos.filter(
                   (i: any) => i.accountsReview?.decision !== "Verified",
-                ).length + (data.reviewSamples?.length ?? 0),
+                ).length +
+                  (data.reviewSamples?.filter(
+                    (r: any) =>
+                      (r.kind !== "IPO / PT review sample" || r.review_decision !== "Approved sample") &&
+                      r.stage !== "Accounts Accepted—BOQ Issuance Pending",
+                  ).length ?? 0),
                 "IPO Review",
               ],
               ["IRRs received", received.length, "Inventory Reconciliations"],
@@ -378,7 +487,30 @@ export function AccountsWorkspace({
                 </tr>
               </thead>
               <tbody>
-                {data.reviewSamples?.map((r: any) => <tr key={r.id}><td>{r.site_name} · UBL {r.branch_code} · {r.configuration}</td><td>Sample—review only</td><td><Button onClick={() => {setSamplePreview(r); setSelected(undefined); setTab("IPO Review");}}>Review sample IPO &amp; PT</Button></td></tr>)}
+                {data.reviewSamples?.map((r: any) => (
+                  <tr key={r.id}>
+                    <td>
+                      {r.site_name} · UBL {r.branch_code} · {r.configuration}
+                    </td>
+                    <td>
+                      {r.kind === "IPO / PT review sample"
+                        ? (r.review_decision ??
+                          "Sample—awaiting Accounts approval")
+                        : r.stage}
+                    </td>
+                    <td>
+                      <Button
+                        onClick={() => {
+                          setSamplePreview(r);
+                          setSelected(undefined);
+                          setTab("IPO Review");
+                        }}
+                      >
+                        Review IPO &amp; PT
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
                 {data.ipos
                   .filter((i: any) => i.accountsReview?.decision !== "Verified")
                   .map((i: any) => (
@@ -398,9 +530,7 @@ export function AccountsWorkspace({
                   ))}
                 {received.map((r) => (
                   <tr key={r.id}>
-                    <td>
-                      {jobLabel(r)}
-                    </td>
+                    <td>{jobLabel(r)}</td>
                     <td>Inventory reconciliation received</td>
                     <td>
                       <Button onClick={() => void openJob(r.job_key)}>
@@ -413,9 +543,7 @@ export function AccountsWorkspace({
                   .filter((c: any) => c.stage !== "Closed")
                   .map((c: any) => (
                     <tr key={c.id}>
-                      <td>
-                        {jobLabel(c.snapshot)}
-                      </td>
+                      <td>{jobLabel(c.snapshot)}</td>
                       <td>{c.stage}</td>
                       <td>
                         <Button onClick={() => void openJob(c.job_key)}>
@@ -453,7 +581,35 @@ export function AccountsWorkspace({
                 </tr>
               </thead>
               <tbody>
-                {data.reviewSamples?.filter((r: any) => `${r.site_name} ${r.branch_code} ${r.configuration}`.toLowerCase().includes(search.toLowerCase())).map((r: any) => <tr key={r.id}><td>{r.site_name} · UBL {r.branch_code} · {r.configuration}</td><td>Sample—review only</td><td><Button onClick={() => {setSamplePreview(r); setSelected(undefined);}}>Review sample IPO &amp; PT</Button></td></tr>)}
+                {data.reviewSamples
+                  ?.filter((r: any) =>
+                    `${r.site_name} ${r.branch_code} ${r.configuration}`
+                      .toLowerCase()
+                      .includes(search.toLowerCase()),
+                  )
+                  .map((r: any) => (
+                    <tr key={r.id}>
+                      <td>
+                        {r.site_name} · UBL {r.branch_code} · {r.configuration}
+                      </td>
+                      <td>
+                        {r.kind === "IPO / PT review sample"
+                          ? (r.review_decision ??
+                            "Sample—awaiting Accounts approval")
+                          : r.stage}
+                      </td>
+                      <td>
+                        <Button
+                          onClick={() => {
+                            setSamplePreview(r);
+                            setSelected(undefined);
+                          }}
+                        >
+                          Review IPO &amp; PT
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
                 {filtered.map((i: any) => (
                   <tr key={i.id}>
                     <td>
@@ -472,7 +628,70 @@ export function AccountsWorkspace({
               </tbody>
             </table>
           </div>
-          {samplePreview && <article className="detail-panel"><h3>{samplePreview.site_name} · UBL {samplePreview.branch_code} · {samplePreview.configuration}</h3><p>Sample—review only. PO not received. No approval, job issuance or material authorization.</p><DocumentPreview title="Review-only IPO and PT" url={`/api/ubl-workflow/documents/${samplePreview.id}.pdf`}/></article>}
+          {samplePreview && (
+            <article className="detail-panel">
+              <h3>
+                {samplePreview.site_name} · UBL {samplePreview.branch_code} ·{" "}
+                {samplePreview.configuration}
+              </h3>
+              <p>
+                {samplePreview.kind === "IPO / PT review sample"
+                  ? "Sample—review only. PO not received. Approval records a sample review; no job or material authorization."
+                  : "UBL standard configuration sale—review approved pricing, IPO and PT before Accounts acceptance."}
+              </p>
+              <div className="pz-form-grid">
+                <section>
+                  <h3>Approved quotation</h3>
+                  <p>
+                    Not available—UBL standard configuration pricing is used.
+                  </p>
+                </section>
+                <DocumentPreview
+                  title="IPO and PT"
+                  url={`/api/ubl-workflow/documents/${samplePreview.id}.pdf`}
+                />
+              </div>
+              <Field
+                id="ubl-accounts-review-notes"
+                label="Accounts review remarks / revision reason"
+              >
+                <textarea
+                  id="ubl-accounts-review-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </Field>
+              <div className="pz-action-row">
+                <Button
+                  variant="success"
+                  disabled={
+                    busy ||
+                    (samplePreview.kind === "IPO / PT review sample" && samplePreview.review_decision === "Approved sample") ||
+                    samplePreview.stage ===
+                      "Accounts Accepted—BOQ Issuance Pending"
+                  }
+                  onClick={() => void reviewWorkflowIpo(true)}
+                >
+                  Approve IPO
+                </Button>
+                <Button
+                  variant="warning"
+                  disabled={busy}
+                  onClick={() => void reviewWorkflowIpo(false)}
+                >
+                  Return for revision
+                </Button>
+              </div>
+              {samplePreview.review_decision && (
+                <p role="status">{samplePreview.review_decision}</p>
+              )}
+              {error && errorAction === "workflow-ipo" && (
+                <p role="alert" className="form-error">
+                  {error}
+                </p>
+              )}
+            </article>
+          )}
           {selected && (
             <article className="detail-panel">
               <h3>
@@ -752,9 +971,7 @@ export function AccountsWorkspace({
               <tbody>
                 {reports.map((r) => (
                   <tr key={r.id}>
-                    <td>
-                      {jobLabel(r)}
-                    </td>
+                    <td>{jobLabel(r)}</td>
                     <td>
                       {data.closures.find((c: any) => c.job_key === r.job_key)
                         ?.stage ?? "IRR received"}
@@ -773,9 +990,7 @@ export function AccountsWorkspace({
       )}
       {tab === "Job Closure" && job && (
         <article className="detail-panel">
-          <h3>
-            {jobLabel(job)}
-          </h3>
+          <h3>{jobLabel(job)}</h3>
           <p>
             {latest?.stage ?? "New closure"} · {job.basis}
             {latest && <> · Prepared by {latest.recorded_by}</>}
@@ -873,7 +1088,7 @@ export function AccountsWorkspace({
           </div>
           {actualTotal && (
             <section>
-              <h3>Potential invoice adjustment impact · excluding GST</h3>
+              <h3>Potential cable invoice adjustment impact · excluding GST</h3>
               <p>
                 Scenario only, pending authorized invoice adjustment. This does
                 not post an invoice or change the approved selling price.
@@ -881,9 +1096,9 @@ export function AccountsWorkspace({
               <table>
                 <tbody>
                   <tr>
-                    <th>Reconciliation adjustment</th>
+                    <th>Cable adjustment only</th>
                     <td className="pz-number">
-                      {money(job.reconciliation.net)}
+                      {money(cableInvoiceAdjustment(job.reconciliation).net)}
                     </td>
                   </tr>
                   <tr>
@@ -891,7 +1106,10 @@ export function AccountsWorkspace({
                     <td className="pz-number">
                       {money(
                         new Decimal(job.selling)
-                          .add(job.reconciliation.net)
+                          .add(
+                            cableInvoiceAdjustment(job.reconciliation).net ??
+                              "0",
+                          )
                           .toString(),
                       )}
                     </td>
@@ -901,7 +1119,10 @@ export function AccountsWorkspace({
                     <td className="pz-number">
                       {money(
                         new Decimal(job.selling)
-                          .add(job.reconciliation.net)
+                          .add(
+                            cableInvoiceAdjustment(job.reconciliation).net ??
+                              "0",
+                          )
                           .sub(actualTotal)
                           .toString(),
                       )}
@@ -914,7 +1135,10 @@ export function AccountsWorkspace({
                         ? "Not available"
                         : money(
                             new Decimal(job.selling)
-                              .add(job.reconciliation.net)
+                              .add(
+                                cableInvoiceAdjustment(job.reconciliation)
+                                  .net ?? "0",
+                              )
                               .sub(actualTotal)
                               .div(actualTotal)
                               .mul(100)
@@ -926,80 +1150,106 @@ export function AccountsWorkspace({
               </table>
             </section>
           )}
-          <h3>Inventory reconciliation</h3>
           <p>
-            Potential adjustment without GST: {money(job.reconciliation.net)} ·
-            With GST: {money(job.reconciliation.gross)}
+            Per-watt and other non-cable quantity differences remain cost/usage
+            variances. Good-faith supply does not adjust the invoice.
+          </p>
+          <h3>Cable invoice reconciliation</h3>
+          <p>
+            Potential adjustment without GST:{" "}
+            {money(cableInvoiceAdjustment(job.reconciliation).net)} · With GST:{" "}
+            {money(cableInvoiceAdjustment(job.reconciliation).gross)}
           </p>
           <p>
             This does not change approved selling values. Invoicing and
             authorized adjustment posting are deferred.
           </p>
-          {readonly ? (
-            <section className="detail-panel">
-              <h3>Accounts remarks & supporting documents</h3>
-              <p>{remarks || "No remarks provided."}</p>
-              <details>
-                <summary>
-                  Client acknowledgment, site photos & PT references
-                </summary>
-                <p>
-                  <strong>Client acknowledgment:</strong>{" "}
-                  {ack || "Not available"}
+          <section className="detail-panel">
+            <h3>QC supporting documents</h3>
+            <p>
+              Uploaded by QC. Accounts reviews receipt status and does not enter
+              these references.
+            </p>
+            {["Client acknowledgment", "Site photographs"].map((kind) => {
+              const files =
+                job.evidence?.filter((e: any) => e.kind === kind) ?? [];
+              return (
+                <p key={kind}>
+                  <strong>{kind}:</strong>{" "}
+                  {files.length ? "Received" : "Not received"}{" "}
+                  {files.map((e: any) => (
+                    <a
+                      key={e.id}
+                      href={`/api/accounts-workspace/evidence/${e.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {e.filename}
+                    </a>
+                  ))}
                 </p>
-                <p>
-                  <strong>Site photos:</strong> {photos || "Not available"}
+              );
+            })}
+          </section>
+          <section className="detail-panel">
+            <h3>PT costing screenshot</h3>
+            {job.evidence
+              ?.filter((e: any) => e.kind === "PT costing screenshot")
+              .map((e: any) => (
+                <p key={e.id}>
+                  <a
+                    href={`/api/accounts-workspace/evidence/${e.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {e.filename}
+                  </a>
+                  {e.id === ptAttachmentId
+                    ? " · Selected for this closure"
+                    : !readonly && (
+                        <Button onClick={() => setPtAttachmentId(e.id)}>
+                          Use this screenshot
+                        </Button>
+                      )}
                 </p>
-                <p>
-                  <strong>PT supporting records:</strong>{" "}
-                  {pt || "Not available"}
-                </p>
-              </details>
-            </section>
-          ) : (
-            <>
-              <div className="pz-form-grid">
-                <Field id="closure-ack" label="Client acknowledgment reference">
-                  <input
-                    id="closure-ack"
-                    disabled={readonly}
-                    value={ack}
-                    onChange={(e) => setAck(e.target.value)}
-                  />
-                </Field>
-                <Field id="closure-photos" label="Site photographs reference">
-                  <input
-                    id="closure-photos"
-                    disabled={readonly}
-                    value={photos}
-                    onChange={(e) => setPhotos(e.target.value)}
-                  />
-                </Field>
-                <Field
-                  id="closure-pt"
-                  label="PT costing / supporting records reference"
-                >
-                  <input
-                    id="closure-pt"
-                    disabled={readonly}
-                    value={pt}
-                    onChange={(e) => setPt(e.target.value)}
-                  />
-                </Field>
-                <Field
-                  id="closure-remarks"
-                  label="Accounts remarks / cost variance explanation"
-                >
-                  <textarea
-                    id="closure-remarks"
-                    disabled={readonly}
-                    value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
-                  />
-                </Field>
-              </div>
-            </>
-          )}
+              ))}
+            {!readonly && (
+              <Field
+                id="closure-pt-upload"
+                label="Attach PT costing screenshot"
+                hint="PNG or JPEG · up to 8 MB"
+              >
+                <input
+                  id="closure-pt-upload"
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  disabled={busy}
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) void attachPt(e.target.files[0]);
+                  }}
+                />
+                {error && errorAction === "pt-upload" && (
+                  <p role="alert" className="form-error">
+                    {error}
+                  </p>
+                )}
+              </Field>
+            )}
+            {readonly && !ptAttachmentId && (
+              <p>Not attached{pt ? " · Historical reference: " + pt : ""}</p>
+            )}
+          </section>
+          <Field
+            id="closure-remarks"
+            label="Accounts remarks / cost variance explanation"
+          >
+            <textarea
+              id="closure-remarks"
+              disabled={readonly}
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+            />
+          </Field>
           {!readonly && (
             <div className="pz-action-row">
               <Button

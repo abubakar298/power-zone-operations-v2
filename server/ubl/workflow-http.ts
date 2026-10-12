@@ -15,6 +15,8 @@ const schema = z
   .object({
     version: z.number().int().positive(),
     action: z.enum([
+      "sample-accept",
+      "sample-return",
       "sample",
       "save",
       "identity",
@@ -141,7 +143,8 @@ export function ublWorkflowHttp(
       ),
       s = doc.snapshot;
     let buffer: Buffer;
-    if (["IPO / PT", "IPO / PT review sample"].includes(doc.kind)) buffer = ublIpoSamplePdf(s.sample, "pack");
+    if (["IPO / PT", "IPO / PT review sample"].includes(doc.kind))
+      buffer = ublIpoSamplePdf(s.sample, "pack");
     else {
       const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
       drawReportLogo(pdf);

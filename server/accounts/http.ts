@@ -29,6 +29,43 @@ export function accountsHttp(
   r.get("/", async (req, res) =>
     res.json(await repo.overview(req.authSession!.user.id)),
   );
+  r.post("/evidence", async (req, res) => {
+    const v = parse(
+      z
+        .object({
+          jobKey: z.string().max(100),
+          filename: z.string().trim().min(1).max(200),
+          mediaType: z.enum(["image/png", "image/jpeg"]),
+          base64: z.string().max(11200000),
+        })
+        .strict(),
+      req.body,
+    );
+    res
+      .status(201)
+      .json(
+        await repo.uploadEvidence(
+          req.authSession!.user.id,
+          v.jobKey,
+          v.filename,
+          v.mediaType,
+          v.base64,
+        ),
+      );
+  });
+  r.get("/evidence/:id", async (req, res) => {
+    const f = await repo.evidenceFile(
+      req.authSession!.user.id,
+      parse(z.uuid(), req.params.id),
+    );
+    res
+      .set({
+        "Content-Type": f.media_type,
+        "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(f.filename)}`,
+        "X-Content-Type-Options": "nosniff",
+      })
+      .send(f.content);
+  });
   r.get("/ipos/:id", async (req, res) =>
     res.json(
       await repo.comparison(
