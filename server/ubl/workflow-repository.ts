@@ -447,7 +447,11 @@ export class UblWorkflowRepository {
         );
       if (action === "save" || action === "verify") {
         if (
-          ![...ublStages.slice(0, 5), "Deferred"].includes(r.stage) &&
+          ![
+            ...ublStages.slice(0, 5),
+            "Deferred",
+            "Existing job—Revised PO pending",
+          ].includes(r.stage) &&
           !(r.stage === ublStages[5] && r.data.returnReason)
         )
           throw new HttpError(
@@ -545,6 +549,7 @@ export class UblWorkflowRepository {
         [
           "submit",
           "headsup",
+          "revision-pending",
           "defer",
           "decline",
           "return",
@@ -558,6 +563,20 @@ export class UblWorkflowRepository {
           422,
           "Attach recommendation sending evidence before recording a new submission.",
         );
+      if (action === "revision-pending") {
+        const demand = await c.query(
+          "SELECT 1 FROM ubl_workflow_demand WHERE request_id=$1",
+          [id],
+        );
+        if (demand.rowCount)
+          throw new HttpError(
+            409,
+            "Resolve the existing material demand before reclassification.",
+          );
+        d.materialPlanningRequired = false;
+        d.revisedPoPending = true;
+        d.notes = input.notes;
+      }
       if (action === "headsup") d.reportedHeadsUp = input.date ?? null;
       if (["advance", "confirmed"].includes(action)) {
         if (

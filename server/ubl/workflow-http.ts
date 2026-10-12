@@ -27,6 +27,7 @@ const schema = z
       "return",
       "confirmed",
       "acknowledge",
+      "revision-pending",
       "defer",
       "decline",
     ]),

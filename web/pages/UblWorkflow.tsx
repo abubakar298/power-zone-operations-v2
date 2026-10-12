@@ -210,7 +210,7 @@ export function UblWorkflow({ session }: { session: Session }) {
         ? [stages[6], stages[7]]
         : role === "Operations"
           ? [stages[3], stages[4], "Confirmed BOQ issued"]
-          : stages;
+          : [...stages, "Existing job—Revised PO pending"];
   const shown = departmentRows.filter(
     (r) =>
       matches(r, filter) &&
@@ -219,6 +219,8 @@ export function UblWorkflow({ session }: { session: Session }) {
         .includes(search.toLowerCase()),
   );
   function nextAction(r: any) {
+    if (r.stage === "Existing job—Revised PO pending")
+      return "Attach revised PO when received; no material planning needed";
     if (!r.branch_code) return "Confirm branch code and site identity";
     if (!r.data.configuration)
       return "Design: review configuration recommendation";
@@ -706,6 +708,13 @@ export function UblWorkflow({ session }: { session: Session }) {
               )}
             </div>
             <div className="pz-action-row">
+              {["Admin", "Management"].includes(role) &&
+                selected.data.originalOrderPreserved &&
+                selected.stage === stages[3] &&
+                act(
+                  "revision-pending",
+                  "Move to existing job—revised PO pending",
+                )}
               {coord &&
                 selected.stage === stages[1] &&
                 act("submit", "Record recommendation sent", "primary")}
@@ -716,7 +725,11 @@ export function UblWorkflow({ session }: { session: Session }) {
                 selected.stage === stages[3] &&
                 act("advance", "Send advance BOQ", "primary")}
               {coord &&
-                [...stages.slice(1, 5), "Deferred"].includes(selected.stage) &&
+                [
+                  ...stages.slice(1, 5),
+                  "Deferred",
+                  "Existing job—Revised PO pending",
+                ].includes(selected.stage) &&
                 act("po", "Record actual PO", "primary")}
               {coord &&
                 selected.stage === stages[5] &&

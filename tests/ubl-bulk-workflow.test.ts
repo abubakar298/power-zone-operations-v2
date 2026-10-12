@@ -47,6 +47,34 @@ test("UBL routes preserve acceptance, verification and separate advance preparat
       }),
     /four agreed/,
   );
+  const existing = { ...d, originalOrderPreserved: true, ipoNumber: 315 };
+  assert.equal(
+    transition(ublStages[3], "revision-pending", "Admin", existing),
+    "Existing job—Revised PO pending",
+  );
+  assert.throws(
+    () => transition(ublStages[3], "revision-pending", "Admin", d),
+    /existing job/,
+  );
+  assert.throws(
+    () =>
+      transition(
+        "Existing job—Revised PO pending",
+        "advance",
+        "Coordinator",
+        existing,
+      ),
+    /heads-up/,
+  );
+  assert.equal(
+    transition(
+      "Existing job—Revised PO pending",
+      "po",
+      "Coordinator",
+      existing,
+    ),
+    ublStages[5],
+  );
   const sensitive = {
     baseline: { cost: 123 },
     budgetSnapshot: { cost: 12 },

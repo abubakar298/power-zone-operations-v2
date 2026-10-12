@@ -28,6 +28,7 @@ export type WorkflowAction =
   | "return"
   | "confirmed"
   | "acknowledge"
+  | "revision-pending"
   | "defer"
   | "decline";
 export function transition(
@@ -52,6 +53,19 @@ export function transition(
     )
   )
     throw new HttpError(403, "Your department cannot perform this action.");
+  if (action === "revision-pending") {
+    if (!manager || !data.originalOrderPreserved || !data.ipoNumber)
+      throw new HttpError(
+        403,
+        "Only Management can classify an existing job as awaiting a revised PO.",
+      );
+    if (![ublStages[3], "Existing job—Revised PO pending"].includes(stage))
+      throw new HttpError(
+        409,
+        "Only an existing heads-up can be reclassified.",
+      );
+    return "Existing job—Revised PO pending";
+  }
   if (action === "save") return stage;
   if (action === "identity") {
     if (!manager)
@@ -86,7 +100,11 @@ export function transition(
     );
   if (action === "verify") {
     if (
-      ![...ublStages.slice(0, 5), "Deferred"].includes(stage) &&
+      ![
+        ...ublStages.slice(0, 5),
+        "Deferred",
+        "Existing job—Revised PO pending",
+      ].includes(stage) &&
       !(stage === ublStages[5] && data.returnReason)
     )
       throw new HttpError(
@@ -124,6 +142,7 @@ export function transition(
         ublStages[3],
         ublStages[4],
         "Deferred",
+        "Existing job—Revised PO pending",
       ].includes(stage)
     )
       throw new HttpError(409, "This site is not awaiting a PO.");
