@@ -12,6 +12,7 @@ export function managementReview(
   costValue: string,
   savedDiscount: string,
   adjustment: ReviewAdjustment,
+  cash = false,
 ) {
   const total = new D(subtotal).add(solarTax).add(otherTax);
   const cost = new D(costValue);
@@ -23,6 +24,7 @@ export function managementReview(
       otherTax,
       discount,
       total.minus(discount).toFixed(2),
+      cash,
     );
   const metrics = (discount: string) => {
     const a = allocate(discount);
@@ -43,7 +45,7 @@ export function managementReview(
   };
   const base = allocate("0");
   const maximum = base.lines
-    .filter((l) => l.taxRate === "18" && l.group !== "solar")
+    .filter((l) => (l.taxRate === "18" || cash && l.taxRate === "0") && l.group !== "solar")
     .reduce((s, l) => s.add(l.originalTotal), new D(0));
   let discount: string;
   if ("targetMargin" in adjustment || "targetMarkup" in adjustment) {
@@ -95,7 +97,7 @@ export function managementReview(
   }
   return {
     cost: cost.toFixed(2),
-    basis: "Revenue excluding GST · markup = profit / approved cost",
+    basis: cash ? "Cash selling price retained in full · markup = profit / approved cost" : "Revenue excluding GST · markup = profit / approved cost",
     original: metrics(savedDiscount),
     proposed: metrics(discount),
     discount,

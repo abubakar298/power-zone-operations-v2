@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { pricingSchema } from "../commercial/schema.js";
 export const instructionsSchema = pricingSchema
-  .pick({ presentation: true, taxMode: true, markups: true })
+  .pick({ presentation: true, taxMode: true, saleType:true,cashGstTreatment:true,markups: true })
   .extend({ notes: z.string().trim().max(2000).default("") })
   .strict();
 export type ApprovalInstructions = z.infer<typeof instructionsSchema>;

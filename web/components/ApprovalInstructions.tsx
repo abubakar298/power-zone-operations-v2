@@ -29,6 +29,8 @@ export function ApprovalInstructions({
         These instructions are saved with this costing approval.
       </p>
       <div className="survey-grid">
+        <label>Quotation type<select value={value.saleType ?? "Tax Deal"} onChange={e=>onChange({...value,saleType:e.target.value as Instructions["saleType"]})}><option>Tax Deal</option><option>Cash Deal</option></select></label>
+        {value.saleType === "Cash Deal" && <label>Cash deal GST treatment<select value={value.cashGstTreatment ?? "No GST added"} onChange={e=>onChange({...value,cashGstTreatment:e.target.value as Instructions["cashGstTreatment"],taxMode:"Tax Included"})}><option>No GST added</option><option>Included in selling price</option></select></label>}
         <label>
           Quotation format
           <select

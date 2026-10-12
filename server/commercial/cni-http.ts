@@ -26,6 +26,8 @@ const schema = z
       .regex(/^[A-Za-z0-9_-]{1,40}$/)
       .optional(),
     quantity: z.number().int().min(1).max(1000),
+    saleType:z.enum(["Tax Deal","Cash Deal"]).optional(),
+    cashGstTreatment:z.enum(["Included in selling price","No GST added"]).optional(),
     presentation: z.enum(["Inclusive", "Separate"]),
     discount: z
       .string()
@@ -99,6 +101,7 @@ export function cniHttp(pool: Pool, requireSession: RequestHandler) {
     let pricing;
     try {
       pricing = priceCni({
+        saleType:v.saleType,cashGstTreatment:v.cashGstTreatment,
         quantity: v.quantity,
         discount: v.discount,
         presentation: v.presentation,
@@ -397,6 +400,7 @@ export function cniHttp(pool: Pool, requireSession: RequestHandler) {
             ...prior.snapshot,
             pdfTemplate: "PHOTON-APPROVED-1",
             pricing: priceCni({
+              saleType:prior.snapshot.pricing.saleType,cashGstTreatment:prior.snapshot.pricing.cashGstTreatment,
               quantity: prior.snapshot.pricing.quantity,
               presentation: prior.snapshot.pricing.presentation,
               taxRate: prior.snapshot.pricing.taxRate,

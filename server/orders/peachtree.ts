@@ -1,3 +1,4 @@
+import {cashDeal} from "../commercial/deal.js";
 import { Decimal } from "decimal.js";
 import type { BoqSnapshot } from "../boq/engine.js";
 import type { PricingSnapshot } from "../commercial/engine.js";
@@ -20,7 +21,8 @@ export function peachtreeDivision(
   pricing: PricingSnapshot,
   legacyAdditionalCost = "0",
 ) {
-  const included = pricing.input.taxMode === "Tax Included";
+  const included = cashDeal(pricing.input) || !pricing.input.saleType && pricing.input.taxMode === "Tax Included";
+  const taxMode = included?"Tax Included":"Show Sales Tax Separately";
   const field = included ? "total" : "beforeTax";
   const target = D(included ? allocation.total : allocation.subtotal);
   if(boq.survey.family === "direct-product") {
@@ -30,12 +32,12 @@ export function peachtreeDivision(
       return category === name;
     }).reduce((sum,line)=>sum.add(line[field]),D("0")))}));
     if(!phases.reduce((sum,p)=>sum.add(p.amount),D("0")).eq(target))throw new HttpError(422,"Product classifications do not reconcile with the IPO.");
-    return {version:2,policy:"exact-accepted-quotation-v2",presentation:pricing.input.presentation,taxMode:pricing.input.taxMode,basis:included?"Tax-inclusive selling values":"Selling values excluding tax",effectivePooledMarkup:null,phases,phaseTotal:money(target),ipoBeforeTax:allocation.subtotal,ipoTax:allocation.tax,ipoPayable:allocation.total};
+    return {version:2,saleType:pricing.input.saleType,cashGstTreatment:pricing.input.cashGstTreatment,policy:"exact-accepted-quotation-v2",presentation:pricing.input.presentation,taxMode,basis:included?"Tax-inclusive selling values":"Selling values excluding tax",effectivePooledMarkup:null,phases,phaseTotal:money(target),ipoBeforeTax:allocation.subtotal,ipoTax:allocation.tax,ipoPayable:allocation.total};
   }
   if(boq.survey.family === "bess-only"){
     const phases=[{name:"BESS",amount:money(allocation.lines.filter(l=>l.group==="bess").reduce((v,l)=>v.add(l[field]),D("0")))},{name:"EPC",amount:money(allocation.lines.filter(l=>l.group!=="bess").reduce((v,l)=>v.add(l[field]),D("0")))}];
     if(!D(phases[0].amount).add(phases[1].amount).eq(target))throw new HttpError(422,"BESS/EPC totals do not reconcile with the IPO.");
-    return {version:2,policy:"exact-accepted-quotation-v2",presentation:pricing.input.presentation,taxMode:pricing.input.taxMode,basis:included?"Tax-inclusive selling values":"Selling values excluding tax",effectivePooledMarkup:null,phases,phaseTotal:money(target),ipoBeforeTax:allocation.subtotal,ipoTax:allocation.tax,ipoPayable:allocation.total};
+    return {version:2,saleType:pricing.input.saleType,cashGstTreatment:pricing.input.cashGstTreatment,policy:"exact-accepted-quotation-v2",presentation:pricing.input.presentation,taxMode,basis:included?"Tax-inclusive selling values":"Selling values excluding tax",effectivePooledMarkup:null,phases,phaseTotal:money(target),ipoBeforeTax:allocation.subtotal,ipoTax:allocation.tax,ipoPayable:allocation.total};
   }
   const amounts = names.map((_, phase) =>
     allocation.lines
@@ -51,9 +53,10 @@ export function peachtreeDivision(
     );
   return {
     version: 2,
+    saleType:pricing.input.saleType,cashGstTreatment:pricing.input.cashGstTreatment,
     policy,
     presentation: pricing.input.presentation,
-    taxMode: pricing.input.taxMode,
+    taxMode,
     basis: included
       ? "Tax-inclusive selling values"
       : "Selling values excluding tax",

@@ -17,7 +17,7 @@ import { poSuggestions } from "../../server/orders/po-extraction.js";
 const fields: [keyof OrderInput, string][] = [
   ["poNumber", "Customer PO reference"],
   ["orderDate", "Order date"],
-  ["invoiceCompany", "Customer / company name on invoice"],
+  ["invoiceCompany", "Power Zone legal entity issuing invoice"],
   ["salesPerson", "Sales person"],
   ["customerNtn", "Customer NTN"],
   ["customerStrn", "Customer STRN"],
@@ -234,8 +234,7 @@ export function Orders({
         )}
         {field === "invoiceCompany" && (
           <small>
-            The customer or legal entity receiving the invoice. Filled from the
-            customer record; edit if their billing name differs.
+            Choose PZES or PZES (PVT Ltd) for a tax deal; Energy Solutions for a cash deal.
           </small>
         )}
       </label>
@@ -508,54 +507,14 @@ export function Orders({
             <table className="order-table">
               <thead>
                 <tr>
-                  {(view!.included
-                    ? ["Description", "Qty", "Unit", "Rate", "Amount"]
-                    : [
-                        "Description",
-                        "Qty",
-                        "Unit",
-                        "Net rate",
-                        "Amount",
-                        "Tax %",
-                        "Tax",
-                        "Total",
-                      ]
-                  ).map((h) => (
-                    <th key={h}>{h}</th>
-                  ))}
+                  {["Description","Qty","Unit",view!.included?"Rate":"Rate excl. GST",view!.included?"Amount":"Amount excl. GST"].map(h=><th key={h}>{h}</th>)}
                 </tr>
               </thead>
-              <tbody>
-                {view!.rows.map((l: any, i: number) => (
-                  <tr key={i}>
-                    <td style={{ whiteSpace: "pre-line" }}>{l.description}</td>
-                    <td>{l.qty}</td>
-                    <td>{displayUnit(l.unit,l.qty)}</td>
-                    <td>{money(l.rate)}</td>
-                    <td>{money(l.amount)}</td>
-                    {!view!.included && (
-                      <>
-                        <td>{l.taxRate}%</td>
-                        <td>{money(l.tax)}</td>
-                        <td>{money(l.total)}</td>
-                      </>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
+              <tbody>{view!.rows.map((l:any,i:number)=><tr key={i}><td style={{whiteSpace:"pre-line"}}>{l.description}</td><td>{l.qty}</td><td>{displayUnit(l.unit,l.qty)}</td><td className="numeric">{money(l.rate)}</td><td className="numeric">{money(l.amount)}</td></tr>)}</tbody>
               <tfoot>
-                {!view!.included && view!.taxSummary.map((tax)=><tr key={tax.label}><th colSpan={6}>{tax.label}</th><td>{money(tax.amount)}</td><td></td></tr>)}
-                <tr>
-                  <th colSpan={4}>Grand total</th>
-                  <td>{money(view!.amount)}</td>
-                  {!view!.included && (
-                    <>
-                      <td></td>
-                      <td>{money(view!.tax)}</td>
-                      <td>{money(view!.total)}</td>
-                    </>
-                  )}
-                </tr>
+                <tr><th colSpan={4}>{view!.included?"Subtotal":"Subtotal excl. GST"}</th><td className="numeric">{money(view!.amount)}</td></tr>
+                {!view!.included && view!.taxSummary.map(tax=><tr key={tax.label}><th colSpan={4}>{tax.label}</th><td className="numeric">{money(tax.amount)}</td></tr>)}
+                <tr><th colSpan={4}>Grand total {view!.included?"":"incl. GST"}</th><td className="numeric">{money(view!.total)}</td></tr>
               </tfoot>
             </table>
           </div>

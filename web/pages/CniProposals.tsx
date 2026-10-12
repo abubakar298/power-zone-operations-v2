@@ -48,6 +48,7 @@ export function CniProposals({
       "Inclusive",
     ),
     [discount, setDiscount] = useState("0");
+  const [saleType,setSaleType]=useState<"Tax Deal"|"Cash Deal">("Tax Deal"),[cashGstTreatment,setCashGstTreatment]=useState<"Included in selling price"|"No GST added">("No GST added");
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -62,6 +63,7 @@ export function CniProposals({
   let preview: ReturnType<typeof priceCni> | undefined;
   try {
     preview = priceCni({
+      saleType,cashGstTreatment,
       quantity: Number(quantity),
       discount: discount || "0",
       presentation,
@@ -189,7 +191,8 @@ export function CniProposals({
                   customerId: Number(customerId),
                   siteName,
                   siteCode,
-                  quantity: Number(quantity),
+                  saleType,cashGstTreatment,
+      quantity: Number(quantity),
                   presentation,
                   discount: discount || "0",
                   ...(editing
@@ -318,6 +321,8 @@ export function CniProposals({
                   storage
                 </small>
               </label>
+              <label>Quotation type<select value={saleType} onChange={e=>setSaleType(e.target.value as any)}><option>Tax Deal</option><option>Cash Deal</option></select></label>
+              {saleType === "Cash Deal" && <label>Cash GST treatment<select value={cashGstTreatment} onChange={e=>setCashGstTreatment(e.target.value as any)}><option>No GST added</option><option>Included in selling price</option></select></label>}
               <label>
                 Tax presentation
                 <select
@@ -476,6 +481,7 @@ export function CniProposals({
               setSiteName(s.siteName);
               setSiteCode(s.siteCode ?? "");
               setQuantity(String(s.pricing.quantity));
+              setSaleType(s.pricing.saleType ?? "Tax Deal");setCashGstTreatment(s.pricing.cashGstTreatment ?? "No GST added");
               setPresentation(s.pricing.presentation);
               setDiscount(
                 detail.actions

@@ -12,15 +12,15 @@ export function reviewCni(pricing:ReturnType<typeof priceCni>,cost:CniCostSnapsh
  if(adjustment&&"discount" in adjustment)discount=adjustment.discount;
  if(adjustment&&"targetMarkup" in adjustment){
   if(!/^\d{1,3}(\.\d{1,2})?$/.test(adjustment.targetMarkup))throw new Error("Enter a valid target markup percentage.");
-  const required=budget.mul(new Decimal(adjustment.targetMarkup).div(100).plus(1)).mul(new Decimal(pricing.taxRate).div(100).plus(1)).toDecimalPlaces(2,Decimal.ROUND_HALF_UP);
+  const required=budget.mul(new Decimal(adjustment.targetMarkup).div(100).plus(1)).mul(pricing.saleType === "Cash Deal"?1:new Decimal(pricing.taxRate).div(100).plus(1)).toDecimalPlaces(2,Decimal.ROUND_HALF_UP);
   const reduction=new Decimal(pricing.standardPayable).minus(required);
   if(reduction.isNegative())throw new Error("Target markup exceeds the standard selling price.");
   discount=reduction.toFixed(2);
  }
- const proposed=priceCni({quantity:pricing.quantity,presentation:pricing.presentation,taxRate:pricing.taxRate,discount});
+ const proposed=priceCni({saleType:pricing.saleType,cashGstTreatment:pricing.cashGstTreatment,quantity:pricing.quantity,presentation:pricing.presentation,taxRate:pricing.taxRate,discount});
  const metrics=(p:ReturnType<typeof priceCni>)=>{
   const profit=new Decimal(p.beforeTax).minus(budget);
-  return {cost:budget.toFixed(2),profit:profit.toFixed(2),beforeTax:p.beforeTax,tax:p.tax,payable:p.payable,discount:p.discount,markup:profit.div(budget).mul(100).toFixed(2)};
+  return {profitNote:p.profitNote,cost:budget.toFixed(2),profit:profit.toFixed(2),beforeTax:p.beforeTax,tax:p.tax,payable:p.payable,discount:p.discount,markup:profit.div(budget).mul(100).toFixed(2)};
  };
  return {costVersion:cost.version,unitCostBeforeTax:cost.unitBeforeTax,original:metrics(pricing),proposed:metrics(proposed),recommendedDiscount:proposed.discount};
 }

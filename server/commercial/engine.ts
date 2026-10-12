@@ -1,3 +1,4 @@
+import {cashDeal, retainedGst, sellingFactor, CASH_PROFIT_NOTE} from "./deal.js";
 import {customerScopeItems, earthingScopeDescription} from './customer-scope.js';
 import { standardItemPrices, type CommercialPolicy } from "./active-policy.js";
 import { Decimal } from "decimal.js";
@@ -56,7 +57,9 @@ export function price(
   policy?: CommercialPolicy,
 ) {
   if(boq.survey.family === "direct-product" && input.presentation === "Basic Breakup") throw new HttpError(400,"Direct Product Sale supports No Breakup or Breakup only.");
-  const itemPricing = policy ? standardItemPrices(boq, input, policy) : undefined;
+  input = {...input, ...(boq.survey.saleType ? {saleType:boq.survey.saleType,cashGstTreatment:boq.survey.cashGstTreatment} : {})};
+  if(cashDeal(input)) input = {...input,taxMode:"Tax Included",cashGstTreatment:input.cashGstTreatment ?? "No GST added"};
+  const itemPricing = policy ? standardItemPrices(boq, input, policy).map(l=>cashDeal(input)?{...l,beforeTax:D(l.beforeTax).mul(sellingFactor(input,l.taxRate)).toString(),taxRate:"0",tax:"0"}:l) : undefined;
   if (policy) input = {...input, markups:{solar:policy.markups.solar,structure:policy.markups.structure,bess:policy.markups.bess,earthing:policy.markups.earthing,balance:policy.markups.other,rest:policy.markups.other},additionalMarkup:input.additionalCategory?policy.markups[input.additionalCategory]:undefined};
   const summary = (name: string) =>
     D(boq.summary.find((x) => x.name === name)?.cost ?? "0");
@@ -89,13 +92,13 @@ export function price(
     ] as const
   ).map(([key, name, base]) => {
     const markup = input.markups[key];
-    const selling = itemPricing ? itemPricing.filter(l=>l.group===key).reduce((s,l)=>s.add(l.beforeTax),D("0")) : base.mul(D(markup).div(100).add(1)),
-      rate = key === "solar" ? "10" : "18";
+    const selling = itemPricing ? itemPricing.filter(l=>l.group===key).reduce((s,l)=>s.add(l.beforeTax),D("0")) : base.mul(D(markup).div(100).add(1)).mul(sellingFactor(input,key === "solar" ? "10" : "18")),
+      rate = cashDeal(input) ? "0" : key === "solar" ? "10" : "18";
     return {
       key,
       name,
       cost: base.toString(),
-      markup: itemPricing && !base.isZero() ? selling.div(base).minus(1).mul(100).toFixed(6) : markup,
+      markup: (itemPricing || cashDeal(input)) && !base.isZero() ? selling.div(base).minus(1).mul(100).toFixed(6) : markup,
       profit: selling.minus(base).toString(),
       beforeTax: selling.toString(),
       taxRate: rate,
@@ -106,15 +109,15 @@ export function price(
   const extraRows = boq.survey.additionalItem
     ? (() => {
         const markup = input.additionalMarkup ?? input.markups.balance;
-        const selling = itemPricing ? D(itemPricing.find(l=>l.group==="additional")!.beforeTax) : additional.mul(D(markup).div(100).add(1));
+        const selling = itemPricing ? D(itemPricing.find(l=>l.group==="additional")!.beforeTax) : additional.mul(D(markup).div(100).add(1)).mul(sellingFactor(input,input.additionalTaxRate ?? boq.survey.additionalItem!.taxRate));
         const rate =
-          input.additionalTaxRate ?? boq.survey.additionalItem.taxRate;
+          cashDeal(input) ? "0" : input.additionalTaxRate ?? boq.survey.additionalItem.taxRate;
         return [
           {
             key: "additional" as const,
             name: boq.survey.additionalItem.description,
             cost: additional.toString(),
-            markup,
+            markup:cashDeal(input)&&!additional.isZero()?selling.div(additional).minus(1).mul(100).toFixed(6):markup,
             profit: selling.minus(additional).toString(),
             beforeTax: selling.toString(),
             taxRate: rate,
@@ -158,6 +161,7 @@ export function price(
     cost: cost.toString(),
     rows: allRows,
     profit: money(sum("profit")),
+    ...(cashDeal(input) ? {dealAccounting:{saleType:input.saleType,gstPayable:"0.00",retainedGstEquivalent:money(allRows.reduce((v,r)=>v.add(retainedGst(input)?D(r.beforeTax).sub(D(r.beforeTax).div(r.key==="solar"?"1.10":r.key==="additional"?D(input.additionalTaxRate??boq.survey.additionalItem?.taxRate??"18").div(100).add(1):"1.18")):0),D("0"))),note:retainedGst(input)?CASH_PROFIT_NOTE:"Cash deal: no GST added; the full selling amount is used for markup."}} : {}),
     subtotal,
     solarTax,
     otherTax,
@@ -339,12 +343,12 @@ export function quote(
     );
   if (extra && !full)
     throw new HttpError(400, "Additional items require Full Breakup.");
-  const extraPrice = D(extra?.cost ?? "0").mul(
+  const extraPrice = D(extra?.cost ?? "0").mul(sellingFactor(p.input,extra?.taxRate ?? "0")).mul(
     D(extra?.markup ?? "0")
       .div(100)
       .add(1),
   );
-  const extraTax = D(extra?.taxRate ?? "0")
+  const extraTax = D(cashDeal(p.input) ? "0" : extra?.taxRate ?? "0")
     .div(100)
     .mul(extraPrice);
   const subtotal = money(D(p.subtotal).add(extraPrice));

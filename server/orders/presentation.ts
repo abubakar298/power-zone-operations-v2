@@ -5,7 +5,8 @@ export function ipoPresentation(snapshot: any) {
     snapshot.peachtree?.presentation ??
     snapshot.presentation ??
     "Full Breakup";
-  const included =
+  const deal=snapshot.quotationType?.saleType ?? snapshot.peachtree?.saleType;
+  const included = deal === "Cash Deal" || deal !== "Tax Deal" &&
     (snapshot.quotationType?.taxMode ??
       snapshot.peachtree?.taxMode ??
       snapshot.taxMode) === "Tax Included";

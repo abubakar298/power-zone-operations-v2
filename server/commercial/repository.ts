@@ -1,3 +1,4 @@
+import {cashDeal} from "./deal.js";
 import { allocateReference, revisedReference, boqIdentity } from "../documents/references.js";
 import {
   managementReview,
@@ -290,6 +291,7 @@ export class CommercialRepository {
         input.revisionRequestId,
         input.boqRevisionId,
       );
+    const contract=(await this.pool.query("SELECT version,contract FROM document_commercial_contract_versions ORDER BY version DESC LIMIT 1")).rows[0];
     const b = await this.boq(this.pool, input.boqRevisionId),
       snapshot = price(
         b.snapshot,
@@ -297,6 +299,7 @@ export class CommercialRepository {
         input,
         await this.standardPolicy(actor),
       );
+    Object.assign(snapshot,{documentCommercialContract:contract});
     return { snapshot, fingerprint: fingerprint(snapshot) };
   }
   async pricingList(actor: string) {
@@ -349,7 +352,8 @@ export class CommercialRepository {
           input,
           await this.standardPolicy(actor, c),
         ),
-        fp = fingerprint(snapshot);
+        contract=(await c.query("SELECT version,contract FROM document_commercial_contract_versions ORDER BY version DESC LIMIT 1")).rows[0],
+        fp = fingerprint(Object.assign(snapshot,{documentCommercialContract:contract}));
       if (fp !== expected)
         throw new HttpError(409, "Preview the current pricing before saving.");
       const old = (
@@ -805,7 +809,7 @@ export class CommercialRepository {
       beforeTax: l.amount!,
       taxRate:
         extra && i === detailed.lines.length - 1
-          ? extra.taxRate
+          ? cashDeal(p.snapshot.input)?"0":extra.taxRate
           : p.snapshot.rows.find((r: any) => r.key === l.group).taxRate,
     }));
     const amount = (label: string) =>
@@ -818,6 +822,7 @@ export class CommercialRepository {
       new Decimal(p.snapshot.cost).add(extra?.cost ?? "0").toString(),
       q.snapshot.input.discount ?? "0",
       typeof adjustment === "string" ? { discount: adjustment } : adjustment,
+      cashDeal(p.snapshot.input),
     );
   }
 

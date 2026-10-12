@@ -39,97 +39,16 @@ export function buildIpoPdf(s: any, number?: string, division = s.peachtree) {
     ...s,
     quotationType: division ?? s.quotationType,
   });
-  const entries =
-    i.entryVersion === 2
-      ? [
-          [
-            "IPO reference",
-            number ?? "DRAFT",
-            "Quotation reference",
-            s.quotationNumber,
-          ],
-          [
-            "Company to invoice",
-            i.invoiceCompany,
-            "Customer / BOQ",
-            `${s.customer.name} / ${s.boqNumber}`,
-          ],
-          [
-            "Sale confirmation",
-            i.evidenceType,
-            "Customer PO",
-            i.poNumber || "N/A",
-          ],
-          ["Order date", i.orderDate, "Sales person", i.salesPerson],
-          [
-            "Customer contact",
-            `${i.contactPerson || s.customer.name} / ${i.phone || "N/A"}`,
-            "Email",
-            i.email || "N/A",
-          ],
-          [
-            "Billing address",
-            i.billingAddress || "N/A",
-            "Payment contact",
-            `${i.paymentContact || s.customer.name} / ${i.paymentPhone || "N/A"}`,
-          ],
-          ...(i.evidenceType === "Customer PO" && s.document
-            ? [["NTN", i.customerNtn || "N/A", "STRN", i.customerStrn || "N/A"]]
-            : []),
-          [
-            "Evidence details",
-            i.evidenceNotes,
-            "Checked by",
-            s.checkedBy ?? "Pending review",
-          ],
-        ]
-      : [
-          [
-            "IPO reference",
-            number ?? "DRAFT",
-            "Quotation reference",
-            s.quotationNumber,
-          ],
-          ["Company to invoice", i.invoiceCompany, "Customer PO", i.poNumber],
-          [
-            "Sale confirmation",
-            i.evidenceType,
-            "Evidence details",
-            i.evidenceNotes,
-          ],
-          ["Customer", s.customer.name, "BOQ", s.boqNumber],
-          [
-            "Sales person",
-            i.salesPerson,
-            "Checked by",
-            s.checkedBy ?? "Pending review",
-          ],
-          ["NTN", i.customerNtn, "STRN", i.customerStrn],
-          [
-            "Contact / designation",
-            `${i.contactPerson} / ${i.designation}`,
-            "Phone / email",
-            `${i.phone} / ${i.email}`,
-          ],
-          [
-            "Billing address",
-            i.billingAddress,
-            "Delivery address",
-            i.deliveryAddress,
-          ],
-          [
-            "Site contact",
-            `${i.siteContact} / ${i.sitePhone}`,
-            "Payment contact",
-            `${i.paymentContact} / ${i.paymentPhone}`,
-          ],
-          [
-            "Order date",
-            i.orderDate,
-            "Delivery date / time",
-            `${i.deliveryDate} / ${i.deliveryTime}`,
-          ],
-        ];
+  const taxDeal=s.quotationType?.saleType !== "Cash Deal";
+  const entries = [
+    ["IPO / Job reference",number ?? "DRAFT","Quotation reference",s.quotationNumber || "Not available"],
+    ["Company to invoice",i.invoiceCompany,"Tax deal",taxDeal?"Yes":"No"],
+    ["Prepared by","Atif","Checked by","Atif"],
+    ["Customer",s.customer.name,"Site / branch",`${s.siteName ?? "Not entered"} / ${s.siteCode ?? "Not entered"}`],
+    ["Customer PO / approval",i.poNumber || i.evidenceNotes || "Not entered","PO / approval date",i.orderDate],
+    ...(taxDeal?[["Customer NTN",i.customerNtn || "Not entered","Customer STRN",i.customerStrn || "Not entered"]]:[]),
+    ["Billing address",i.billingAddress || "Not entered","Customer contact",`${i.contactPerson || s.customer.contactPerson || "Not entered"} / ${i.phone || s.customer.phone || "Not entered"}`],
+  ];
   autoTable(pdf, {
     startY: 46,
     theme: "grid",
@@ -152,52 +71,9 @@ export function buildIpoPdf(s: any, number?: string, division = s.peachtree) {
     margin: { left: 14, right: 14, bottom: reportBottomMargin },
     styles: { fontSize: 7, cellPadding: 1.3 },
     headStyles: { fillColor: [61, 63, 146], fontSize: 7 },
-    head: [
-      view.included
-        ? ["Description", "Qty", "Unit", "Rate", "Amount"]
-        : [
-            "Description",
-            "Qty",
-            "Unit",
-            "Net rate",
-            "Amount",
-            "Tax %",
-            "Tax",
-            "Total",
-          ],
-    ],
-    columnStyles: view.included
-      ? {
-          0: { cellWidth: 100 },
-          1: { halign: "center", cellWidth: 10 },
-          2: { halign: "center", cellWidth: 10 },
-          3: { halign: "right" },
-          4: { halign: "right" },
-        }
-      : {
-          0: { cellWidth: 66 },
-          1: { halign: "center", cellWidth: 10 },
-          2: { halign: "center", cellWidth: 10 },
-          3: { halign: "right" },
-          4: { halign: "right" },
-          5: { halign: "center", cellWidth: 9 },
-          6: { halign: "right" },
-          7: { halign: "right" },
-        },
-    body: view.rows.map((l) =>
-      view.included
-        ? [clean(l.description), l.qty, displayUnit(l.unit,l.qty), money(l.rate), money(l.amount)]
-        : [
-            clean(l.description),
-            l.qty,
-            displayUnit(l.unit,l.qty),
-            money(l.rate),
-            money(l.amount),
-            l.taxRate,
-            money(l.tax),
-            money(l.total),
-          ],
-    ),
+    head: [["Description", "Qty", "Unit", view.included ? "Rate" : "Rate excl. GST", view.included ? "Amount" : "Amount excl. GST"]],
+    columnStyles: {0:{cellWidth:100},1:{halign:"center",cellWidth:10},2:{halign:"center",cellWidth:12},3:{halign:"right"},4:{halign:"right"}},
+    body:view.rows.map(l=>[clean(l.description),l.qty,displayUnit(l.unit,l.qty),money(l.rate),money(l.amount)]),
   });
   autoTable(pdf, {
     startY: (pdf as any).lastAutoTable.finalY + 3,
