@@ -1,0 +1,226 @@
+{
+  "standard-installation": {
+    "source": "Abu Bakar approval, 12 October 2026",
+    "spMisc": 0,
+    "spLabour": 15000,
+    "spDelivery": 15000,
+    "spAcBox": 5000,
+    "spDcBox": 5000,
+    "singleChangeover": "63A 4P Changeover",
+    "siteBoxesQty": 1,
+    "siteBoxesCost": 35000,
+    "miscCost": 60000,
+    "standardBoreCost": 25000,
+    "solarBores": 2,
+    "upsBores": 1,
+    "threePhaseUpsLabourPerInverter": 50000,
+    "threePhaseUpsDelivery": 50000,
+    "spInputAmps": 63,
+    "spOutputAmps": 32,
+    "spChangeoverAmps": 32,
+    "spVpdPoles": 2,
+    "spMaxPanelsPerString": 10,
+    "threePhaseFirstStringPanels": 14,
+    "threePhaseAdditionalStringPanels": 15,
+    "dcBreakersPerString": 2,
+    "dcSpdPerString": 1,
+    "dcFuseHolderPerString": 1,
+    "spAcTerminationMetres": 20,
+    "singleAc16Metres": 30,
+    "dualAc16Metres": 15,
+    "dualAc25Metres": 20,
+    "single63A4p": 2,
+    "dual63A4p": 4,
+    "dual100A4p": 2,
+    "acSpdQty": 1,
+    "dcCablePerWattPerColour": "0.0045",
+    "earth25PerWatt": "0.00075",
+    "earth6PerWatt": "0.003",
+    "earth10PerWatt": "0.003"
+  },
+  "UBL-UPS-6-10": {
+    "customerShortCode": "UBL",
+    "configuration": "6-10",
+    "scope": "UPS installation only",
+    "inverter": {
+      "itemId": "CH-PCS-HYB-SP-006",
+      "quantity": 1
+    },
+    "battery": {
+      "itemId": "CH-BAT-LV-05 KW",
+      "quantity": 2
+    },
+    "bms": {
+      "itemId": "CH-BMS-LV",
+      "quantity": 1
+    },
+    "vpd": {
+      "itemId": "CH-VPD-2P",
+      "quantity": 1
+    },
+    "acCable": {
+      "brand": "Pakistan Cables",
+      "sizeMm2": 10,
+      "cores": 1,
+      "inputMetresReported": 2,
+      "inputSplitStatus": "Owner confirmed",
+      "outputRedMetres": 1,
+      "outputBlackMetres": 1,
+      "stockItemId": "CH-CBL-AC-10MM/1C-RB",
+      "stockMappingStatus": "Mapped",
+      "inputRedMetres": 1,
+      "inputBlackMetres": 1,
+      "totalAcConductorMetres": 4
+    },
+    "earthing": {
+      "sizeMm2": 2.5,
+      "metres": 1,
+      "itemId": "CH-CBL-ERT-2.5MM/1CP"
+    },
+    "box": {
+      "itemId": "CH-5WAY-DB",
+      "quantity": 1
+    },
+    "labour": {
+      "budgetPkr": 5000,
+      "status": "Approximate owner budget"
+    },
+    "delivery": {
+      "budgetPkr": 5000,
+      "status": "Approximate owner budget"
+    },
+    "sellingPriceInclusiveTaxPkr": 900000,
+    "otherStandardUpsItemsIncluded": false,
+    "source": "Abu Bakar, 12 October 2026",
+    "status": "Cable quantities confirmed; pending live integration and missing stock-ID mapping"
+  },
+  "MBL-UPS-6-5": {
+    "customerShortCode": "MBL",
+    "configuration": "6-5",
+    "scope": "UPS installation only",
+    "inverter": {
+      "itemId": "CH-PCS-HYB-SP-006",
+      "quantity": 1
+    },
+    "battery": {
+      "itemId": "CH-BAT-LV-05 KW",
+      "quantity": 1
+    },
+    "bms": {
+      "itemId": "CH-BMS-LV",
+      "quantity": 1
+    },
+    "vpd": {
+      "itemId": "CH-VPD-2P",
+      "quantity": 1
+    },
+    "acCable": {
+      "brand": "Newage Cables",
+      "sizeMm2": 6,
+      "cores": 1,
+      "inputMetresReported": 2,
+      "inputSplitStatus": "Owner confirmed",
+      "outputRedMetres": 1,
+      "outputBlackMetres": 1,
+      "stockItemId": "CH-CBL-AC-6MM/1C-RB-NA",
+      "stockMappingStatus": "Owner-authorized combined ID created locally",
+      "inputRedMetres": 1,
+      "inputBlackMetres": 1,
+      "totalAcConductorMetres": 4
+    },
+    "earthing": {
+      "sizeMm2": 2.5,
+      "metres": 1,
+      "itemId": "CH-CBL-ERT-2.5MM1CNA"
+    },
+    "box": {
+      "itemId": "CH-5WAY-DB",
+      "quantity": 1
+    },
+    "labour": {
+      "budgetPkr": 5000,
+      "status": "Approximate owner budget"
+    },
+    "delivery": {
+      "budgetPkr": 5000,
+      "status": "Approximate owner budget"
+    },
+    "sellingPriceInclusiveTaxPkr": 660000,
+    "otherStandardUpsItemsIncluded": false,
+    "source": "Abu Bakar, 12 October 2026",
+    "status": "Cable quantities confirmed; pending live integration and missing stock-ID mapping"
+  },
+  "MBL-UPS-6-10": {
+    "customerShortCode": "MBL",
+    "configuration": "6-10",
+    "scope": "UPS installation only",
+    "inverter": {
+      "itemId": "CH-PCS-HYB-SP-006",
+      "quantity": 1
+    },
+    "battery": {
+      "itemId": "CH-BAT-LV-05 KW",
+      "quantity": 2
+    },
+    "bms": {
+      "itemId": "CH-BMS-LV",
+      "quantity": 1
+    },
+    "vpd": {
+      "itemId": "CH-VPD-2P",
+      "quantity": 1
+    },
+    "acCable": {
+      "brand": "Newage Cables",
+      "sizeMm2": 6,
+      "cores": 1,
+      "inputMetresReported": 2,
+      "inputSplitStatus": "Owner confirmed",
+      "outputRedMetres": 1,
+      "outputBlackMetres": 1,
+      "stockItemId": "CH-CBL-AC-6MM/1C-RB-NA",
+      "stockMappingStatus": "Owner-authorized combined ID created locally",
+      "inputRedMetres": 1,
+      "inputBlackMetres": 1,
+      "totalAcConductorMetres": 4
+    },
+    "earthing": {
+      "sizeMm2": 2.5,
+      "metres": 1,
+      "itemId": "CH-CBL-ERT-2.5MM1CNA"
+    },
+    "box": {
+      "itemId": "CH-5WAY-DB",
+      "quantity": 1
+    },
+    "labour": {
+      "budgetPkr": 5000,
+      "status": "Approximate owner budget"
+    },
+    "delivery": {
+      "budgetPkr": 5000,
+      "status": "Approximate owner budget"
+    },
+    "sellingPriceInclusiveTaxPkr": 935000,
+    "otherStandardUpsItemsIncluded": false,
+    "source": "Abu Bakar, 12 October 2026",
+    "status": "Cable quantities confirmed; pending live integration and missing stock-ID mapping"
+  },
+  "UBL-solar-preserved": {
+    "scope": "Existing customized solar",
+    "configurations": [
+      "20-20-30",
+      "25-20-30",
+      "30-30-40",
+      "35-30-40"
+    ],
+    "boreRate": 30000,
+    "gensetRate": 10000,
+    "internetRate": 3000,
+    "preserveSavedBudgets": true,
+    "doNotRefreshExistingJobs": true,
+    "dualInput100AQty": 3,
+    "dualOutput100AQty": 3,
+    "dualStrings": 4
+  }
+}

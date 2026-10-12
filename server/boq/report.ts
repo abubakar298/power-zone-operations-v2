@@ -170,7 +170,7 @@ export function buildCostingPdf(
       "Total Cost (PKR)",
     ],
     s.lines.map((l) => [
-      label(l.description),
+      label(l.itemId ? `${l.itemId}\n${l.description}` : l.description),
       label([l.brand || "-", ...l.brandAlternatives].join("\n")),
       label(l.specification || "-"),
       money(l.qty, Number(l.qty) % 1 ? 2 : 0),

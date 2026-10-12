@@ -279,7 +279,7 @@ test("only reviewers can decide; submitted drafts lock; source access and change
   r0 = approvals[0].body.saved;
   assert.equal(r0.id, approvals[1].body.saved.id);
   assert.equal((await get(manager, `/reviews/${s.id}`)).body.revision_id, null);
-  assert.equal(r0.snapshot.total, "6456786");
+  assert.equal(r0.snapshot.total, "6406786");
   await post(employee, "/drafts", {
     id: d.id,
     version: draft.version,
@@ -360,7 +360,7 @@ test("revision reasons, identities and latest-base checks preserve immutable R0/
   );
   assert.equal(
     (await get(manager, `/${r0.id}`)).body.snapshot.total,
-    "6456786",
+    "6406786",
   );
   await assert.rejects(
     db.pool.query(

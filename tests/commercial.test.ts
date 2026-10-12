@@ -129,8 +129,8 @@ before(async () => {
     .expect(200);
   employeeCookie = el.headers["set-cookie"][0].split(";")[0];
   employeeCsrf = el.body.csrfToken;
-  const m = await new MastersRepository(db.pool).list(),
-    brand = (category: string, name: string) =>
+  const m = await new MastersRepository(db.pool).list();
+  const brand = (category: string, name: string) =>
       m.brands.find((b) => b.category === category && b.name === name)!.id;
   const s = surveySchema.parse({
     customerId: 3,
@@ -187,13 +187,13 @@ before(async () => {
 after(async () => {
   await db?.close();
 });
-test("locked commercial case reconciles, markup is on cost, and discount follows tax", () => {
+test("approved-profile commercial case reconciles, markup is on cost, and discount follows tax", () => {
   const p = price(boq.snapshot, boq.number, inputs());
   assert.equal(p.rows[0].beforeTax, "1811160");
   assert.equal(p.solarTax, "181116.00");
-  assert.equal(p.subtotal, "7601457.40");
-  assert.equal(p.otherTax, "1042253.53");
-  assert.equal(p.netTotal, "8824826.93");
+  assert.equal(p.subtotal, "7541457.40");
+  assert.equal(p.otherTax, "1031453.53");
+  assert.equal(p.netTotal, "8754026.93");
   const discounted = price(boq.snapshot, boq.number, {
     ...inputs(),
     discount: "324826.93",
@@ -211,7 +211,7 @@ test("locked commercial case reconciles, markup is on cost, and discount follows
     discount: "324826.93",
   };
   const q = quote(p, boq.snapshot, quotationInput);
-  assert.equal(q.footer.at(-1)!.amount, "8500000.00");
+  assert.equal(q.footer.at(-1)!.amount, "8429200.00");
   assert.throws(
     () => quote(p, boq.snapshot, { ...quotationInput, discount: "999999999" }),
     /discount/,
@@ -410,7 +410,7 @@ test("saved quotation versions retain pricing, customer descriptions and PDF aft
       }).expect(201)
     ).body;
   assert.equal(pr2.version, 2);
-  assert.equal(pr2.snapshot.cost, "6456786");
+  assert.equal(pr2.snapshot.cost, "6406786");
   const old = (await get(`/quotations/${issued.id}`)).body;
   assert.deepEqual(old.snapshot, issued.snapshot);
   const copy = (await get(`/quotations/${issued.id}/copy`)).body;

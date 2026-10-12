@@ -1,3 +1,4 @@
+import { identifyLines, standardProfile, bankUpsProfile, type CatalogueItem, type EngineeringProfile } from '../masters/catalogue.js';
 import { calculateDirectProducts, directProductGroups } from "./direct-products.js";
 import { singlePhaseCableDescription } from "./ac-cable.js";
 import { singlePhaseConfigurations } from "./equipment.js";
@@ -63,8 +64,11 @@ export interface Masters {
   items: ItemMaster[];
   inverters: InverterMaster[];
   classifications: Classification[];
+  catalogue?: CatalogueItem[];
+  engineeringProfiles?: EngineeringProfile[];
 }
 export interface CostLine {
+  itemId?:string;itemVersion?:number;stockBrand?:string;rateKey?:string;costingCategory?:string;colour?:string;
   key: string;
   description: string;
   brand: string;
@@ -87,6 +91,7 @@ export function calculate(s: Survey, m: Masters) {
 }
 function calculateInstallation(s:Survey,m:Masters) {
   const bessOnly=s.family === "bess-only";
+  const approved=standardProfile(m);
   if(!bessOnly && (s.panelQty<1 || new Decimal(s.panelWattage).lte(0))) throw new HttpError(400,"Enter positive panel quantity and wattage.");
   const customer = m.customers.find(
     (c) => c.id === s.customerId && c.status === "Active",
@@ -110,6 +115,8 @@ function calculateInstallation(s:Survey,m:Masters) {
     throw new HttpError(400, "Select a supported inverter configuration.");
   if (sp && (config.sku !== sp.inverterSku || config.quantity !== 1 || !new Decimal(config.total_kw).eq(6)))
     throw new HttpError(422, "Single-phase inverter master configuration is inconsistent. Ask an administrator to review it.");
+  const bankProfile=bessOnly && sp && approved ? bankUpsProfile(m,customer.short_code,s.batteryKwh) : undefined;
+  if(bessOnly && sp && approved && ["UBL","MBL"].includes(customer.short_code) && !bankProfile)throw new HttpError(400,"Select the customer-approved UPS configuration.");
   const allowances =
     !bessOnly && s.sourceMode === "General quotation"
       ? generalAllowances(s.panelQty, s.panelWattage, config.quantity)
@@ -219,7 +226,7 @@ function calculateInstallation(s:Survey,m:Masters) {
   add(config.sku, config.quantity, "BESS", "inverter");
   add(sp?.batterySku ?? "BAT-HV-05 KW WO BMS", sp?.batteryModules ?? modules, "BESS", "battery");
   add(sp?.bmsSku ?? "CH-BMS-HV", bms, "BESS", "battery");
-  for (const [key, qty] of Object.entries({
+  if(!bankProfile)for (const [key, qty] of Object.entries({
     "6mm² DC Cable Red": bessOnly ? "0" : allowances
       ? new Decimal(allowances.dcRed)
       : new Decimal(s.dcMetres).div(2),
@@ -237,7 +244,16 @@ function calculateInstallation(s:Survey,m:Masters) {
       : new Decimal(s.acTerminationMode === "Fixed" ? (config.quantity === 2 ? "20" : "0") : s.acInverter25 ?? "0").add(s.acPanel25 ?? "0"),
   }))
     add(key, qty, "EPC", "cable", "Installation Cost");
-  if (spScope) {
+  if (bankProfile) {
+    const p=bankProfile.payload;
+    const cableItem=m.catalogue?.find(i=>i.item_id===p.acCable.stockItemId);
+    if(!cableItem?.rate_key)throw new HttpError(422,"Customer UPS cable rate mapping is missing.");
+    add(cableItem.rate_key,4,"EPC","cable","Installation Cost");
+    const ac=lines[lines.length-1];ac.itemId=cableItem.item_id;ac.stockBrand=p.acCable.brand;ac.brand=p.acCable.brand;ac.description=`${p.acCable.sizeMm2}mm² single-core AC cable: input 1 MTRS red + 1 MTRS black; output 1 MTRS red + 1 MTRS black`;
+    add("2.5mm² Earthing Cable",1,"EPC","cable","Installation Cost");lines[lines.length-1].brand=p.acCable.brand;
+    add("63A 1P AC VPD",1,"EPC","switchgear","Installation Cost");
+    add("CH-5WAY-DB",1,"EPC",undefined,"Installation Cost");
+  } else if (spScope) {
     const termination = s.sourceMode !== "General quotation" && s.acTerminationMode === "Measured" ? s.spInverterTerminationMetres ?? spScope.cable.fixedTotalMetres : spScope.cable.fixedTotalMetres;
     add("10mm² 1C AC Cable", new Decimal(termination).plus(spScope.cable.loadPanelConductorMetres), "EPC", "cable", "Installation Cost");
     const cable = lines.find(l=>l.key === "10mm² 1C AC Cable");
@@ -251,7 +267,7 @@ function calculateInstallation(s:Survey,m:Masters) {
     })) add(key, qty, "EPC", "switchgear", "Installation Cost");
     add("SP AC Conduit Accessories and Box", 1, "EPC", undefined, "Installation Cost");
     add("SP DC Enclosures", bessOnly ? 0 : 1, "EPC", undefined, "Installation Cost");
-    warnings.push("Single-phase design requires electrical verification before release; DC breaker, AC accessories and DC enclosure allowances are provisional.");
+    warnings.push("Single-phase design requires electrical verification before release. SP accessory and enclosure costs are owner-confirmed; protection specifications remain subject to verification.");
   } else {
   for (const [key, qty] of Object.entries({
     "DC Breaker": rule(22).mul(strings),
@@ -259,22 +275,22 @@ function calculateInstallation(s:Survey,m:Masters) {
     "DC Fuse with Holder": rule(24).mul(strings),
     "63A 4P MCB": rule(dual ? 16 : 14),
     "100A 4P MCCB": rule(dual ? 17 : 15),
-    "100A Rotary Changeover with Box": rule(18),
+    [approved && !dual ? "63A 4P Changeover" : "100A Rotary Changeover with Box"]: rule(18),
     "AC SPD": rule(19),
   }))
     add(key, qty, "EPC", "switchgear", "Installation Cost");
-  add("AC & DC Boxes", rule(20), "EPC", undefined, "Installation Cost");
+  add("AC & DC Boxes", approved ? 1 : rule(20), "EPC", undefined, "Installation Cost");
   }
-  add("Earthing Bore", s.spIncludeEarthingBore === false ? 0 : bessOnly ? 1 : rule(13), "EPC", undefined, "Earthing Cost");
+  add("Earthing Bore", bankProfile || s.spIncludeEarthingBore === false ? 0 : bessOnly ? 1 : approved ? approved.solarBores : rule(13), "EPC", undefined, "Earthing Cost");
   const fixedCharge=(key:string,qty:number,rate:string,unit:string,description:string,epc:typeof lines[number]["epc"])=>{
     const spec=m.items.find(i=>i.key===key);
     lines.push({key,description,brand:"",brandAlternatives:[],specification:spec?.approved_specification??null,specVersion:spec?.version??null,qty:String(qty),unit,rate,rateVersion:0,rateStatus:"Active",total:new Decimal(qty).mul(rate).toString(),phase:"EPC",epc});
   };
-  if(sp)fixedCharge("Misc. Accessories",1,"45000","LS","Miscellaneous accessories","Installation Cost");
-  else add("Misc. Accessories", rule(21), "EPC", undefined, "Installation Cost");
+  if(sp && !approved)fixedCharge("Misc. Accessories",1,"45000","LS","Miscellaneous accessories","Installation Cost");
+  else if(!sp) add("Misc. Accessories", rule(21), "EPC", undefined, "Installation Cost");
   if(sp || bessOnly){
-    fixedCharge("Labour",config.quantity,sp?"15000":"50000","Inverter",sp?"Single-phase installation per inverter":"UPS installation per inverter","Electrical Labour");
-    fixedCharge("Delivery",1,sp?"15000":"50000","Project","Project delivery","Deliveries");
+    fixedCharge("Labour",config.quantity,bankProfile?"5000":sp?"15000":"50000",approved?"JOB":"Inverter",sp?"Single-phase installation per inverter":"UPS installation per inverter","Electrical Labour");
+    fixedCharge("Delivery",1,bankProfile?"5000":sp?"15000":"50000",approved?"JOB":"Project","Project delivery","Deliveries");
   }else{
     add("Labour", pv, "EPC", undefined, "Electrical Labour");
     add("Delivery", pv, "EPC", undefined, "Deliveries");
@@ -321,6 +337,7 @@ function calculateInstallation(s:Survey,m:Masters) {
       l.specVersion = null;
     }
   }
+  identifyLines(m,lines,s,warnings);
   const total = lines.reduce((a, l) => a.add(l.total), new Decimal(0));
   const summary = (bessOnly ? ["BESS","EPC"] : ["Solar Panels", "Structure", "BESS", "EPC"]).map((phase) => {
     const cost = lines
@@ -384,8 +401,10 @@ function calculateInstallation(s:Survey,m:Masters) {
         }
       : {}),
     directProductGroups: undefined as ReturnType<typeof directProductGroups> | undefined,
+    ...(approved?{masterRuleVersion:"owner-approved-2026-10-12-v1",customerRuleProfile:bankProfile?.key,customerRuleVersion:bankProfile?.version}:{}),
     engineVersion: 1,
   };
 }
 
 export type BoqSnapshot = ReturnType<typeof calculateInstallation>;
+

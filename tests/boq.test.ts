@@ -48,6 +48,9 @@ before(async () => {
   cookie = l.headers["set-cookie"][0].split(";")[0];
   csrf = l.body.csrfToken;
   masters = await new MastersRepository(db.pool).list();
+  // Golden historical fixture runs the legacy profile; new owner-approved profiles have a dedicated integration suite.
+  masters.engineeringProfiles = [];
+  masters.rules.find((r:any)=>r.key==="engineering-20").value=2;
   const brand = (cat: string, name: string) =>
     masters.brands.find((b: any) => b.category === cat && b.name === name).id;
   survey = surveySchema.parse({
@@ -247,13 +250,13 @@ test("master changes cannot rewrite snapshots and stale previews are rejected", 
     .get(`/api/boqs/${saved.id}`)
     .set("Cookie", cookie)
     .expect(200);
-  assert.equal(r.body.snapshot.total, "6456786");
+  assert.equal(r.body.snapshot.total, "6406786");
   assert.equal(
     r.body.snapshot.lines.find((l: any) => l.key === "Solar PV Modules").rate,
     "39",
   );
   const recalculated = (await post("/preview", s)).body;
-  assert.equal(recalculated.snapshot.total, "6495486");
+  assert.equal(recalculated.snapshot.total, "6445486");
   const submitted = (
     await post("/reviews", {
       draftId: d.id,

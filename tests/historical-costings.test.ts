@@ -16,6 +16,9 @@ let db: Awaited<ReturnType<typeof testDatabase>>, masters: Masters;
 before(async () => {
   db = await testDatabase();
   masters = await new MastersRepository(db.pool).list();
+  // Exercise the workbook-era rules independently from future approved profiles.
+  masters.engineeringProfiles=[];
+  masters.rules.find(r=>r.key==="engineering-20")!.value="2";
 });
 after(async () => {
   await db?.close();

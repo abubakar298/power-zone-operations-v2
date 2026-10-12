@@ -46,15 +46,16 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  assert.equal(b.lines.some(l=>['2.5mm² Earthing Cable',sp?'10mm² Earthing Cable':'6mm² Earthing Cable'].includes(l.key)),false);
  if(sp)assert.match(b.lines.find(l=>l.key==='10mm² 1C AC Cable')!.description,/10 m red \+ 10 m black/);
  if(sp){
- assert.equal(b.lines.find(l=>l.key==='Misc. Accessories')!.total,'45000');
+ assert.equal(b.lines.some(l=>l.key==='Misc. Accessories'),false);
  const noBore=calculate({...s,spIncludeEarthingBore:false},m as any);
  assert.equal(noBore.lines.some(l=>l.key==='Earthing Bore'),false);
  assert.equal(new Decimal(b.total).sub(noBore.total).toString(),b.lines.find(l=>l.key==='Earthing Bore')!.total);
  const noBorePricing=price(noBore,'UPS',{boqRevisionId:randomUUID(),presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},preparedBy:'Fixture',remarks:''} as any,policy);
  assert.equal(quote(noBorePricing,noBore,{pricingId:randomUUID(),quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture'}).lines.some(l=>l.group==='earthing'),false);
  const solar=calculate({...s,family:'solar-hybrid',panelQty:10,panelWattage:'585',brands:{...s.brands,solar:brand('Solar Panel')},spIncludeEarthingBore:false},m as any);
- for(const [key,value] of [['Labour','15000'],['Delivery','15000'],['Misc. Accessories','45000']])assert.equal(solar.lines.find(l=>l.key===key)!.total,value);
+ for(const [key,value] of [['Labour','15000'],['Delivery','15000']])assert.equal(solar.lines.find(l=>l.key===key)!.total,value);
  assert.equal(solar.lines.some(l=>l.key==='Earthing Bore'),false);
+ assert.equal(solar.lines.some(l=>l.key==='Misc. Accessories'),false);
  for(const presentation of ['Full Breakup','Basic Breakup','No Breakup'])for(const taxMode of ['Tax Included','Show Sales Tax Separately']){
  const pricing=price(solar,'SOLAR-SP',{boqRevisionId:randomUUID(),presentation,taxMode,preparedBy:'Fixture',markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},remarks:''} as any,policy);
  const quoted=quote(pricing,solar,{pricingId:randomUUID(),quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture'});

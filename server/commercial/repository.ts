@@ -424,7 +424,7 @@ export class CommercialRepository {
           "SELECT DISTINCT ON(key) key,rate FROM rate_versions WHERE key=ANY($1::text[]) ORDER BY key,version DESC",
           [
             b.snapshot.lines
-              .filter((l: any) => l.unit === "m")
+              .filter((l: any) => /^(m|MTRS)$/i.test(l.unit))
               .map((l: any) => l.key),
           ],
         )

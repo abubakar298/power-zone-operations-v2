@@ -280,7 +280,7 @@ export function quotationLines(
     "balance",
   );
   add(
-    sp ? `AC Protection & Distribution: 63A input MCB, 32A output MCB, 32A changeover, VPD and protection boxes — ${brand("switchgear")}` : `AC Protection & Distribution: MCB/MCCB, Rotary Changeover, AC SPD and AC/DC Protection Boxes — ${brand("switchgear")}`,
+    sp ? `AC Protection & Distribution: 63A input MCB, 32A output MCB, 32A changeover, VPD and protection boxes — ${brand("switchgear")}` : `AC Protection & Distribution: MCB/MCCB, Changeover, AC SPD and AC/DC Protection Boxes — ${brand("switchgear")}`,
     "LS",
     "1",
     "balance",
@@ -307,7 +307,7 @@ export function quotationLines(
   const detailKeys = [
     ["16mm² 4C AC Cable", "25mm² 4C AC Cable", "10mm² 1C AC Cable"],
     ["DC Breaker", "500V 2P DC Breaker", "DC SPD", "DC Fuse with Holder", "SP DC Enclosures"],
-    ["63A 4P MCB", "100A 4P MCCB", "100A Rotary Changeover with Box", "AC SPD", "AC & DC Boxes", "63A 2P MCB", "32A 2P MCB", "32A 2P Breaker Changeover", "63A 1P AC VPD", "SP AC Conduit Accessories and Box"],
+    ["63A 4P MCB", "100A 4P MCCB", "100A Rotary Changeover with Box", "63A 4P Changeover", "CH-5WAY-DB", "AC SPD", "AC & DC Boxes", "63A 2P MCB", "32A 2P MCB", "32A 2P Breaker Changeover", "63A 1P AC VPD", "SP AC Conduit Accessories and Box"],
     ["Misc. Accessories", "Extra Smart Meter", "Genset Synchronisation with Battery SOC"],
   ];
   const firstComposite = rows.findIndex(r => r.description === `${ac} — ${brand("cable")}`);
@@ -436,7 +436,7 @@ export function quote(
       [
         "63A 4P MCB",
         "100A 4P MCCB",
-        "100A Rotary Changeover with Box",
+        "100A Rotary Changeover with Box", "63A 4P Changeover", "CH-5WAY-DB",
         "AC SPD",
         "AC & DC Boxes", "63A 2P MCB", "32A 2P MCB", "32A 2P Breaker Changeover", "63A 1P AC VPD", "SP AC Conduit Accessories and Box",
       ],

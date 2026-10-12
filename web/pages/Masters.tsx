@@ -1,3 +1,4 @@
+import {InventoryCatalogue} from '../components/InventoryCatalogue.js';
 import { compareRateItems } from "../ui/rateOrder.js";
 import {Button} from "../ui/Button.js";
 import { CustomerImport } from "../components/CustomerImport.js";
@@ -45,7 +46,8 @@ const columns: Record<Kind, [string, string][]> = {
     ["notes", "Notes"],
   ],
   rates: [
-    ["key", "Item / rate key"],
+    ["pt_item_ids", "PT Item IDs"],
+    ["key", "Rate source / historical name"],
     ["unit", "UOM"],
     ["rate", "Rate (PKR)"],
     ["status", "Status"],
@@ -114,6 +116,7 @@ export function Masters({
   onLogout: () => void;
 }) {
   const [data, setData] = useState<Data | null>(null),
+    [catalogueOpen,setCatalogueOpen]=useState(false),
     [kind, setKind] = useState<Kind>(initialKind),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState("All");
@@ -192,7 +195,7 @@ export function Masters({
   function display(row: Row, key: string) {
     const reviewReasons: Record<string, string> = {
       "SP AC Conduit Accessories and Box": "Temporary PKR 5,000 allowance: AC box, conduit and termination accessories. Confirm actual combined cost.",
-      "500V 2P DC Breaker": "Temporary PKR 4,950 per breaker. Confirm supplier rate and current rating.",
+      "500V 2P DC Breaker": "Confirm supplier rate and current rating; the current rate column is authoritative.",
       "SP DC Enclosures": "Temporary PKR 5,000 project allowance for roof and inverter-room DC enclosures. Confirm actual cost.",
     };
     if (kind === "rates" && key === "notes" && rateReview(row) && reviewReasons[String(row.key)]) return reviewReasons[String(row.key)] + " " + String(row.notes ?? "");
@@ -227,6 +230,7 @@ export function Masters({
             aria-selected={kind === k}
             className={kind === k ? "selected" : ""}
             onClick={() => {
+              setCatalogueOpen(false);
               setKind(k);
               setQuery("");
               setFilter("All");
@@ -237,6 +241,8 @@ export function Masters({
           </button>
         ))}
       </div>
+      {data && <Button variant="secondary" onClick={()=>setCatalogueOpen(!catalogueOpen)}>{catalogueOpen?"Back to master records":"PT Item catalogue & approved rules"}</Button>}
+      {catalogueOpen && data ? <InventoryCatalogue data={data}/> : <>
       <div className="master-toolbar">
         <div>
           <h2>{titles[kind]}</h2>
@@ -624,6 +630,8 @@ export function Masters({
           </section>
         </div>
       )}
+      </>}
     </section>
   );
 }
+

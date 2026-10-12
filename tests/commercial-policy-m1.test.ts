@@ -57,7 +57,7 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
         .set("X-CSRF-Token", csrf)
         .send(body);
     const policy = await repo.standardPolicy(admin);
-    assert.equal(policy.version, 1);
+    assert.equal(policy.version, 2);
     assert.deepEqual(policy.markups, {
       solar: "10",
       structure: "10",
@@ -70,7 +70,7 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
       .set("Cookie", cookie)
       .set("Origin", origin)
       .send({
-        expectedVersion: 1,
+        expectedVersion: policy.version,
         policy: {
           markups: policy.markups,
           itemCategories: policy.itemCategories,
@@ -111,7 +111,7 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
         .set("Origin", origin)
         .set("X-CSRF-Token", "m1-csrf-token")
         .send({
-          expectedVersion: 1,
+          expectedVersion: policy.version,
           policy: {
             markups: policy.markups,
             itemCategories: policy.itemCategories,
@@ -286,9 +286,9 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
         markups: { ...policy.markups, solar: "11" },
         itemCategories: policy.itemCategories,
       },
-      1,
+      policy.version,
     );
-    assert.equal(next.version, 2);
+    assert.equal(next.version, policy.version + 1);
     assert.equal(JSON.stringify(snapshot), original);
     assert.equal(snapshot.policy!.markups.solar, "10");
     await assert.rejects(
@@ -327,7 +327,7 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
     const preview = (
       await post("/api/commercial/pricing/preview", body).expect(200)
     ).body;
-    assert.equal(preview.snapshot.policy.version, 2);
+    assert.equal(preview.snapshot.policy.version, policy.version + 1);
     const saved = (
       await post("/api/commercial/pricing", {
         ...body,
@@ -335,7 +335,7 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
         requestKey: randomUUID(),
       }).expect(201)
     ).body;
-    assert.equal(saved.snapshot.policy.version, 2);
+    assert.equal(saved.snapshot.policy.version, policy.version + 1);
     assert.equal(saved.fingerprint, fingerprint(saved.snapshot));
     // Management preview works identically for tax-inclusive and separate-tax presentations.
     const qi = quotationSchema.parse({
@@ -461,9 +461,9 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
     const managementPolicy = await repo.saveStandardPolicy(
       managerId,
       { markups: policy.markups, itemCategories: policy.itemCategories },
-      2,
+      policy.version + 1,
     );
-    assert.equal(managementPolicy.version, 3);
+    assert.equal(managementPolicy.version, policy.version + 2);
     assert.deepEqual(
       (await repo.pricingGet(admin, saved.id)).snapshot,
       saved.snapshot,
@@ -475,7 +475,7 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
         markups: { ...policy.markups, solar: "12" },
         itemCategories: policy.itemCategories,
       },
-      3,
+      policy.version + 2,
     );
     await assert.rejects(
       repo.pricingSave(admin, body, stale.fingerprint, randomUUID()),

@@ -34,13 +34,16 @@ export class MastersRepository {
       "SELECT * FROM customers ORDER BY id",
       "SELECT s.*,c.name AS customer_name FROM sites s JOIN customers c ON c.id=s.customer_id ORDER BY s.id",
       "SELECT * FROM brands ORDER BY id",
-      "SELECT DISTINCT ON(r.key) r.*,i.unit FROM rate_versions r JOIN item_master i ON i.key=r.key ORDER BY r.key,r.version DESC",
+      "SELECT DISTINCT ON(r.key) r.*,i.unit,i.item_group FROM rate_versions r JOIN item_master i ON i.key=r.key ORDER BY r.key,r.version DESC",
       "SELECT DISTINCT ON(key) * FROM rule_versions ORDER BY key,version DESC",
       `SELECT DISTINCT ON(i.key) i.key,i.unit,i.display_name,i.item_group,s.specification AS approved_specification,
     s.status,s.notes,s.version FROM item_master i JOIN item_spec_versions s ON s.key=i.key ORDER BY i.key,s.version DESC`,
       "SELECT * FROM inverter_configurations ORDER BY total_kw,configuration",
       "SELECT * FROM costing_classifications",
       "SELECT * FROM master_imports",
+      "SELECT * FROM inventory_catalogue_current ORDER BY item_id",
+      "SELECT * FROM engineering_profiles_current ORDER BY key",
+      "SELECT * FROM inventory_item_aliases ORDER BY alias",
     ];
     const results = [];
     if (this.serial) {
@@ -58,19 +61,26 @@ export class MastersRepository {
       items,
       inverters,
       classifications,
-      imports,
+      imports, catalogue, engineeringProfiles, itemAliases,
     ] = results;
     return {
       customers: customers.rows,
       sites: sites.rows,
       brands: brands.rows,
-      rates: rates.rows,
+      rates: rates.rows.map(r=>({...r,pt_item_ids:catalogue.rows.filter(i=>i.rate_key===r.key).map(i=>i.item_id).join(" · ")})),
       rules: rules.rows,
       items: items.rows,
       inverters: inverters.rows,
       classifications: classifications.rows,
       imports: imports.rows,
+      catalogue: catalogue.rows,
+      engineeringProfiles: engineeringProfiles.rows,
+      itemAliases: itemAliases.rows,
     };
+  }
+  private async resolveRateKey(key: string, pool: Pool | PoolClient = this.pool) {
+    const row = (await pool.query(`SELECT rate_key FROM inventory_catalogue_current WHERE item_id=$1 UNION ALL SELECT c.rate_key FROM inventory_item_aliases a JOIN inventory_catalogue_current c ON c.item_id=a.item_id WHERE a.alias=$1 LIMIT 1`, [key])).rows[0];
+    return row?.rate_key || key;
   }
   async save(
     actor: string,
@@ -83,6 +93,7 @@ export class MastersRepository {
       return await transaction(this.pool as Pool, async (c) => {
         // Serializes writes, allocates stable customer IDs and avoids version races across processes.
         await c.query("SELECT pg_advisory_xact_lock(742019002)");
+        if (kind === "rates") id = await this.resolveRateKey(id, c);
         const user = (
           await c.query("SELECT active,role FROM users WHERE id=$1 FOR SHARE", [
             actor,
@@ -223,6 +234,7 @@ export class MastersRepository {
     }
   }
   async history(kind: "rates" | "rules" | "items", key: string) {
+    if (kind === "rates") key = await this.resolveRateKey(key);
     const table =
       kind === "rates"
         ? "rate_versions"
@@ -237,3 +249,4 @@ export class MastersRepository {
     ).rows;
   }
 }
+

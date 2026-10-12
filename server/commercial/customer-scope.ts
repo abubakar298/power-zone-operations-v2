@@ -4,7 +4,7 @@ import type {QuoteLine} from './engine.js';
 
 type Item = {description:string;unit:string;qty:string;amount?:string;offerAllowance?:string};
 export type ScopePricing = (sources:BoqSnapshot['lines'], fraction:Decimal)=>{amount:string;offerAllowance:string};
-const acKeys = new Set(['63A 4P MCB','100A 4P MCCB','100A Rotary Changeover with Box','AC SPD','AC & DC Boxes','63A 2P MCB','32A 2P MCB','32A 2P Breaker Changeover','63A 1P AC VPD','SP AC Conduit Accessories and Box']);
+const acKeys = new Set(['63A 4P MCB','100A 4P MCCB','100A Rotary Changeover with Box','63A 4P Changeover','CH-5WAY-DB','AC SPD','AC & DC Boxes','63A 2P MCB','32A 2P MCB','32A 2P Breaker Changeover','63A 1P AC VPD','SP AC Conduit Accessories and Box']);
 const dcKeys = new Set(['DC Breaker','500V 2P DC Breaker','DC SPD','DC Fuse with Holder','SP DC Enclosures']);
 export const earthingScopeDescription = 'Earthing Bore — Target earth resistance: 1–5 ohms, subject to site conditions';
 
