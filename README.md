@@ -1,6 +1,6 @@
 # Power Zone Operations V2
 
-Milestone 1 implements one-time administrator setup, login, an authenticated application shell, logout and repeat login. It uses React/TypeScript, Express 5 and PostgreSQL. No customer import, BOQ, costing, commercial pricing or quotation implementation is included.
+Operations system for Power Zone Engineering & Services: master data, design surveys, BOQ and costing, commercial pricing, quotations, customer purchase orders, IPOs, store issuance, Accounts and department dashboards. It uses React/TypeScript, Express 5 and PostgreSQL, deployed on Render in Singapore. See "Current milestone checkpoint" below for what is implemented.
 
 ## Boundaries
 

@@ -4,8 +4,6 @@ import { StatusBadge } from "../ui/StatusBadge.js";
 import { confirmTransition, confirmRevision } from "../confirm.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
-export type CoordinatorTarget =
-  "boqs" | "pricing" | "quotes" | "orders" | "operations";
 const stages = [
   "Survey & Costing Preparation",
   "Quotation approval",

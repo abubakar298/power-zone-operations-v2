@@ -84,7 +84,7 @@ export interface CostLine {
   phase: string;
   epc: string;
 }
-export type SelectedBrand = BrandMaster & { alternatives: string[] };
+type SelectedBrand = BrandMaster & { alternatives: string[] };
 export function calculate(s: Survey, m: Masters) {
   if(s.family === "direct-product") return calculateDirectProducts(s,m);
   return calculateInstallation(s,m);

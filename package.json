@@ -14,7 +14,7 @@
     "migrate": "tsx server/db/migrate-cli.ts",
     "migrate:production": "node dist/server/db/migrate-cli.js",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/*.test.ts tests/*.test.tsx",
     "test:e2e": "node scripts/browser-tests.mjs",
     "db:local": "tsx scripts/local-db.ts"
   },
@@ -46,7 +46,6 @@
     "@types/supertest": "^6.0.3",
     "@vitejs/plugin-react": "^5.0.2",
     "embedded-postgres": "^17.6.0-beta.15",
-    "prettier": "^3.9.9",
     "supertest": "^7.1.4",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",

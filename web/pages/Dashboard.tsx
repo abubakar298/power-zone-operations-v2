@@ -11,9 +11,9 @@ import { WorkspaceBoundary } from "../components/WorkspaceBoundary.js";
 import { api, ApiError, type Session, type User } from "../api.js";
 import { Brand } from "../components/Brand.js";
 import { Icon } from "../components/Icon.js";
+import { Departments } from "./Departments.js";
 
 const Design = lazy(() => import("./Design.js").then(module => ({ default: module.Design })));
-const Departments = lazy(() => import("./Departments.js").then(module => ({ default: module.Departments })));
 const Director = lazy(() => import("./Director.js").then(module => ({ default: module.Director })));
 const Coordinator = lazy(() => import("./Coordinator.js").then(module => ({ default: module.Coordinator })));
 const Operations = lazy(() => import("./Operations.js").then(module => ({ default: module.Operations })));

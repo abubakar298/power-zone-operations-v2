@@ -3,14 +3,6 @@ import { transaction } from "../db/transaction.js";
 import type { User } from "../auth/repository.js";
 import type { EmailDelivery } from "../email/delivery.js";
 import { notificationMessage } from "../email/templates.js";
-export const eventTitle = (kind: string) =>
-  ({
-    Submitted: "Quotation approval required",
-    "Approval requested": "Quotation approval required",
-    Approved: "Quotation approved",
-    "Changes requested": "Revision requested",
-    "PO received": "Customer confirmation received",
-  })[kind] ?? kind;
 export class NotificationsRepository {
   constructor(private pool: Pool) {}
   // Projection runs separately from business transactions: delivery failures never undo work.

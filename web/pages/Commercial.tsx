@@ -40,7 +40,7 @@ function editablePricing(p: PricingSnapshot): PricingInput {
   for (const r of p.rows) if (r.key !== "additional" && r.markup != null) markups[r.key] = r.markup;
   return { ...p.input, markups };
 }
-export function QuotationView({
+function QuotationView({
   snapshot: s,
   number,
   pdfUrl,

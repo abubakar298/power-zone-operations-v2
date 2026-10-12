@@ -8,7 +8,7 @@ const escapeHtml = (value: string) =>
       ]!,
   );
 /** Shared, table-based, image-optional design for account and workflow mail. */
-export function brandedMessage(
+function brandedMessage(
   to: string,
   subject: string,
   title: string,

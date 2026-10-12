@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { surveySchema } from "../boq/schema.js";
-export const designFields = surveySchema
+const designFields = surveySchema
   .omit({
     brands: true,
     sourceMode: true,

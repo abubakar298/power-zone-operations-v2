@@ -1,4 +1,3 @@
-export type QuotationType = { presentation: string; taxMode: string };
 export function quotationTypeLabel(value: any): string {
   const type = value?.quotationType ?? value?.peachtree ?? value;
   return type?.presentation && type?.taxMode

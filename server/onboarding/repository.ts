@@ -6,7 +6,7 @@ import type { StoredUser, User } from "../auth/repository.js";
 import { unseal, type EmailDelivery } from "../email/delivery.js";
 
 type Purpose = "invite" | "reset" | "verify";
-export interface AccountToken {
+interface AccountToken {
   id: string;
   purpose: Purpose;
   email: string;

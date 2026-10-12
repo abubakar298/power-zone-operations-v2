@@ -12,7 +12,6 @@ const input = z.object({
   taxRate: z.string().regex(/^\d{1,2}(\.\d{1,4})?$/),
   presentation: z.enum(["Inclusive", "Separate"]),
 }).strict();
-export type CniPriceInput = z.input<typeof input>;
 export function priceCni(raw: unknown) {
   const value = input.parse(raw);
   const rate = new Decimal(value.taxRate);

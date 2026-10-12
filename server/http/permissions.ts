@@ -76,7 +76,7 @@ export const resourceOwnership = {
   issuance:
     "SELECT 1 FROM operations_boq_issuances o JOIN internal_purchase_orders i ON i.id=o.ipo_id LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE o.id=$1 AND (o.created_by=$2 OR i.created_by=$2 OR s.created_by=$2)",
 } as const;
-export type Resource = keyof typeof resourceOwnership;
+type Resource = keyof typeof resourceOwnership;
 export async function requireOwnedResource(
   pool: Pool,
   actor: string,

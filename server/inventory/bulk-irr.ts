@@ -2,9 +2,9 @@ import source from './bulk-irr-source.json' with {type:'json'};
 import { Decimal } from 'decimal.js';
 import type {InventoryLine,ReportEntry} from './reconciliation.js';
 export const BULK_IRR_ID='ubl-verified-irr-2026-10-11';
-export const BULK_REFERENCE='Given in bulk by Abu Bakar — 11 October 2026';
+const BULK_REFERENCE='Given in bulk by Abu Bakar — 11 October 2026';
 export const verifiedGroups=Object.entries(source.rows.reduce((groups:Record<string,any[]>,row:any[])=>{if(row[0]&&row[1]) (groups[String(row[0])]??=[]).push(row);return groups;},{})).map(([originalId,rows])=>({originalId,ipo:originalId.includes('Mankera')?'316':originalId.includes('Darya')?'317':originalId.replace('CHJ','CHP').match(/CHP[- ]?(\d+)/)?.[1],rows}));
-export const confirmedPanels:Record<string,[number,number]>={
+const confirmedPanels:Record<string,[number,number]>={
  '293':[33,620],'232':[33,620],'285':[33,620],'292':[47,645],'316':[47,645],'319':[39,645],'286':[33,620],'295':[47,645],'302':[55,645],'309':[39,645],'317':[31,645],'318':[39,645],'320':[55,645],'301':[49,620],'306':[49,620],'311':[57,620],'299':[49,620],'296':[57,620],'290':[49,620],'298':[49,620],'312':[49,620],'287':[40,620]
 };
 export function bulkEntry(ipo:string,lines:InventoryLine[],dates:{start?:string,end?:string}={}) {
