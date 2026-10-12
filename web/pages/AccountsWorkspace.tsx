@@ -40,6 +40,7 @@ export function AccountsWorkspace({
     [data, setData] = useState<any>({ ipos: [], closures: [] }),
     [reports, setReports] = useState<any[]>([]),
     [selected, setSelected] = useState<any>(),
+    [samplePreview, setSamplePreview] = useState<any>(),
     [job, setJob] = useState<any>(),
     [actual, setActual] = useState<Record<string, string>>({}),
     [epcAggregate, setEpcAggregate] = useState(""),
@@ -101,12 +102,14 @@ export function AccountsWorkspace({
     setTab(t);
     setJob(undefined);
     setSelected(undefined);
+    setSamplePreview(undefined);
     setError("");
     setMessage("");
   }
   async function openIpo(id: string) {
     setBusy(true);
     try {
+      setSamplePreview(undefined);
       setSelected(await api("/accounts-workspace/ipos/" + id));
       setTab("IPO Review");
       setNotes("");
@@ -321,7 +324,6 @@ export function AccountsWorkspace({
         ))}
       </div>
       <h2>{tab}</h2>
-      {["My Workspace", "IPO Review"].includes(tab) && data.reviewSamples?.length > 0 && <section className="card"><h3>IPO review samples</h3><p>Review only. No actual PO, assigned job ID, approval or material issuance.</p>{data.reviewSamples.map((s: any) => <p key={s.id}><strong>{s.site_name} · {s.branch_code} · {s.configuration}</strong> · <a href={`/api/ubl-workflow/documents/${s.id}.pdf`} download>Download sample IPO &amp; PT</a> · <Button onClick={() => window.location.hash = "workspace=ubl-workflow"}>Open review samples</Button></p>)}</section>}
       {tab === "Project checkpoints" && <ProjectCheckpoints session={session} mode="Accounts"/>}
       {error && !errorAction && (
         <p role="alert" className="form-error">
@@ -337,7 +339,7 @@ export function AccountsWorkspace({
                 "IPOs to review",
                 data.ipos.filter(
                   (i: any) => i.accountsReview?.decision !== "Verified",
-                ).length,
+                ).length + (data.reviewSamples?.length ?? 0),
                 "IPO Review",
               ],
               ["IRRs received", received.length, "Inventory Reconciliations"],
@@ -376,6 +378,7 @@ export function AccountsWorkspace({
                 </tr>
               </thead>
               <tbody>
+                {data.reviewSamples?.map((r: any) => <tr key={r.id}><td>{r.site_name} · UBL {r.branch_code} · {r.configuration}</td><td>Sample—review only</td><td><Button onClick={() => {setSamplePreview(r); setSelected(undefined); setTab("IPO Review");}}>Review sample IPO &amp; PT</Button></td></tr>)}
                 {data.ipos
                   .filter((i: any) => i.accountsReview?.decision !== "Verified")
                   .map((i: any) => (
@@ -450,6 +453,7 @@ export function AccountsWorkspace({
                 </tr>
               </thead>
               <tbody>
+                {data.reviewSamples?.filter((r: any) => `${r.site_name} ${r.branch_code} ${r.configuration}`.toLowerCase().includes(search.toLowerCase())).map((r: any) => <tr key={r.id}><td>{r.site_name} · UBL {r.branch_code} · {r.configuration}</td><td>Sample—review only</td><td><Button onClick={() => {setSamplePreview(r); setSelected(undefined);}}>Review sample IPO &amp; PT</Button></td></tr>)}
                 {filtered.map((i: any) => (
                   <tr key={i.id}>
                     <td>
@@ -468,6 +472,7 @@ export function AccountsWorkspace({
               </tbody>
             </table>
           </div>
+          {samplePreview && <article className="detail-panel"><h3>{samplePreview.site_name} · UBL {samplePreview.branch_code} · {samplePreview.configuration}</h3><p>Sample—review only. PO not received. No approval, job issuance or material authorization.</p><DocumentPreview title="Review-only IPO and PT" url={`/api/ubl-workflow/documents/${samplePreview.id}.pdf`}/></article>}
           {selected && (
             <article className="detail-panel">
               <h3>
