@@ -868,7 +868,7 @@ export function AccountsWorkspace({
                       .filter((p: any) => p.name !== "EPC")
                       .map((p: any, i: number) => (
                         <tr key={i}>
-                          <th>{p.name}</th>
+                          <th>{p.name}<small className="muted" style={{display:"block",fontWeight:"normal"}}>{p.description || "Description not recorded"}</small></th>
                           <td className="pz-number">{money(p.amount)}</td>
                         </tr>
                       ))}
@@ -894,7 +894,7 @@ export function AccountsWorkspace({
                       .filter((p: any) => p.name === "EPC")
                       .map((p: any) => (
                         <tr key={p.name}>
-                          <th>{p.name}</th>
+                          <th>{p.name}<small className="muted" style={{display:"block",fontWeight:"normal"}}>{p.description || "Description not recorded"}</small></th>
                           <td className="pz-number">{money(p.amount)}</td>
                         </tr>
                       ))}

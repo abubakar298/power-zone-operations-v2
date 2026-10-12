@@ -259,6 +259,8 @@ export function Boqs({
           .filter((k) => f.get(`brand-${k}`))
           .map((k) => [k, Number(f.get(`brand-${k}`))]),
       ),
+      saleType:f.get("saleType") || "Tax Deal",
+      cashGstTreatment:f.get("cashGstTreatment") || "No GST added",
       preparedBy: f.get("preparedBy"),
       additionalItem:boqFamily === "direct-product" ? undefined : additionalItem,
       specifications: Object.keys(specifications).length
@@ -1350,6 +1352,8 @@ export function Boqs({
                     </select>
                   </label>
                 ))}
+                <label>Quotation type<select name="saleType" aria-label="Quotation type" defaultValue={initial.saleType ?? "Tax Deal"}><option>Tax Deal</option><option>Cash Deal</option></select></label>
+                <label>Cash deal GST treatment<select name="cashGstTreatment" aria-label="Cash deal GST treatment" defaultValue={initial.cashGstTreatment ?? "No GST added"}><option>No GST added</option><option>Included in selling price</option></select><small>Applies only to Cash Deal. Included GST-equivalent remains part of selling price and markup.</small></label>
                 <label>
                   Prepared by
                   <input

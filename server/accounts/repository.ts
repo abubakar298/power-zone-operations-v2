@@ -326,8 +326,8 @@ export class AccountsRepository {
         )
       ).rows[0];
       if (!b) throw new HttpError(409, "Saved BOQ budget unavailable.");
-      selling = i.snapshot.allocation.subtotal;
-      if (i.snapshot.peachtree?.taxMode !== "Tax Included")
+      selling = i.snapshot.quotationType?.saleType === "Cash Deal" ? i.snapshot.allocation.total : i.snapshot.allocation.subtotal;
+      if (i.snapshot.peachtree?.taxMode !== "Tax Included" || i.snapshot.quotationType?.saleType === "Cash Deal")
         phaseSelling = Object.fromEntries(
           (i.snapshot.peachtree?.phases ?? []).map((p: any) => [
             p.name,
@@ -369,7 +369,7 @@ export class AccountsRepository {
           epc: "Installation Cost",
         });
       basis =
-        "Budget from the IPO-linked immutable BOQ and saved additional scope, not current Rate Master.";
+        "Budget from the IPO-linked immutable BOQ and saved additional scope, not current Rate Master." + (i.snapshot.dealAccounting?.note ? " " + i.snapshot.dealAccounting.note : "");
     }
     const sum = (list: any[]) =>
       m(list.reduce((s: Decimal, l: any) => s.add(l.cost), D("0")));

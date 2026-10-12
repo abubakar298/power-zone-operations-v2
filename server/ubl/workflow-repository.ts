@@ -307,7 +307,9 @@ export class UblWorkflowRepository {
         )
       ).rows[0];
     if (!d) throw new HttpError(404, "UBL document not found.");
-    return { ...d, snapshot: publicDocument(d.snapshot, u.role) };
+    const customerMaster=(await this.pool.query('SELECT c.name,c.contact_person,c.phone,c.address FROM customers c JOIN ubl_workflow_requests r ON r.customer_id=c.id WHERE r.id=$1',[d.request_id])).rows[0];
+    const snapshot=publicDocument(d.snapshot,u.role);
+    return { ...d, snapshot: snapshot.sample?{...snapshot,sample:{...snapshot.sample,customerMaster}}:snapshot };
   }
   async attach(
     actor: string,

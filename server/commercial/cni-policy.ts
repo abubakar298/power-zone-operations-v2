@@ -1,3 +1,4 @@
+import {cashDeal,retainedGst,CASH_PROFIT_NOTE} from "./deal.js";
 import { Decimal } from "decimal.js";
 import { z } from "zod";
 
@@ -7,6 +8,8 @@ export const cniPolicy = Object.freeze({
   minimumUnitPayable: "15500000.00",
 });
 const input = z.object({
+  saleType:z.enum(["Tax Deal","Cash Deal"]).optional(),
+  cashGstTreatment:z.enum(["Included in selling price","No GST added"]).optional(),
   quantity: z.number().int().min(1).max(1000),
   discount: z.string().regex(/^\d{1,14}(\.\d{1,2})?$/).default("0"),
   taxRate: z.string().regex(/^\d{1,2}(\.\d{1,4})?$/),
@@ -22,7 +25,7 @@ export function priceCni(raw: unknown) {
   const payable = standard.minus(discount);
   const floor = new Decimal(cniPolicy.minimumUnitPayable).mul(value.quantity);
   if (payable.lessThan(floor)) throw new Error("Below the C&I minimum price. No exception authority has been configured.");
-  const beforeTax = payable.div(rate.div(100).plus(1)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+  const beforeTax = cashDeal(value)?payable:payable.div(rate.div(100).plus(1)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
   const tax = payable.minus(beforeTax);
   return Object.freeze({
     policyVersion: cniPolicy.version, quantity: value.quantity,
@@ -30,7 +33,8 @@ export function priceCni(raw: unknown) {
     standardDiscount: standardDiscount.toFixed(2), displayedOffer: standard.add(standardDiscount).toFixed(2),
     discount: discount.toFixed(2), totalDiscount: standardDiscount.add(discount).toFixed(2), payable: payable.toFixed(2),
     beforeTax: beforeTax.toFixed(2), tax: tax.toFixed(2), taxRate: rate.toString(),
-    presentation: value.presentation, requiresDiscountApproval: discount.greaterThan(0),
+    saleType:value.saleType,cashGstTreatment:value.cashGstTreatment,profitNote:retainedGst(value)?CASH_PROFIT_NOTE:undefined,
+    presentation: cashDeal(value)?"Inclusive":value.presentation, requiresDiscountApproval: discount.greaterThan(0),
   });
 }
 /** Do not serialize hidden tax lines in the inclusive customer document. */

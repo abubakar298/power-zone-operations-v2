@@ -23,7 +23,8 @@ export class UblRepository {
   await this.role(actor);
   const row=(await this.pool.query('SELECT version,snapshot FROM ubl_site_document_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1',[siteId])).rows[0];
   if(!row)throw new HttpError(404,'No registered IPO or PT document for this site.');
-  return row;
+  const customerMaster=(await this.pool.query('SELECT c.name,c.contact_person,c.phone,c.address FROM customers c JOIN sites s ON s.customer_id=c.id WHERE s.id=$1',[siteId])).rows[0];
+  return {...row,snapshot:{...row.snapshot,customerMaster}};
  }
  async role(actor:string,write=false,c:Pool=this.pool){
   await new CommercialRepository(this.pool).manager(c,actor,!write);

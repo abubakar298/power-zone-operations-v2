@@ -45,6 +45,7 @@ export function allocateDiscount(
   tax18: string,
   discount: string,
   netTotal: string,
+  cash = false,
 ) {
   if (
     !source.length ||
@@ -73,7 +74,7 @@ export function allocateDiscount(
   }
   const gross = base.map((v, i) => v.add(originalTax[i]));
   const eligible = gross.map((v, i) =>
-    source[i].taxRate === "18" && source[i].group !== "solar" ? v : D("0"),
+    (source[i].taxRate === "18" || cash && source[i].taxRate === "0") && source[i].group !== "solar" ? v : D("0"),
   );
   const maximum = eligible.reduce((a, b) => a.add(b), D("0"));
   const discountCents = D(discount).mul(100);
@@ -93,7 +94,7 @@ export function allocateDiscount(
     // discount independently. The residual is explicit reporting data, not a hidden change.
     const adjustedBase = shares[i].isZero()
       ? base[i]
-      : after.div("1.18").toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
+      : cash ? after : after.div("1.18").toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
     const adjustedTax = after.minus(adjustedBase);
     const expectedTax = adjustedBase
       .mul(D(l.taxRate).div(100))

@@ -10,6 +10,8 @@ export const pricingSchema = z.object({
   revisionRequestId: z.uuid().optional(),
   presentation: z.enum(["No Breakup", "Basic Breakup", "Full Breakup"]),
   groupBessPackages: z.boolean().optional(),
+    saleType: z.enum(["Tax Deal", "Cash Deal"]).optional(),
+    cashGstTreatment: z.enum(["Included in selling price", "No GST added"]).optional(),
   taxMode: z.enum(["Tax Included", "Show Sales Tax Separately"]),
   markups: z.object({
     solar: percent,

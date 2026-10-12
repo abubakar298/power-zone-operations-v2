@@ -1,3 +1,5 @@
+import {CASH_PROFIT_NOTE, retainedGst} from "../commercial/deal.js";
+import {Decimal} from "decimal.js";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import { drawReportLogo, drawReportFooter } from "../reports/branding.js";
@@ -43,10 +45,10 @@ export function appendPeachtreePage(
     headStyles: { fillColor: [61, 63, 146] },
     footStyles: { fillColor: [61, 63, 146] },
     styles: { fontSize: 10, cellPadding: 3 },
-    columnStyles: { 1: { halign: "right" } },
-    head: [["Peachtree job-ledger phase", "Selling value (PKR)"]],
-    body: d.phases.map((p) => [p.name, money(p.amount)]),
-    foot: [["PHASE TOTAL", {content:money(d.phaseTotal),styles:{halign:"right"}}]],
+    columnStyles: {0:{cellWidth:32},1:{cellWidth:105},2:{halign:"right"}},
+    head: [["PT phase", "Item / quantity description", d.saleType === "Cash Deal" ? "Selling value (PKR)" : "Selling excl. GST (PKR)"]],
+    body: d.phases.flatMap((p:any)=>[[p.name,text(p.description || "Description not recorded"),money(p.amount)],...(p.name === "BMS"?[["BESS Total","Subtotal",money(d.phases.filter(p=>["Inverter","Batteries","BMS"].includes(p.name)).reduce((v,p)=>v.add(p.amount),new Decimal(0)).toFixed(2))]]:[])]),
+    foot: [["PHASE TOTAL","", {content:money(d.phaseTotal),styles:{halign:"right"}}]],
   });
   autoTable(pdf, {
     startY: (pdf as any).lastAutoTable.finalY + 6,
@@ -74,7 +76,7 @@ export function appendPeachtreePage(
   pdf.text(
     pdf.splitTextToSize(
       text(
-        `${policy} ${d.phases.length===2 && d.phases[0].name==="BESS" ? "BESS contains inverter, batteries and BMS; EPC contains every other project item." : "EPC contains all items outside Solar, Structure, Inverter, Batteries and BMS."} This internal phase division does not alter the accepted quotation, IPO payable or tax treatment. Taxes are not classified as accounting profit.`,
+        `${policy} ${d.phases.length===2 && d.phases[0].name==="BESS" ? "BESS contains inverter, batteries and BMS; EPC contains every other project item." : "EPC contains all items outside Solar, Structure, Inverter, Batteries and BMS."} This internal phase division does not alter the accepted quotation, IPO payable or tax treatment. ${retainedGst(d)?CASH_PROFIT_NOTE:"GST payable is excluded from profit."}`,
       ),
       180,
     ),

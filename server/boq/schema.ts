@@ -9,6 +9,8 @@ export const surveySchema = z
   .object({
     family: z.enum(["solar-hybrid", "bess-only", "direct-product"]).optional(),
     directProducts: z.array(z.object({kind:z.enum(["item","bess"]),key:z.string().trim().min(1).max(200),qty:quantity.refine(v=>Number(v)>0),brandId:z.number().int().positive().optional()}).strict()).min(1).max(30).optional(),
+    saleType: z.enum(["Tax Deal", "Cash Deal"]).optional(),
+    cashGstTreatment: z.enum(["Included in selling price", "No GST added"]).optional(),
     sourceMode: z.enum(["Survey", "General quotation"]).optional(),
     customerId: z.number().int().min(0),
     siteName: z.string().trim().min(1).max(200),
@@ -102,3 +104,4 @@ export function recommendSiteCode(name: string) {
       .toUpperCase()
   );
 }
+

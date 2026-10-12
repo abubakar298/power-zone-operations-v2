@@ -361,6 +361,7 @@ export function Commercial({
   async function applyApprovalInstructions(id: string) {
     const source = await api<any>(`/boqs/${id}`);
     if(source.snapshot.survey.family === "direct-product") setInput(old=>old.boqRevisionId===id ? {...old,presentation:old.presentation === "Basic Breakup" ? "Full Breakup" : old.presentation} : old);
+    if(source.snapshot.survey.saleType) setInput(old=>({...old,saleType:source.snapshot.survey.saleType,cashGstTreatment:source.snapshot.survey.cashGstTreatment,taxMode:source.snapshot.survey.saleType === "Cash Deal"?"Tax Included":old.taxMode}));
     const a = await api<any>(`/boqs/${id}/instructions`);
     if (a) {
       setInput((old) =>
@@ -369,6 +370,7 @@ export function Commercial({
               ...old,
               presentation: source.snapshot.survey.family === "direct-product" && a.instructions.presentation === "Basic Breakup" ? "Full Breakup" : a.instructions.presentation,
               taxMode: a.instructions.taxMode,
+              saleType:source.snapshot.survey.saleType ?? a.instructions.saleType,cashGstTreatment:source.snapshot.survey.cashGstTreatment ?? a.instructions.cashGstTreatment,
               markups: a.instructions.markups ? {...defaults(session.user.displayName).markups,...a.instructions.markups} : defaults(session.user.displayName).markups,
               remarks: a.instructions.notes,
             }
@@ -761,6 +763,8 @@ export function Commercial({
                   </select>
                 </label>
                 {directSale && input.presentation === "Full Breakup" && <label>Complete BESS package pricing<select aria-label="Complete BESS package pricing" value={input.groupBessPackages ? "grouped" : "separate"} onChange={e=>update({groupBessPackages:e.target.value === "grouped"})}><option value="separate">Show inverter, battery and BMS prices separately</option><option value="grouped">One combined amount per complete BESS package</option></select></label>}
+                <label>Quotation type<select value={input.saleType ?? "Tax Deal"} onChange={e=>update({saleType:e.target.value as PricingInput["saleType"]})}><option>Tax Deal</option><option>Cash Deal</option></select></label>
+                {input.saleType === "Cash Deal" && <label>Cash deal GST treatment<select value={input.cashGstTreatment ?? "No GST added"} onChange={e=>update({cashGstTreatment:e.target.value as PricingInput["cashGstTreatment"],taxMode:"Tax Included"})}><option>No GST added</option><option>Included in selling price</option></select></label>}
                 <label>
                   Tax presentation
                   <select
@@ -831,6 +835,7 @@ export function Commercial({
           {p && (
             <section className="detail-panel">
               <h3>{financialManager?"Internal commercial summary":"Non-BESS cost & selling review"}</h3>
+              {financialManager && p?.dealAccounting && <p role="status">{p.dealAccounting.note} Retained GST-equivalent: PKR {money(p.dealAccounting.retainedGstEquivalent)}.</p>}
               {!financialManager&&<p>BESS equipment costs and confidential profitability are excluded. The selling totals below include the complete quotation.</p>}
               <div className="table-scroll">
                 <table className="master-table">
@@ -867,7 +872,8 @@ export function Commercial({
               {p.policy && <p>Standard Commercial Policy v{p.policy.version} · Category percentages in the summary are effective averages where a display group contains different item markups.</p>}
               {financialManager && p.itemPricing && <details><summary>Standard item selling prices</summary><div className="table-scroll"><table className="master-table"><thead><tr><th>Item</th><th>Category</th><th>Pre-tax cost</th><th>Standard markup</th><th>Selling before tax</th></tr></thead><tbody>{p.itemPricing.map(l=><tr key={l.key}><td>{l.description}</td><td>{l.category}</td><td>{money(l.cost)}</td><td>{new Decimal(l.markup).toDecimalPlaces(2).toString()}%</td><td>{money(l.beforeTax)}</td></tr>)}</tbody></table></div></details>}
               <div className="quote-totals">
-                {!financialManager&&<p><span>Visible Cost Subtotal — Excludes BESS Equipment</span><strong>PKR {money(visibleCost)}</strong></p>}
+                {financialManager && p?.dealAccounting && <p role="status">{p.dealAccounting.note} Retained GST-equivalent: PKR {money(p.dealAccounting.retainedGstEquivalent)}.</p>}
+              {!financialManager&&<p><span>Visible Cost Subtotal — Excludes BESS Equipment</span><strong>PKR {money(visibleCost)}</strong></p>}
                 {financialManager && <p>
                   <span>Approved BOQ cost</span>
                   <strong>PKR {money(p.cost)}</strong>

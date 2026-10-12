@@ -1,3 +1,4 @@
+import {cashDeal, sellingFactor} from "../commercial/deal.js";
 import { requireEligibleQuotation } from "../commercial/eligibility.js";
 import { allocateReference, boqIdentity } from "../documents/references.js";
 import { ownedCondition } from "../http/permissions.js";
@@ -23,13 +24,13 @@ export class OrdersRepository {
   async quotationTypes(ipoIds: string[]) {
     if (!ipoIds.length) return new Map<string, any>();
     const { rows } = await this.pool.query(
-      `SELECT i.id,p.snapshot->'input'->>'presentation' AS presentation,p.snapshot->'input'->>'taxMode' AS "taxMode" FROM internal_purchase_orders i JOIN quotation_versions q ON q.id::text=i.snapshot->>'quotationId' JOIN commercial_pricing_versions p ON p.id=q.pricing_id WHERE i.id=ANY($1::uuid[])`,
+      `SELECT i.id,p.snapshot->'input'->>'presentation' AS presentation,p.snapshot->'input'->>'taxMode' AS "taxMode",p.snapshot->'input'->>'saleType' AS "saleType",p.snapshot->'input'->>'cashGstTreatment' AS "cashGstTreatment" FROM internal_purchase_orders i JOIN quotation_versions q ON q.id::text=i.snapshot->>'quotationId' JOIN commercial_pricing_versions p ON p.id=q.pricing_id WHERE i.id=ANY($1::uuid[])`,
       [ipoIds],
     );
     return new Map(
       rows.map((r) => [
         r.id,
-        { presentation: r.presentation, taxMode: r.taxMode },
+        { presentation: r.presentation, taxMode: r.taxMode,saleType:r.saleType,cashGstTreatment:r.cashGstTreatment },
       ]),
     );
   }
@@ -37,15 +38,15 @@ export class OrdersRepository {
     await requireEligibleQuotation(this.pool,quotationId);
     const row = (
       await this.pool.query(
-        `SELECT c.*, q.snapshot->'input'->>'proposedBy' AS proposed_by,p.snapshot->'input'->>'presentation' AS presentation,p.snapshot->'input'->>'taxMode' AS tax_mode FROM quotation_versions q JOIN commercial_pricing_versions p ON p.id=q.pricing_id JOIN boq_revisions b ON b.id=q.boq_revision_id JOIN boqs o ON o.id=b.boq_id JOIN customers c ON c.id=o.customer_id WHERE q.id=$1`,
+        `SELECT c.*, q.snapshot->'input'->>'proposedBy' AS proposed_by,p.snapshot->'input'->>'presentation' AS presentation,p.snapshot->'input'->>'taxMode' AS tax_mode,p.snapshot->'input'->>'saleType' AS sale_type,p.snapshot->'input'->>'cashGstTreatment' AS cash_gst_treatment FROM quotation_versions q JOIN commercial_pricing_versions p ON p.id=q.pricing_id JOIN boq_revisions b ON b.id=q.boq_revision_id JOIN boqs o ON o.id=b.boq_id JOIN customers c ON c.id=o.customer_id WHERE q.id=$1`,
         [quotationId],
       )
     ).rows[0];
     if (!row) throw new HttpError(404, "Quotation customer not found.");
     return {
       customerName: row.name,
-      invoiceCompany: row.name,
-      quotationType: { presentation: row.presentation, taxMode: row.tax_mode },
+      invoiceCompany: row.sale_type === "Cash Deal" ? "Energy Solutions" : "PZES (PVT Ltd)",
+      quotationType: { presentation: row.presentation, taxMode: row.tax_mode,saleType:row.sale_type,cashGstTreatment:row.cash_gst_treatment },
       contactPerson: row.contact_person || row.name,
       phone: row.phone,
       email: row.email,
@@ -91,6 +92,7 @@ export class OrdersRepository {
         [q.id],
       )
     ).rows[0]?.input;
+    if(cashDeal(p.snapshot.input) && input.invoiceCompany !== "Energy Solutions") throw new HttpError(422,"Cash deals must use Energy Solutions as the invoicing company.");
     const source = q.snapshot;
     const detailed = quote(
       {
@@ -122,11 +124,11 @@ export class OrdersRepository {
     });
     const footer = (name: string) =>
       source.footer.find((r: any) => r.label === name)?.amount;
-    const extraSelling = new Decimal(extra?.cost ?? "0").mul(
+    const extraSelling = new Decimal(extra?.cost ?? "0").mul(sellingFactor(p.snapshot.input,extra?.taxRate ?? "0")).mul(
       new Decimal(extra?.markup ?? "0").div(100).add(1),
     );
     const extraTax = extraSelling.mul(
-      new Decimal(extra?.taxRate ?? "0").div(100),
+      new Decimal(cashDeal(p.snapshot.input)?"0":extra?.taxRate ?? "0").div(100),
     );
     const m = (d: Decimal) =>
       d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2);
@@ -152,7 +154,7 @@ export class OrdersRepository {
       beforeTax: l.amount!,
       taxRate:
         i === detailed.lines.length - 1 && extra
-          ? extra.taxRate
+          ? cashDeal(p.snapshot.input)?"0":extra.taxRate
           : p.snapshot.rows.find((r: any) => r.key === l.group).taxRate,
     }));
     const allocation = allocateDiscount(
@@ -162,12 +164,16 @@ export class OrdersRepository {
       tax18,
       footer("Special Discount") ?? "0.00",
       footer("Net Total"),
+      cashDeal(p.snapshot.input),
     );
     const document = await this.checkDocument(c, actor, input.documentId);
     const snapshot = {
       engineVersion: 1,
       input,
       source: "Accepted quotation",
+      quotationType:{presentation:p.snapshot.input.presentation,taxMode:p.snapshot.input.taxMode,saleType:p.snapshot.input.saleType,cashGstTreatment:p.snapshot.input.cashGstTreatment},
+      dealAccounting:p.snapshot.dealAccounting,
+      documentLayoutVersion:3,
       quotationId: q.id,
       quotationNumber: q.number,
       boqRevisionId: b.id,
@@ -185,6 +191,8 @@ export class OrdersRepository {
         extra?.cost ?? "0",
       ),
     };
+    const phaseSource=(name:string)=>b.snapshot.lines.filter((l:any)=>name === "Solar Panels"?l.phase === "Solar Panels":name === "Structure"?l.phase === "Structure":name === "Inverter"?l.key===b.snapshot.inverterConfig?.sku:name === "Batteries"?/^(BAT-|CH-BAT-)/.test(l.key):name === "BMS"?/^(BMS-|CH-BMS-)/.test(l.key):name === "BESS"?l.phase === "BESS":l.phase!=="Solar Panels"&&l.phase!=="Structure"&&l.phase!=="BESS");
+    snapshot.peachtree.phases=snapshot.peachtree.phases.map(p=>({...p,description:p.name === "EPC"?"CH-EPC - Installation and balance of system":p.name === "Structure"?"CH-Structure - "+phaseSource(p.name).map((l:any)=>l.description).join("; "):phaseSource(p.name).map((l:any)=>`${l.qty} x ${l.itemId || l.description} (${l.specification || l.description})`).join("; ")}));
     return { snapshot, fingerprint: fingerprint(snapshot) };
   }
   async checkDocument(c: Pool | PoolClient, actor: string, id?: string) {
