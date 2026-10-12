@@ -16,6 +16,7 @@ export const ublConfigurations = [
   "35-30-40",
 ] as const;
 export type WorkflowAction =
+  | "sample"
   | "save"
   | "identity"
   | "verify"
@@ -53,6 +54,12 @@ export function transition(
     )
   )
     throw new HttpError(403, "Your department cannot perform this action.");
+  if (action === "sample") {
+    if (!manager) throw new HttpError(403, "Only Management can send a review sample.");
+    if (stage !== ublStages[3] || !ublConfigurations.includes(data.configuration))
+      throw new HttpError(422, "A heads-up with a standard configuration is required for this sample.");
+    return stage;
+  }
   if (action === "revision-pending") {
     if (!manager || !data.originalOrderPreserved || !data.ipoNumber)
       throw new HttpError(

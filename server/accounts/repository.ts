@@ -102,6 +102,7 @@ export class AccountsRepository {
     ).rows;
     const identities = await new InventoryRepository(this.pool).jobs(actor);
     return {
+      reviewSamples: (await this.pool.query("SELECT d.id,d.version,d.created_at,r.site_name,r.branch_code,r.data->>'configuration' AS configuration FROM ubl_workflow_documents d JOIN ubl_workflow_requests r ON r.id=d.request_id WHERE d.kind='IPO / PT review sample' AND r.data->>'accountsReviewSample'='true' ORDER BY d.created_at DESC")).rows,
       ipos: ipo.map((i) => ({
         ...i,
         accountsReview: reviews.find((r) => r.ipo_id === i.id),

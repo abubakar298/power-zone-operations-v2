@@ -185,14 +185,14 @@ export function UblWorkflow({ session }: { session: Session }) {
   }
   const departmentRows = rows.filter((r) =>
     role === "Accounts"
-      ? r.stage === stages[6] || r.stage === stages[7]
+      ? r.stage === stages[6] || r.stage === stages[7] || r.data.accountsReviewSample
       : role === "Operations"
         ? [stages[3], stages[4], "Confirmed BOQ issued"].includes(r.stage)
         : true,
   );
   const matches = (r: any, f: string) =>
     f === "All" ||
-    (f === "Survey tracking"
+    (f === "Review samples" ? r.data.accountsReviewSample : f === "Survey tracking"
       ? r.data.surveyStatus !== "Completed"
       : f === "Reports awaiting technical review"
         ? r.data.surveyStatus === "Completed" && !r.data.technicalVerified
@@ -207,7 +207,7 @@ export function UblWorkflow({ session }: { session: Session }) {
           "Verified recommendations",
         ]
       : role === "Accounts"
-        ? [stages[6], stages[7]]
+        ? [stages[6], stages[7], "Review samples"]
         : role === "Operations"
           ? [stages[3], stages[4], "Confirmed BOQ issued"]
           : [...stages, "Existing job—Revised PO pending"];
@@ -708,6 +708,7 @@ export function UblWorkflow({ session }: { session: Session }) {
               )}
             </div>
             <div className="pz-action-row">
+              {["Admin", "Management"].includes(role) && selected.stage === stages[3] && selected.data.configuration && act("sample", "Send review-only IPO / PT sample to Accounts")}
               {["Admin", "Management"].includes(role) &&
                 selected.data.originalOrderPreserved &&
                 selected.stage === stages[3] &&

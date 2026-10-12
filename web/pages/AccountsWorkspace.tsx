@@ -321,6 +321,7 @@ export function AccountsWorkspace({
         ))}
       </div>
       <h2>{tab}</h2>
+      {["My Workspace", "IPO Review"].includes(tab) && data.reviewSamples?.length > 0 && <section className="card"><h3>IPO review samples</h3><p>Review only. No actual PO, assigned job ID, approval or material issuance.</p>{data.reviewSamples.map((s: any) => <p key={s.id}><strong>{s.site_name} · {s.branch_code} · {s.configuration}</strong> · <a href={`/api/ubl-workflow/documents/${s.id}.pdf`} download>Download sample IPO &amp; PT</a> · <Button onClick={() => window.location.hash = "workspace=ubl-workflow"}>Open review samples</Button></p>)}</section>}
       {tab === "Project checkpoints" && <ProjectCheckpoints session={session} mode="Accounts"/>}
       {error && !errorAction && (
         <p role="alert" className="form-error">

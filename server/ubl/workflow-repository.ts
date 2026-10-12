@@ -672,7 +672,7 @@ export class UblWorkflowRepository {
         }
         d.ipoNumber = input.ipoNumber;
       }
-      if (action === "verify" || action === "ipo") {
+      if (["verify", "ipo", "sample"].includes(action)) {
         const h = (
           await c.query(
             "SELECT snapshot FROM ubl_commercial_history WHERE configuration_id=$1 AND stage=$2",
@@ -723,8 +723,8 @@ export class UblWorkflowRepository {
           branch_code: r.branch_code,
           region: r.source.branch?.Region ?? "",
           main_city: r.source.branch?.Cluster ?? "",
-          legacy_ipo_number: d.ipoNumber ?? "Pending",
-          po_number: d.poNumber ?? "Pending",
+          legacy_ipo_number: action === "sample" ? "SAMPLE - NOT ASSIGNED" : d.ipoNumber ?? "Pending",
+          po_number: action === "sample" ? "Not received - review sample" : d.poNumber ?? "Pending",
           po_issued_date: d.poDate ?? "Pending",
           agreedWatts: Number(d.configuration.split("-")[0]) * 1000,
           panelSellingRate: d.pricingStage === "Revised" ? 44 : 33,
@@ -750,7 +750,7 @@ export class UblWorkflowRepository {
           .div(sample.budgetedCost)
           .mul(100)
           .toFixed(2);
-        await this.makeDocument(
+        if (action !== "sample") await this.makeDocument(
           c,
           actor,
           r,
@@ -763,15 +763,17 @@ export class UblWorkflowRepository {
           },
           d,
         );
-        if (action === "ipo")
+        if (["ipo", "sample"].includes(action)) {
           await this.makeDocument(
             c,
             actor,
             r,
-            "IPO / PT",
-            { sample, baseline: base },
+            action === "sample" ? "IPO / PT review sample" : "IPO / PT",
+            { sample, baseline: base, reviewOnly: action === "sample" },
             d,
           );
+          if (action === "sample") d.accountsReviewSample = true;
+        }
       }
       if (["advance", "confirmed"].includes(action)) {
         const t = (
