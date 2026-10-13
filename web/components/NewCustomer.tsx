@@ -6,11 +6,13 @@ export function NewCustomer({
   onCreated,
   onClose,
   onLogout,
+  context = "BOQ",
 }: {
   session: Session;
   onCreated: (id: string) => Promise<void>;
   onClose: () => void;
   onLogout: () => void;
+  context?: string;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -58,7 +60,7 @@ export function NewCustomer({
         aria-labelledby="new-boq-customer-title"
       >
         <h2 id="new-boq-customer-title">Add customer</h2>
-        <p>Create a customer and continue with this BOQ.</p>
+        <p>Create a customer and continue with this {context}.</p>
         <form onSubmit={save}>
           {(
             [

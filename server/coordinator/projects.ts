@@ -1,54 +1,261 @@
-import type {Pool} from 'pg';
-import {ownedCondition} from '../http/permissions.js';
-import {HttpError} from '../http/errors.js';
+import type { Pool } from "pg";
+import { ownedCondition } from "../http/permissions.js";
+import { HttpError } from "../http/errors.js";
 // This index deliberately selects metadata, never costing/pricing snapshots or audit payloads.
-export async function projectCatalog(pool:Pool,actor:string) {
- const queries=[
- `SELECT d.id,'Survey draft' AS type,d.inputs->>'siteName' AS number,d.version,d.inputs->>'customerId' AS customer_id,d.inputs->>'siteCode' AS site_code,d.inputs->>'siteName' AS site,d.inputs->>'location' AS location,COALESCE(d.inputs->>'family','solar-hybrid') AS family,d.updated_at AS created_at,d.owner_id AS actor_id,'draft' AS resource FROM survey_drafts d WHERE ${ownedCondition('draft','d.id','$1')}`,
- `SELECT r.id,'BOQ' AS type,r.number,r.revision AS version,b.customer_id::text,b.site_id,s.code AS site_code,r.snapshot->'survey'->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,r.created_at,r.created_by AS actor_id,'boq' AS resource FROM boq_revisions r JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition('boq','r.id','$1')}`,
- `SELECT q.id,'Quotation' AS type,q.number,q.version,b.customer_id::text,s.code AS site_code,q.snapshot->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,q.created_at,q.created_by AS actor_id,'quotation' AS resource,q.boq_revision_id,NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS current,EXISTS(SELECT 1 FROM quotation_revision_requests r WHERE r.source_quotation_id=q.id) AS revision_requested,COALESCE((SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1),'Not submitted') AS stage FROM quotation_versions q JOIN boq_revisions r ON r.id=q.boq_revision_id JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition('quotation','q.id','$1')}`,
- `SELECT v.id,p.id AS proposal_id,'C&I proposal' AS type,v.number,v.version,p.customer_id::text,v.snapshot->>'siteCode' AS site_code,v.snapshot->>'siteName' AS site,'ci-bess' AS family,v.created_at,v.created_by AS actor_id,'cni' AS resource,COALESCE((SELECT a.action FROM cni_proposal_actions a WHERE a.version_id=v.id ORDER BY a.created_at DESC,a.id DESC LIMIT 1),'Saved draft') AS stage FROM cni_proposal_versions v JOIN cni_proposals p ON p.id=v.proposal_id WHERE ${ownedCondition('cni','p.id','$1')}`,
- `SELECT i.id,'IPO / PT' AS type,i.number,1 AS version,b.customer_id::text,s.code AS site_code,i.snapshot->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,i.created_at,i.created_by AS actor_id,'ipo' AS resource,i.snapshot->>'quotationId' AS quotation_id FROM internal_purchase_orders i JOIN boq_revisions r ON r.id::text=i.snapshot->>'boqRevisionId' JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition('ipo','i.id','$1')}`,
- `SELECT i.id,'IPO submission' AS type,i.snapshot->>'quotationNumber' AS number,1 AS version,b.customer_id::text,s.code AS site_code,i.snapshot->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,i.created_at,i.created_by AS actor_id,'submission' AS resource FROM ipo_submissions i JOIN boq_revisions r ON r.id::text=i.snapshot->>'boqRevisionId' JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition('submission','i.id','$1')}`,
- `SELECT o.id,'Operations handoff' AS type,o.number,1 AS version,b.customer_id::text,s.code AS site_code,r.snapshot->'survey'->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,o.created_at,o.created_by AS actor_id,'issuance' AS resource,o.ipo_id FROM operations_boq_issuances o JOIN boq_revisions r ON r.id=o.boq_revision_id JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition('issuance','o.id','$1')}`
- ];
- const documents=(await Promise.all(queries.map(sql=>pool.query(sql,[actor])))).flatMap(r=>r.rows);
- const customers=(await pool.query('SELECT id,name,short_code,contact_person,phone,email,address FROM customers WHERE id::text=ANY($1::text[])',[[...new Set(documents.map(d=>d.customer_id).filter(Boolean))]])).rows;
- const users=(await pool.query('SELECT id,display_name FROM users WHERE id=ANY($1::uuid[])',[[...new Set(documents.map(d=>d.actor_id))]])).rows;
- for(const d of documents){d.customer=customers.find(c=>String(c.id)===d.customer_id)?.name??'Customer not entered';d.actor=users.find(u=>u.id===d.actor_id)?.display_name??'Recorded user';d.project_key=JSON.stringify([d.customer_id,d.site_code?.toUpperCase()||`@${d.site??''}`]);
- const id=d.proposal_id??d.id;
- d.task=d.resource==='draft'?{target:'boqs',draft_id:id}:d.resource==='boq'?{target:'boqs',kind:'Saved BOQ',id}:d.resource==='quotation'?{target:'quotes',kind:'Sale confirmation',id}:d.resource==='cni'?{target:'quotes',kind:'C&I proposal',id}:d.resource==='ipo'?{target:'orders',kind:'Operations issuance',ipo_id:id}:d.resource==='submission'?{target:'orders',kind:'IPO evidence',id}:{target:'operations',ipo_id:d.ipo_id};
- if(d.resource==='quotation'){
-   d.version_status=d.revision_requested?'Revision requested':!d.current?'Superseded':'Current';
-   d.status_explanation=d.revision_requested?'A revision was requested. This version remains in history.':!d.current?'A newer version exists. This saved version remains in history.':null;
- }
- d.stage=d.stage??(d.resource==='ipo'?'Issued':d.resource==='submission'?'Evidence submitted':d.resource==='issuance'?'Sent to Operations':'Saved');
- d.pdf_url=d.resource==='boq'?`/api/boqs/${id}/costing.pdf`:d.resource==='quotation'?`/api/commercial/quotations/${id}/quotation.pdf`:d.resource==='cni'?`/api/cni/${id}/versions/${d.id}/proposal.pdf`:d.resource==='ipo'?`/api/orders/${id}/ipo.pdf`:d.resource==='submission'?`/api/orders/submissions/${id}/preview.pdf`:d.resource==='issuance'?`/api/operations/${id}/report.pdf`:null;
- }
- return {documents:documents.sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime()||a.id.localeCompare(b.id)),customers};
+export async function projectCatalog(pool: Pool, actor: string) {
+  const queries = [
+    `SELECT d.id,'Survey draft' AS type,d.inputs->>'siteName' AS number,d.version,d.inputs->>'customerId' AS customer_id,d.inputs->>'siteCode' AS site_code,d.inputs->>'siteName' AS site,d.inputs->>'location' AS location,COALESCE(d.inputs->>'family','solar-hybrid') AS family,d.updated_at AS created_at,d.owner_id AS actor_id,'draft' AS resource FROM survey_drafts d WHERE ${ownedCondition("draft", "d.id", "$1")}`,
+    `SELECT r.id,'BOQ' AS type,r.number,r.revision AS version,b.customer_id::text,b.site_id,s.code AS site_code,r.snapshot->'survey'->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,r.created_at,r.created_by AS actor_id,'boq' AS resource FROM boq_revisions r JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("boq", "r.id", "$1")}`,
+    `SELECT q.id,'Quotation' AS type,q.number,q.version,b.customer_id::text,s.code AS site_code,q.snapshot->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,q.created_at,q.created_by AS actor_id,'quotation' AS resource,q.boq_revision_id,NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS current,EXISTS(SELECT 1 FROM quotation_revision_requests r WHERE r.source_quotation_id=q.id) AS revision_requested,COALESCE((SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1),'Not submitted') AS stage FROM quotation_versions q JOIN boq_revisions r ON r.id=q.boq_revision_id JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("quotation", "q.id", "$1")}`,
+    `SELECT v.id,p.id AS proposal_id,'C&I proposal' AS type,v.number,v.version,p.customer_id::text,v.snapshot->>'siteCode' AS site_code,v.snapshot->>'siteName' AS site,'ci-bess' AS family,v.created_at,v.created_by AS actor_id,'cni' AS resource,COALESCE((SELECT a.action FROM cni_proposal_actions a WHERE a.version_id=v.id ORDER BY a.created_at DESC,a.id DESC LIMIT 1),'Saved draft') AS stage FROM cni_proposal_versions v JOIN cni_proposals p ON p.id=v.proposal_id WHERE ${ownedCondition("cni", "p.id", "$1")}`,
+    `SELECT i.id,'IPO / PT' AS type,i.number,1 AS version,b.customer_id::text,s.code AS site_code,i.snapshot->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,i.created_at,i.created_by AS actor_id,'ipo' AS resource,i.snapshot->>'quotationId' AS quotation_id FROM internal_purchase_orders i JOIN boq_revisions r ON r.id::text=i.snapshot->>'boqRevisionId' JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("ipo", "i.id", "$1")}`,
+    `SELECT i.id,'IPO submission' AS type,i.snapshot->>'quotationNumber' AS number,1 AS version,b.customer_id::text,s.code AS site_code,i.snapshot->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,i.created_at,i.created_by AS actor_id,'submission' AS resource FROM ipo_submissions i JOIN boq_revisions r ON r.id::text=i.snapshot->>'boqRevisionId' JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("submission", "i.id", "$1")}`,
+    `SELECT o.id,'Operations handoff' AS type,o.number,1 AS version,b.customer_id::text,s.code AS site_code,r.snapshot->'survey'->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,o.created_at,o.created_by AS actor_id,'issuance' AS resource,o.ipo_id FROM operations_boq_issuances o JOIN boq_revisions r ON r.id=o.boq_revision_id JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("issuance", "o.id", "$1")}`,
+    `SELECT d.id,d.kind AS type,d.number,d.version,r.customer_id::text,r.site_code,r.site_name AS site,r.region AS location,'project-workflow' AS family,d.created_at,d.created_by AS actor_id,'workflow' AS resource,r.id AS workflow_id,r.stage FROM project_workflow_documents d JOIN project_workflow_records r ON r.id=d.record_id WHERE r.coordinator_id=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role IN('Admin','Management'))`,
+  ];
+  const documents = (
+    await Promise.all(queries.map((sql) => pool.query(sql, [actor])))
+  ).flatMap((r) => r.rows);
+  const customers = (
+    await pool.query(
+      "SELECT id,name,short_code,contact_person,phone,email,address FROM customers WHERE id::text=ANY($1::text[])",
+      [[...new Set(documents.map((d) => d.customer_id).filter(Boolean))]],
+    )
+  ).rows;
+  const users = (
+    await pool.query(
+      "SELECT id,display_name FROM users WHERE id=ANY($1::uuid[])",
+      [[...new Set(documents.map((d) => d.actor_id))]],
+    )
+  ).rows;
+  for (const d of documents) {
+    d.customer =
+      customers.find((c) => String(c.id) === d.customer_id)?.name ??
+      "Customer not entered";
+    d.actor =
+      users.find((u) => u.id === d.actor_id)?.display_name ?? "Recorded user";
+    d.project_key = JSON.stringify([
+      d.customer_id,
+      d.site_code?.toUpperCase() || `@${d.site ?? ""}`,
+    ]);
+    const id = d.proposal_id ?? d.id;
+    d.task =
+      d.resource === "workflow"
+        ? { target: "dashboard", workflow_id: d.workflow_id }
+        : d.resource === "draft"
+          ? { target: "boqs", draft_id: id }
+          : d.resource === "boq"
+            ? { target: "boqs", kind: "Saved BOQ", id }
+            : d.resource === "quotation"
+              ? { target: "quotes", kind: "Sale confirmation", id }
+              : d.resource === "cni"
+                ? { target: "quotes", kind: "C&I proposal", id }
+                : d.resource === "ipo"
+                  ? {
+                      target: "orders",
+                      kind: "Operations issuance",
+                      ipo_id: id,
+                    }
+                  : d.resource === "submission"
+                    ? { target: "orders", kind: "IPO evidence", id }
+                    : { target: "operations", ipo_id: d.ipo_id };
+    if (d.resource === "quotation") {
+      d.version_status = d.revision_requested
+        ? "Revision requested"
+        : !d.current
+          ? "Superseded"
+          : "Current";
+      d.status_explanation = d.revision_requested
+        ? "A revision was requested. This version remains in history."
+        : !d.current
+          ? "A newer version exists. This saved version remains in history."
+          : null;
+    }
+    d.stage =
+      d.stage ??
+      (d.resource === "ipo"
+        ? "Issued"
+        : d.resource === "submission"
+          ? "Evidence submitted"
+          : d.resource === "issuance"
+            ? "Sent to Operations"
+            : "Saved");
+    d.pdf_url =
+      d.resource === "workflow"
+        ? `/api/project-workflow/${d.workflow_id}/documents/${d.id}/pdf`
+        : d.resource === "boq"
+          ? `/api/boqs/${id}/costing.pdf`
+          : d.resource === "quotation"
+            ? `/api/commercial/quotations/${id}/quotation.pdf`
+            : d.resource === "cni"
+              ? `/api/cni/${id}/versions/${d.id}/proposal.pdf`
+              : d.resource === "ipo"
+                ? `/api/orders/${id}/ipo.pdf`
+                : d.resource === "submission"
+                  ? `/api/orders/submissions/${id}/preview.pdf`
+                  : d.resource === "issuance"
+                    ? `/api/operations/${id}/report.pdf`
+                    : null;
+  }
+  return {
+    documents: documents.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime() ||
+        a.id.localeCompare(b.id),
+    ),
+    customers,
+  };
 }
-export async function projectContext(pool:Pool,actor:string,key:string) {
- const catalog=await projectCatalog(pool,actor),docs=catalog.documents.filter(d=>d.project_key===key);
- if(!docs.length)throw new HttpError(404,'Project not found or unavailable to your account.');
- const ids=(resource:string)=>docs.filter(d=>d.resource===resource).map(d=>d.id);
- const events:any[]=docs.map(d=>({id:`saved-${d.id}`,at:d.created_at,actor:d.actor,document:d.number,version:d.version,action:d.resource==='ipo'?'IPO approved and issued':d.resource==='issuance'?'BOQ sent to Operations':d.resource==='submission'?'Sale evidence submitted for IPO approval':'Document saved',document_id:d.id,reason:''}));
- const eventQueries:[string, string[],string][]=[
- ["SELECT e.id,e.created_at AS at,e.created_by AS actor_id,e.quotation_id AS document_id,CASE WHEN e.kind='Approved' AND a.id IS NOT NULL THEN 'External approval recorded' ELSE e.kind END AS action,e.notes AS reason,a.approver,a.channel AS approval_method,a.decision_at FROM coordination_events e LEFT JOIN external_document_approvals a ON a.quotation_id=e.quotation_id AND e.kind='Approved' WHERE e.quotation_id=ANY($1::uuid[])",ids('quotation'),'Quotation'],
- ["SELECT e.id,e.created_at AS at,e.created_by AS actor_id,e.version_id AS document_id,e.action,e.remarks AS reason FROM cni_proposal_actions e WHERE e.version_id=ANY($1::uuid[])",ids('cni'),'C&I'],
- ["SELECT e.id,e.created_at AS at,e.created_by AS actor_id,e.source_quotation_id AS document_id,'Revision requested · '||e.origin AS action,e.reason FROM quotation_revision_requests e WHERE e.source_quotation_id=ANY($1::uuid[])",ids('quotation'),'Revision'],
- ["SELECT e.id,e.created_at AS at,e.created_by AS actor_id,e.quotation_id AS document_id,'Customer confirmation recorded' AS action,e.input->>'evidenceNotes' AS reason FROM customer_purchase_orders e WHERE e.quotation_id=ANY($1::uuid[])",ids('quotation'),'Confirmation'],
- ["SELECT e.id,e.created_at AS at,e.created_by AS actor_id,e.ipo_id AS document_id,'IPO sent to Accounts' AS action,'' AS reason FROM ipo_accounts_handoffs e WHERE e.ipo_id=ANY($1::uuid[])",ids('ipo'),'Accounts'],
- ["SELECT e.id,e.created_at AS at,e.created_by AS actor_id,e.draft_id AS document_id,'Survey assigned by Design' AS action,'' AS reason FROM design_survey_handoffs e WHERE e.draft_id=ANY($1::uuid[])",ids('draft'),'Design'],
- ["SELECT e.id,e.created_at AS at,e.submitted_by AS actor_id,e.draft_id AS document_id,'BOQ submitted' AS action,e.revision_reason AS reason FROM boq_review_submissions e WHERE e.draft_id=ANY($1::uuid[])",ids('draft'),'Review'],
- ["SELECT e.submission_id AS id,e.created_at AS at,e.reviewed_by AS actor_id,s.draft_id AS document_id,e.outcome AS action,e.comments AS reason FROM boq_review_decisions e JOIN boq_review_submissions s ON s.id=e.submission_id WHERE s.draft_id=ANY($1::uuid[])",ids('draft'),'Decision']
- ];
- for(const [sql,allowed] of eventQueries){const rows=(await pool.query(sql,[allowed])).rows;for(const e of rows){const doc=docs.find(d=>d.id===e.document_id);const u=(await pool.query('SELECT display_name FROM users WHERE id=$1',[e.actor_id])).rows[0];events.push({...e,actor:u?.display_name??'Recorded user',document:doc?.number,version:doc?.version});}}
- const attachments=(await pool.query(`SELECT DISTINCT u.id,u.filename,u.mime,u.created_at,'Survey / supporting attachment' AS type FROM survey_uploads u WHERE (EXISTS(SELECT 1 FROM boq_uploads l WHERE l.upload_id=u.id AND l.revision_id=ANY($1::uuid[])) OR EXISTS(SELECT 1 FROM survey_drafts d WHERE d.id=ANY($2::uuid[]) AND d.inputs->'uploadIds' ? u.id::text) OR EXISTS(SELECT 1 FROM external_document_approval_files f JOIN external_document_approvals a ON a.id=f.approval_id WHERE f.upload_id=u.id AND (a.quotation_id=ANY($3::uuid[]) OR a.submission_id=ANY($4::uuid[]))))`,[ids('boq'),ids('draft'),ids('quotation'),ids('submission')])).rows.map(a=>({...a,url:`/api/boqs/uploads/${a.id}`}));
- const po=(await pool.query(`SELECT d.id,d.filename,d.mime,d.created_at,'Customer PO / approval evidence' AS type FROM customer_po_documents d WHERE EXISTS(SELECT 1 FROM customer_purchase_orders p WHERE p.document_id=d.id AND p.quotation_id=ANY($1::uuid[])) OR EXISTS(SELECT 1 FROM ipo_submissions s WHERE s.id=ANY($2::uuid[]) AND s.input->>'documentId'=d.id::text)`,[ids('quotation'),ids('submission')])).rows.map(a=>({...a,url:`/api/orders/documents/${a.id}`}));
- const external=(await pool.query("SELECT a.id,a.created_at AS at,a.decision_at,a.channel AS approval_method,a.recorded_by AS actor_id,COALESCE(a.quotation_id,a.submission_id) AS document_id,'External approval · '||a.channel AS action,a.comments AS reason,a.approver FROM external_document_approvals a WHERE a.quotation_id=ANY($1::uuid[]) OR a.submission_id=ANY($2::uuid[])",[ids('quotation'),ids('submission')])).rows;
- for(const e of external){const d=docs.find(d=>d.id===e.document_id);const u=(await pool.query('SELECT display_name FROM users WHERE id=$1',[e.actor_id])).rows[0];events.push({...e,actor:u?.display_name??'Recorded user',document:d?.number,version:d?.version});}
- const latest=docs[0],customer=catalog.customers.find(c=>String(c.id)===latest.customer_id);
- const site=(await pool.query('SELECT id,name,code,location,status FROM sites WHERE customer_id::text=$1 AND lower(code)=lower($2)',[latest.customer_id,latest.site_code??''])).rows[0]??{name:latest.site,code:latest.site_code,location:latest.location??''};
- const identity=(await pool.query('SELECT site_number FROM document_site_identities WHERE customer_id::text=$1 AND lower(site_code)=lower($2)',[latest.customer_id,latest.site_code??''])).rows[0];
- return {key,customer,site:{...site,site_number:identity?.site_number},families:[...new Set(docs.map(d=>d.family))],documents:docs,attachments:[...attachments,...po],events:events.sort((a,b)=>new Date(a.at).getTime()-new Date(b.at).getTime()||Number(b.id.startsWith('saved-'))-Number(a.id.startsWith('saved-'))||a.id.localeCompare(b.id))};
+export async function projectContext(pool: Pool, actor: string, key: string) {
+  const catalog = await projectCatalog(pool, actor),
+    docs = catalog.documents.filter((d) => d.project_key === key);
+  if (!docs.length)
+    throw new HttpError(
+      404,
+      "Project not found or unavailable to your account.",
+    );
+  const ids = (resource: string) =>
+    docs.filter((d) => d.resource === resource).map((d) => d.id);
+  const events: any[] = docs.map((d) => ({
+    id: `saved-${d.id}`,
+    at: d.created_at,
+    actor: d.actor,
+    document: d.number,
+    version: d.version,
+    action:
+      d.resource === "ipo"
+        ? "IPO approved and issued"
+        : d.resource === "issuance"
+          ? "BOQ sent to Operations"
+          : d.resource === "submission"
+            ? "Sale evidence submitted for IPO approval"
+            : "Document saved",
+    document_id: d.id,
+    reason: "",
+  }));
+  const eventQueries: [string, string[], string][] = [
+    [
+      "SELECT e.id,e.created_at AS at,e.created_by AS actor_id,e.quotation_id AS document_id,CASE WHEN e.kind='Approved' AND a.id IS NOT NULL THEN 'External approval recorded' ELSE e.kind END AS action,e.notes AS reason,a.approver,a.channel AS approval_method,a.decision_at FROM coordination_events e LEFT JOIN external_document_approvals a ON a.quotation_id=e.quotation_id AND e.kind='Approved' WHERE e.quotation_id=ANY($1::uuid[])",
+      ids("quotation"),
+      "Quotation",
+    ],
+    [
+      "SELECT e.id,e.created_at AS at,e.created_by AS actor_id,e.version_id AS document_id,e.action,e.remarks AS reason FROM cni_proposal_actions e WHERE e.version_id=ANY($1::uuid[])",
+      ids("cni"),
+      "C&I",
+    ],
+    [
+      "SELECT e.id,e.created_at AS at,e.created_by AS actor_id,e.source_quotation_id AS document_id,'Revision requested · '||e.origin AS action,e.reason FROM quotation_revision_requests e WHERE e.source_quotation_id=ANY($1::uuid[])",
+      ids("quotation"),
+      "Revision",
+    ],
+    [
+      "SELECT e.id,e.created_at AS at,e.created_by AS actor_id,e.quotation_id AS document_id,'Customer confirmation recorded' AS action,e.input->>'evidenceNotes' AS reason FROM customer_purchase_orders e WHERE e.quotation_id=ANY($1::uuid[])",
+      ids("quotation"),
+      "Confirmation",
+    ],
+    [
+      "SELECT e.id,e.created_at AS at,e.created_by AS actor_id,e.ipo_id AS document_id,'IPO sent to Accounts' AS action,'' AS reason FROM ipo_accounts_handoffs e WHERE e.ipo_id=ANY($1::uuid[])",
+      ids("ipo"),
+      "Accounts",
+    ],
+    [
+      "SELECT e.id,e.created_at AS at,e.created_by AS actor_id,e.draft_id AS document_id,'Survey assigned by Design' AS action,'' AS reason FROM design_survey_handoffs e WHERE e.draft_id=ANY($1::uuid[])",
+      ids("draft"),
+      "Design",
+    ],
+    [
+      "SELECT e.id,e.created_at AS at,e.submitted_by AS actor_id,e.draft_id AS document_id,'BOQ submitted' AS action,e.revision_reason AS reason FROM boq_review_submissions e WHERE e.draft_id=ANY($1::uuid[])",
+      ids("draft"),
+      "Review",
+    ],
+    [
+      "SELECT e.submission_id AS id,e.created_at AS at,e.reviewed_by AS actor_id,s.draft_id AS document_id,e.outcome AS action,e.comments AS reason FROM boq_review_decisions e JOIN boq_review_submissions s ON s.id=e.submission_id WHERE s.draft_id=ANY($1::uuid[])",
+      ids("draft"),
+      "Decision",
+    ],
+  ];
+  for (const [sql, allowed] of eventQueries) {
+    const rows = (await pool.query(sql, [allowed])).rows;
+    for (const e of rows) {
+      const doc = docs.find((d) => d.id === e.document_id);
+      const u = (
+        await pool.query("SELECT display_name FROM users WHERE id=$1", [
+          e.actor_id,
+        ])
+      ).rows[0];
+      events.push({
+        ...e,
+        actor: u?.display_name ?? "Recorded user",
+        document: doc?.number,
+        version: doc?.version,
+      });
+    }
+  }
+  const attachments = (
+    await pool.query(
+      `SELECT DISTINCT u.id,u.filename,u.mime,u.created_at,'Survey / supporting attachment' AS type FROM survey_uploads u WHERE (EXISTS(SELECT 1 FROM boq_uploads l WHERE l.upload_id=u.id AND l.revision_id=ANY($1::uuid[])) OR EXISTS(SELECT 1 FROM survey_drafts d WHERE d.id=ANY($2::uuid[]) AND d.inputs->'uploadIds' ? u.id::text) OR EXISTS(SELECT 1 FROM external_document_approval_files f JOIN external_document_approvals a ON a.id=f.approval_id WHERE f.upload_id=u.id AND (a.quotation_id=ANY($3::uuid[]) OR a.submission_id=ANY($4::uuid[]))))`,
+      [ids("boq"), ids("draft"), ids("quotation"), ids("submission")],
+    )
+  ).rows.map((a) => ({ ...a, url: `/api/boqs/uploads/${a.id}` }));
+  const po = (
+    await pool.query(
+      `SELECT d.id,d.filename,d.mime,d.created_at,'Customer PO / approval evidence' AS type FROM customer_po_documents d WHERE EXISTS(SELECT 1 FROM customer_purchase_orders p WHERE p.document_id=d.id AND p.quotation_id=ANY($1::uuid[])) OR EXISTS(SELECT 1 FROM ipo_submissions s WHERE s.id=ANY($2::uuid[]) AND s.input->>'documentId'=d.id::text)`,
+      [ids("quotation"), ids("submission")],
+    )
+  ).rows.map((a) => ({ ...a, url: `/api/orders/documents/${a.id}` }));
+  const external = (
+    await pool.query(
+      "SELECT a.id,a.created_at AS at,a.decision_at,a.channel AS approval_method,a.recorded_by AS actor_id,COALESCE(a.quotation_id,a.submission_id) AS document_id,'External approval · '||a.channel AS action,a.comments AS reason,a.approver FROM external_document_approvals a WHERE a.quotation_id=ANY($1::uuid[]) OR a.submission_id=ANY($2::uuid[])",
+      [ids("quotation"), ids("submission")],
+    )
+  ).rows;
+  for (const e of external) {
+    const d = docs.find((d) => d.id === e.document_id);
+    const u = (
+      await pool.query("SELECT display_name FROM users WHERE id=$1", [
+        e.actor_id,
+      ])
+    ).rows[0];
+    events.push({
+      ...e,
+      actor: u?.display_name ?? "Recorded user",
+      document: d?.number,
+      version: d?.version,
+    });
+  }
+  const latest = docs[0],
+    customer = catalog.customers.find(
+      (c) => String(c.id) === latest.customer_id,
+    );
+  const site = (
+    await pool.query(
+      "SELECT id,name,code,location,status FROM sites WHERE customer_id::text=$1 AND lower(code)=lower($2)",
+      [latest.customer_id, latest.site_code ?? ""],
+    )
+  ).rows[0] ?? {
+    name: latest.site,
+    code: latest.site_code,
+    location: latest.location ?? "",
+  };
+  const identity = (
+    await pool.query(
+      "SELECT site_number FROM document_site_identities WHERE customer_id::text=$1 AND lower(site_code)=lower($2)",
+      [latest.customer_id, latest.site_code ?? ""],
+    )
+  ).rows[0];
+  return {
+    key,
+    customer,
+    site: { ...site, site_number: identity?.site_number },
+    families: [...new Set(docs.map((d) => d.family))],
+    documents: docs,
+    attachments: [...attachments, ...po],
+    events: events.sort(
+      (a, b) =>
+        new Date(a.at).getTime() - new Date(b.at).getTime() ||
+        Number(b.id.startsWith("saved-")) - Number(a.id.startsWith("saved-")) ||
+        a.id.localeCompare(b.id),
+    ),
+  };
 }

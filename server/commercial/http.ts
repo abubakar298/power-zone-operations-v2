@@ -7,12 +7,24 @@ import { HttpError } from "../http/errors.js";
 import { pricingSchema, quotationSchema } from "./schema.js";
 import { CommercialRepository } from "./repository.js";
 import { buildQuotationPdf, buildQuotationComparisonPdf } from "./report.js";
+import {randomUUID} from 'node:crypto';
+import {createRequire} from 'node:module';
+const quotationPdfWorkerPath=createRequire(import.meta.url).resolve('pdfjs-dist/build/pdf.worker.min.mjs');
+const quotationPreviewDownloads=new Map<string,{actor:string;bytes:Buffer;expires:number}>();
+const pricingPreviewContexts=new Map<string,{actor:string;input:unknown;expires:number}>();
+export function registerPricingPreviewContext(token:string,actor:string,input:unknown){pricingPreviewContexts.set(z.uuid().parse(token),{actor,input:pricingSchema.parse(input),expires:Date.now()+90*60*1000});}
 export function commercialHttp(
   repo: CommercialRepository,
   requireSession: RequestHandler,
 ) {
   const r = Router();
   r.use(requireSession);
+  r.get('/pdf-worker.mjs',(_req,res)=>res.type('application/javascript').sendFile(quotationPdfWorkerPath,{dotfiles:'allow'}));
+  r.get('/pricing-preview-context/:token',(req,res)=>{
+    const context=pricingPreviewContexts.get(String(req.params.token));
+    if(!context||context.actor!==req.authSession!.user.id||context.expires<Date.now())throw new HttpError(404,'Preview settings have expired or belong to another account.');
+    res.json(context.input);
+  });
   r.use((req, _res, next) => {
     if (
       req.method !== "GET" &&
@@ -112,7 +124,7 @@ export function commercialHttp(
     res.json(
       await repo.pricingPreview(
         req.authSession!.user.id,
-        parse(pricingSchema, req.body),
+        parse(pricingSchema, {...req.body,preparedBy:req.authSession!.user.display_name}),
       ),
     ),
   );
@@ -123,7 +135,7 @@ export function commercialHttp(
       .json(
         await repo.pricingSave(
           req.authSession!.user.id,
-          parse(pricingSchema, req.body),
+          parse(pricingSchema, {...req.body,preparedBy:req.authSession!.user.display_name}),
           key.fingerprint,
           key.requestKey,
         ),
@@ -159,6 +171,18 @@ export function commercialHttp(
           key.requestKey,
         ),
       );
+  });
+  r.post('/quotations/preview-download',async(req,res)=>{
+    const preview=await repo.quotationPreview(req.authSession!.user.id,parse(quotationSchema,req.body));
+    for(const [token,file] of quotationPreviewDownloads)if(file.expires<Date.now())quotationPreviewDownloads.delete(token);
+    while(quotationPreviewDownloads.size>=32)quotationPreviewDownloads.delete(quotationPreviewDownloads.keys().next().value!);
+    const token=randomUUID();quotationPreviewDownloads.set(token,{actor:req.authSession!.user.id,bytes:buildQuotationPdf(preview.snapshot),expires:Date.now()+15*60*1000});
+    res.json({url:`/api/commercial/quotations/preview-download/${token}`});
+  });
+  r.get('/quotations/preview-download/:token',(req,res)=>{
+    const file=quotationPreviewDownloads.get(String(req.params.token));
+    if(!file||file.actor!==req.authSession!.user.id||file.expires<Date.now())throw new HttpError(404,'Preview download expired. Download the preview again.');
+    res.set({'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="Quotation-Preview.pdf"','Cache-Control':'private, no-store','Content-Length':String(file.bytes.length)}).send(file.bytes);
   });
   r.post("/quotations/preview.pdf", async (req, res) => {
     const p = await repo.quotationPreview(

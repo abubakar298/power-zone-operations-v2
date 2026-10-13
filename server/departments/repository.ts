@@ -5,7 +5,7 @@ import { z } from "zod";
 import { transaction } from "../db/transaction.js";
 import { HttpError } from "../http/errors.js";
 export const departmentSchema = z.enum(["Inventory", "Accounts"]);
-type Department = z.infer<typeof departmentSchema>;
+export type Department = z.infer<typeof departmentSchema>;
 export const checkpointSchema = z
   .object({
     id: z.uuid(),

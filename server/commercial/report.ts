@@ -27,7 +27,7 @@ function appendQuotation(
   label?: string,
 ) {
   // Promotional presentation only. The immutable net/tax basis remains unchanged for review and IPO/PT.
-  if(s.standardDiscountStrategy){
+  if(s.standardDiscountStrategy && s.standardDiscountStrategy.version !== 'PZ-STANDARD-DISCOUNT-2'){
     const D=Decimal;
     const included=s.footer.some(r=>r.label==="Total");
     const groups=s.standardDiscountStrategy.groups.map(g=>({...g,amount:new D(g.beforeTax).mul(included?new D(g.taxRate).div(100).add(1):1).toDecimalPlaces(2,Decimal.ROUND_HALF_UP)}));
@@ -46,6 +46,12 @@ function appendQuotation(
     const index=footer.findIndex(r=>r.label==="Special Discount");
     footer.splice(included?index:1,0,{label:"Management-approved discount",amount:allowance.toFixed(2)});
     s={...s,lines,footer};
+  }
+  if(s.discountAuthorization){
+    const allowance=new Decimal(s.discountAuthorization.preapprovedBeforeTax),requested=new Decimal(s.discountAuthorization.requestedBeforeTax);
+    const approved=Decimal.min(allowance,requested),special=Decimal.max(0,requested.sub(allowance));
+    const footer=s.footer.flatMap(row=>row.label==='Special Discount'?[{label:'Approved Discount',amount:approved.toFixed(2)},{label:'Management Special Discount',amount:special.toFixed(2)}]:[row]);
+    s={...s,footer};
   }
   const margin = 14;
   pdf.setProperties({
@@ -170,7 +176,7 @@ function appendQuotation(
     didParseCell(data) {
       if (data.row.index === s.footer.length - 1) {
         data.cell.styles.fontStyle = "bold";
-        data.cell.styles.fillColor = [239, 236, 249];
+        data.cell.styles.fillColor = false;
       }
     },
   });

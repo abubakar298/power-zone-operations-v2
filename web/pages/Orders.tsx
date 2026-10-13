@@ -14,7 +14,7 @@ import { orderSchema, type OrderInput } from "../../server/orders/schema.js";
 import { extractText } from "../ocr.js";
 import { poSuggestions } from "../../server/orders/po-extraction.js";
 
-const fields: [keyof OrderInput, string][] = [
+export const saleConfirmationFields: [keyof OrderInput, string][] = [
   ["poNumber", "Customer PO reference"],
   ["orderDate", "Order date"],
   ["invoiceCompany", "Power Zone legal entity issuing invoice"],
@@ -33,6 +33,7 @@ const fields: [keyof OrderInput, string][] = [
   ["remarks", "Remarks"],
   ["evidenceNotes", "Approval evidence / verbal confirmation details"],
 ];
+const fields=saleConfirmationFields;
 export function Orders({
   session,
   onOperations,

@@ -1,0 +1,2 @@
+type Row={branchCode:string;branchName:string;solarKw:string};
+export function parseHeadsupRows(text:string):Row[]{return text.split(/\n/).flatMap(line=>{const clean=line.replace(/[|]/g,' ').replace(/\s+/g,' ').trim();const match=clean.match(/^(.*?)\bRaised\b\s+Power\s*Zone\s+(.+?)\s+(\d+(?:\.\d+)?)\s*$/i);if(!match)return[];const prefix=match[1].trim().replace(/^\d+\s*/, '').trim();return[{branchCode:prefix,branchName:match[2].trim(),solarKw:match[3]}];});}

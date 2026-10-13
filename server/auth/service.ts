@@ -31,6 +31,7 @@ export const publicUser = (u: User) => ({
   email: u.email,
   displayName: u.display_name,
   role: u.role,
+  restrictedCostAccess: u.restrictedCostAccess === true,
 });
 
 export class AuthService {
@@ -72,6 +73,36 @@ export class AuthService {
     };
     if (!(await this.repository.bootstrap(user)))
       throw new HttpError(409, "Administrator setup is already complete.");
+  }
+
+  async changePassword(user: User, body: unknown, ip: string) {
+    await this.throttle(ip, `change-password:${user.id}`, 10);
+    const parsed = z
+      .object({
+        currentPassword: z.string().min(1).max(128),
+        newPassword: z.string().min(12).max(128),
+      })
+      .strict()
+      .safeParse(body);
+    if (!parsed.success)
+      throw new HttpError(
+        400,
+        "Enter your current password and a new password of 12–128 characters.",
+      );
+    const stored = await this.repository.findUser(user.email);
+    if (
+      !stored ||
+      stored.id !== user.id ||
+      !(await verifyPassword(parsed.data.currentPassword, stored.password_hash))
+    )
+      throw new HttpError(400, "Your current password is incorrect.");
+    if (parsed.data.currentPassword === parsed.data.newPassword)
+      throw new HttpError(400, "Choose a different new password.");
+    await this.repository.changePassword(
+      user.id,
+      stored.password_hash,
+      await hashPassword(parsed.data.newPassword),
+    );
   }
 
   async login(body: unknown, ip: string, oldTokenHash?: string) {

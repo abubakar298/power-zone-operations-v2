@@ -5,6 +5,7 @@ import type { QuoteLine } from './engine.js';
 /** Expand customer scope without changing the stored financial groups or amounts. */
 export function quotationDisplayRows(lines: QuoteLine[]): QuoteLine[] {
   const members = lines.map(line => {
+    if(line.descriptionOverride)return [{description:line.description,descriptionOverride:true,unit:line.items?.length===1?line.items[0].unit:line.unit,qty:line.items?.length===1?line.items[0].qty:line.qty}];
     if (line.items?.length) return line.items;
     // Older saved BESS quotations used one multiline LS cell. Read it without rewriting history.
     const parts = line.description.split('\n');
@@ -15,7 +16,7 @@ export function quotationDisplayRows(lines: QuoteLine[]): QuoteLine[] {
   });
   const panelQty=lines.filter(line=>line.group==="solar").reduce((sum,line)=>sum.add(line.qty),new Decimal(0));
   return lines.flatMap((line,index) => {
-    if(line.items?.length && line.amount!==undefined && line.items.every(i=>i.amount!==undefined)){
+    if(!line.descriptionOverride && line.items?.length && line.amount!==undefined && line.items.every(i=>i.amount!==undefined)){
       const items=line.items.map(i=>({...i}));
       const delta=new Decimal(line.amount).sub(items.reduce((v,i)=>v.add(i.amount!),new Decimal(0))).mul(100).toDecimalPlaces(0);
       // A displayed introductory offer increase is allocated by its saved allowance,
@@ -42,7 +43,7 @@ export function quotationDisplayRows(lines: QuoteLine[]): QuoteLine[] {
   }));
   }).map(row=>{
     const job=/^(Installation, Testing|UPS installation|Single-phase installation|Project delivery)/i.test(row.description);
-    const description=row.group==="structure" && panelQty.gt(0) ? `${row.description.replace(/ for [\d,.]+ panels$/i, "")} for ${new Intl.NumberFormat("en-PK", {maximumFractionDigits:4}).format(panelQty.toNumber())} panels` : row.description;
+    const description=!("descriptionOverride" in row && row.descriptionOverride) && row.group==="structure" && panelQty.gt(0) ? `${row.description.replace(/ for [\d,.]+ panels$/i, "")} for ${new Intl.NumberFormat("en-PK", {maximumFractionDigits:4}).format(panelQty.toNumber())} panels` : row.description;
     return {...row,description,unit:job?"JOB":displayUnit(row.unit,row.qty),qty:job?"1":row.qty};
   });
 }

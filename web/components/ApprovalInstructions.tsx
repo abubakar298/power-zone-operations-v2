@@ -1,6 +1,6 @@
 import type { ApprovalInstructions as Instructions } from "../../server/boq/instructions.js";
 export const blankInstructions = (): Instructions => ({
-  presentation: "No Breakup",
+  cashGstTreatment:undefined,presentation: "No Breakup",
   taxMode: "Show Sales Tax Separately",
   markups: {
     solar: "0",

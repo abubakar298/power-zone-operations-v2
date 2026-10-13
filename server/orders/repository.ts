@@ -157,6 +157,8 @@ export class OrdersRepository {
           ? cashDeal(p.snapshot.input)?"0":extra.taxRate
           : p.snapshot.rows.find((r: any) => r.key === l.group).taxRate,
     }));
+    const beforeTaxDiscount=p.snapshot.input.discountPercent!==undefined && (new Decimal(footer('Special Discount')??'0').gt(0)||p.snapshot.input.roundedTotal!==undefined);
+    if(beforeTaxDiscount)throw new HttpError(422,'This quotation uses discount before GST. Its IPO allocation is awaiting the Director’s decision; the accepted quotation remains unchanged.');
     const allocation = allocateDiscount(
       lines,
       subtotal,
@@ -446,7 +448,7 @@ export class OrdersRepository {
   async list(actor?: string) {
     const rows = (
       await this.pool.query(
-        `SELECT i.id,i.number,i.created_at,i.snapshot->>'quotationNumber' AS quotation_number,i.snapshot->'input'->>'poNumber' AS po_number,i.snapshot->'customer'->>'name' AS customer,i.snapshot->'allocation'->>'total' AS total,(SELECT jsonb_build_object('decision',r.decision,'notes',r.notes) FROM accounts_ipo_reviews r WHERE r.ipo_id=i.id ORDER BY r.version DESC LIMIT 1) AS accounts_review FROM internal_purchase_orders i ${actor ? `WHERE ${ownedCondition("ipo", "i.id", "$1")}` : ""} ORDER BY i.created_at DESC LIMIT 200`,
+        `SELECT i.id,i.number,i.created_at,i.snapshot->>'quotationNumber' AS quotation_number,i.snapshot->'input'->>'poNumber' AS po_number,i.snapshot->'customer'->>'name' AS customer,i.snapshot->'allocation'->>'total' AS total,(SELECT jsonb_build_object('decision',r.decision,'notes',r.notes) FROM accounts_ipo_reviews r WHERE r.ipo_id=i.id ORDER BY r.version DESC LIMIT 1) AS accounts_review FROM internal_purchase_orders i ${actor ? `WHERE ${ownedCondition("ipo", "i.id", "$1")}` : "WHERE true"} AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? i.id::text) ORDER BY i.created_at DESC LIMIT 200`,
         actor ? [actor] : [],
       )
     ).rows;
@@ -532,6 +534,9 @@ export class OrdersRepository {
   }
   async divisionForSnapshot(snapshot: any) {
     if (snapshot.peachtree) return snapshot.peachtree;
+    // Recover the exact archived PT pack when a legacy caller omits its embedded division.
+    const archived=(await this.pool.query("SELECT snapshot->'peachtree' AS division FROM internal_purchase_orders WHERE snapshot->>'quotationId'=$1 AND snapshot->'allocation'=$2::jsonb AND snapshot->'input'=$3::jsonb AND snapshot->'peachtree' IS NOT NULL ORDER BY created_at LIMIT 1",[snapshot.quotationId,JSON.stringify(snapshot.allocation),JSON.stringify(snapshot.input)])).rows[0];
+    if(archived?.division)return archived.division;
     // Earlier IPOs retain their snapshots. Version-1 report derivation uses only
     // their immutable costing/pricing links, never today's master data.
     const b = (

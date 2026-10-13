@@ -9,7 +9,7 @@ export const ublStages = [
   "IPO Submitted—Awaiting Accounts",
   "Accounts Accepted—BOQ Issuance Pending",
 ] as const;
-const ublConfigurations = [
+export const ublConfigurations = [
   "20-20-30",
   "25-20-30",
   "30-30-40",

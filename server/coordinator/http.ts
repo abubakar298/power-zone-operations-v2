@@ -97,6 +97,7 @@ export function coordinatorHttp(
         recipient: z.enum(["Customer", "Salesperson"]),
         notes: z.string().trim().min(1).max(2000),
         confirmed: z.literal(true),
+        evidenceIds:z.array(z.uuid()).max(10).default([]),
       })
       .strict()
       .refine((v) => !!v.quotationId !== !!v.cniVersionId)

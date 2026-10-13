@@ -75,11 +75,13 @@ export class CommercialRepository {
         ])
       ).rows[0];
       if (!source) throw new HttpError(404, "Quotation not found.");
+      const status=(await c.query('SELECT kind FROM coordination_events WHERE quotation_id=$1 ORDER BY created_at DESC LIMIT 1',[sourceId])).rows[0]?.kind;
+      if(status==='Submitted'&&!['Admin','Management'].includes(user.role))throw new HttpError(403,'This quotation is with Management. Only Management can return it for revision.');
       let draftId: string | null = null;
       if (costingChange) {
         const latest = (
           await c.query(
-            "SELECT r.* FROM boq_revisions r WHERE r.boq_id=(SELECT boq_id FROM boq_revisions WHERE id=$1) ORDER BY r.revision DESC LIMIT 1",
+            "SELECT r.* FROM boq_revisions r WHERE r.id=$1",
             [source.boq_revision_id],
           )
         ).rows[0];
@@ -278,8 +280,17 @@ export class CommercialRepository {
       return { ...policy, version };
     });
   }
+  async pricingAttribution(c:Pool|PoolClient,actor:string,input:PricingInput){
+    const user=(await c.query('SELECT display_name,role FROM users WHERE id=$1',[actor])).rows[0];
+    const files=input.discountApprovalEvidence??[];
+    if(!files.length)return {...input,preparedBy:user.display_name};
+    const rows=(await c.query("SELECT id,filename FROM survey_uploads WHERE id=ANY($1::uuid[]) AND (owner_id=$2 OR $3)",[files.map(file=>file.id),actor,['Admin','Management'].includes(user.role)])).rows;
+    if(rows.length!==new Set(files.map(file=>file.id)).size)throw new HttpError(403,'Discount approval evidence is unavailable to your account.');
+    return {...input,preparedBy:user.display_name,discountApprovalEvidence:files.map(file=>rows.find(row=>row.id===file.id))};
+  }
   async pricingPreview(actor: string, input: PricingInput) {
     await this.manager(this.pool, actor);
+    input=await this.pricingAttribution(this.pool,actor,input);
     await this.requireCostingContext(
       this.pool,
       input.boqRevisionId,
@@ -306,7 +317,7 @@ export class CommercialRepository {
     await this.manager(this.pool, actor);
     return (
       await this.pool.query(
-        `SELECT p.id,p.number,p.version,p.boq_revision_id,p.created_at,p.snapshot->>'boqNumber' AS boq_number,p.snapshot->>'netTotal' AS total FROM commercial_pricing_versions p WHERE ${ownedCondition("pricing", "p.id", "$1")} ORDER BY p.created_at DESC LIMIT 200`,
+        `SELECT p.id,p.number,p.version,p.boq_revision_id,p.created_at,p.snapshot->>'boqNumber' AS boq_number,p.snapshot->>'netTotal' AS total FROM commercial_pricing_versions p WHERE ${ownedCondition("pricing", "p.id", "$1")} AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? p.id::text) ORDER BY p.created_at DESC LIMIT 200`,
         [actor],
       )
     ).rows;
@@ -334,6 +345,7 @@ export class CommercialRepository {
     return transaction(this.pool, async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(742019003)");
       await this.manager(c, actor);
+      input=await this.pricingAttribution(c,actor,input);
       await this.requireCostingContext(
         c,
         input.boqRevisionId,
@@ -410,7 +422,7 @@ export class CommercialRepository {
       const prior=(await c.query("SELECT v.snapshot FROM quotation_revision_requests r JOIN quotation_versions v ON v.id=r.source_quotation_id WHERE r.id=$1",[input.revisionRequestId])).rows[0];
       if(prior) input={...input,discount:prior.snapshot.footer.find((r:any)=>r.label==="Special Discount")?.amount??"0"};
     }
-    const p = await this.pricingGet(actor, input.pricingId, c),
+    const p = input.previewPricing?{boq_revision_id:input.previewPricing.boqRevisionId,snapshot:(await this.pricingPreview(actor,input.previewPricing)).snapshot}:await this.pricingGet(actor, input.pricingId, c),
       b = await this.boq(c, p.boq_revision_id),
       customer = (
         await c.query(
@@ -555,6 +567,7 @@ export class CommercialRepository {
     expected: string,
     key: string,
   ) {
+    if(input.previewPricing)throw new HttpError(422,'Record pricing only when sending the reviewed quotation to Management.');
     return transaction(this.pool, async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(742019003)");
       const replay = (
@@ -680,7 +693,7 @@ export class CommercialRepository {
   async quotationList(actor?: string) {
     return (
       await this.pool.query(
-        `SELECT q.id,q.number,q.version,q.pricing_id,q.boq_revision_id,q.created_at,(SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS workflow_status,NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS workflow_latest,EXISTS(SELECT 1 FROM quotation_revision_requests r WHERE r.source_quotation_id=q.id) AS revision_requested,q.snapshot->>'boqNumber' AS boq_number,q.snapshot->'customer'->>'name' AS customer,q.snapshot->>'siteName' AS site FROM quotation_versions q ${actor ? `WHERE ${ownedCondition("quotation", "q.id", "$1")}` : ""} ORDER BY q.created_at DESC LIMIT 200`,
+        `SELECT q.id,q.number,q.version,q.pricing_id,q.boq_revision_id,q.created_at,(SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS workflow_status,NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS workflow_latest,EXISTS(SELECT 1 FROM quotation_revision_requests r WHERE r.source_quotation_id=q.id) AS revision_requested,q.snapshot->>'boqNumber' AS boq_number,q.snapshot->'customer'->>'name' AS customer,q.snapshot->>'siteName' AS site FROM quotation_versions q ${actor ? `WHERE ${ownedCondition("quotation", "q.id", "$1")}` : "WHERE true"} AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? q.id::text) ORDER BY q.created_at DESC LIMIT 200`,
         actor ? [actor] : [],
       )
     ).rows;

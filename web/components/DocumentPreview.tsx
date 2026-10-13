@@ -8,11 +8,13 @@ export function DocumentPreview({
   title,
   mime = "application/pdf",
   data,
+  onReady,
 }: {
   url: string;
   title: string;
   mime?: string;
   data?: Blob;
+  onReady?: () => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [retry, setRetry] = useState(0);
@@ -76,7 +78,7 @@ export function DocumentPreview({
             host.current?.append(image);
           }
         }
-        if (!cancelled) setStatus("");
+        if (!cancelled) {setStatus("");onReady?.();}
       } catch (e) {
         if (!cancelled)
           setStatus(

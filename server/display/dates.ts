@@ -1,5 +1,5 @@
 /** Display dates in Pakistan time. Never rewrite stored ISO dates/snapshots. */
-const businessTimeZone = "Asia/Karachi";
+export const businessTimeZone = "Asia/Karachi";
 const dateFormat = new Intl.DateTimeFormat("en-GB", {
   timeZone: businessTimeZone,
   day: "numeric",
@@ -37,4 +37,14 @@ export function displayDateTime(
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value))
     return dateFormat.format(date);
   return `${dateFormat.format(date)} · ${timeFormat.format(date)}`;
+}
+export function businessDateInput(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: businessTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const part = (type: string) => parts.find((p) => p.type === type)!.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }

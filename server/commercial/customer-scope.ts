@@ -3,7 +3,7 @@ import type {BoqSnapshot} from '../boq/engine.js';
 import type {QuoteLine} from './engine.js';
 
 type Item = {description:string;unit:string;qty:string;amount?:string;offerAllowance?:string};
-type ScopePricing = (sources:BoqSnapshot['lines'], fraction:Decimal)=>{amount:string;offerAllowance:string};
+export type ScopePricing = (sources:BoqSnapshot['lines'], fraction:Decimal)=>{amount:string;offerAllowance:string};
 const acKeys = new Set(['63A 4P MCB','100A 4P MCCB','100A Rotary Changeover with Box','63A 4P Changeover','CH-5WAY-DB','AC SPD','AC & DC Boxes','63A 2P MCB','32A 2P MCB','32A 2P Breaker Changeover','63A 1P AC VPD','SP AC Conduit Accessories and Box']);
 const dcKeys = new Set(['DC Breaker','500V 2P DC Breaker','DC SPD','DC Fuse with Holder','SP DC Enclosures']);
 export const earthingScopeDescription = 'Earthing Bore — Target earth resistance: 1–5 ohms, subject to site conditions';
@@ -25,6 +25,7 @@ export function customerScopeItems(boq:BoqSnapshot, sources:BoqSnapshot['lines']
   };
   for(const l of sources){
     if(!new Decimal(l.qty).gt(0)||acKeys.has(l.key)||dcKeys.has(l.key))continue;
+    const quotedBrand=l.brand==='Any of the Above'?(l.brandAlternatives??[]).join(' / '):l.brand;
     if(/^(10mm² 1C|16mm² 4C|25mm² 4C) AC Cable$/.test(l.key)){
       const total=new Decimal(l.qty),s=boq.survey,dual=boq.inverterConfig.quantity===2;
       let inverter:Decimal;
@@ -38,12 +39,12 @@ export function customerScopeItems(boq:BoqSnapshot, sources:BoqSnapshot['lines']
       inverter=Decimal.min(total,inverter);
       const size=l.key.replace(' AC Cable','').replace('1C','1-core').replace('4C','4-core');
       for(const [purpose,qty] of [['Inverter Termination',inverter],['Load Panel Termination',total.minus(inverter)]] as const)
-        if(qty.gt(0))output.push({description:`AC Cable ${purpose} — ${size}${l.brand?' — '+l.brand:''}`,unit:l.unit,qty:qty.toString(),...(pricing?.([l],qty.div(total))??{})});
+        if(qty.gt(0))output.push({description:`AC Cable ${purpose} — ${size}${quotedBrand?' — '+quotedBrand:''}`,unit:l.unit,qty:qty.toString(),...(pricing?.([l],qty.div(total))??{})});
       continue;
     }
     const labels:Record<string,string>={'2.5mm² Earthing Cable':'2.5mm² Earthing Cable — Panel to Panel','6mm² Earthing Cable':boq.survey.family==='bess-only'?'6mm² Earthing Cable — AC Side':'6mm² Earthing Cable — DC Side','10mm² Earthing Cable':'10mm² Earthing Cable — AC Side','Earthing Bore':earthingScopeDescription,'Misc. Accessories':'Miscellaneous Accessories','Labour':'Installation, Testing & Commissioning','Delivery':'Project Delivery / Logistics'};
     const description=labels[l.key]??(/Cable/.test(l.key)?l.key:l.specification&&l.specification.trim()!=='General'?l.specification:l.description.trim()!=='General'?l.description:l.key);
-    output.push({description:[description,l.brand].filter(Boolean).join(' — '),unit:l.unit,qty:l.qty,...(pricing?.([l],new Decimal(1))??{})});
+    output.push({description:[description,quotedBrand].filter(Boolean).join(' — '),unit:l.unit,qty:l.qty,...(pricing?.([l],new Decimal(1))??{})});
   }
   protection('AC',acKeys);protection('DC',dcKeys);
   const rank=(i:Item)=> /AC Cable Inverter/.test(i.description)?0:/AC Cable Load/.test(i.description)?1:/DC Cable Red/.test(i.description)?2:/DC Cable Black/.test(i.description)?3:/2.5mm² Earthing/.test(i.description)?4:/6mm² Earthing/.test(i.description)?5:/10mm² Earthing/.test(i.description)?6:/AC Protection Box/.test(i.description)?7:/DC Protection Box/.test(i.description)?8:/Earthing Bore/.test(i.description)?9:/Installation,/.test(i.description)?11:/Delivery/.test(i.description)?12:10;

@@ -12,6 +12,30 @@ export interface SellingLine {
 const D = (v: string) => new Decimal(v);
 const money = (v: Decimal) =>
   v.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2);
+/** Current quotations discount selling before GST; legacy allocations remain unchanged. */
+export function allocateBeforeTaxDiscount(source:SellingLine[],subtotal:string,tax10:string,tax18:string,discount:string,netTotal:string,acceptedTax10:string,acceptedTax18:string){
+ if(!source.length||source.some(line=>!['0','10','18'].includes(line.taxRate)||D(line.beforeTax).isNegative()||D(line.qty).isNegative()))throw new HttpError(422,'Invalid approved quotation selling lines.');
+ const base=distribute(D(subtotal).mul(100),source.map(line=>D(line.beforeTax).mul(100)));
+ const discountCents=D(discount).mul(100);
+ if(!discountCents.isInteger()||discountCents.isNegative()||discountCents.gt(D(subtotal).mul(100)))throw new HttpError(422,'Invalid before-tax discount.');
+ const shares=distribute(discountCents,base),afterBase=base.map((value,i)=>value.sub(shares[i]));
+ const originalTax=source.map(()=>D('0')),afterTax=source.map(()=>D('0'));
+ for(const [rate,original,accepted] of [['10',tax10,acceptedTax10],['18',tax18,acceptedTax18]]){
+  const weights=source.map((line,i)=>line.taxRate===rate?afterBase[i]:D('0'));
+  const expected=weights.reduce((sum,value)=>sum.add(value),D('0')).div(100).mul(D(rate).div(100));
+  if(D(accepted).sub(expected).abs().gt('0.02'))throw new HttpError(422,'Accepted quotation GST does not reconcile with discounted selling.');
+  distribute(D(original).mul(100),source.map((line,i)=>line.taxRate===rate?base[i]:D('0'))).forEach((value,i)=>originalTax[i]=originalTax[i].add(value));
+  distribute(D(accepted).mul(100),weights).forEach((value,i)=>afterTax[i]=afterTax[i].add(value));
+ }
+ const rounding=D(netTotal).mul(100).sub(afterBase.reduce((sum,value,i)=>sum.add(value).add(afterTax[i]),D('0')));
+ if(!rounding.isInteger()||rounding.abs().gt(2))throw new HttpError(422,'Accepted quotation total does not reconcile with its discount and GST.');
+ const roundingIndex=afterBase.findLastIndex(value=>value.gt(0));
+ if(roundingIndex<0&&!rounding.isZero())throw new HttpError(422,'No selling row for the approved rounding adjustment.');
+ if(roundingIndex>=0)afterBase[roundingIndex]=afterBase[roundingIndex].add(rounding);
+ const lines=source.map((line,i)=>({...line,originalBeforeTax:money(base[i].div(100)),originalTax:money(originalTax[i].div(100)),originalTotal:money(base[i].add(originalTax[i]).div(100)),allocatedDiscount:money(shares[i].div(100)),beforeTaxReduction:money(shares[i].div(100)),taxReduction:money(originalTax[i].sub(afterTax[i]).div(100)),beforeTax:money(afterBase[i].div(100)),tax:money(afterTax[i].div(100)),total:money(afterBase[i].add(afterTax[i]).div(100)),rate:D(line.qty).gt(0)?afterBase[i].div(100).div(line.qty).toFixed(6):'0.000000',taxRoundingAdjustment:'0.00'}));
+ const sum=(key:'beforeTax'|'tax'|'total')=>money(lines.reduce((value,line)=>value.add(line[key]),D('0')));
+ return {policy:'accepted-before-tax-discount-v2',originalSubtotal:subtotal,originalTax10:tax10,originalTax18:tax18,originalDiscount:discount,roundingAdjustment:money(rounding.div(100)),lines,subtotal:sum('beforeTax'),tax:sum('tax'),total:sum('total')};
+}
 // Largest-remainder allocation works in integer cents and never over-allocates a row.
 function distribute(total: Decimal, weights: Decimal[]): Decimal[] {
   const sum = weights.reduce((a, b) => a.add(b), D("0"));

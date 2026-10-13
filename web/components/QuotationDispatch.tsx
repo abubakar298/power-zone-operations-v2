@@ -16,7 +16,7 @@ export function QuotationDispatch({
     [notes, setNotes] = useState(""),
     [confirmed, setConfirmed] = useState(false),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),[file,setFile]=useState<File>(),[uploads,setUploads]=useState<{id:string;filename:string}[]>([]);
   useEffect(() => {
     setRecord(undefined);
     setError("");
@@ -28,7 +28,7 @@ export function QuotationDispatch({
   }, [quotationId, cniVersionId]);
   return (
     <section className="detail-panel">
-      <h4>Customer delivery confirmation</h4>
+      <h4>Dispatch Approved Quotation</h4>
       {record ? (
         <p role="status">
           Marked sent to {record.recipient}: {record.notes}
@@ -47,6 +47,7 @@ export function QuotationDispatch({
                   recipient,
                   notes,
                   confirmed,
+                  evidenceIds:uploads.map(u=>u.id),
                 },
               });
               setRecord(r);
@@ -81,6 +82,9 @@ export function QuotationDispatch({
               onChange={(e) => setNotes(e.target.value)}
             />
           </Field>
+          <Field id="dispatch-evidence" label="Dispatch evidence" hint="PDF, PNG or JPEG · maximum 8 MB"><input id="dispatch-evidence" type="file" accept="application/pdf,image/png,image/jpeg" onChange={e=>setFile(e.target.files?.[0])}/></Field>
+          <Button variant="secondary" disabled={!file||busy||uploads.length>=10} onClick={async()=>{setBusy(true);setError('');try{if(!file||file.size>8388608)throw Error('Choose a file up to 8 MB.');const base64=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});const saved=await api<{id:string;filename:string}>('/survey-uploads',{csrf:session.csrfToken,body:{filename:file.name,mime:file.type,base64}});setUploads(old=>[...old,saved]);setFile(undefined);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>Upload Dispatch Evidence</Button>
+          {uploads.length>0&&<p role="status">Attached: {uploads.map(u=>u.filename).join(', ')}</p>}
           <label>
             <input
               type="checkbox"
@@ -94,7 +98,7 @@ export function QuotationDispatch({
             loading={busy}
             disabled={!confirmed || !notes.trim()}
           >
-            Mark quotation sent
+            Dispatch Approved Quotation
           </Button>
           {error && (
             <p className="error" role="alert">

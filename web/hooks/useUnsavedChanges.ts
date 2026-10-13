@@ -11,7 +11,7 @@ export function confirmLeaveWorkspace() {
   );
 }
 
-export function useUnsavedChanges(dirty: boolean) {
+export function useUnsavedChanges(dirty: boolean, protectReload=true) {
   useEffect(() => {
     if (!dirty) return;
     const prevent = (event: Event) => event.preventDefault();
@@ -20,10 +20,10 @@ export function useUnsavedChanges(dirty: boolean) {
       event.returnValue = "";
     };
     window.addEventListener(navigationEvent, prevent);
-    window.addEventListener("beforeunload", beforeUnload);
+    if(protectReload)window.addEventListener("beforeunload", beforeUnload);
     return () => {
       window.removeEventListener(navigationEvent, prevent);
       window.removeEventListener("beforeunload", beforeUnload);
     };
-  }, [dirty]);
+  }, [dirty,protectReload]);
 }

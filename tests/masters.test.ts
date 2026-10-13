@@ -57,7 +57,7 @@ function save(kind: string, id: string, version: number, values: unknown) {
 }
 test("reviewed import preserves all IDs, names, codes, site zeros, rates, statuses and rules", async () => {
   const source = JSON.parse(
-    await readFile("tests/fixtures/reference-masters.json", "utf8"),
+    await readFile("data/reference-masters.json", "utf8"),
   );
   const { body } = await request(app)
     .get("/api/masters")

@@ -1,10 +1,15 @@
 import type { Pool } from "pg";
 import { Decimal } from "decimal.js";
-import { quote } from "../commercial/engine.js";
+import { quote, discountedSellingReview } from "../commercial/engine.js";
 import { managementReview } from "../commercial/management-review.js";
 
 export function savedQuotationMarkup(pricing:any, boq:any, quotation:any) {
   const extra=quotation.additionalItem;
+  if(pricing.input.discountPercent!==undefined && !extra){
+    const review=discountedSellingReview(pricing,quotation.input.discount??pricing.discount);
+    const cost=new Decimal(pricing.cost);
+    return cost.isZero()?null:new Decimal(review.subtotal).sub(cost).div(cost).mul(100).toFixed(2);
+  }
   const detailed=quote({...pricing,input:{...pricing.input,presentation:"Full Breakup",taxMode:"Show Sales Tax Separately"}},boq,{...quotation.input,pricingId:"00000000-0000-4000-8000-000000000001",discount:"0",additionalItem:extra});
   const rows=boq.survey.family === "direct-product" && pricing.itemPricing ? pricing.itemPricing.map((l:any)=>{const source=boq.lines.find((x:any)=>x.key===l.key);return {description:source.description,qty:source.qty,unit:source.unit,group:l.group,beforeTax:l.beforeTax,taxRate:l.taxRate};}) : detailed.lines.map((l:any,i:number)=>({description:l.description,qty:l.qty,unit:l.unit,group:l.group,beforeTax:l.amount,taxRate:extra&&i===detailed.lines.length-1?extra.taxRate:pricing.rows.find((r:any)=>r.key===l.group).taxRate}));
   const amount=(label:string)=>detailed.footer.find((r:any)=>r.label===label)?.amount ?? "0.00";

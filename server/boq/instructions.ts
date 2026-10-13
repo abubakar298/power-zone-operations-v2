@@ -1,9 +1,20 @@
 import { z } from "zod";
-import { pricingSchema } from "../commercial/schema.js";
-export const instructionsSchema = pricingSchema
-  .pick({ presentation: true, taxMode: true, saleType:true,cashGstTreatment:true,markups: true })
+import { pricingFieldsSchema } from "../commercial/schema.js";
+export const instructionsSchema = pricingFieldsSchema
+  .pick({
+    presentation: true,
+    taxMode: true,
+    saleType: true,
+    cashGstTreatment: true,
+    markups: true,
+  })
   .extend({ notes: z.string().trim().max(2000).default("") })
-  .strict();
+  .strict()
+  .transform((v) => ({
+    ...v,
+    cashGstTreatment:
+      v.saleType === "Cash Deal" ? v.cashGstTreatment : undefined,
+  }));
 export type ApprovalInstructions = z.infer<typeof instructionsSchema>;
 export const externalApprovalSchema = z
   .object({

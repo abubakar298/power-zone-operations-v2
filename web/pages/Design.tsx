@@ -1,3 +1,18 @@
+import { DepartmentWorkspace } from "./DepartmentWorkspace.js";
+import { Button } from "../ui/Button.js";
+import { UblWorkflow } from "./UblWorkflow.js";
+import {
+  WorkspaceFilters,
+  emptyWorkspaceFilters,
+  matchesWorkspace,
+} from "../components/WorkspaceFilters.js";
+import {
+  designBuckets,
+  designBucket,
+  frameworkTask,
+  routes,
+  taskAge,
+} from "../workspaces/tasks.js";
 import { BessSelector } from "../components/BessSelector.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, type Session } from "../api.js";
@@ -17,10 +32,10 @@ const quantities: Record<string, string> = {
   earth10: "10mm² earth cable (m)",
   batteryKwh: "Total battery capacity (kWh)",
 };
-export function Design({ session }: { session: Session }) {
+export function LegacyDesign({ session }: { session: Session }) {
   const [references, setReferences] = useState<any>(),
     [surveys, setSurveys] = useState<any[]>([]),
-    [bucket, setBucket] = useState("Survey drafts"),
+    [bucket, setBucket] = useState(designBuckets[2]),
     [selected, setSelected] = useState<any>(),
     [editing, setEditing] = useState(false),
     [uploads, setUploads] = useState<any[]>([]),
@@ -28,6 +43,22 @@ export function Design({ session }: { session: Session }) {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [formKey, setFormKey] = useState(0);
+  const [framework, setFramework] = useState<any[]>([]),
+    [frameworkId, setFrameworkId] = useState<string>(),
+    [filters, setFilters] = useState({ ...emptyWorkspaceFilters }),
+    [taskScope, setTaskScope] = useState(
+      session.user.role === "Design" ? "mine" : "team",
+    ),
+    [frameworkError, setFrameworkError] = useState("");
+  async function loadFramework() {
+    try {
+      const r = await api<any>("/ubl-workflow");
+      setFramework(r.requests);
+      setFrameworkError("");
+    } catch (e) {
+      setFrameworkError((e as Error).message);
+    }
+  }
   const form = useRef<HTMLFormElement>(null);
   const locked =
     !!selected?.draft_id ||
@@ -35,8 +66,10 @@ export function Design({ session }: { session: Session }) {
   async function load() {
     const d = await api<any>("/design");
     setSurveys(d.surveys);
+    await loadFramework();
   }
   useEffect(() => {
+    void loadFramework();
     void Promise.all([api("/design/references"), api<any>("/design")])
       .then(([r, d]) => {
         setReferences(r);
@@ -90,6 +123,14 @@ export function Design({ session }: { session: Session }) {
       location: String(f.get("location") ?? ""),
       uploadIds: uploads.map((u) => u.id),
       notes: String(f.get("notes") ?? ""),
+      workflowStage: String(f.get("workflowStage") ?? designBuckets[2]),
+      workflowRoute: String(f.get("workflowRoute") ?? routes[0]),
+      surveyStatus: String(f.get("surveyStatus") ?? "Completed"),
+      scheduledSurveyDate:
+        String(f.get("scheduledSurveyDate") ?? "") || undefined,
+      responsiblePerson: String(f.get("responsiblePerson") ?? ""),
+      region: String(f.get("region") ?? ""),
+      revisionReason: String(f.get("revisionReason") ?? ""),
     };
     if (f.get("customerId")) v.customerId = Number(f.get("customerId"));
     for (const key of Object.keys(quantities)) {
@@ -100,7 +141,8 @@ export function Design({ session }: { session: Session }) {
           : value;
     }
     if (f.get("bessId")) v.bessId = f.get("bessId");
-    v.batteryKwh = Number(f.get("batteryKwh"));
+    if (String(f.get("batteryKwh") ?? ""))
+      v.batteryKwh = Number(f.get("batteryKwh"));
     for (const key of ["structure", "inverter"])
       if (f.get(key)) v[key] = f.get(key);
     for (const key of ["smartMeter", "genset"])
@@ -160,7 +202,7 @@ export function Design({ session }: { session: Session }) {
           )?.display_name,
           sent_at: sent.created_at,
         });
-        setBucket("Sent to Coordination");
+        setBucket(designBuckets[3]);
         setNotice(
           "Survey sent. The coordinator can select brands and prepare costing.",
         );
@@ -173,95 +215,223 @@ export function Design({ session }: { session: Session }) {
     }
   }
   const initial = selected?.inputs ?? {};
+  const manager = ["Admin", "Management"].includes(session.user.role);
+  const tasks = [
+    ...surveys.map((s) => ({
+      ...s,
+      customer:
+        references?.customers.find((c: any) => c.id === s.inputs.customerId)
+          ?.name ?? "Customer not selected",
+      site: s.inputs.siteName || "Untitled survey",
+      reference: s.number,
+      person: s.inputs.responsiblePerson || s.designer,
+      region: s.inputs.region || "Not entered",
+      route: s.inputs.workflowRoute ?? routes[0],
+      started_at: s.sent_at ?? s.updated_at,
+      taskBucket: designBucket(s),
+      overdue:
+        !!s.inputs.scheduledSurveyDate &&
+        new Date(s.inputs.scheduledSurveyDate).getTime() < Date.now() &&
+        ["Scheduled", "In progress"].includes(s.inputs.surveyStatus),
+    })),
+    ...framework
+      .filter(
+        (r) =>
+          !r.data?.technicalVerified ||
+          r.data?.returnReason ||
+          r.stage.includes("Recommendation"),
+      )
+      .map((r) => ({
+        ...frameworkTask(r),
+        taskBucket:
+          r.stage.includes("Recommendations Submitted") && !r.data?.returnReason
+            ? designBuckets[3]
+            : designBucket(r),
+        overdue:
+          !!r.data?.scheduledSurveyDate &&
+          new Date(r.data.scheduledSurveyDate).getTime() < Date.now() &&
+          ["Scheduled", "In progress"].includes(r.data?.surveyStatus),
+      })),
+  ];
+  const scoped = tasks.filter(
+    (t) =>
+      taskScope === "team" ||
+      (t.framework
+        ? [
+            t.framework.data?.planningOwnerId,
+            t.framework.data?.technicalOwnerId,
+          ].includes(session.user.id)
+        : t.owner_id === session.user.id),
+  );
+  const filtered = scoped.filter((t) => matchesWorkspace(t, filters));
+  const shown = filtered.filter((t) => t.taskBucket === bucket);
+  if (frameworkId)
+    return (
+      <UblWorkflow
+        session={session}
+        initialRequestId={frameworkId}
+        onBack={() => {
+          setFrameworkId(undefined);
+          void loadFramework();
+        }}
+      />
+    );
   return (
-    <section className="design-portal">
-      <h2>Design workspace</h2>
-      <p>
-        Upload the completed site survey and enter the technical requirements
-        for Coordination. Brand selection and costing are completed by the
-        coordinator.
-      </p>
-      <div className="button-row">
-        <button className="dark-button" onClick={() => open()} disabled={busy}>
+    <section className="design-portal pz-stack">
+      <header>
+        <h2>Design workspace</h2>
+        <p>
+          Schedule surveys, review original evidence and prepare verified
+          handoffs to Coordination.
+        </p>
+      </header>
+      <div className="pz-action-row">
+        <Button variant="primary" onClick={() => open()} disabled={busy}>
           New design survey
-        </button>
-        <button
-          disabled={busy}
+        </Button>
+        <Button
+          variant="neutral"
           onClick={() => void load().catch((e) => setError(e.message))}
         >
-          Refresh surveys
-        </button>
+          Refresh workspace
+        </Button>
+        {manager && (
+          <>
+            <Button
+              variant="neutral"
+              aria-pressed={taskScope === "mine"}
+              onClick={() => setTaskScope("mine")}
+            >
+              My Tasks
+            </Button>
+            <Button
+              variant="neutral"
+              aria-pressed={taskScope === "team"}
+              onClick={() => setTaskScope("team")}
+            >
+              Team Tasks
+            </Button>
+          </>
+        )}
       </div>
-      {error && (
+      {error && !editing && (
         <p role="alert" className="form-error">
           {error}
         </p>
       )}
+      {frameworkError && (
+        <p role="alert" className="form-error">
+          Pre-agreed survey records could not load: {frameworkError}
+        </p>
+      )}
       {notice && <p role="status">{notice}</p>}
+      <div className="summary-grid">
+        <article className="summary-card">
+          <span>Still in process</span>
+          <strong>
+            {filtered.filter((t) => t.taskBucket !== designBuckets[3]).length}
+          </strong>
+        </article>
+        <article className="summary-card">
+          <span>Handed off</span>
+          <strong>
+            {filtered.filter((t) => t.taskBucket === designBuckets[3]).length}
+          </strong>
+          <small>Existing recorded handoffs; date filters apply</small>
+        </article>
+      </div>
+      <WorkspaceFilters rows={scoped} value={filters} onChange={setFilters} compact searchLabel="Search survey requests" showTaskModes={false} />
       <div className="department-buckets">
-        {["Survey drafts", "Sent to Coordination"].map((label) => (
-          <button
+        {designBuckets.map((label) => (
+          <Button
             key={label}
+            variant="neutral"
             aria-pressed={bucket === label}
             onClick={() => setBucket(label)}
           >
             <span>{label}</span>
             <strong>
-              {
-                surveys.filter((s) =>
-                  label === "Survey drafts" ? !s.draft_id : !!s.draft_id,
-                ).length
-              }
+              {filtered.filter((t) => t.taskBucket === label).length}
             </strong>
-          </button>
+          </Button>
         ))}
       </div>
       {!references && <p role="status">Loading survey workspace…</p>}
-      <div className="table-scroll">
+      <div className="pz-table-scroll">
         <table className="master-table">
           <thead>
             <tr>
-              <th>Customer / site</th>
-              <th>Prepared by</th>
-              <th>Updated / sent</th>
-              <th>Coordinator</th>
-              <th>Action</th>
+              <th>Customer / site / route</th>
+              <th>Responsible / age</th>
+              <th>Next action / blocker</th>
+              <th>Documents / record</th>
             </tr>
           </thead>
           <tbody>
-            {surveys
-              .filter((s) =>
-                bucket === "Survey drafts" ? !s.draft_id : !!s.draft_id,
-              )
-              .map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    {references?.customers.find(
-                      (c: any) => c.id === s.inputs.customerId,
-                    )?.name ?? "Customer not selected"}
-                    <br />
-                    {s.inputs.siteName || "Untitled survey"}
-                    {s.number && <small>{s.number}</small>}
-                  </td>
-                  <td>{s.designer}</td>
-                  <td>
-                    {new Date(s.sent_at ?? s.updated_at).toLocaleString()}
-                  </td>
-                  <td>{s.assigned_name ?? "Not sent"}</td>
-                  <td>
-                    <button disabled={busy} onClick={() => open(s)}>
-                      {s.draft_id ? "View survey" : "Open survey"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+            {shown.map((t) => (
+              <tr key={`${t.framework ? "framework" : "survey"}-${t.id}`}>
+                <td>
+                  <strong>{t.customer}</strong>
+                  <br />
+                  {t.site}
+                  <small>
+                    {t.reference} · {t.route}
+                  </small>
+                </td>
+                <td>
+                  {t.person}
+                  <small>
+                    {taskAge(t.started_at)} ·{" "}
+                    {t.assigned_name
+                      ? `Sent to ${t.assigned_name}`
+                      : "Handoff pending"}
+                  </small>
+                </td>
+                <td>
+                  {t.taskBucket === designBuckets[3]
+                    ? "View submitted evidence and history"
+                    : t.taskBucket === designBuckets[0]
+                      ? "Sajid: schedule survey"
+                      : t.taskBucket === designBuckets[1]
+                        ? "Complete visit and upload report"
+                        : t.taskBucket === designBuckets[2]
+                          ? "Solution Engineer: verify technical details"
+                          : "Review requirements and prepare handoff"}
+                  <small>
+                    {t.inputs?.revisionReason || t.framework?.data?.returnReason
+                      ? `Revision required: ${t.inputs?.revisionReason || t.framework?.data?.returnReason}`
+                      : t.blocker || "No blocker recorded"}
+                  </small>
+                </td>
+                <td>
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      t.framework ? setFrameworkId(t.id) : open(t)
+                    }
+                  >
+                    Open record & documents
+                  </Button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
-      {references &&
-        !surveys.some((s) =>
-          bucket === "Survey drafts" ? !s.draft_id : !!s.draft_id,
-        ) && <p>No surveys in this bucket.</p>}
+      {references && !shown.length && (
+        <p>No records match this bucket and filters.</p>
+      )}
+      <p className="pz-caption">
+        General technical returns from Coordination and rule/brand selection in
+        the Design form are pending integration. Existing pre-agreed
+        recommendation review is available through its site record.
+      </p>
+      <p className="pz-caption">
+        Ordinary-item costing remains available through authorised costing
+        records. Restricted equipment costs and totals are not loaded in this
+        workspace. Customer-specific recommendation records use their existing
+        verified workflow.
+      </p>
       {editing && references && (
         <article className="detail-panel">
           <h3>
@@ -289,6 +459,78 @@ export function Design({ session }: { session: Session }) {
           >
             <fieldset disabled={busy || locked}>
               <legend>1 · Customer and site</legend>
+              <div className="survey-grid">
+                <label>
+                  Workflow route
+                  <select
+                    name="workflowRoute"
+                    defaultValue={initial.workflowRoute ?? routes[0]}
+                  >
+                    <option>{routes[0]}</option>
+                  </select>
+                </label>
+                <label>
+                  Design stage
+                  <select
+                    name="workflowStage"
+                    defaultValue={initial.workflowStage ?? designBuckets[2]}
+                  >
+                    {designBuckets.slice(0, 3).map((v) => (
+                      <option key={v}>{v}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Survey visit status
+                  <select
+                    name="surveyStatus"
+                    defaultValue={initial.surveyStatus ?? "Completed"}
+                  >
+                    {[
+                      "Awaiting scheduling",
+                      "Scheduled",
+                      "In progress",
+                      "Completed",
+                    ].map((v) => (
+                      <option key={v}>{v}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Planned survey date
+                  <input
+                    name="scheduledSurveyDate"
+                    type="date"
+                    defaultValue={initial.scheduledSurveyDate ?? ""}
+                  />
+                </label>
+                <label>
+                  Region
+                  <input
+                    name="region"
+                    maxLength={100}
+                    defaultValue={initial.region ?? ""}
+                  />
+                </label>
+                <label>
+                  Responsible person
+                  <input
+                    name="responsiblePerson"
+                    maxLength={200}
+                    defaultValue={
+                      initial.responsiblePerson ?? session.user.displayName
+                    }
+                  />
+                </label>
+                <label>
+                  Revision reason / blocker
+                  <textarea
+                    name="revisionReason"
+                    maxLength={2000}
+                    defaultValue={initial.revisionReason ?? ""}
+                  />
+                </label>
+              </div>
               <div className="survey-grid">
                 <label>
                   Customer
@@ -505,6 +747,11 @@ export function Design({ session }: { session: Session }) {
                   form.
                 </label>
                 <div className="button-row">
+                  {error && (
+                    <p role="alert" className="form-error">
+                      {error}
+                    </p>
+                  )}
                   <button
                     type="button"
                     disabled={busy}
@@ -527,4 +774,8 @@ export function Design({ session }: { session: Session }) {
       )}
     </section>
   );
+}
+
+export function Design({ session }: { session: Session }) {
+  return <DepartmentWorkspace session={session} department="design" />;
 }

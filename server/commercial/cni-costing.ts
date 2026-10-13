@@ -1,8 +1,8 @@
 import { Decimal } from "decimal.js";
 import { priceCni } from "./cni-policy.js";
 /** Server-only internal cost. Never import into the employee/customer presentation. */
-const cniInternalCost = Object.freeze({version:"CNI-COST-1",unitBeforeTax:"11000000.00"});
-type CniCostSnapshot={version:string;unitBeforeTax:string;quantity:number;totalBeforeTax:string};
+export const cniInternalCost = Object.freeze({version:"CNI-COST-1",unitBeforeTax:"11000000.00"});
+export type CniCostSnapshot={version:string;unitBeforeTax:string;quantity:number;totalBeforeTax:string};
 export function snapshotCniCost(quantity:number):CniCostSnapshot {
  return {...cniInternalCost,quantity,totalBeforeTax:new Decimal(cniInternalCost.unitBeforeTax).mul(quantity).toFixed(2)};
 }

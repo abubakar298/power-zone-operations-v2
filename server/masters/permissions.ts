@@ -1,4 +1,4 @@
-type MasterKind =
+export type MasterKind =
   "customers" | "sites" | "brands" | "rates" | "rules" | "items";
 
 // Coordinator master access is limited to the operational records authorised by management.

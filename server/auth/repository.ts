@@ -6,6 +6,7 @@ export interface User {
   id: string;
   email: string;
   display_name: string;
+  restrictedCostAccess?: boolean;
   role:
     | "Admin"
     | "Management"
@@ -62,7 +63,7 @@ export class AuthRepository {
 
   async findUser(email: string) {
     const result = await this.pool.query<StoredUser>(
-      "SELECT id, email, display_name, role, password_hash, active, email_verified_at FROM users WHERE email = $1",
+      `SELECT id, email, display_name, role, password_hash, active, email_verified_at,EXISTS(SELECT 1 FROM restricted_cost_access a WHERE a.user_id=users.id) AS "restrictedCostAccess" FROM users WHERE email = $1`,
       [email],
     );
     return result.rows[0];
@@ -105,7 +106,7 @@ export class AuthRepository {
     const r = await this.pool.query<
       User & { csrf_token: string; expires_at: Date }
     >(
-      `SELECT u.id,u.email,u.display_name,u.role,s.csrf_token,s.expires_at
+      `SELECT u.id,u.email,u.display_name,u.role,EXISTS(SELECT 1 FROM restricted_cost_access a WHERE a.user_id=u.id) AS "restrictedCostAccess",s.csrf_token,s.expires_at
       FROM auth_sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > now() AND u.active = true`,
       [tokenHash],
@@ -121,6 +122,24 @@ export class AuthRepository {
         session.tokenHash,
       ]);
       await this.audit(client, session.user.id, "auth.logout");
+    });
+  }
+
+  async changePassword(userId: string, expectedHash: string, newHash: string) {
+    await transaction(this.pool, async (client) => {
+      const result = await client.query(
+        "UPDATE users SET password_hash=$3 WHERE id=$1 AND password_hash=$2 AND active=true RETURNING id",
+        [userId, expectedHash, newHash],
+      );
+      if (!result.rowCount)
+        throw new HttpError(
+          409,
+          "Your account changed. Sign in again before changing your password.",
+        );
+      await client.query("DELETE FROM auth_sessions WHERE user_id=$1", [
+        userId,
+      ]);
+      await this.audit(client, userId, "auth.password_changed");
     });
   }
 

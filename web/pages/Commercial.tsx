@@ -1,13 +1,23 @@
-import {RevisionComparison,hasRevisionPriceChange} from '../components/RevisionComparison.js';
-import {Button} from "../ui/Button.js";
-import {confirmLeaveWorkspace,useUnsavedChanges} from "../hooks/useUnsavedChanges.js";
+import {RevisionPricingSummary} from '../components/RevisionPricingSummary.js';
+import {RevisionReasonFields} from '../components/RevisionReasonFields.js';
+import {
+  RevisionComparison,
+  hasRevisionPriceChange,
+} from "../components/RevisionComparison.js";
+import { Button } from "../ui/Button.js";
+import {DiscountApprovalEvidence} from '../components/DiscountApprovalEvidence.js';
+import {discountedSellingReview} from '../../server/commercial/engine.js';
+import {
+  confirmLeaveWorkspace,
+  useUnsavedChanges,
+} from "../hooks/useUnsavedChanges.js";
 import type { CommercialPolicy } from "../../server/commercial/active-policy.js";
 import { money } from "../numbers.js";
 import { SharePdf } from "../components/SharePdf.js";
 import { QuotationWorkflow } from "./QuotationWorkflow.js";
 import { confirmTransition, confirmRevision } from "../confirm.js";
 import { createPortal } from "react-dom";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+const pdfWorker='/api/commercial/pdf-worker.mjs';
 import { Decimal } from "decimal.js";
 import { useEffect, useRef, useState } from "react";
 import { api, type Session } from "../api.js";
@@ -21,6 +31,7 @@ import type {
 } from "../../server/commercial/engine.js";
 const defaults = (name: string, id = ""): PricingInput => ({
   boqRevisionId: id,
+  cashGstTreatment:undefined,
   presentation: "No Breakup",
   taxMode: "Show Sales Tax Separately",
   markups: {
@@ -31,16 +42,25 @@ const defaults = (name: string, id = ""): PricingInput => ({
     balance: "25",
     rest: "25",
   },
+  discountMode: "Pre-approved",
   preparedBy: name,
   remarks: "",
 });
 function editablePricing(p: PricingSnapshot): PricingInput {
-  if (p.policy) return { ...p.input, markups: { ...defaults(p.input.preparedBy).markups, ...p.input.markups } };
-  const markups = { ...defaults(p.input.preparedBy).markups,...p.input.markups };
-  for (const r of p.rows) if (r.key !== "additional" && r.markup != null) markups[r.key] = r.markup;
+  if (p.policy)
+    return {
+      ...p.input,
+      markups: { ...defaults(p.input.preparedBy).markups, ...p.input.markups },
+    };
+  const markups = {
+    ...defaults(p.input.preparedBy).markups,
+    ...p.input.markups,
+  };
+  for (const r of p.rows)
+    if (r.key !== "additional" && r.markup != null) markups[r.key] = r.markup;
   return { ...p.input, markups };
 }
-function QuotationView({
+export function QuotationView({
   snapshot: s,
   number,
   pdfUrl,
@@ -48,6 +68,7 @@ function QuotationView({
   onDiscount,
   draftInput,
   csrf,
+  refreshKey,
 }: {
   snapshot: QuotationSnapshot;
   number?: string;
@@ -56,6 +77,7 @@ function QuotationView({
   onDiscount?: (value: string) => void;
   draftInput?: QuotationInput;
   csrf?: string;
+  refreshKey?: number;
 }) {
   const pages = useRef<HTMLDivElement>(null);
   const [pdfError, setPdfError] = useState("");
@@ -169,7 +191,7 @@ function QuotationView({
       controller.abort();
       void task?.destroy();
     };
-  }, [pdfUrl, serialized, csrf]);
+  }, [pdfUrl, serialized, csrf, refreshKey]);
   return (
     <section className="boq-costing quotation-preview">
       <div className="panel-heading">
@@ -233,35 +255,40 @@ function QuotationView({
 export function Commercial({
   session,
   initialRevisionId,
+  initialFrameworkInput,
   section = "pricing",
   onRevisionDraft,
   onRevisionPricing,
   initialRequestId,
   initialQuotationId,
   initialPricingId,
+  onQuotationSent,
 }: {
   session: Session;
   initialRevisionId?: string;
+  initialFrameworkInput?: Partial<PricingInput>;
   section?: "pricing" | "quotes";
   onRevisionDraft?: (id: string) => void;
   onRevisionPricing?: (id: string, requestId: string) => void;
   initialRequestId?: string;
   initialQuotationId?: string;
   initialPricingId?: string;
+  onQuotationSent?: () => void;
 }) {
-  const financialManager = ["Admin","Management"].includes(session.user.role);
+  const financialManager = session.user.restrictedCostAccess === true;
   const manager = ["Admin", "Management", "Coordinator"].includes(
     session.user.role,
   );
-  const [priceChangeAcknowledged,setPriceChangeAcknowledged]=useState(false);
-  const [dirty,setDirty]=useState(false);
-  useUnsavedChanges(dirty);
-  const [policy,setPolicy] = useState<CommercialPolicy>();
+  const [priceChangeAcknowledged, setPriceChangeAcknowledged] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [pricingUpdating,setPricingUpdating]=useState(false);
+  const [reloadProtected,setReloadProtected]=useState(false);
+  const [policy, setPolicy] = useState<CommercialPolicy>();
   const [boqs, setBoqs] = useState<any[]>([]),
     [prices, setPrices] = useState<any[]>([]),
     [quotes, setQuotes] = useState<any[]>([]),
     [input, setInput] = useState<PricingInput>(
-      defaults(session.user.displayName, initialRevisionId),
+      {...defaults(session.user.displayName, initialRevisionId),...initialFrameworkInput,markups:{...defaults(session.user.displayName).markups,...initialFrameworkInput?.markups}},
     ),
     [preview, setPreview] = useState<{
       snapshot: PricingSnapshot;
@@ -272,12 +299,20 @@ export function Commercial({
     [quotePreview, setQuotePreview] = useState<{
       snapshot: QuotationSnapshot;
       fingerprint: string;
+      refreshVersion?: number;
     }>(),
     [savedQuote, setSavedQuote] = useState<any>(),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [key, setKey] = useState(crypto.randomUUID());
+  useUnsavedChanges(dirty,!reloadProtected||Boolean(quoteInput));
+  useEffect(()=>{
+    const token=new URLSearchParams(window.location.search).get('pricingPreviewToken');
+    if(!token||!dirty||!input.boqRevisionId)return;
+    try{sessionStorage.setItem(`pz-pricing-preview:${session.user.id}:${token}`,JSON.stringify(input));setReloadProtected(true);}catch{setReloadProtected(false);}
+  },[input,dirty,session.user.id]);
+  const [sendError,setSendError]=useState("");
   const [revisionDialog, setRevisionDialog] = useState(false),
     [revisionInfo, setRevisionInfo] = useState<any>(),
     [revisionOrigin, setRevisionOrigin] = useState("Internal management"),
@@ -295,7 +330,10 @@ export function Commercial({
     ),
   );
   const [revisionRequests, setRevisionRequests] = useState<any[]>([]);
-  const directSale = (boqs.find(b=>b.id===input.boqRevisionId)?.family ?? savedPrice?.snapshot.boqFamily) === "direct-product";
+  const boqRevisionLocked = Boolean(initialRevisionId) || Boolean(new URLSearchParams(window.location.search).get("pricingPreviewToken")) || boqs.some(b => b.id === input.boqRevisionId && b.from_technical_report === true);
+  const directSale =
+    (boqs.find((b) => b.id === input.boqRevisionId)?.family ??
+      savedPrice?.snapshot.boqFamily) === "direct-product";
   async function load() {
     const [b, q] = await Promise.all([
       api<{ boqs: any[] }>("/boqs"),
@@ -313,6 +351,8 @@ export function Commercial({
   }
   useEffect(() => {
     void load().catch(fail);
+    const carryToken=new URLSearchParams(window.location.search).get('pricingPreviewToken');
+    if(carryToken&&!initialRevisionId&&!initialQuotationId&&!initialPricingId){void api<PricingInput>(`/commercial/pricing-preview-context/${carryToken}`).then(value=>{let restored=value;try{const saved=JSON.parse(sessionStorage.getItem(`pz-pricing-preview:${session.user.id}:${carryToken}`)??'null');if(saved?.boqRevisionId===value.boqRevisionId)restored=saved;}catch{}setInput(restored);setDirty(true);setNotice('Your entered quotation settings and discount evidence have been preserved in this preview.');}).catch(fail);}
     if (initialQuotationId) void openQuote(initialQuotationId);
     if (initialPricingId) void selectPrice(initialPricingId);
     if (
@@ -348,7 +388,10 @@ export function Commercial({
             setRevisionInfo(r);
             setInput({
               ...r.pricing_input,
-              markups: { ...defaults(session.user.displayName).markups, ...r.pricing_input.markups },
+              markups: {
+                ...defaults(session.user.displayName).markups,
+                ...r.pricing_input.markups,
+              },
               boqRevisionId: initialRevisionId,
               revisionRequestId: r.id,
             });
@@ -360,18 +403,42 @@ export function Commercial({
   }, []);
   async function applyApprovalInstructions(id: string) {
     const source = await api<any>(`/boqs/${id}`);
-    if(source.snapshot.survey.family === "direct-product") setInput(old=>old.boqRevisionId===id ? {...old,presentation:old.presentation === "Basic Breakup" ? "Full Breakup" : old.presentation} : old);
-    if(source.snapshot.survey.saleType) setInput(old=>({...old,saleType:source.snapshot.survey.saleType,cashGstTreatment:source.snapshot.survey.cashGstTreatment,taxMode:source.snapshot.survey.saleType === "Cash Deal"?"Tax Included":old.taxMode}));
+    if (source.snapshot.survey.family === "direct-product")
+      setInput((old) =>
+        old.boqRevisionId === id
+          ? {
+              ...old,
+              presentation:
+                old.presentation === "Basic Breakup"
+                  ? "Full Breakup"
+                  : old.presentation,
+            }
+          : old,
+      );
+
     const a = await api<any>(`/boqs/${id}/instructions`);
     if (a) {
       setInput((old) =>
         old.boqRevisionId === id
           ? {
               ...old,
-              presentation: source.snapshot.survey.family === "direct-product" && a.instructions.presentation === "Basic Breakup" ? "Full Breakup" : a.instructions.presentation,
+              presentation:
+                source.snapshot.survey.family === "direct-product" &&
+                a.instructions.presentation === "Basic Breakup"
+                  ? "Full Breakup"
+                  : a.instructions.presentation,
               taxMode: a.instructions.taxMode,
-              saleType:source.snapshot.survey.saleType ?? a.instructions.saleType,cashGstTreatment:source.snapshot.survey.cashGstTreatment ?? a.instructions.cashGstTreatment,
-              markups: a.instructions.markups ? {...defaults(session.user.displayName).markups,...a.instructions.markups} : defaults(session.user.displayName).markups,
+              saleType: a.instructions.saleType,
+              cashGstTreatment:
+                a.instructions.saleType === "Cash Deal"
+                  ? a.instructions.cashGstTreatment
+                  : undefined,
+              markups: a.instructions.markups
+                ? {
+                    ...defaults(session.user.displayName).markups,
+                    ...a.instructions.markups,
+                  }
+                : defaults(session.user.displayName).markups,
               remarks: a.instructions.notes,
             }
           : old,
@@ -400,14 +467,14 @@ export function Commercial({
       e instanceof Error ? e.message : "Unable to complete this action.",
     );
   }
-  async function action(fn: () => Promise<void>) {
+  async function action(fn: () => Promise<void>,sendAction=false) {
     if (busy) return;
     setBusy(true);
-    setError("");
+    if(sendAction)setSendError("");else setError("");
     try {
       await fn();
     } catch (e) {
-      fail(e);
+      if(sendAction)setSendError(e instanceof Error?e.message:"Unable to send the quotation.");else fail(e);
     } finally {
       setBusy(false);
     }
@@ -415,7 +482,7 @@ export function Commercial({
   function update(p: Partial<PricingInput>) {
     setDirty(true);
     setInput({ ...input, ...p });
-    setPreview(undefined);
+    setPricingUpdating(true);
     setSavedPrice(undefined);
     setQuoteInput(undefined);
     setQuotePreview(undefined);
@@ -423,50 +490,77 @@ export function Commercial({
     setKey(crypto.randomUUID());
     setNotice("");
   }
+  function roundTotal(value:string){
+    value=value.replace(/,/g,'');
+    if(!/^\d*(?:\.\d*)?$/.test(value))return;
+    if(!value.trim()){update({roundedTotal:undefined});return;}
+    if(value==='.')value='0.';
+    if(!preview)return;
+    const target=new Decimal(value),original=new Decimal(preview.snapshot.total);
+    const percentage=original.isZero()?'0':new Decimal(100).mul(new Decimal(1).sub(target.div(original))).toDecimalPlaces(6).toString();
+    update({discountMode:'Custom',roundedTotal:value,...(target.gte(0)&&target.lte(original)?{discountPercent:percentage}:{})});
+  }
   async function pricingPreview() {
     await action(async () => {
       setPreview(
         await api("/commercial/pricing/preview", {
-          body: input,
+          body: {...input,discountPercent:input.discountMode==='Pre-approved'?undefined:input.discountPercent?.trim()||'0'},
           csrf: session.csrfToken,
         }),
       );
+      setPricingUpdating(false);
       setNotice(
         "Review the internal pricing, then save an immutable pricing version.",
       );
     });
   }
-  useEffect(()=>{
-    if(initialQuotationId||section!=="pricing"||!initialRevisionId||!policy||revisionLoading||!input.boqRevisionId||savedPrice)return;
-    let active=true;
-    const timer=setTimeout(()=>{api<{snapshot:PricingSnapshot;fingerprint:string}>("/commercial/pricing/preview",{body:input,csrf:session.csrfToken}).then(r=>{if(active)setPreview(r);}).catch(e=>{if(active)fail(e);});},200);
-    return()=>{active=false;clearTimeout(timer);};
-  },[initialRevisionId,policy,revisionLoading,input,savedPrice]);
-  async function pricingSave() {
-    if (!preview) return;
+  useEffect(() => {
     if (
-      !confirmTransition(
-        "Create quotation",
-        "Save these standard prices and open the customer quotation.",
-      )
+      initialQuotationId ||
+      section !== "pricing" ||
+      !policy ||
+      revisionLoading ||
+      !input.boqRevisionId ||
+      savedPrice
     )
       return;
-    await action(async () => {
-      const p = await api<any>("/commercial/pricing", {
-        body: { ...input, fingerprint: preview.fingerprint, requestKey: key },
-        csrf: session.csrfToken,
+    let active = true;
+    setPricingUpdating(true);
+    const timer = setTimeout(() => {
+      api<{ snapshot: PricingSnapshot; fingerprint: string }>(
+        "/commercial/pricing/preview",
+        { body: {...input,discountPercent:input.discountMode==='Pre-approved'?undefined:input.discountPercent?.trim()||'0'}, csrf: session.csrfToken },
+      )
+        .then((r) => {
+          if (active){setPreview(r);setPricingUpdating(false);setError('');if((input.discountMode==='Pre-approved'||input.roundedTotal!==undefined)&&r.snapshot.input.discountPercent!==input.discountPercent)setInput(old=>({...old,discountPercent:r.snapshot.input.discountPercent}));}
+        })
+        .catch((e) => {
+          if (active) fail(e);
+        });
+    }, 200);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [initialRevisionId, policy, revisionLoading, input, savedPrice]);
+  async function pricingSave() {
+    if (!preview||pricingUpdating) return;
+      await prepareQuote({
+        pricingId: crypto.randomUUID(),
+        previewPricing:{...input,discountPercent:input.discountMode==='Pre-approved'?undefined:input.discountPercent?.trim()||'0'},
+        revisionRequestId: input.revisionRequestId,
+        quotedDate: new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Karachi",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date()),
+        validity: "7 Days",
+        proposedBy: session.user.displayName,
       });
-      setDirty(false);
-      setSavedPrice(p);
-      await load();
-      await prepareQuote({pricingId:p.id,revisionRequestId:input.revisionRequestId,quotedDate:new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Karachi",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()),validity:"7 Days",proposedBy:session.user.displayName});
-      setNotice(
-        `${p.number} saved. You can now prepare its customer quotation.`,
-      );
-    });
   }
   async function selectPrice(id: string) {
-    if(!confirmLeaveWorkspace())return;
+    if (!confirmLeaveWorkspace()) return;
     setDirty(false);
     await action(async () => {
       const p = await api<any>(`/commercial/pricing/${id}`);
@@ -496,7 +590,7 @@ export function Commercial({
         validity: "7 Days",
         proposedBy: session.user.displayName,
       };
-      if (copy) {
+      if (copy&&!copy.previewPricing) {
         const source = await api<any>(`/commercial/pricing/${data.pricingId}`);
         setSavedPrice(source);
         setInput({
@@ -508,9 +602,15 @@ export function Commercial({
           fingerprint: source.fingerprint,
         });
       }
-      if(data.revisionRequestId && data.discount===undefined && revisionInfo){
-        const prior=await api<QuotationInput>(`/commercial/quotations/${revisionInfo.source_quotation_id}/copy`);
-        data.discount=prior.discount;
+      if (
+        data.revisionRequestId &&
+        data.discount === undefined &&
+        revisionInfo
+      ) {
+        const prior = await api<QuotationInput>(
+          `/commercial/quotations/${revisionInfo.source_quotation_id}/copy`,
+        );
+        data.discount = prior.discount;
       }
       if (
         !copy &&
@@ -560,7 +660,7 @@ export function Commercial({
         csrf: session.csrfToken,
       });
       if (sequence === previewSequence.current) {
-        setQuotePreview(result);
+        setQuotePreview({...result,refreshVersion:sequence});
         setPriceChangeAcknowledged(false);
         setQuotePdfInput(quoteInput);
       }
@@ -571,41 +671,50 @@ export function Commercial({
     if (
       !confirmTransition(
         submit
-          ? "Save and send quotation for approval"
+          ? quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput.additionalItem ? "Approve quotation within pre-approved allowance" : "Save and send quotation for approval"
           : "Save quotation version",
         "This preserves the quotation prices, discount and terms as an immutable version.",
       )
     )
       return;
     await action(async () => {
+      let savingInput={...quoteInput};let expected=quotePreview.fingerprint;
+      if(savingInput.previewPricing){
+        const pricingInput=savingInput.previewPricing;
+        const currentPricing=await api<{fingerprint:string}>('/commercial/pricing/preview',{body:pricingInput,csrf:session.csrfToken});
+        if(currentPricing.fingerprint!==preview?.fingerprint)throw new Error('Pricing changed. Return to Quotation Settings and review the updated prices before sending.');
+        const pricingVersion=await api<any>('/commercial/pricing',{body:{...pricingInput,fingerprint:currentPricing.fingerprint,requestKey:crypto.randomUUID()},csrf:session.csrfToken});
+        savingInput={...savingInput,pricingId:pricingVersion.id,previewPricing:undefined};
+        setSavedPrice(pricingVersion);setQuoteInput(savingInput);
+        const currentQuote=await api<{fingerprint:string}>('/commercial/quotations/preview',{body:savingInput,csrf:session.csrfToken});if(currentQuote.fingerprint!==quotePreview.fingerprint)throw new Error('Quotation details changed. Review the updated preview before sending.');expected=currentQuote.fingerprint;
+      }
       const q = await api<any>("/commercial/quotations", {
         body: {
-          ...quoteInput,
-          acknowledgePriceChange:priceChangeAcknowledged,
+          ...savingInput,
+          acknowledgePriceChange: priceChangeAcknowledged,
           discount: quoteInput.discount?.trim() || "0",
-          fingerprint: quotePreview.fingerprint,
+          fingerprint: expected,
           requestKey: key,
         },
         csrf: session.csrfToken,
       });
-      setDirty(false);
-      setSavedQuote(q);
-      setQuoteInput(undefined);
       if (submit) {
-        await api("/coordinator/events", {
-          body: { quotationId: q.id, kind: "Submitted", notes: "" },
+        try{await api("/coordinator/events", {
+          body: { quotationId: q.id, kind: quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput.additionalItem ? "Approved" : "Submitted", notes: "" },
           csrf: session.csrfToken,
-        });
-        setSavedQuote(await api(`/commercial/quotations/${q.id}`));
+        });}catch(e){throw new Error(`Quotation saved, but it was not sent. ${e instanceof Error?e.message:"Please retry the send action."}`);}
+        setDirty(false);setSavedQuote(q);setQuoteInput(undefined);
+        if(onQuotationSent){onQuotationSent();return;}
       }
+      setDirty(false);setSavedQuote(q);setQuoteInput(undefined);
       await load();
       setNotice(
         `${q.number} saved. Earlier quotation versions remain unchanged.`,
       );
-    });
+    },submit);
   }
   async function openQuote(id: string) {
-    if(!confirmLeaveWorkspace())return;
+    if (!confirmLeaveWorkspace()) return;
     setDirty(false);
     await action(async () => {
       setSavedQuote(await api(`/commercial/quotations/${id}`));
@@ -618,33 +727,8 @@ export function Commercial({
   const quoteFields = quoteInput
     ? JSON.stringify({ ...quoteInput, discount: undefined })
     : "";
-  useEffect(() => {
-    if (!quoteInput || !quotePreview) return;
-    const sequence = ++previewSequence.current;
-    const timer = setTimeout(() => {
-      void api<{ snapshot: QuotationSnapshot; fingerprint: string }>(
-        "/commercial/quotations/preview",
-        {
-          body: { ...quoteInput, discount: quoteInput.discount?.trim() || "0" },
-          csrf: session.csrfToken,
-        },
-      )
-        .then((result) => {
-          if (sequence === previewSequence.current) {
-            setQuotePreview(result);
-            setQuotePdfInput(quoteInput);
-            setError("");
-          }
-        })
-        .catch((e) => {
-          if (sequence === previewSequence.current) fail(e);
-        });
-    }, 400);
-    return () => {
-      clearTimeout(timer);
-      ++previewSequence.current;
-    };
-  }, [quoteFields]);
+  // Text/date/validity edits remain local until the user requests a refreshed preview.
+  useEffect(() => {}, [quoteFields]);
   function quoteChange(p: Partial<QuotationInput>) {
     setDirty(true);
     ++previewSequence.current;
@@ -693,16 +777,31 @@ export function Commercial({
     );
   }
   const p = preview?.snapshot;
-  const visibleRows = p?.rows.filter(r=>financialManager || (r.key!=="bess" && r.cost!=null && r.markup!=null)) ?? [];
-  const visibleCost = visibleRows.reduce((sum,r)=>sum.add(r.cost),new Decimal(0)).toFixed(2);
+  const sellingOnly=session.user.role==='Coordinator';
+  const discountReview=p?discountedSellingReview(p):undefined;
+  const visibleRows = p?.rows.filter(r=>sellingOnly||financialManager||(r.key!=="bess"&&r.cost!=null&&r.markup!=null))??[];
+  const visibleCost = visibleRows
+    .reduce((sum, r) => sum.add(r.cost??0), new Decimal(0))
+    .toFixed(2);
   return (
     <section className="commercial-section">
       <p>
-        Commercial pricing uses the selected saved BOQ revision. Management approves the final quotation.
-        Saved versions retain their original inputs and amounts.
+        Commercial pricing uses the selected saved BOQ revision. Atif may approve quotations within the standard discount allowance; Management approves further discounts. Saved versions retain their original
+        inputs and amounts.
       </p>
-      {dirty&&<p role="status">Unsaved quotation preparation changes</p>}
-      {revisionInfo&&<aside className="detail-panel" aria-label="Requested revision"><h3>Requested changes</h3><p>{revisionInfo.origin} · {revisionInfo.reason}</p><p>The revised quotation returns to Management approval before customer confirmation.</p></aside>}
+      {dirty && <p role="status">Unsaved quotation preparation changes</p>}
+      {revisionInfo && (
+        <aside className="detail-panel" aria-label="Requested revision">
+          <h3>Requested changes</h3>
+          <p>
+            {revisionInfo.origin} · {revisionInfo.reason}
+          </p>
+          <p>
+            The revised quotation returns to Management approval before customer
+            confirmation.
+          </p>
+        </aside>
+      )}
       {error && (
         <p role="alert" className="form-error">
           {error}
@@ -713,7 +812,7 @@ export function Commercial({
           {notice}
         </p>
       )}
-      {section === "pricing" && manager && (
+      {section === "pricing" && manager && !quoteInput && !quotePreview && (
         <>
           <form
             className="survey-form"
@@ -723,12 +822,14 @@ export function Commercial({
             }}
           >
             <fieldset disabled={busy || revisionLoading}>
-              <legend>Approved BOQ & commercial settings</legend>
+              <legend>Quotation Settings</legend>
               <div className="survey-grid">
                 <label>
-                  Approved BOQ revision
+                  BOQ revision
                   <select
-                    aria-label="Approved BOQ revision"
+                    aria-label="BOQ revision"
+                    disabled={boqRevisionLocked}
+                    aria-describedby={boqRevisionLocked ? "technical-boq-revision-note" : undefined}
                     value={input.boqRevisionId}
                     onChange={(e) => {
                       const id = e.target.value;
@@ -740,10 +841,14 @@ export function Commercial({
                     <option value="">Select approved revision</option>
                     {boqs.map((b) => (
                       <option key={b.id} value={b.id}>
-                        {b.number} · {b.site}{financialManager && b.total != null ? ` · PKR ${money(b.total)}` : ""}
+                        {b.number} · {b.site}
+                        {financialManager && b.total != null
+                          ? ` · PKR ${money(b.total)}`
+                          : ""}
                       </option>
                     ))}
                   </select>
+                  {boqRevisionLocked && <small id="technical-boq-revision-note">The BOQ revision is fixed for this quotation preparation. Review or revise its inputs in the BOQ preparation page.</small>}
                 </label>
                 <label>
                   Price presentation
@@ -759,12 +864,68 @@ export function Commercial({
                   >
                     <option>No Breakup</option>
                     {!directSale && <option>Basic Breakup</option>}
-                    <option value="Full Breakup">{directSale ? "Breakup" : "Full Breakup"}</option>
+                    <option value="Full Breakup">
+                      {directSale ? "Breakup" : "Full Breakup"}
+                    </option>
                   </select>
                 </label>
-                {directSale && input.presentation === "Full Breakup" && <label>Complete BESS package pricing<select aria-label="Complete BESS package pricing" value={input.groupBessPackages ? "grouped" : "separate"} onChange={e=>update({groupBessPackages:e.target.value === "grouped"})}><option value="separate">Show inverter, battery and BMS prices separately</option><option value="grouped">One combined amount per complete BESS package</option></select></label>}
-                <label>Quotation type<select value={input.saleType ?? "Tax Deal"} onChange={e=>update({saleType:e.target.value as PricingInput["saleType"]})}><option>Tax Deal</option><option>Cash Deal</option></select></label>
-                {input.saleType === "Cash Deal" && <label>Cash deal GST treatment<select value={input.cashGstTreatment ?? "No GST added"} onChange={e=>update({cashGstTreatment:e.target.value as PricingInput["cashGstTreatment"],taxMode:"Tax Included"})}><option>No GST added</option><option>Included in selling price</option></select></label>}
+                {directSale && input.presentation === "Full Breakup" && (
+                  <label>
+                    Complete BESS package pricing
+                    <select
+                      aria-label="Complete BESS package pricing"
+                      value={input.groupBessPackages ? "grouped" : "separate"}
+                      onChange={(e) =>
+                        update({
+                          groupBessPackages: e.target.value === "grouped",
+                        })
+                      }
+                    >
+                      <option value="separate">
+                        Show inverter, battery and BMS prices separately
+                      </option>
+                      <option value="grouped">
+                        One combined amount per complete BESS package
+                      </option>
+                    </select>
+                  </label>
+                )}
+                <label>
+                  Quotation type
+                  <select
+                    value={input.saleType ?? "Tax Deal"}
+                    onChange={(e) =>
+                      update({
+                        saleType: e.target.value as PricingInput["saleType"],
+                        cashGstTreatment:
+                          e.target.value === "Cash Deal"
+                            ? "No GST added"
+                            : undefined,
+                      })
+                    }
+                  >
+                    <option>Tax Deal</option>
+                    <option>Cash Deal</option>
+                  </select>
+                </label>
+                {input.saleType === "Cash Deal" && (
+                  <label>
+                    Cash deal GST treatment
+                    <select
+                      value={input.cashGstTreatment ?? "No GST added"}
+                      onChange={(e) =>
+                        update({
+                          cashGstTreatment: e.target
+                            .value as PricingInput["cashGstTreatment"],
+                          taxMode: "Tax Included",
+                        })
+                      }
+                    >
+                      <option>No GST added</option>
+                      <option>Included in selling price</option>
+                    </select>
+                  </label>
+                )}
                 <label>
                   Tax presentation
                   <select
@@ -780,12 +941,30 @@ export function Commercial({
                     <option>Show Sales Tax Separately</option>
                   </select>
                 </label>
-                  <label>Additional scope category (if included in the BOQ)
-                    <select aria-label="Additional scope category" value={input.additionalCategory ?? ""} onChange={e=>update({additionalCategory:e.target.value as PricingInput["additionalCategory"] || undefined})}>
-                      <option value="">Select category if additional scope exists</option>
-                      <option value="solar">Solar panels</option><option value="structure">Structure</option><option value="earthing">Earthing bore</option><option value="bess">Inverter, battery or BMS</option><option value="other">Everything else</option>
-                    </select>
-                  </label>
+                <label>
+                  Additional scope category (if included in the BOQ)
+                  <select
+                    aria-label="Additional scope category"
+                    value={input.additionalCategory ?? ""}
+                    onChange={(e) =>
+                      update({
+                        additionalCategory:
+                          (e.target
+                            .value as PricingInput["additionalCategory"]) ||
+                          undefined,
+                      })
+                    }
+                  >
+                    <option value="">
+                      Select category if additional scope exists
+                    </option>
+                    <option value="solar">Solar panels</option>
+                    <option value="structure">Structure</option>
+                    <option value="earthing">Earthing bore</option>
+                    <option value="bess">Inverter, battery or BMS</option>
+                    <option value="other">Everything else</option>
+                  </select>
+                </label>
                 {(input.additionalMarkup !== undefined ||
                   p?.rows.some((r) => r.key === "additional")) && (
                   <label>
@@ -811,13 +990,18 @@ export function Commercial({
                   </label>
                 )}
                 <label>
-                  Prepared by
+                  Discount (%)
                   <input
-                    value={input.preparedBy}
-                    required
-                    maxLength={100}
-                    onChange={(e) => update({ preparedBy: e.target.value })}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={input.roundedTotal!==undefined||input.discountMode==='Pre-approved'?new Decimal(input.discountPercent||'0').toFixed(1):input.discountPercent??"0"}
+                    onChange={(e) => update({ discountMode:'Custom',discountPercent: e.target.value,roundedTotal:undefined })}
+                    onBlur={()=>{if(input.discountMode!=='Pre-approved'&&input.roundedTotal===undefined&&input.discountPercent?.trim()&&new Decimal(input.discountPercent).gte(0)&&new Decimal(input.discountPercent).lte(100)){const value=new Decimal(input.discountPercent).toFixed(1);if(value!==input.discountPercent)update({discountPercent:value});}}}
                   />
+                  <small>{preview?.snapshot.discountAuthorization ? `${new Decimal(preview.snapshot.discountAuthorization.preapprovedPercent).toFixed(1)}% is the Approved Discount. Any amount above this is a Management Special Discount and requires Management approval.` : 'Applied before sales tax; subject to Management approval.'}</small>
+                    {preview?.snapshot.discountAuthorization && input.discountMode!=='Pre-approved' && <Button variant="neutral" onClick={()=>update({discountMode:'Pre-approved',discountPercent:undefined,roundedTotal:undefined})}>Use Approved Discount</Button>}
                 </label>
                 <label>
                   Commercial remarks (internal)
@@ -828,20 +1012,37 @@ export function Commercial({
                   />
                 </label>
               </div>
-              <div className="pricing-policy-note"><strong>Power Zone standard pricing{policy ? ` · Policy v${policy.version}` : ""}</strong><p>Selling prices are applied automatically. Saved quotations retain their pricing policy version.</p>{policy?.markups&&<p>Solar panels {policy.markups.solar}% · Structure {policy.markups.structure}% · Earthing bores {policy.markups.earthing}% · Balance of systems {policy.markups.other}%</p>}</div>
             </fieldset>
-            <Button variant="primary" loading={busy} type="submit" loadingLabel="Calculating…">Calculate selling price</Button>
           </form>
+          <details className="pz-form-section"><summary>Discount Approval Evidence{input.discountApprovalEvidence?.length?` · ${input.discountApprovalEvidence.length} attached`:''}</summary><DiscountApprovalEvidence session={session} files={input.discountApprovalEvidence??[]} onChange={files=>update({discountApprovalEvidence:files})}/></details>
+          {!p&&<section className="detail-panel"><h3>Selling Prices Review</h3><p role="status">{input.boqRevisionId?'Loading selling prices…':'Select a BOQ to review selling prices.'}</p></section>}
           {p && (
             <section className="detail-panel">
-              <h3>{financialManager?"Internal commercial summary":"Non-BESS cost & selling review"}</h3>
-              {financialManager && p?.dealAccounting && <p role="status">{p.dealAccounting.note} Retained GST-equivalent: PKR {money(p.dealAccounting.retainedGstEquivalent)}.</p>}
-              {!financialManager&&<p>BESS equipment costs and confidential profitability are excluded. The selling totals below include the complete quotation.</p>}
+              <h3>
+                {sellingOnly?'Selling Prices Review':financialManager
+                  ? "Internal commercial summary"
+                  : "Non-BESS cost & selling review"}
+              </h3>
+              <p>Solution ID: <strong>{p.solutionId||'N/A'}</strong></p>
+              {pricingUpdating&&<p role="status">Updating selling prices… Previous amounts remain visible until the update completes.</p>}
+              {financialManager && p?.dealAccounting && (
+                <p role="status">
+                  {p.dealAccounting.note} Retained GST-equivalent: PKR{" "}
+                  {money(p.dealAccounting.retainedGstEquivalent)}.
+                </p>
+              )}
+              {!sellingOnly&&!financialManager && (
+                <p>
+                  BESS equipment costs and confidential profitability are
+                  excluded. The selling totals below include the complete
+                  quotation.
+                </p>
+              )}
               <div className="table-scroll">
                 <table className="master-table">
                   <thead>
                     <tr>
-                      {[
+                      {(sellingOnly?['Category','Selling price before discount','Discount (%)','Discount amount','Selling price after discount','Sales tax','Selling including tax']:[
                         "Category",
                         "Cost (PKR)",
                         "Markup %",
@@ -849,55 +1050,121 @@ export function Commercial({
                         "Selling before tax",
                         "Sales tax",
                         "Selling after tax",
-                      ].filter(h=>financialManager||h!=="Profit (PKR)").map((h) => (
-                        <th key={h}>{h}</th>
-                      ))}
+                      ])
+                        .filter(h=>sellingOnly?!['Cost (PKR)','Markup %','Profit (PKR)'].includes(h):financialManager||h!=='Profit (PKR)')
+                        .map((h) => (
+                          <th key={h}>{h}</th>
+                        ))}
                     </tr>
                   </thead>
                   <tbody>
                     {visibleRows.map((r) => (
                       <tr key={r.key}>
                         <td>{r.name}</td>
-                        <td className="numeric">{money(r.cost)}</td>
-                        <td className="numeric">{new Decimal(r.markup).toDecimalPlaces(2).toString()}%</td>
-                        {financialManager && <td className="numeric">{money(r.profit)}</td>}
+                        {!sellingOnly&&<><td className="numeric">{money(r.cost)}</td>
+                        <td className="numeric">
+                          {new Decimal(r.markup).toDecimalPlaces(2).toString()}%
+                        </td></>}
+                        {!sellingOnly&&financialManager && (
+                          <td className="numeric">{money(r.profit)}</td>
+                        )}
                         <td className="numeric">{money(r.beforeTax)}</td>
-                        <td className="numeric">{money(r.tax)}</td>
-                        <td className="numeric">{money(r.afterTax)}</td>
+                        {sellingOnly&&<><td className="numeric">{new Decimal(p.input.discountPercent||'0').toFixed(1)}%</td><td className="numeric">{money(discountReview!.rows.find(row=>row.key===r.key)!.discountAmount)}</td><td className="numeric">{money(discountReview!.rows.find(row=>row.key===r.key)!.sellingAfterDiscount)}</td></>}
+                        <td className="numeric">{money(sellingOnly?discountReview!.rows.find(row=>row.key===r.key)!.discountedTax:r.tax)}</td>
+                        <td className="numeric">{money(sellingOnly?discountReview!.rows.find(row=>row.key===r.key)!.discountedAfterTax:r.afterTax)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {p.policy && <p>Standard Commercial Policy v{p.policy.version} · Category percentages in the summary are effective averages where a display group contains different item markups.</p>}
-              {financialManager && p.itemPricing && <details><summary>Standard item selling prices</summary><div className="table-scroll"><table className="master-table"><thead><tr><th>Item</th><th>Category</th><th>Pre-tax cost</th><th>Standard markup</th><th>Selling before tax</th></tr></thead><tbody>{p.itemPricing.map(l=><tr key={l.key}><td>{l.description}</td><td>{l.category}</td><td>{money(l.cost)}</td><td>{new Decimal(l.markup).toDecimalPlaces(2).toString()}%</td><td>{money(l.beforeTax)}</td></tr>)}</tbody></table></div></details>}
+              {!sellingOnly&&p.policy && (
+                <p>
+                  Standard Commercial Policy v{p.policy.version} · Category
+                  percentages in the summary are effective averages where a
+                  display group contains different item markups.
+                </p>
+              )}
+              {!sellingOnly&&financialManager && p.itemPricing && (
+                <details>
+                  <summary>Standard item selling prices</summary>
+                  <div className="table-scroll">
+                    <table className="master-table">
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th>Category</th>
+                          <th>Pre-tax cost</th>
+                          <th>Standard markup</th>
+                          <th>Selling before tax</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {p.itemPricing.map((l) => (
+                          <tr key={l.key}>
+                            <td>{l.description}</td>
+                            <td>{l.category}</td>
+                            <td>{money(l.cost)}</td>
+                            <td>
+                              {new Decimal(l.markup)
+                                .toDecimalPlaces(2)
+                                .toString()}
+                              %
+                            </td>
+                            <td>{money(l.beforeTax)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
               <div className="quote-totals">
-                {financialManager && p?.dealAccounting && <p role="status">{p.dealAccounting.note} Retained GST-equivalent: PKR {money(p.dealAccounting.retainedGstEquivalent)}.</p>}
-              {!financialManager&&<p><span>Visible Cost Subtotal — Excludes BESS Equipment</span><strong>PKR {money(visibleCost)}</strong></p>}
-                {financialManager && <p>
-                  <span>Approved BOQ cost</span>
-                  <strong>PKR {money(p.cost)}</strong>
-                </p>}
+                {financialManager && p?.dealAccounting && (
+                  <p role="status">
+                    {p.dealAccounting.note} Retained GST-equivalent: PKR{" "}
+                    {money(p.dealAccounting.retainedGstEquivalent)}.
+                  </p>
+                )}
+                {!sellingOnly&&!financialManager && (
+                  <p>
+                    <span>Visible Cost Subtotal — Excludes BESS Equipment</span>
+                    <strong>PKR {money(visibleCost)}</strong>
+                  </p>
+                )}
+                {!sellingOnly&&financialManager && (
+                  <p>
+                    <span>Approved BOQ cost</span>
+                    <strong>PKR {money(p.cost)}</strong>
+                  </p>
+                )}
                 <p>
                   <span>Selling before tax</span>
                   <strong>PKR {money(p.subtotal)}</strong>
                 </p>
                 <p>
-                  <span>Sales tax (internal)</span>
+                  <span>Sales tax before discount</span>
                   <strong>PKR {money(p.tax)}</strong>
                 </p>
                 <p className="net-total">
                   <span>Selling price including tax</span>
                   <strong>PKR {money(p.total)}</strong>
                 </p>
+                {new Decimal(p.discount).gt(0)&&<>
+                  <p><span>{p.discountAuthorization?'Approved Discount':'Proposed discount'} {p.discountAuthorization?'':`(${new Decimal(p.input.discountPercent||'0').toFixed(1)}%)`}</span><strong>PKR {money(p.discountAuthorization?.approvedAppliedBeforeTax??p.discount)}</strong></p>
+                  {p.discountAuthorization && new Decimal(p.discountAuthorization.managementSpecialBeforeTax).gt(0) && <p><span>Management Special Discount</span><strong>PKR {money(p.discountAuthorization.managementSpecialBeforeTax)}</strong></p>}
+                  {new Decimal(p.tax).gt(discountReview!.tax)&&<p><span>Sales tax reduction from discount</span><strong>PKR {money(new Decimal(p.tax).sub(discountReview!.tax).toFixed(2))}</strong></p>}
+                  <p className="net-total"><span>Total after discount including tax</span><strong>PKR {money(discountReview!.netTotal)}</strong></p>
+                </>}
+                {new Decimal(discountReview!.roundingAdjustment).isZero()?null:<p><span>Rounding adjustment</span><strong>PKR {money(discountReview!.roundingAdjustment)}</strong></p>}
+                <label className="pz-rounded-total">Rounded Total (PKR)<input type="text" inputMode="decimal" value={(input.roundedTotal??'').split('.').map((part,index)=>index===0?part.replace(/\B(?=(\d{3})+(?!\d))/g, ','):part).join('.')} onChange={e=>{const field=e.currentTarget;const position=field.selectionStart??field.value.length;const significant=field.value.slice(0,position).replace(/,/g,'').length;roundTotal(field.value);requestAnimationFrame(()=>{let count=0,caret=0;while(caret<field.value.length&&count<significant){if(field.value[caret]!==',')count++;caret++;}field.setSelectionRange(caret,caret);});}} placeholder="Enter the final rounded total"/><small>Updates the discount percentage and amounts automatically.</small></label>
               </div>
               {!savedPrice ? (
                 <button
                   className="primary"
-                  disabled={busy}
+                  disabled={busy||pricingUpdating}
                   onClick={() => void pricingSave()}
                 >
-                  Create quotation
+                  Preview Quotation
                 </button>
               ) : (
                 <>
@@ -914,22 +1181,24 @@ export function Commercial({
             </section>
           )}
           <section className="detail-panel">
-            <details><summary>Saved pricing versions</summary>
-            {prices.length ? (
-              prices.map((r) => (
-                <button
-                  key={r.id}
-                  className="draft-button"
-                  disabled={busy}
-                  onClick={() => void selectPrice(r.id)}
-                >
-                  {r.number} · PKR {money(r.total)}
-                </button>
-              ))
-            ) : (
-              <p>No pricing saved yet.</p>
-            )}
-          </details></section>
+            <details>
+              <summary>Saved pricing versions</summary>
+              {prices.length ? (
+                prices.map((r) => (
+                  <button
+                    key={r.id}
+                    className="draft-button"
+                    disabled={busy}
+                    onClick={() => void selectPrice(r.id)}
+                  >
+                    {r.number} · PKR {money(r.total)}
+                  </button>
+                ))
+              ) : (
+                <p>No pricing saved yet.</p>
+              )}
+            </details>
+          </section>
         </>
       )}
       {!manager && section === "pricing" && (
@@ -940,6 +1209,7 @@ export function Commercial({
       )}
       {quoteInput && manager && (
         <>
+          <div className="pz-action-row"><h2>Quotation Preview</h2><Button variant="secondary" onClick={()=>{setQuoteInput(undefined);setQuotePreview(undefined);setQuotePdfInput(undefined);setNotice('');}}>Back to Quotation Settings</Button></div>
           <p>
             {revisionInfo &&
               `${revisionInfo.origin} revision: ${revisionInfo.reason}`}
@@ -1007,7 +1277,6 @@ export function Commercial({
                 <label className="source-label quote-description" key={i}>
                   Row {i + 1}
                   <textarea
-                    readOnly={!!revisionInfo && !revisionInfo.costing_change}
                     required
                     maxLength={1500}
                     value={d}
@@ -1021,7 +1290,8 @@ export function Commercial({
                   />
                 </label>
               ))}
-              {!savedPrice?.snapshot.policy && savedPrice?.snapshot.input.presentation === "Full Breakup" &&
+              {!savedPrice?.snapshot.policy &&
+                savedPrice?.snapshot.input.presentation === "Full Breakup" &&
                 !savedPrice.snapshot.rows.some(
                   (r: any) => r.key === "additional",
                 ) &&
@@ -1130,14 +1400,27 @@ export function Commercial({
                   </fieldset>
                 )}
             </fieldset>
-            <Button variant="secondary" type="submit" loading={busy} loadingLabel="Preparing preview…">Preview quotation</Button>
+            <Button
+              variant="secondary"
+              type="submit"
+              loading={busy}
+              loadingLabel="Preparing preview…"
+            >
+              Preview quotation
+            </Button>
           </form>
         </>
       )}
       {quotePreview && !savedQuote && (
         <>
-          {!financialManager&&<p>A proposed special discount requires Management approval. Saving or submitting does not approve the quotation.</p>}
+          {!financialManager && (
+            <p>
+              {quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval ? 'This discount is within Atif’s pre-approved allowance.' : 'This discount exceeds the pre-approved allowance and requires Management approval.'}
+            </p>
+          )}
+          {!quotePreview.fingerprint && <p role="status">Quotation details changed. Press Preview Quotation to refresh the document.</p>}
           <QuotationView
+            refreshKey={quotePreview.refreshVersion}
             snapshot={quotePreview.snapshot}
             discount={quoteInput?.discount}
             onDiscount={manager ? changeQuotationDiscount : undefined}
@@ -1153,21 +1436,51 @@ export function Commercial({
               Confirm quotation totals
             </button>
           )}
-          <RevisionComparison snapshot={quotePreview.snapshot} acknowledged={priceChangeAcknowledged} onAcknowledge={setPriceChangeAcknowledged}/>
-          <p>Save draft preserves this quotation version without submission. Submit sends it to Management; customer confirmation becomes available only after approval.</p>
+          <RevisionComparison
+            snapshot={quotePreview.snapshot}
+            acknowledged={priceChangeAcknowledged}
+            onAcknowledge={setPriceChangeAcknowledged}
+          />
+          <p>{quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput?.additionalItem ? 'Download the preview or approve it within the pre-approved discount allowance.' : 'Download the preview or send the reviewed quotation to Management for approval.'}</p>
           <div className="pz-action-row">
-          <Button variant="secondary" loading={busy} disabled={!quotePreview.fingerprint || (hasRevisionPriceChange(quotePreview.snapshot)&&!priceChangeAcknowledged)} onClick={() => void saveQuote()}>Save draft quotation</Button>
-          <Button variant="primary" loading={busy} disabled={!quotePreview.fingerprint || (hasRevisionPriceChange(quotePreview.snapshot)&&!priceChangeAcknowledged)} onClick={() => void saveQuote(true)}>Save and send for approval</Button>
+            <Button
+              variant="secondary"
+              loading={busy}
+              disabled={
+                !quotePreview.fingerprint ||
+                (hasRevisionPriceChange(quotePreview.snapshot) &&
+                  !priceChangeAcknowledged)
+              }
+              onClick={()=>void action(async()=>{const result=await api<{url:string}>('/commercial/quotations/preview-download',{body:quotePdfInput,csrf:session.csrfToken});const link=document.createElement('a');link.href=result.url;link.download='Quotation-Preview.pdf';document.body.appendChild(link);link.click();link.remove();})}
+            >
+              Download Preview
+            </Button>
+            <div className="pz-send-action">
+            <Button
+              variant="primary"
+              loading={busy}
+              disabled={
+                !quotePreview.fingerprint ||
+                (hasRevisionPriceChange(quotePreview.snapshot) &&
+                  !priceChangeAcknowledged)
+              }
+              onClick={() => void saveQuote(true)}
+            >
+              {quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput?.additionalItem ? 'Approve Quotation' : 'Send to Management'}
+            </Button>
+              {sendError&&<p className="form-error" role="alert">{sendError}</p>}
+            </div>
           </div>
         </>
       )}
       {savedQuote && (
         <>
+          {savedQuote.workflow_status==='Approved'&&<><h3>Submitted Pricing Summary</h3><RevisionPricingSummary session={session} source={savedQuote}/></>}
           <QuotationWorkflow
             key={savedQuote.id}
             session={session}
             quotation={savedQuote}
-            onChange={setSavedQuote}
+            onChange={next=>{setSavedQuote(next);if(onQuotationSent&&next.workflow_status==='Submitted'&&savedQuote.workflow_status!=='Submitted')onQuotationSent();}}
             renderPreview={(snapshot, discount, onDiscount) => (
               <QuotationView
                 snapshot={snapshot}
@@ -1195,7 +1508,7 @@ export function Commercial({
               {savedQuote.snapshot.boqNumber}
             </p>
           )}
-          {
+          {(manager || savedQuote.workflow_status!=='Submitted') &&
             <button
               disabled={busy}
               onClick={() => {
@@ -1245,55 +1558,7 @@ export function Commercial({
               className="detail-panel revision-request-form"
             >
               <h3>Revision request</h3>
-              <label>
-                Requested by
-                <select
-                  aria-label="Revision source"
-                  value={revisionOrigin}
-                  onChange={(e) => setRevisionOrigin(e.target.value)}
-                >
-                  <option>Internal management</option>
-                  <option>Customer</option>
-                </select>
-              </label>
-              <label>
-                Requester name
-                <input
-                  required
-                  value={revisionRequester}
-                  onChange={(e) => setRevisionRequester(e.target.value)}
-                />
-              </label>
-              <label>
-                Reason
-                <textarea
-                  aria-label="Quotation revision reason"
-                  required
-                  maxLength={2000}
-                  value={revisionReason}
-                  onChange={(e) => setRevisionReason(e.target.value)}
-                />
-              </label>
-              <label>
-                Does this require costing or technical scope changes?
-                <select
-                  aria-label="Requires costing change"
-                  required
-                  value={costingChoice}
-                  onChange={(e) => setCostingChoice(e.target.value)}
-                >
-                  <option value="">Choose revision route</option>
-                  {manager && (
-                    <option value="no">
-                      No — margins, tax, discount or commercial details only
-                    </option>
-                  )}
-                  <option value="yes">
-                    Yes — quantities, technical specifications or additional
-                    scope
-                  </option>
-                </select>
-              </label>
+              <RevisionReasonFields origin={revisionOrigin} onOrigin={setRevisionOrigin} requester={revisionRequester} onRequester={setRevisionRequester} reason={revisionReason} onReason={setRevisionReason} costingChoice={costingChoice} onCostingChoice={setCostingChoice} allowCommercial={manager}/>
               <p>
                 Commercial revisions retain the original costing. Costing
                 changes require a revised BOQ and approval before a new
@@ -1306,7 +1571,7 @@ export function Commercial({
           )}
         </>
       )}
-      <section className="detail-panel">
+      {!input.revisionRequestId&&!revisionInfo&&!initialFrameworkInput&&!savedQuote?.snapshot?.revision&&!(quotePreview?.snapshot as (QuotationSnapshot & {revision?:unknown}) | undefined)?.revision&&<section className="detail-panel">
         <h3>Revision requests</h3>
         {revisionRequests.length ? (
           revisionRequests.map((r) => (
@@ -1363,7 +1628,7 @@ export function Commercial({
         ) : (
           <p>No quotations saved yet.</p>
         )}
-      </section>
+      </section>}
     </section>
   );
 }

@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import { HttpError } from "../http/errors.js";
 
-async function quotationEligibility(c: Pool | PoolClient, id: string) {
+export async function quotationEligibility(c: Pool | PoolClient, id: string) {
   const row=(await c.query(`SELECT q.id,
     (SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS status,
     NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS current,

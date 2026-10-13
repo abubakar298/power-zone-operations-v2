@@ -1,6 +1,6 @@
 import { createWorker } from "tesseract.js";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-export async function extractText(file: File, progress: (s: string) => void) {
+export async function extractText(file: File, progress: (s: string) => void, tableMode=false) {
   if (file.type === "text/plain")
     return { text: await file.text(), confidence: null };
   let worker: Awaited<ReturnType<typeof createWorker>> | undefined;
@@ -14,6 +14,7 @@ export async function extractText(file: File, progress: (s: string) => void) {
           progress(`${m.status} ${Math.round((m.progress ?? 0) * 100)}%`);
       },
     });
+    if(tableMode)await worker.setParameters({tessedit_pageseg_mode:6 as any});
     const result = await worker.recognize(image);
     return result.data;
   }
@@ -25,6 +26,11 @@ export async function extractText(file: File, progress: (s: string) => void) {
         throw new Error(
           "Image is too large to process. Resize it to 20 megapixels or less.",
         );
+      }
+      if(tableMode){
+        const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext('2d')!;context.drawImage(image,0,0);const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;const borders:number[]=[];let last=-10;
+        for(let y=0;y<canvas.height;y++){let dark=0;for(let x=0;x<canvas.width;x+=2){const i=(y*canvas.width+x)*4;if((pixels[i]+pixels[i+1]+pixels[i+2])/3<90)dark++;}if(dark>canvas.width*.35){if(y-last>3)borders.push(y);last=y;}}
+        if(borders.length>=3){const parts:string[]=[];for(let i=1;i<borders.length;i++){const height=borders[i]-borders[i-1]-6;if(height<20)continue;const strip=document.createElement('canvas');strip.width=canvas.width;strip.height=height;strip.getContext('2d')!.drawImage(canvas,0,borders[i-1]+3,canvas.width,height,0,0,canvas.width,height);progress(`Reading table row ${i}`);parts.push((await recognize(strip)).text.replace(/\n/g,' '));strip.width=0;strip.height=0;}image.close();canvas.width=0;canvas.height=0;return{text:parts.join('\n'),confidence:null};}canvas.width=0;canvas.height=0;
       }
       image.close();
       const d = await recognize(file);

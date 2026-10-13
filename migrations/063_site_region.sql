@@ -1,0 +1,1 @@
+ALTER TABLE sites ADD COLUMN region text NOT NULL DEFAULT '';

@@ -7,6 +7,7 @@ COPY tsconfig*.json vite.config.ts ./
 COPY server ./server
 COPY web ./web
 COPY scripts ./scripts
+COPY data ./data
 RUN pnpm build
 RUN pnpm prune --prod
 

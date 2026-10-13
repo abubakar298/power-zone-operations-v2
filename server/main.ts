@@ -1,4 +1,5 @@
 import {NotificationsRepository} from "./notifications/repository.js";
+import { archiveConfirmedTestWorkflow } from "./maintenance/archive-test-workflow.js";
 import { AccountsRepository } from "./onboarding/repository.js";
 import { ResendDelivery } from "./email/delivery.js";
 import { resolve } from "node:path";
@@ -13,13 +14,22 @@ const pool = createPool(config);
 pool.on("error", () => console.error("Database connection interrupted."));
 // Only an explicit operator setting enables the owner-requested training batch.
 // Normal deployments never create sample records. Batch retries are idempotent.
-if (process.env.PZ_DASHBOARD_SAMPLE_BATCH === "atif-training-20-v1") {
+if (!config.production && process.env.PZ_DASHBOARD_SAMPLE_BATCH === "atif-training-20-v1") {
   await runRequestedDashboardSamples(
     pool,
     process.env.PZ_DASHBOARD_SAMPLE_BATCH,
   );
   console.log("Atif dashboard training batch ready: 20 sample proposals.");
 }
+const archivedTests = !config.production && await archiveConfirmedTestWorkflow(
+  pool,
+  process.env.PZ_ARCHIVE_TEST_WORKFLOW,
+);
+if (archivedTests)
+  console.log(
+    "Owner-confirmed test workflow archived:",
+    JSON.stringify(archivedTests),
+  );
 const app = createApp(pool, config, resolve("dist/web"));
 const server = app.listen(config.port, "0.0.0.0", () =>
   console.log(`Power Zone V2 listening on port ${config.port}`),

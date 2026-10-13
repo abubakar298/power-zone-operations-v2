@@ -35,7 +35,9 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
   r.get("/drafts", async (req, res) =>
     res.json({ drafts: await repo.drafts(req.authSession!.user.id) }),
   );
-  r.get("/", async (req, res) => res.json({ boqs: await repo.list(req.authSession!.user.id) }));
+  r.get("/", async (req, res) =>
+    res.json({ boqs: await repo.list(req.authSession!.user.id) }),
+  );
   r.post("/drafts", async (req, res) => {
     const v = z
       .object({
@@ -45,6 +47,8 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         baseRevisionId: z.uuid().optional(),
         revisionReason: z.string().trim().max(2000).default(""),
         revisionOrigin: z.enum(["Internal management", "Customer"]).optional(),
+        workflowId:z.uuid().optional(),
+        surveyDeviationConfirmed:z.boolean().optional(),
       })
       .strict()
       .safeParse(req.body);
@@ -62,17 +66,19 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         v.data.baseRevisionId,
         v.data.revisionReason,
         v.data.revisionOrigin,
+        v.data.workflowId,
+        v.data.surveyDeviationConfirmed,
       ),
     );
   });
   r.post("/preview", async (req, res) => {
-    const v = surveySchema.safeParse(req.body);
+    const v = surveySchema.extend({baseRevisionId:z.uuid().optional()}).safeParse(req.body);
     if (!v.success)
       throw new HttpError(
         400,
         "Check all required survey fields and non-negative quantities.",
       );
-    res.json(await repo.preview(v.data));
+    const {baseRevisionId,...survey}=v.data;res.json(await repo.preview(survey,baseRevisionId));
   });
   r.post("/save", async (req, res) => {
     const v = z
@@ -199,7 +205,13 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         "Cache-Control": "private, no-store",
       })
       .send(
-        Buffer.from(buildCostingPdf(canSeeBessCost(req.authSession!.user.role)?review.snapshot:restrictedCostView(review.snapshot)).output("arraybuffer")),
+        Buffer.from(
+          buildCostingPdf(
+            canSeeBessCost(req.authSession!.user)
+              ? review.snapshot
+              : restrictedCostView(review.snapshot),
+          ).output("arraybuffer"),
+        ),
       );
   });
   r.get("/:id/history", async (req, res) => {
@@ -241,7 +253,15 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Cache-Control": "private, no-store",
       })
-      .send(Buffer.from(buildCostingPdf(canSeeBessCost(req.authSession!.user.role)?snapshot:restrictedCostView(snapshot)).output("arraybuffer")));
+      .send(
+        Buffer.from(
+          buildCostingPdf(
+            canSeeBessCost(req.authSession!.user)
+              ? snapshot
+              : restrictedCostView(snapshot),
+          ).output("arraybuffer"),
+        ),
+      );
   });
   r.get("/:id/costing.pdf", async (req, res) => {
     if (!z.uuid().safeParse(req.params.id).success)
@@ -260,7 +280,9 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
       .send(
         Buffer.from(
           buildCostingPdf(
-            canSeeBessCost(req.authSession!.user.role)?record.snapshot:restrictedCostView(record.snapshot),
+            canSeeBessCost(req.authSession!.user)
+              ? record.snapshot
+              : restrictedCostView(record.snapshot),
             record.number,
             record.created_at,
           ).output("arraybuffer"),

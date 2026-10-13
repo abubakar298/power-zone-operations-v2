@@ -7,7 +7,7 @@ const D=(v:string)=>new Exact(v);
 const money=(v:Decimal)=>v.toDecimalPlaces(2,Decimal.ROUND_HALF_UP).toFixed(2);
 export interface UblScopeRow {id:string;description:string;brands:string;specification:string;unit:string;quantity:string;proposalSellingRate:string|null;proposalTax:string|null;proposalSellingTotal:string|null;bundle:string|null;deferred?:boolean;includedIn?:string;routeAllowance?:string}
 export interface UblConfiguration {id:string;option:string;pvWatts:string;inverterKw:string;essKwh:string;source:{filename:string;sha256:string;proposalStageFinalTotal:string};originalBoq:UblScopeRow[];currentBoq:UblScopeRow[];currentTechnicalVersion:number;amendments:{date:null;dateLabel:string;notes:string}[];history:{stage:string;date:string;totalIncludingGst:string;panelSellingExcludingGst:string;historicalSummaryBudget:string;technicalVersion:number}[]}
-interface AllocationLine {id:string;cost:string;standardMarkupAmount:string;taxRate:string}
+export interface AllocationLine {id:string;cost:string;standardMarkupAmount:string;taxRate:string}
 /** Scale monetary markup, never costs. Tax groups come from the existing policy engine. */
 export function allocateRemaining(lines:AllocationLine[],availableIncludingTax:string){
  const available=D(availableIncludingTax),costGross=lines.reduce((n,l)=>n.add(D(l.cost).mul(D(l.taxRate).div(100).add(1))),D('0'));

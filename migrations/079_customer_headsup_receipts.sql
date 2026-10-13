@@ -1,0 +1,2 @@
+CREATE TABLE customer_headsup_receipts(id uuid PRIMARY KEY,customer_id integer NOT NULL REFERENCES customers(id),source_key text NOT NULL,evidence_id uuid NOT NULL REFERENCES survey_uploads(id),snapshot jsonb NOT NULL,request_key uuid UNIQUE NOT NULL,created_by uuid NOT NULL REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now());
+CREATE TRIGGER immutable_customer_headsup_receipt BEFORE UPDATE OR DELETE ON customer_headsup_receipts FOR EACH ROW EXECUTE FUNCTION prevent_master_version_mutation();

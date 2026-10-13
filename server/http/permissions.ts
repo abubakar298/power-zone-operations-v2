@@ -76,7 +76,7 @@ export const resourceOwnership = {
   issuance:
     "SELECT 1 FROM operations_boq_issuances o JOIN internal_purchase_orders i ON i.id=o.ipo_id LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE o.id=$1 AND (o.created_by=$2 OR i.created_by=$2 OR s.created_by=$2)",
 } as const;
-type Resource = keyof typeof resourceOwnership;
+export type Resource = keyof typeof resourceOwnership;
 export async function requireOwnedResource(
   pool: Pool,
   actor: string,
@@ -123,6 +123,7 @@ export function coordinatorRecords(pool: Pool): RequestHandler {
     }
     const body = req.body;
     if (body && typeof body === "object") {
+      const unsavedQuotationPreview=req.method==='POST'&&/^\/api\/commercial\/quotations\/preview(?:\.pdf|-download)?\/?$/.test(path)&&body.previewPricing&&typeof body.previewPricing==='object';
       const references: Record<string, Resource> = {
         boqRevisionId: "boq",
         baseRevisionId: "boq",
@@ -133,10 +134,10 @@ export function coordinatorRecords(pool: Pool): RequestHandler {
         draftId: "draft",
         ipoId: "ipo",
       };
-      for (const source of [body, body.input]) {
+      for (const source of [body, body.input,...(unsavedQuotationPreview?[body.previewPricing]:[])]) {
         if (!source || typeof source !== "object") continue;
         for (const [key, resource] of Object.entries(references))
-          if (source[key])
+          if (source[key]&&!(unsavedQuotationPreview&&source===body&&key==='pricingId'))
             await requireOwnedResource(pool, actor, resource, source[key]);
       }
       if (path === "/api/boqs/drafts" && body.id)

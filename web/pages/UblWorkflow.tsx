@@ -16,7 +16,15 @@ const stages = [
   "Accounts Accepted—BOQ Issuance Pending",
 ];
 const configs = ["20-20-30", "25-20-30", "30-30-40", "35-30-40"];
-export function UblWorkflow({ session }: { session: Session }) {
+export function UblWorkflow({
+  session,
+  initialRequestId,
+  onBack,
+}: {
+  session: Session;
+  initialRequestId?: string;
+  onBack?: () => void;
+}) {
   const [previewId, setPreviewId] = useState<string>();
   const [rows, setRows] = useState<any[]>([]),
     [sources, setSources] = useState<any[]>([]),
@@ -52,7 +60,11 @@ export function UblWorkflow({ session }: { session: Session }) {
     setSources(s.sources);
   }
   useEffect(() => {
-    void refresh().catch((e) => setError(e.message));
+    void refresh()
+      .then(() => {
+        if (initialRequestId) return open({ id: initialRequestId });
+      })
+      .catch((e) => setError(e.message));
   }, []);
   async function open(r: any, checkDirty = true) {
     if (checkDirty && dirty && !window.confirm("Discard unsaved changes?"))
@@ -185,20 +197,24 @@ export function UblWorkflow({ session }: { session: Session }) {
   }
   const departmentRows = rows.filter((r) =>
     role === "Accounts"
-      ? r.stage === stages[6] || r.stage === stages[7] || r.data.accountsReviewSample
+      ? r.stage === stages[6] ||
+        r.stage === stages[7] ||
+        r.data.accountsReviewSample
       : role === "Operations"
         ? [stages[3], stages[4], "Confirmed BOQ issued"].includes(r.stage)
         : true,
   );
   const matches = (r: any, f: string) =>
     f === "All" ||
-    (f === "Review samples" ? r.data.accountsReviewSample : f === "Survey tracking"
-      ? r.data.surveyStatus !== "Completed"
-      : f === "Reports awaiting technical review"
-        ? r.data.surveyStatus === "Completed" && !r.data.technicalVerified
-        : f === "Verified recommendations"
-          ? r.data.technicalVerified
-          : r.stage === f);
+    (f === "Review samples"
+      ? r.data.accountsReviewSample
+      : f === "Survey tracking"
+        ? r.data.surveyStatus !== "Completed"
+        : f === "Reports awaiting technical review"
+          ? r.data.surveyStatus === "Completed" && !r.data.technicalVerified
+          : f === "Verified recommendations"
+            ? r.data.technicalVerified
+            : r.stage === f);
   const filters =
     role === "Design"
       ? [
@@ -280,10 +296,16 @@ export function UblWorkflow({ session }: { session: Session }) {
       </select>
     </Field>
   );
+  if (initialRequestId && !selected && !actionError)
+    return <p role="status">Opening site record…</p>;
   return (
     <section className="pz-stack pz-ubl-workflow">
       <header>
-        <h2>UBL Site Workflow</h2>
+        <h2>
+          {initialRequestId
+            ? "Pre-agreed configuration · Site record"
+            : "UBL Site Workflow"}
+        </h2>
         <p>
           Survey requests, configuration recommendations and PO handoffs.
           Reported history stays separate from verified actions.
@@ -295,32 +317,40 @@ export function UblWorkflow({ session }: { session: Session }) {
         </p>
       )}
       {success && <p role="status">{success}</p>}
-      {sources.map((s) => (
-        <div className="card" key={s.sha256}>
-          <strong>{s.filename}</strong>
-          <p>
-            {s.site_count} sites ·{" "}
-            {s.imported_batch
-              ? "Imported with actor and timestamp"
-              : "Reviewed source awaiting import"}
-          </p>
-          <div className="pz-action-row">
-            <a href={`/api/ubl-workflow/sources/${s.sha256}/file`} download>
-              Download original workbook
-            </a>
-            {manager && !s.imported_batch && (
-              <Button
-                variant="primary"
-                loading={busy === "import"}
-                onClick={() => void importSource(s)}
-              >
-                Import reviewed 36-site batch
-              </Button>
-            )}
+      {initialRequestId && (
+        <p className="pz-caption">
+          Existing saved site workflow is retained. Automatic PO matching, IPO
+          issuance and removal of the prior approval gate are pending backend
+          integration.
+        </p>
+      )}
+      {!initialRequestId &&
+        sources.map((s) => (
+          <div className="card" key={s.sha256}>
+            <strong>{s.filename}</strong>
+            <p>
+              {s.site_count} sites ·{" "}
+              {s.imported_batch
+                ? "Imported with actor and timestamp"
+                : "Reviewed source awaiting import"}
+            </p>
+            <div className="pz-action-row">
+              <a href={`/api/ubl-workflow/sources/${s.sha256}/file`} download>
+                Download original workbook
+              </a>
+              {manager && !s.imported_batch && (
+                <Button
+                  variant="primary"
+                  loading={busy === "import"}
+                  onClick={() => void importSource(s)}
+                >
+                  Import reviewed 36-site batch
+                </Button>
+              )}
+            </div>
+            {feedback("import")}
           </div>
-          {feedback("import")}
-        </div>
-      ))}
+        ))}
       {!selected ? (
         <>
           <div className="pz-action-row">
@@ -441,13 +471,19 @@ export function UblWorkflow({ session }: { session: Session }) {
             <Button
               onClick={() => {
                 if (!dirty || window.confirm("Discard unsaved changes?")) {
+                  if (onBack) {
+                    onBack();
+                    return;
+                  }
                   setSelected(undefined);
                   setDetail(undefined);
                   setDirty(false);
                 }
               }}
             >
-              ← Back to UBL workflow
+              {initialRequestId
+                ? "← Back to workspace"
+                : "← Back to UBL workflow"}
             </Button>
             <StatusBadge>{selected.stage}</StatusBadge>
           </div>
@@ -708,7 +744,10 @@ export function UblWorkflow({ session }: { session: Session }) {
               )}
             </div>
             <div className="pz-action-row">
-              {["Admin", "Management"].includes(role) && selected.stage === stages[3] && selected.data.configuration && act("sample", "Send review-only IPO / PT sample to Accounts")}
+              {["Admin", "Management"].includes(role) &&
+                selected.stage === stages[3] &&
+                selected.data.configuration &&
+                act("sample", "Send review-only IPO / PT sample to Accounts")}
               {["Admin", "Management"].includes(role) &&
                 selected.data.originalOrderPreserved &&
                 selected.stage === stages[3] &&
@@ -719,9 +758,6 @@ export function UblWorkflow({ session }: { session: Session }) {
               {coord &&
                 selected.stage === stages[1] &&
                 act("submit", "Record recommendation sent", "primary")}
-              {coord &&
-                stages.slice(0, 3).includes(selected.stage) &&
-                act("headsup", "Record customer heads-up")}
               {coord &&
                 selected.stage === stages[3] &&
                 act("advance", "Send advance BOQ", "primary")}

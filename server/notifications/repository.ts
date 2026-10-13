@@ -3,6 +3,14 @@ import { transaction } from "../db/transaction.js";
 import type { User } from "../auth/repository.js";
 import type { EmailDelivery } from "../email/delivery.js";
 import { notificationMessage } from "../email/templates.js";
+export const eventTitle = (kind: string) =>
+  ({
+    Submitted: "Quotation approval required",
+    "Approval requested": "Quotation approval required",
+    Approved: "Quotation approved",
+    "Changes requested": "Revision requested",
+    "PO received": "Customer confirmation received",
+  })[kind] ?? kind;
 export class NotificationsRepository {
   constructor(private pool: Pool) {}
   // Projection runs separately from business transactions: delivery failures never undo work.
@@ -15,7 +23,7 @@ export class NotificationsRepository {
     e.reference,e.actor_id,e.target,e.actionable,e.created_at
    FROM notification_events e CROSS JOIN notification_settings s JOIN users u ON u.active AND (
     (e.audience='management' AND u.role IN('Admin','Management')) OR
-    (e.audience='owner' AND u.id=e.owner_id AND u.role IN('Admin','Management','Coordinator')) OR (e.audience='security' AND u.id=e.owner_id) OR u.role=e.audience)
+    (e.audience='owner' AND u.id=e.owner_id AND u.role IN('Admin','Management','Coordinator')) OR (e.audience IN('security','assigned') AND u.id=e.owner_id) OR u.role=e.audience)
    WHERE e.created_at>=s.activated_at AND (u.id<>e.actor_id OR e.kind='Security')
    ON CONFLICT(user_id,source_key) DO NOTHING`);
       await c.query(`UPDATE notifications n SET resolved_at=now() WHERE n.resolved_at IS NULL AND n.actionable AND (
@@ -43,7 +51,7 @@ export class NotificationsRepository {
   async list(user: User, id?: string, cursor?: { time: string; id: string }) {
     return (
       await this.pool.query(
-        `WITH inbox AS (SELECT COUNT(*) FILTER(WHERE n.read_at IS NULL AND n.resolved_at IS NULL) OVER()::integer AS unread_count,n.id,n.kind,COALESCE(t.title,n.title) AS title,n.reference,n.target,n.actionable,n.created_at,n.read_at,n.resolved_at,COALESCE(u.display_name,'Power Zone') AS actor FROM notifications n JOIN notification_events e ON e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1) LEFT JOIN notification_types t ON t.kind=n.kind LEFT JOIN users u ON u.id=n.actor_id WHERE n.user_id=$1 AND ($3::uuid IS NULL OR n.id=$3) AND ((e.audience='management' AND $2 IN('Admin','Management')) OR (e.audience='owner' AND e.owner_id=$1 AND $2 IN('Admin','Management','Coordinator')) OR (e.audience='security' AND e.owner_id=$1) OR e.audience=$2 OR (n.kind='Escalation' AND $2 IN('Admin','Management'))) ) SELECT * FROM inbox WHERE ($4::timestamptz IS NULL OR (created_at,id)<($4::timestamptz,$5::uuid)) ORDER BY created_at DESC,id DESC LIMIT 100`,
+        `WITH inbox AS (SELECT COUNT(*) FILTER(WHERE n.read_at IS NULL AND n.resolved_at IS NULL) OVER()::integer AS unread_count,n.id,n.kind,COALESCE(t.title,n.title) AS title,n.reference,n.target,n.actionable,n.created_at,n.read_at,n.resolved_at,COALESCE(u.display_name,'Power Zone') AS actor FROM notifications n JOIN notification_events e ON e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1) LEFT JOIN notification_types t ON t.kind=n.kind LEFT JOIN users u ON u.id=n.actor_id WHERE n.user_id=$1 AND ($3::uuid IS NULL OR n.id=$3) AND ((e.audience='management' AND $2 IN('Admin','Management')) OR (e.audience='owner' AND e.owner_id=$1 AND $2 IN('Admin','Management','Coordinator')) OR (e.audience IN('security','assigned') AND e.owner_id=$1) OR e.audience=$2 OR (n.kind='Escalation' AND $2 IN('Admin','Management'))) ) SELECT * FROM inbox WHERE ($4::timestamptz IS NULL OR (created_at,id)<($4::timestamptz,$5::uuid)) ORDER BY created_at DESC,id DESC LIMIT 100`,
         [
           user.id,
           user.role,

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import {Button} from "../ui/Button.js";
 import { recommendSiteCode } from "../../server/boq/schema.js";
 
 /** A customer ID is submitted only after an explicit selection from the search results. */
@@ -19,6 +20,7 @@ export function CustomerSiteFields({
   const [customerSearch, setCustomerSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
 
+
   const [siteId, setSiteId] = useState("");
   const [site, setSite] = useState({
     name: initial.siteName ?? "",
@@ -35,6 +37,10 @@ export function CustomerSiteFields({
     setCustomerSearch("");
     setSearchOpen(false);
     setSiteId("");
+    const dismiss=(event:Event)=>{if(event.target instanceof Element && !event.target.closest('#boq-customer-picker'))setSearchOpen(false);};
+    document.addEventListener('pointerdown',dismiss);
+    document.addEventListener('focusin',dismiss);
+    return()=>{document.removeEventListener('pointerdown',dismiss);document.removeEventListener('focusin',dismiss);};
   }, [initial]);
   useEffect(() => {
     if (preferredCustomer) {
@@ -55,13 +61,15 @@ export function CustomerSiteFields({
   };
   return (
     <>
-      <div className="customer-field">
+      {onAdd && !revision && <div className="customer-master-actions"><Button variant="neutral" onClick={() => {setSearchOpen(false);onAdd();}}>Add Customer</Button></div>}
+      <div className="customer-field" id="boq-customer-picker">
       <label>
         Customer
         <input type="search" role="combobox" aria-label="Customer" aria-expanded={searchOpen && !revision} aria-controls="boq-customer-options" aria-autocomplete="list" required disabled={revision}
           value={customerSearch || (masters.customers.find((c: any) => String(c.id) === customer)?.name ?? "")}
           placeholder="Search customer name, code or contact"
           onFocus={() => setSearchOpen(true)}
+          onClick={() => setSearchOpen(true)}
           ref={input => { input?.setCustomValidity(customer || revision ? "" : "Select a customer from the search results."); }}
           onChange={e => { setCustomerSearch(e.target.value); changeCustomer(""); setSearchOpen(true); }}
           onKeyDown={e => {
@@ -75,7 +83,6 @@ export function CustomerSiteFields({
             <button key={c.id} type="button" role="option" aria-selected={String(c.id) === customer} onKeyDown={e => { const target = e.currentTarget; if (e.key === "ArrowDown") { e.preventDefault(); (target.nextElementSibling as HTMLElement)?.focus(); } if (e.key === "ArrowUp") { e.preventDefault(); (target.previousElementSibling as HTMLElement)?.focus(); } if (e.key === "Escape") setSearchOpen(false); }} onClick={() => { changeCustomer(String(c.id)); setCustomerSearch(""); setSearchOpen(false); }}>{c.name} · {c.short_code}</button>)}
         </div>}
       </label>
-      {onAdd && !revision && <button type="button" onClick={() => { setSearchOpen(false); onAdd(); }}>Add customer</button>}
       </div>
       <label>
         {siteId || revision ? "Site name" : "New site name"}

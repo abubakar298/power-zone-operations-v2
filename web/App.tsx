@@ -13,6 +13,7 @@ type State =
   | { kind: "login" }
   | { kind: "authenticated"; session: Session };
 export function App() {
+  const [pricingCarryLink]=useState(()=>{const token=new URLSearchParams(window.location.search).get('pricingPreviewToken');return token&&/^[0-9a-f-]{36}$/i.test(token)?`?pricingPreviewToken=${token}#workspace=pricing`:'';});
   const [notificationLink] = useState(()=>{
     const hash=window.location.hash,params=new URLSearchParams(hash.slice(1));
     return /^#notification=[0-9a-f-]{36}$/i.test(hash)||["dashboard","projects","documents","ubl","ubl-workflow"].includes(params.get("workspace")??"")?hash:"";
@@ -27,8 +28,8 @@ export function App() {
   );
   const [setupComplete, setSetupComplete] = useState(false);
   const go = useCallback(
-    (path: string) => window.history.replaceState(null, "", path+(path==="/dashboard"?notificationLink:"")),
-    [notificationLink],
+    (path: string) => window.history.replaceState(null, "", path+(path==="/dashboard"?(pricingCarryLink||notificationLink):"")),
+    [notificationLink,pricingCarryLink],
   );
   const signedOut = useCallback(() => {
     setState({ kind: "login" });

@@ -14,7 +14,7 @@ const epcNames = [
   "Deliveries",
   "Installation Cost",
 ];
-const markupPercent = (selling: any, cost: any) =>
+export const markupPercent = (selling: any, cost: any) =>
   selling == null || cost == null || new Decimal(cost).lte(0)
     ? "Not available"
     : money(new Decimal(selling).sub(cost).div(cost).mul(100).toString()) + "%";

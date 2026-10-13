@@ -55,6 +55,7 @@ export const surveySchema = z
       })
       .strict(),
     preparedBy: z.string().trim().min(1).max(100),
+    brandSelections:z.object({solar:z.array(z.number().int().positive()).max(30).optional(),inverter:z.array(z.number().int().positive()).max(30).optional(),battery:z.array(z.number().int().positive()).max(30).optional(),cable:z.array(z.number().int().positive()).max(30).optional(),switchgear:z.array(z.number().int().positive()).max(30).optional()}).strict().optional(),
     specifications: z
       .record(z.string().min(1).max(200), z.string().trim().min(1).max(1500))
       .optional(),

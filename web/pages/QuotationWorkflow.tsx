@@ -606,21 +606,21 @@ export function QuotationWorkflow({
             <p style={{ whiteSpace: "pre-wrap" }}>{q.workflow_notes}</p>
           </aside>
         )}
-        {(error || selected.failure) && (
-          <p role="alert">{error || selected.failure}</p>
+        {(selected.failure || (q.workflow_status && error)) && (
+          <p role="alert">{selected.failure || error}</p>
         )}
         {q.workflow_latest !== false &&
           !q.workflow_status &&
           (manager || author) && (
-            <button
+            <div className="pz-send-action"><button
               disabled={busy}
               onClick={() => void transition("Submitted")}
             >
-              Send for approval
-            </button>
+              Send to Management
+            </button>{error&&<p className="form-error" role="alert">{error}</p>}</div>
           )}
         {q.workflow_latest !== false &&
-          (!q.workflow_status || q.workflow_status === "Submitted") &&
+          !q.workflow_status &&
           author &&
           session.user.role === "Coordinator" && (
             <ExternalApproval

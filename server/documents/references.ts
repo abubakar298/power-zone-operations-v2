@@ -1,7 +1,7 @@
 import type { PoolClient } from "pg";
 import { HttpError } from "../http/errors.js";
-export const documentTypes = ["QT","BOQ","IPO","DO","INV","PO","SSR","TS","SR","IR","CR","AMC"] as const;
-type DocumentType = typeof documentTypes[number];
+export const documentTypes = ["QT","BOQ","PBQ","IPO","DO","INV","PO","SSR","TS","SR","IR","CR","AMC"] as const;
+export type DocumentType = typeof documentTypes[number];
 export function formatReference(type:DocumentType,year:number,sequence:number,customerCode:number,siteNumber:number,shortId:string,siteCode:string) {
   return `CPZ-${type}-${String(year).slice(-2)}-${String(sequence).padStart(3,"0")}-${String(customerCode).padStart(4,"0")}-${String(siteNumber).padStart(3,"0")} (${shortId}-${siteCode})`;
 }

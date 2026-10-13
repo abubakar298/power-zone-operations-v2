@@ -1,3 +1,4 @@
+import {finalizeCustomerBoq} from '../boq/lifecycle.js';
 import { Decimal } from "decimal.js";
 import { projectCatalog, projectContext } from "./projects.js";
 import { resourceOwnership, ownedCondition } from "../http/permissions.js";
@@ -302,6 +303,7 @@ export class CoordinatorRepository {
       cniVersionId?: string;
       recipient: string;
       notes: string;
+      evidenceIds?:string[];
     },
   ) {
     const c = await this.pool.connect();
@@ -390,6 +392,8 @@ export class CoordinatorRepository {
           ],
         )
       ).rows[0];
+      const evidenceIds=[...new Set(input.evidenceIds??[])];if(evidenceIds.length){const uploads=await c.query("SELECT id FROM survey_uploads WHERE id=ANY($1::uuid[]) AND owner_id=$2",[evidenceIds,actor]);if(uploads.rowCount!==evidenceIds.length)throw new HttpError(403,'Select your uploaded dispatch evidence.');for(const uploadId of evidenceIds)await c.query('INSERT INTO quotation_dispatch_evidence(dispatch_id,upload_id) VALUES($1,$2)',[row.id,uploadId]);}
+      if(input.quotationId)await finalizeCustomerBoq(c,input.quotationId,actor);
       await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
         actor,
         "quotation.sent." + row.id,
@@ -426,12 +430,19 @@ export class CoordinatorRepository {
       ).rows[0];
       if (!q) throw new HttpError(404, "Quotation not found.");
       const management = ["Admin", "Management"].includes(u.role);
+      // Authority derives only from the immutable saved pricing and quotation, never a client flag.
+      const pricing=(await c.query('SELECT snapshot FROM commercial_pricing_versions WHERE id=$1',[q.pricing_id])).rows[0]?.snapshot;
+      const allowance=pricing?.discountAuthorization;
+      const requested=q.snapshot?.discountAuthorization?.requestedBeforeTax;
+      const delegatedDiscount=u.role==='Coordinator' && kind==='Approved' && allowance && pricing.policy?.costUpliftPercent==='5' && pricing.policy?.preapprovedCostDiscountPercent==='5' && requested!==undefined && new Decimal(requested).lte(allowance.preapprovedBeforeTax) && !q.snapshot?.input?.additionalItem && !q.snapshot?.revision;
+
       if (!management && q.created_by !== actor)
         throw new HttpError(403, "Choose your own quotation.");
       if (
         ["Approved", "Changes requested"].includes(kind) &&
         !management &&
-        !external
+        !external &&
+        !delegatedDiscount
       )
         throw new HttpError(
           403,
@@ -462,6 +473,10 @@ export class CoordinatorRepository {
           [quotationId],
         )
       ).rows[0];
+      if(previous?.kind==='Submitted'&&u.role==='Coordinator'&&kind!=='Submitted')throw new HttpError(403,'This quotation is with Management. Coordination has preview-only access until Management returns it.');
+      if(!previous && delegatedDiscount){
+        previous=(await c.query("INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by) VALUES($1,$2,'Submitted',$3,$4) RETURNING *",[randomUUID(),quotationId,'Standard policy: discount within pre-approved 5% of cost allowance',actor])).rows[0];
+      }
       if (!previous && external) {
         if (external.channel !== "WhatsApp" || !external.evidenceIds.length)
           throw new HttpError(
@@ -508,7 +523,7 @@ export class CoordinatorRepository {
       const row = (
         await c.query(
           "INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by,created_at)VALUES($1,$2,$3,$4,$5,clock_timestamp())RETURNING *",
-          [randomUUID(), quotationId, kind, notes, actor],
+          [randomUUID(), quotationId, kind, delegatedDiscount ? `${notes}${notes?' · ':''}Coordinator approval within standard discount allowance (policy v${allowance.policyVersion})` : notes, actor],
         )
       ).rows[0];
       if (external) await recordExternal(c, actor, quotationId, null, external);
@@ -516,6 +531,15 @@ export class CoordinatorRepository {
         actor,
         `coordination.${kind}`,
       ]);
+      if(['Submitted','Approved','Changes requested'].includes(kind)){
+        const linked=(await c.query(`SELECT r.* FROM project_workflow_records r WHERE r.stage NOT IN('issued','order_exception','customer_tracking') AND (
+          r.data->>'quotationId'=$1 OR r.data->>'latestQuotationId'=$1 OR
+          EXISTS(SELECT 1 FROM boq_draft_finalizations f JOIN boq_revisions base ON base.id=f.revision_id JOIN boq_revisions quoted ON quoted.id=$2 WHERE f.draft_id::text=r.data->>'draftId' AND base.boq_id=quoted.boq_id) OR
+          EXISTS(SELECT 1 FROM framework_revision_sources s JOIN boq_revisions base ON base.id=s.boq_revision_id JOIN boq_revisions quoted ON quoted.id=$2 WHERE s.record_id=r.id AND base.boq_id=quoted.boq_id)
+        ) FOR UPDATE`,[quotationId,q.boq_revision_id])).rows;
+        const stage=kind==='Submitted'?'management_review':kind==='Approved'?'approved_dispatch':'commercial_revision';
+        for(const r of linked){let data={...r.data,latestQuotationId:quotationId,quotationId,returnReason:kind==='Changes requested'?notes:null};const configuration=(await c.query('SELECT target_framework_id,snapshot FROM framework_configuration_revisions WHERE boq_revision_id=$1',[q.boq_revision_id])).rows[0];if(configuration&&kind==='Approved'){data={...data,basis:configuration.snapshot.basis};await c.query('UPDATE project_workflow_records SET framework_id=$2 WHERE id=$1',[r.id,configuration.target_framework_id]);}await c.query('UPDATE project_workflow_records SET stage=$2,data=$3,version=version+1,updated_at=now() WHERE id=$1',[r.id,stage,data]);await c.query('INSERT INTO project_workflow_events(id,record_id,version,action,snapshot,request_key,input_fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[randomUUID(),r.id,r.version+1,`quotation-${kind}`,{stage,reason:notes||kind,data},randomUUID(),JSON.stringify({quotationId,kind}),actor]);}
+      }
       await c.query("COMMIT");
       return row;
     } catch (e) {

@@ -159,9 +159,18 @@ export class DesignRepository {
       if (!parsed.success)
         throw new HttpError(400, parsed.error.issues[0].message);
       const inputs = parsed.data;
-      if(!row.number) {
-        const number=await allocateReference(c,"SSR",id,inputs.customerId,inputs.siteCode);
-        await c.query("UPDATE design_surveys SET number=$2 WHERE id=$1",[id,number]);
+      if (!row.number) {
+        const number = await allocateReference(
+          c,
+          "SSR",
+          id,
+          inputs.customerId,
+          inputs.siteCode,
+        );
+        await c.query("UPDATE design_surveys SET number=$2 WHERE id=$1", [
+          id,
+          number,
+        ]);
       }
       await this.uploads(c, actor, inputs.uploadIds);
       const customer = (
@@ -227,7 +236,26 @@ export class DesignRepository {
       if (!target) throw new HttpError(400, "Choose an active coordinator.");
       const draft = randomUUID(),
         handoff = randomUUID();
-      const { notes, ...survey } = inputs;
+      if (
+        inputs.workflowStage &&
+        (inputs.workflowStage !== "Technical Review & Handoff Preparation" ||
+          inputs.surveyStatus !== "Completed")
+      )
+        throw new HttpError(
+          409,
+          "Complete the visit and technical review before sending to Coordination.",
+        );
+      const {
+        notes,
+        workflowStage,
+        workflowRoute,
+        surveyStatus,
+        scheduledSurveyDate,
+        responsiblePerson,
+        revisionReason,
+        region,
+        ...survey
+      } = inputs;
       await c.query(
         "INSERT INTO survey_drafts(id,owner_id,inputs) VALUES($1,$2,$3)",
         [

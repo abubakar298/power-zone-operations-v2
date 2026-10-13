@@ -1,16 +1,18 @@
-import {ublWorkflowHttp} from './ubl/workflow-http.js';
-import {UblWorkflowRepository} from './ubl/workflow-repository.js';
-import {projectCheckpointsHttp} from './projects/http.js';
-import {ProjectCheckpointsRepository} from './projects/repository.js';
-import {accountsHttp as accountsWorkspaceHttp} from './accounts/http.js';
-import {AccountsRepository as AccountsWorkspaceRepository} from './accounts/repository.js';
-import {inventoryHttp} from './inventory/http.js';
-import {InventoryRepository} from './inventory/repository.js';
-import {ublHttp} from './ubl/http.js';
-import {UblRepository} from './ubl/repository.js';
-import {notificationWebhook} from "./notifications/webhook.js";
-import {NotificationsRepository} from "./notifications/repository.js";
-import {notificationsHttp} from "./notifications/http.js";
+import { projectWorkflowHttp } from "./project-workflow/http.js";
+import { ProjectWorkflowRepository } from "./project-workflow/repository.js";
+import { ublWorkflowHttp } from "./ubl/workflow-http.js";
+import { UblWorkflowRepository } from "./ubl/workflow-repository.js";
+import { projectCheckpointsHttp } from "./projects/http.js";
+import { ProjectCheckpointsRepository } from "./projects/repository.js";
+import { accountsHttp as accountsWorkspaceHttp } from "./accounts/http.js";
+import { AccountsRepository as AccountsWorkspaceRepository } from "./accounts/repository.js";
+import { inventoryHttp } from "./inventory/http.js";
+import { InventoryRepository } from "./inventory/repository.js";
+import { ublHttp } from "./ubl/http.js";
+import { UblRepository } from "./ubl/repository.js";
+import { notificationWebhook } from "./notifications/webhook.js";
+import { NotificationsRepository } from "./notifications/repository.js";
+import { notificationsHttp } from "./notifications/http.js";
 import { financialVisibility } from "./http/cost-visibility.js";
 import { cniHttp } from "./commercial/cni-http.js";
 import { DesignRepository } from "./design/repository.js";
@@ -77,7 +79,10 @@ export function createApp(
     res.set("Cache-Control", "no-store");
     next();
   });
-  app.use("/api/email-webhooks/resend",notificationWebhook(pool,config.emailWebhookSecret));
+  app.use(
+    "/api/email-webhooks/resend",
+    notificationWebhook(pool, config.emailWebhookSecret),
+  );
   app.use("/api", (req, _res, next) => {
     if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
       if (req.get("Origin") !== config.origin)
@@ -106,10 +111,37 @@ export function createApp(
     auth.requireSession,
     workflowBoundary(pool),
   );
-  app.use("/api/cni", express.json({limit:"32kb"}), cniHttp(pool, auth.requireSession));
-  app.use("/api/project-checkpoints", express.json({limit:"32kb"}), projectCheckpointsHttp(new ProjectCheckpointsRepository(pool),auth.requireSession));
-  app.use("/api/ubl", express.json({limit:"16kb"}), ublHttp(new UblRepository(pool),auth.requireSession));
-  app.use("/api/ubl-workflow",express.json({limit:"12mb"}),ublWorkflowHttp(new UblWorkflowRepository(pool),auth.requireSession));
+  app.use(
+    "/api/cni",
+    express.json({ limit: "32kb" }),
+    cniHttp(pool, auth.requireSession),
+  );
+  app.use(
+    "/api/project-checkpoints",
+    express.json({ limit: "32kb" }),
+    projectCheckpointsHttp(
+      new ProjectCheckpointsRepository(pool),
+      auth.requireSession,
+    ),
+  );
+  app.use(
+    "/api/ubl",
+    express.json({ limit: "16kb" }),
+    ublHttp(new UblRepository(pool), auth.requireSession),
+  );
+  app.use(
+    "/api/ubl-workflow",
+    express.json({ limit: "12mb" }),
+    ublWorkflowHttp(new UblWorkflowRepository(pool), auth.requireSession),
+  );
+  app.use(
+    "/api/project-workflow",
+    express.json({ limit: "12mb" }),
+    projectWorkflowHttp(
+      new ProjectWorkflowRepository(pool),
+      auth.requireSession,
+    ),
+  );
   const boqs = new BoqRepository(pool);
   app.use(
     "/api/survey-uploads",
@@ -145,8 +177,19 @@ export function createApp(
   );
   // Customer imports are larger than ordinary forms; keep the general limit small.
   app.use("/api/masters/customer-import", express.json({ limit: "2mb" }));
-  app.use("/api/inventory-reconciliation", express.json({limit:"12mb"}), inventoryHttp(new InventoryRepository(pool),auth.requireSession));
-  app.use("/api/accounts-workspace",express.json({limit:"12mb"}),accountsWorkspaceHttp(new AccountsWorkspaceRepository(pool),auth.requireSession));
+  app.use(
+    "/api/inventory-reconciliation",
+    express.json({ limit: "12mb" }),
+    inventoryHttp(new InventoryRepository(pool), auth.requireSession),
+  );
+  app.use(
+    "/api/accounts-workspace",
+    express.json({ limit: "12mb" }),
+    accountsWorkspaceHttp(
+      new AccountsWorkspaceRepository(pool),
+      auth.requireSession,
+    ),
+  );
   app.use(express.json({ limit: "8kb" }));
   app.get("/api/health", async (_req, res) => {
     try {
@@ -191,7 +234,13 @@ export function createApp(
     "/api/departments",
     departmentsHttp(new DepartmentRepository(pool), auth.requireSession),
   );
-  app.use("/api/notifications",notificationsHttp(new NotificationsRepository(pool),auth.requireSession,{emailConfigured:delivery.configured,webhookConfigured:!!config.emailWebhookSecret}));
+  app.use(
+    "/api/notifications",
+    notificationsHttp(new NotificationsRepository(pool), auth.requireSession, {
+      emailConfigured: delivery.configured,
+      webhookConfigured: !!config.emailWebhookSecret,
+    }),
+  );
   app.use("/api/dashboard", dashboardRoutes(auth.requireSession));
   app.use(
     "/api/masters",
@@ -227,18 +276,25 @@ export function createApp(
       res.status(413).json({ message: "Request is too large." });
     } else {
       // Do not emit request bodies, database URLs, tokens or SQL parameter values.
-      const code = typeof err === "object" && err && "code" in err &&
-        typeof err.code === "string" && /^[A-Z0-9_]{2,30}$/.test(err.code)
-        ? err.code : undefined;
-      console.error(JSON.stringify({
-        event: "request.failed",
-        requestId: res.locals.requestId,
-        method: req.method,
-        // Route patterns exclude URL/query values, bodies and credentials.
-        route: req.route?.path ?? "unmatched",
-        error: err instanceof Error ? err.name : "UnknownError",
-        code,
-      }));
+      const code =
+        typeof err === "object" &&
+        err &&
+        "code" in err &&
+        typeof err.code === "string" &&
+        /^[A-Z0-9_]{2,30}$/.test(err.code)
+          ? err.code
+          : undefined;
+      console.error(
+        JSON.stringify({
+          event: "request.failed",
+          requestId: res.locals.requestId,
+          method: req.method,
+          // Route patterns exclude URL/query values, bodies and credentials.
+          route: req.route?.path ?? "unmatched",
+          error: err instanceof Error ? err.name : "UnknownError",
+          code,
+        }),
+      );
       res.status(503).json({
         message: "Service temporarily unavailable. Please try again.",
         requestId: res.locals.requestId,

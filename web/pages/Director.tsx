@@ -21,8 +21,11 @@ export function Director({
     [error, setError] = useState(""),
     [closureCount, setClosureCount] = useState<number>(),
     [closures, setClosures] = useState<any[]>([]),
+    [surveyPackages,setSurveyPackages]=useState<any[]>([]),
+    [surveyPackageError,setSurveyPackageError]=useState(''),
     [jobKey, setJobKey] = useState<string>();
   useEffect(() => {
+    void api<any>('/project-workflow/ubl-survey-packages').then(d=>{setSurveyPackages(d.packages.filter((p:any)=>p.status==='Submitted for Management'));setSurveyPackageError('');}).catch(e=>setSurveyPackageError(e.message));
     void api<any>("/accounts-workspace")
       .then((d) => {
         setClosures(d.closures);
@@ -89,6 +92,7 @@ export function Director({
       )}
       {tab === "Approvals" && (
         <>
+          <section className="detail-panel"><h3>UBL Survey Reports & Excel</h3>{surveyPackageError&&<p className="form-error" role="alert">{surveyPackageError}</p>}{!surveyPackageError&&!surveyPackages.length&&<p>No submitted UBL survey packages.</p>}{surveyPackages.map(p=><div key={p.id} className="pz-panel"><h4>{p.snapshot.sites.length} site(s) · {new Date(p.created_at).toLocaleDateString('en-PK',{timeZone:'Asia/Karachi'})}</h4><p>{p.snapshot.sites.map((s:any)=>`${s.siteCode} · ${s.siteName}`).join('; ')}</p><p>{p.snapshot.remarks}</p><div className="pz-action-row"><a target="_blank" rel="noreferrer" href={`/api/project-workflow/ubl-survey-packages/${p.id}/pdf`}>Review Report</a><a href={`/api/project-workflow/ubl-survey-packages/${p.id}/xlsx`}>Download UBL Excel</a></div></div>)}</section>
           <section className="detail-panel">
             <h3>Job closure performance</h3>
             {closures

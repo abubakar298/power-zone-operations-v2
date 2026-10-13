@@ -1,9 +1,25 @@
+import {bucketLabel} from '../workspaces/project-routes.js';
+import { DepartmentWorkspace } from "./DepartmentWorkspace.js";
+import { UblWorkflow } from "./UblWorkflow.js";
+import {
+  WorkspaceFilters,
+  emptyWorkspaceFilters,
+  matchesWorkspace,
+} from "../components/WorkspaceFilters.js";
+import {
+  coordinationBuckets,
+  coordinationBucket,
+  frameworkTask,
+  routes,
+} from "../workspaces/tasks.js";
 import { Button } from "../ui/Button.js";
 import { Field } from "../ui/Field.js";
 import { StatusBadge } from "../ui/StatusBadge.js";
 import { confirmTransition, confirmRevision } from "../confirm.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
+export type CoordinatorTarget =
+  "boqs" | "pricing" | "quotes" | "orders" | "operations";
 const stages = [
   "Survey & Costing Preparation",
   "Quotation approval",
@@ -13,7 +29,7 @@ const stages = [
   "Operations & Accounts Handoff",
   "Approved quotations awaiting send",
 ];
-export function Coordinator({
+export function LegacyCoordinator({
   session,
   onOpen,
 }: {
@@ -21,7 +37,7 @@ export function Coordinator({
   onOpen: (task: any) => void;
 }) {
   const manager = ["Admin", "Management"].includes(session.user.role);
-  const [workGroup, setWorkGroup] = useState("action"),
+  const [workGroup, setWorkGroup] = useState("all"),
     [search, setSearch] = useState(""),
     [sort, setSort] = useState("priority");
   const stageLabel = (stage: string) =>
@@ -56,6 +72,18 @@ export function Coordinator({
               : t.stage === stages[3]
                 ? "Record customer confirmation"
                 : "View approval";
+  const [frameworkRows, setFrameworkRows] = useState<any[]>([]),
+    [frameworkId, setFrameworkId] = useState<string>(),
+    [frameworkError, setFrameworkError] = useState("");
+  const [workspaceFilters, setWorkspaceFilters] = useState({
+      ...emptyWorkspaceFilters,
+    }),
+    [actionFailure, setActionFailure] = useState<{
+      id: string;
+      message: string;
+    }>();
+  const workspaceStages = manager ? stages : coordinationBuckets;
+  const taskStage = (t: any) => (manager ? t.stage : coordinationBucket(t));
   const [includeTraining, setIncludeTraining] = useState(false);
   const [scope, setScope] = useState(manager ? "team" : "mine"),
     [data, setData] = useState<any>(),
@@ -74,6 +102,17 @@ export function Coordinator({
         );
         if (!cancelled) {
           setData(r);
+          if (!manager) {
+            try {
+              const f = await api<any>("/ubl-workflow");
+              if (!cancelled) {
+                setFrameworkRows(f.requests);
+                setFrameworkError("");
+              }
+            } catch (e) {
+              if (!cancelled) setFrameworkError((e as Error).message);
+            }
+          }
           setError("");
         }
       } catch (e) {
@@ -109,10 +148,34 @@ export function Coordinator({
     (t.preparation_minutes != null &&
       t.preparation_minutes > 15 &&
       t.responsibility === "Coordinator");
-  const visibleTasks = (data?.tasks ?? [])
+  const allTasks = [
+    ...(data?.tasks ?? []).map((t: any) => ({
+      ...t,
+      route: t.workflowRoute ?? "Not recorded",
+      person: t.responsible_name ?? t.responsibility,
+      region: t.region ?? "Not entered",
+      blocker: t.status?.includes("approval")
+        ? "Decision pending"
+        : (t.blocker ?? ""),
+      overdue: !!overdue(t),
+    })),
+    ...(!manager
+      ? frameworkRows
+          .filter((r) => r.stage !== "Confirmed BOQ issued")
+          .map((r) => ({
+            ...frameworkTask(r),
+            overdue:
+              !!r.data?.scheduledSurveyDate &&
+              new Date(r.data.scheduledSurveyDate).getTime() < Date.now() &&
+              ["Scheduled", "In progress"].includes(r.data?.surveyStatus),
+          }))
+      : []),
+  ];
+  const visibleTasks = allTasks
     .filter(
       (t: any) =>
-        (filter === "All" || t.stage === filter) &&
+        (filter === "All" || taskStage(t) === filter) &&
+        (manager || matchesWorkspace(t, workspaceFilters)) &&
         (!overdueOnly || overdue(t)) &&
         (!approvalsOnly || t.responsibility === "Management") &&
         (manager ||
@@ -173,11 +236,12 @@ export function Coordinator({
             : kind === "PO received"
               ? "Record sale confirmation received"
               : "Request quotation revision",
-        `${t.reference ?? "This quotation"} will move to its next workflow stage. ${kind === "PO received" ? "Sale evidence still needs to be uploaded for IPO approval." : ""}`,
+        `${t.reference ?? "This quotation"} will move to its next workflow stage. ${kind === "PO received" ? "Upload sale evidence in the PO record. Automatic matching and issuance are pending integration." : ""}`,
       ))
     )
       return;
     setBusy(true);
+    setActionFailure(undefined);
     try {
       await api("/coordinator/events", {
         body: { quotationId: t.id, kind, notes },
@@ -186,11 +250,25 @@ export function Coordinator({
       setFeedbackTask(undefined);
       setTick((v) => v + 1);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to move document.");
+      setActionFailure({
+        id: t.id,
+        message: e instanceof Error ? e.message : "Unable to move document.",
+      });
     } finally {
       setBusy(false);
     }
   };
+  if (frameworkId)
+    return (
+      <UblWorkflow
+        session={session}
+        initialRequestId={frameworkId}
+        onBack={() => {
+          setFrameworkId(undefined);
+          setTick((v) => v + 1);
+        }}
+      />
+    );
   return (
     <section className="coordinator-panel">
       {feedbackTask && (
@@ -226,6 +304,70 @@ export function Coordinator({
         </form>
       )}
 
+      {!manager && (
+        <header>
+          <h2>Project Coordination workspace</h2>
+          <p>
+            Atif: follow each site’s selected route, prepare approved documents
+            and record customer decisions.
+          </p>
+          <div className="pz-action-row">
+            <Button
+              variant="primary"
+              onClick={() => onOpen({ target: "newboq" })}
+            >
+              New BOQ / Quick BOQ
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => onOpen({ target: "orders" })}
+            >
+              Record PO / confirmation
+            </Button>
+            <Button
+              variant="neutral"
+              onClick={() => onOpen({ target: "documents" })}
+            >
+              Documents & history
+            </Button>
+            <Button
+              variant="neutral"
+              onClick={() => onOpen({ target: "customers" })}
+            >
+              Customers & sites
+            </Button>
+            <Button
+              variant="neutral"
+              onClick={() => onOpen({ target: "rates" })}
+            >
+              Rate Master
+            </Button>
+          </div>
+          <div className="pz-action-row">
+            <Button variant="neutral" disabled>
+              New survey request · Coming soon
+            </Button>
+            <Button variant="neutral" disabled>
+              Customer recommendation · Open existing site below
+            </Button>
+          </div>
+          <details>
+            <summary>Route actions awaiting integration</summary>
+            <p>
+              New survey requests and new customer heads-ups require a general
+              customer request entry endpoint. Existing recommendations and
+              heads-ups can be opened below. Automatic matched-PO IPO issuance
+              and exception resolution are pending; existing approval controls
+              remain active.
+            </p>
+            <p>
+              Supported route plan: {routes.join("; ")}. Direct PO bypass needs
+              an approved agreement; it is not enabled for unconfigured
+              customers.
+            </p>
+          </details>
+        </header>
+      )}
       {manager && (
         <div className="coordination-heading">
           <div>
@@ -279,6 +421,25 @@ export function Coordinator({
         Waiting times show total elapsed time. Existing targets are unchanged; a
         business-hours calendar has not been configured.
       </p>
+      {!manager && (
+        <>
+          <WorkspaceFilters
+            rows={allTasks}
+            value={workspaceFilters}
+            onChange={setWorkspaceFilters}
+          />
+          {frameworkError && (
+            <p role="alert" className="form-error">
+              Pre-agreed site records could not load: {frameworkError}
+            </p>
+          )}
+          <p className="pz-caption">
+            My Tasks are shown for Coordination. Team Tasks require Management
+            permission. Existing forecast records are advance preparation—PO not
+            received; they do not authorise dispatch or installation.
+          </p>
+        </>
+      )}
       <h3>Work stages</h3>
       {manager && (
         <label className="approval-filter">
@@ -291,7 +452,7 @@ export function Coordinator({
         </label>
       )}
       <div className="stage-grid">
-        {stages.map((stage) => (
+        {workspaceStages.map((stage) => (
           <button
             key={stage}
             className={`stage-card ${filter === stage ? "selected" : ""}`}
@@ -301,12 +462,12 @@ export function Coordinator({
             }}
             aria-pressed={filter === stage}
           >
-            <span>{manager ? stage : stageLabel(stage)}</span>
+            <span>{bucketLabel(stage)}</span>
             <strong>
               {
-                (data?.tasks ?? []).filter(
+                allTasks.filter(
                   (t: any) =>
-                    t.stage === stage &&
+                    taskStage(t) === stage &&
                     (!approvalsOnly || t.responsibility === "Management"),
                 ).length
               }
@@ -320,9 +481,9 @@ export function Coordinator({
             </small>
             <small>
               {
-                (data?.tasks ?? []).filter(
+                allTasks.filter(
                   (t: any) =>
-                    t.stage === stage &&
+                    taskStage(t) === stage &&
                     overdue(t) &&
                     (!approvalsOnly || t.responsibility === "Management"),
                 ).length
@@ -353,7 +514,7 @@ export function Coordinator({
             >
               {label} (
               {data
-                ? (data.tasks ?? []).filter((t: any) =>
+                ? allTasks.filter((t: any) =>
                     value === "action" ? needsAction(t) : !needsAction(t),
                   ).length
                 : "—"}
@@ -394,9 +555,9 @@ export function Coordinator({
               }}
             >
               <option>All</option>
-              {stages.map((s) => (
+              {workspaceStages.map((s) => (
                 <option key={s} value={s}>
-                  {manager ? s : stageLabel(s)}
+                  {bucketLabel(s)}
                 </option>
               ))}
             </select>
@@ -446,7 +607,7 @@ export function Coordinator({
         )}
         {!data ? (
           <p>Loading pending work…</p>
-        ) : data.total === 0 ? (
+        ) : allTasks.length === 0 ? (
           <p>No pending work in this scope.</p>
         ) : (
           <div className="order-table-scroll">
@@ -493,9 +654,10 @@ export function Coordinator({
                       {t.training && <small>Training record</small>}
                     </td>
                     <td>
-                      {manager ? t.stage : stageLabel(t.stage)}
+                      {taskStage(t)}
                       <br />
-                      <small>{t.responsibility}</small>
+                      <small>{t.person ?? t.responsibility}</small>
+                      <small>{t.route}</small>
                     </td>
                     <td>
                       {duration(minutes(t.started_at))}
@@ -510,6 +672,7 @@ export function Coordinator({
                       )}
                     </td>
                     <td>
+                      <small>{t.blocker || "No blocker recorded"}</small>
                       {t.target_minutes
                         ? `${t.target_minutes} min target`
                         : t.preparation_minutes != null
@@ -527,9 +690,21 @@ export function Coordinator({
                       </StatusBadge>
                     </td>
                     <td>
-                      <Button variant="secondary" onClick={() => onOpen(t)}>
-                        {nextAction(t)}
+                      <Button
+                        variant="secondary"
+                        onClick={() =>
+                          t.framework ? setFrameworkId(t.id) : onOpen(t)
+                        }
+                      >
+                        {t.framework
+                          ? "Open recommendation / site record"
+                          : nextAction(t)}
                       </Button>
+                      {actionFailure?.id === t.id && (
+                        <p role="alert" className="form-error">
+                          {actionFailure?.message}
+                        </p>
+                      )}
                       {t.kind === "Sale confirmation" && (
                         <div className="bucket-actions">
                           {t.status ===
@@ -642,5 +817,21 @@ export function Coordinator({
         </>
       )}
     </section>
+  );
+}
+
+export function Coordinator({
+  session,
+  onOpen,
+}: {
+  session: Session;
+  onOpen: (task: any) => void;
+}) {
+  return (
+    <DepartmentWorkspace
+      session={session}
+      department="coordination"
+      onOpen={onOpen}
+    />
   );
 }

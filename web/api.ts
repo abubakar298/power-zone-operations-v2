@@ -1,7 +1,9 @@
+import {workflowFeedback} from './workflow-feedback.js';
 export interface User {
   id: string;
   email: string;
   displayName: string;
+  restrictedCostAccess?: boolean;
   role:
     | "Admin"
     | "Management"
@@ -56,7 +58,7 @@ export async function api<T>(
     );
   }
   try {
-    if (response.status === 204) return undefined as T;
+    if (response.status === 204) { if(options)workflowFeedback(path,options.body); return undefined as T; }
     let body: { message?: string; requestId?: string };
     try {
       body = await response.json();
@@ -76,6 +78,7 @@ export async function api<T>(
         response.status,
         `${body.message ?? "The request could not be completed."}${body.requestId ? ` Reference: ${body.requestId}` : ""}`,
       );
+    if(options)workflowFeedback(path,options.body);
     return body as T;
   } finally {
     clearTimeout(timeout);

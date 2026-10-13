@@ -182,7 +182,18 @@ export function NotificationCenter({
                   <button
                     className="notice-link"
                     onClick={() => {
-                      onOpen(n.target);
+                      if (
+                        typeof n.target.url === "string" &&
+                        /^\/api\/(project-workflow|orders)\/[A-Za-z0-9/-]+$/.test(
+                          n.target.url,
+                        )
+                      )
+                        window.open(
+                          n.target.url,
+                          "_blank",
+                          "noopener,noreferrer",
+                        );
+                      else onOpen(n.target);
                       void mark(n.id);
                       setOpen(false);
                     }}

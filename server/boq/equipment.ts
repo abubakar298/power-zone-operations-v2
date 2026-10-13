@@ -1,5 +1,6 @@
 /** Equipment identity is independent of the surrounding installation/sales scope. */
-function batteryBanks(totalKwh: number, inverterQty: number) {
+export type ApplicationScope = "SOLAR_HYBRID" | "BESS_UPS" | "DIRECT_PRODUCT" | "CNI_BESS";
+export function batteryBanks(totalKwh: number, inverterQty: number) {
   if (!Number.isSafeInteger(inverterQty) || inverterQty < 1 || inverterQty > 2)
     throw new Error("Use one or two approved inverter banks.");
   if (!Number.isSafeInteger(totalKwh) || totalKwh <= 0 || totalKwh % (5 * inverterQty) !== 0)

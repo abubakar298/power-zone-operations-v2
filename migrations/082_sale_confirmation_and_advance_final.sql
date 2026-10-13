@@ -1,0 +1,5 @@
+CREATE TABLE sale_confirmation_rules(version integer PRIMARY KEY,rule jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
+INSERT INTO sale_confirmation_rules VALUES(1,'{"customerPO":"upload-and-compare-exact-approved-basis","whatsAppApproval":"uploaded-approval-of-exact-approved-basis","accountsAcceptanceGate":false,"issue":"IPO-PT-to-Accounts-final-BOQ-to-Operations","advanceOnFinal":"Heads-up shared - final received"}',now());
+CREATE TRIGGER immutable_sale_confirmation_rule BEFORE UPDATE OR DELETE ON sale_confirmation_rules FOR EACH ROW EXECUTE FUNCTION prevent_master_version_mutation();
+CREATE TABLE headsup_advance_final_links(record_id uuid PRIMARY KEY REFERENCES headsup_advance_members(record_id),operations_id uuid UNIQUE NOT NULL REFERENCES operations_boq_issuances(id),created_by uuid NOT NULL REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now());
+CREATE TRIGGER immutable_advance_final_link BEFORE UPDATE OR DELETE ON headsup_advance_final_links FOR EACH ROW EXECUTE FUNCTION prevent_master_version_mutation();

@@ -83,7 +83,7 @@ export async function createDashboardSamples(
     // share one outer transaction, so a failed batch leaves no partial sample data.
     let timestamp = new Date(),
       savepoint = 0;
-    const rawQuery = async (sql: string, values?: any[]) => {
+    const query = async (sql: string, values?: any[]) => {
       if (sql === "BEGIN")
         return client.query(`SAVEPOINT sample_${++savepoint}`);
       if (sql === "COMMIT")
@@ -104,13 +104,6 @@ export async function createDashboardSamples(
         timestamp = new Date(timestamp.getTime() + 60000);
       }
       return client.query(sql, values);
-    };
-    // One client, one query at a time: repositories may issue reads in parallel.
-    let chain: Promise<unknown> = Promise.resolve();
-    const query = (sql: string, values?: any[]) => {
-      const run = chain.then(() => rawQuery(sql, values));
-      chain = run.catch(() => undefined);
-      return run;
     };
     const scoped = {
       query,
