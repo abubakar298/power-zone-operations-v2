@@ -331,3 +331,7 @@ Keep subsequent requests at the end of this queue. The already-started sample jo
 239. Remove Back to BOQs from Coordinator quotation-entry header only. Preserve BOQ list and navigation for other roles, with recoverable source history. No BOQ records deleted.
 
 240. Atif standard quotation Review now opens saved summary/history and unchanged quotation PDF, with download-only link and expandable existing revision settings. Submitted quotations accurately labelled Submitted, not Approved. Workflow-linked and legacy standard quotations use this view; other document types retain their native review. Typecheck passed; live verification pending.
+
+241. The five existing commercial items are C&I proposals. Applied the same Coordinator-only summary/history, saved preview, download and expandable revision-fields layout to CniProposals; existing C&I save/revision and pricing logic retained. Typecheck passed. Published 18f7c81 over 9a50e6a; no migrations/data/master/renderers changed. Live walkthrough pending.
+
+242. Ready to Send: only Approved Survey Groups and Approved Individual Documents below shared compact search/filters. Merge legacy approved quotations into individual table, exclude grouped sites from individual rows, retain group Excel and confirmed Unbind action. No database changes; verification pending.

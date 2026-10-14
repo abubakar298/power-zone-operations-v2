@@ -514,6 +514,8 @@ export function DepartmentWorkspace({
         filters,
       ),
   );
+  const readyToSend = department === "coordination" && page === coordinationBuckets[4];
+  const readyIndividuals = visible.filter(r => !r.data.readySendGrouped);
   const mergedReview = department === "coordination" && page === coordinationBuckets[2];
   async function schedulingSaved() {
     await load();
@@ -931,7 +933,7 @@ export function DepartmentWorkspace({
               }
             />
           )}
-          {!(
+          {!readyToSend && !(
             department === "coordination" && page === coordinationBuckets[5]
           ) &&
             (department !== "design" || page !== designBuckets[1]) && (
@@ -1083,12 +1085,35 @@ export function DepartmentWorkspace({
               </div>
             )}
 
-          {department === "coordination" && page === coordinationBuckets[4] && (
+          {readyToSend && <>
             <ReadySendGroups
               key={rows.map((r) => r.version).join("-")}
               session={session}
+              visibleRecordIds={visible.map(r => r.id)}
+              onUnbind={(id:string)=>{const record=rows.find(r=>r.id===id);if(record)void unbindApproved(record);}}
             />
-          )}
+            <section className="pz-panel pz-stack">
+              <h3>Approved Individual Documents</h3>
+              <div className="pz-table-scroll"><table className="pz-table">
+                <thead><tr><th>Customer / Site</th><th>Document</th><th>Status</th><th>Next action</th></tr></thead>
+                <tbody>
+                  {readyIndividuals.map(r=><tr key={r.id}>
+                    <td><strong>{r.customerCode} · {r.site}</strong><br/>{r.siteCode}</td>
+                    <td>{r.quotation?.number ?? r.references?.join(" · ") ?? r.routeLabel}</td>
+                    <td>Approved · Awaiting dispatch</td>
+                    <td><Button variant="secondary" onClick={()=>void open(r.id).catch(e=>setError(e.message))}>Review</Button></td>
+                  </tr>)}
+                  {visibleLegacy.map((t:any)=><tr key={`commercial-${t.id}`}>
+                    <td><strong>{t.customer} · {t.site}</strong></td>
+                    <td>{t.number ?? t.reference}</td>
+                    <td>{t.status}</td>
+                    <td><Button variant="secondary" onClick={()=>onOpen?.(t)}>Review</Button></td>
+                  </tr>)}
+                </tbody>
+              </table></div>
+              {!readyIndividuals.length&&!visibleLegacy.length&&<p>No approved individual documents match these filters.</p>}
+            </section>
+          </>}
           {department === "coordination" && page === coordinationBuckets[1] && (
             <SurveySubmissionGroups
               session={session}
@@ -1178,6 +1203,7 @@ export function DepartmentWorkspace({
           {department === "coordination" &&
             page !== coordinationBuckets[1] &&
             !mergedReview &&
+            !readyToSend &&
             visibleLegacy.length > 0 && (
               <section className="pz-panel">
                 <h3>Existing commercial work</h3>
