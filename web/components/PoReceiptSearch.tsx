@@ -1,3 +1,4 @@
+import {coordinationBuckets} from "../workspaces/project-routes.js";
 import { useState } from "react";
 import {
   WorkspaceFilters,
@@ -6,19 +7,19 @@ import {
 } from "./WorkspaceFilters.js";
 import { Field } from "../ui/Field.js";
 import { Button } from "../ui/Button.js";
-export function PoReceiptSearch({ records, onConfirm }: any) {
+export function PoReceiptSearch({ records, legacy = [], onConfirm, onLegacy }: any) {
   const [filters, setFilters] = useState({ ...emptyWorkspaceFilters }),
     [headsOnly, setHeadsOnly] = useState("all");
   const candidates = records
-    .filter((r: any) => r.stage === "customer_tracking")
+    .filter((r: any) => r.coordinationBucket === coordinationBuckets[5] || r.stage === "customer_tracking")
     .map((r: any) => ({
       ...r,
       site: `${r.site} (${r.siteCode})`,
-      reference: r.quotation?.number ?? r.references.join(" "),
+      reference: r.quotation?.number ?? (r.references??[]).join(" "),
       kind: r.quotation ? "Quotation" : "UBL survey / recommendation",
       customer: r.customer,
       original: r,
-    }));
+    })).concat(legacy.map((t:any)=>({...t,id:`legacy:${t.id}`,data:{},reference:t.number??t.reference??"",kind:"Quotation",quotation:{number:t.number??t.reference},original:t,legacy:true})));
   const visible = candidates.filter(
     (r: any) =>
       matchesWorkspace(r, filters) &&
@@ -68,11 +69,11 @@ export function PoReceiptSearch({ records, onConfirm }: any) {
                   {r.data.headsupReceived ? (
                     <span className="pz-headsup-tag">Heads-up Received</span>
                   ) : (
-                    "—"
+                    null
                   )}
                 </td>
                 <td>
-                  <Button variant="secondary" onClick={() => onConfirm(r.id)}>
+                  <Button variant="secondary" onClick={() => r.legacy ? onLegacy(r.original) : onConfirm(r.id)}>
                     Confirm Sale
                   </Button>
                 </td>

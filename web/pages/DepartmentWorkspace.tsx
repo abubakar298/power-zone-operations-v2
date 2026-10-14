@@ -551,8 +551,11 @@ export function DepartmentWorkspace({
         </section>
         <PoReceiptSearch
           records={rows}
-          onConfirm={(id: string) => void open(id)}
+          legacy={legacy.filter(t=>legacyBucket(t)===coordinationBuckets[5])}
+          onLegacy={async(t:any)=>{try{if(t.boq_revision_id){const r=await api<any>("/project-workflow/adopt",{csrf:session.csrfToken,body:{boqRevisionId:t.boq_revision_id}});await load();await open(r.id);}else onOpen?.(t);}catch(e){setError((e as Error).message);}}}
+          onConfirm={(id: string) => void open(id).catch(e=>setError(e.message))}
         />
+        <ErrorText error={error}/>
         <SavedHeadsupReports session={session} refresh={headsupRefresh} />
       </div>
     );
@@ -2842,7 +2845,7 @@ function RecordEditor({
   if (
     !design &&
     page === coordinationBuckets[6] &&
-    r.stage === "customer_tracking"
+    (r.stage === "customer_tracking" || r.coordinationBucket === coordinationBuckets[5])
   )
     return <ConfirmSaleForm {...{ session, detail, action, onBack }} />;
   if (!design && r.coordinationBucket === coordinationBuckets[4])

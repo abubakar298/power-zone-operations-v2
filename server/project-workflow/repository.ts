@@ -197,7 +197,9 @@ export class ProjectWorkflowRepository {
     const receiving =
       current.quotation?.status === "Submitted"
         ? "Management"
-        : rule?.stages[r.stage];
+        : current.coordinationBucket === "Customer Decision & Order Tracking"
+          ? "Coordinator"
+          : rule?.stages[r.stage];
     const department = u.role === "Admin" ? "Management" : u.role;
     if (receiving && department !== receiving)
       throw new HttpError(
@@ -3395,7 +3397,8 @@ export class ProjectWorkflowRepository {
     const { u, r } = await this.record(actor, id);
     this.requireRole(u, ["Coordinator"]);
     await this.requireReceivingDepartment(u, r);
-    if (r.stage !== "customer_tracking" && !(r.stage === "po_receipt" && r.route === "direct-framework" && !r.data.originalOrderPreserved))
+    const current = await this.decorate(r, u);
+    if (r.stage !== "customer_tracking" && current.coordinationBucket !== "Customer Decision & Order Tracking" && !(r.stage === "po_receipt" && r.route === "direct-framework" && !r.data.originalOrderPreserved))
       throw new HttpError(
         409,
         "Only customer follow-up projects can be confirmed.",
