@@ -519,7 +519,6 @@ export function DepartmentWorkspace({
   );
   const readyToSend = department === "coordination" && page === coordinationBuckets[4];
   const readyIndividuals = visible.filter(r => !r.data.readySendGrouped);
-  const mergedReview = department === "coordination" && page === coordinationBuckets[2];
   async function schedulingSaved() {
     await load();
     setDetail(undefined);
@@ -1073,7 +1072,7 @@ export function DepartmentWorkspace({
                           </td>
                         </tr>
                       ))}
-                    {mergedReview && visibleLegacy.map((t: any) => (
+                    {department === "coordination" && visibleLegacy.map((t: any) => (
                       <tr key={`commercial-${t.id}`}>
                         <td>
                           <strong>{t.customer || "Customer not recorded"} · {t.site}</strong>
@@ -1085,12 +1084,12 @@ export function DepartmentWorkspace({
                           ? `${Math.max(0, Math.floor((Date.now() - +new Date(t.started_at)) / 86400000))} days`
                           : "Not recorded"}</td>
                         <td>{t.blocker || "No recorded blocker"}</td>
-                        <td><Button variant="secondary" onClick={() => t.kind === "Sale confirmation" ? setQuotationReview({...t,sourceQuotationId:t.id}) : onOpen?.(t)}>Review</Button>{["Sale confirmation","C&I proposal"].includes(t.kind)&&<Button variant="success" onClick={()=>setApprovalTarget({quotationId:t.kind==="Sale confirmation"?t.id:undefined,cniId:t.kind==="C&I proposal"?t.id:undefined,number:t.number})}>Record Approval</Button>}</td>
+                        <td><Button variant="secondary" onClick={() => page === coordinationBuckets[3] ? void openRevision({...t,sourceQuotationId:t.id}) : t.kind === "Sale confirmation" ? setQuotationReview({...t,sourceQuotationId:t.id}) : onOpen?.(t)}>{page === coordinationBuckets[3] ? "Create Revision" : "Review"}</Button>{page === coordinationBuckets[2] && ["Sale confirmation","C&I proposal"].includes(t.kind)&&<Button variant="success" onClick={()=>setApprovalTarget({quotationId:t.kind==="Sale confirmation"?t.id:undefined,cniId:t.kind==="C&I proposal"?t.id:undefined,number:t.number})}>Record Approval</Button>}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {!visible.length && !(mergedReview && visibleLegacy.length) && <p>No sites match these filters.</p>}
+                {!visible.length && !(department === "coordination" && visibleLegacy.length) && <p>No sites match these filters.</p>}
               </div>
             )}
 
@@ -1209,60 +1208,7 @@ export function DepartmentWorkspace({
                 </section>
               );
             })}
-          {department === "coordination" &&
-            page !== coordinationBuckets[1] &&
-            !mergedReview &&
-            page !== coordinationBuckets[5] &&
-            !readyToSend &&
-            visibleLegacy.length > 0 && (
-              <section className="pz-panel">
-                <h3>Existing commercial work</h3>
-                <p>
-                  Preserved records use their current BOQ, costing and quotation
-                  actions. Approved orders can join this shared route.
-                </p>
-                {visibleLegacy.map((t: any) => (
-                  <div className="pz-action-row" key={t.id}>
-                    <span>
-                      {t.number} · {t.site} · {t.status ?? t.stage}
-                    </span>
-                    <Button
-                      onClick={() =>
-                        page === coordinationBuckets[3]
-                          ? void openRevision({ ...t, sourceQuotationId: t.id })
-                          : onOpen?.(t)
-                      }
-                    >
-                      {page === coordinationBuckets[3]
-                        ? "Create Revision"
-                        : "Open existing work"}
-                    </Button>
-                    {t.boq_revision_id && page !== coordinationBuckets[3] && (
-                      <Button
-                        variant="secondary"
-                        onClick={async () => {
-                          try {
-                            const r = await api<any>(
-                              "/project-workflow/adopt",
-                              {
-                                csrf: session.csrfToken,
-                                body: { boqRevisionId: t.boq_revision_id },
-                              },
-                            );
-                            await load();
-                            await open(r.id);
-                          } catch (e) {
-                            setError((e as Error).message);
-                          }
-                        }}
-                      >
-                        Open shared PO route
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </section>
-            )}
+
         </>
       )}
     </div>
