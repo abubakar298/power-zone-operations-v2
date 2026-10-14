@@ -36,6 +36,15 @@ function key(passphrase: string, salt: Buffer): Promise<Buffer> {
 }
 export async function exportBackup(pool: Pool, passphrase: string) {
   const client = await pool.connect();
+  // A checked-out pg client does not forward idle errors to the pool. Keep
+  // a listener while encryption/file I/O runs, and abort rather than crash.
+  const controller = new AbortController();
+  let connectionError: Error | undefined;
+  const onConnectionError = (error: Error) => {
+    connectionError = error;
+    controller.abort(error);
+  };
+  client.on("error", onConnectionError);
   const directory = await mkdtemp(join(tmpdir(), "pz-backup-"));
   const path = join(directory, "archive.pzb");
   let locked = false;
@@ -112,7 +121,9 @@ export async function exportBackup(pool: Pool, passphrase: string) {
     }
     const output = createWriteStream(path, { mode: 0o600 });
     output.write(header);
-    await pipeline(Readable.from(records()), createGzip(), cipher, output);
+    await pipeline(Readable.from(records()), createGzip(), cipher, output, {
+      signal: controller.signal,
+    });
     await appendFile(path, cipher.getAuthTag());
     await client.query("COMMIT");
     return {
@@ -129,7 +140,8 @@ export async function exportBackup(pool: Pool, passphrase: string) {
       await client
         .query("SELECT pg_advisory_unlock(742019099)")
         .catch(() => {});
-    client.release();
+    client.release(connectionError);
+    client.removeListener("error", onConnectionError);
   }
 }
 export async function decodeBackup(path: string, passphrase: string) {
