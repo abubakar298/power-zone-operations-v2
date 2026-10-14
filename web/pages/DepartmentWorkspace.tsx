@@ -329,8 +329,8 @@ export function DepartmentWorkspace({
     setError("");
     setCreating(undefined);
     const loaded = await api<any>(`/project-workflow/${id}`);
-    if (department === "coordination" && page === coordinationBuckets[2] && loaded.record.quotation?.id) {
-      setQuotationReview(loaded.record);
+    if (department === "coordination" && [coordinationBuckets[2],coordinationBuckets[5]].includes(page) && loaded.record.quotation?.id) {
+      setQuotationReview({...loaded.record,followupPreview:page===coordinationBuckets[5]});
       return;
     }
     setDetail(loaded);
@@ -935,7 +935,7 @@ export function DepartmentWorkspace({
               records={[...visible,...visibleLegacy.map(t=>({...t,id:`legacy:${t.id}`,data:{},siteCode:t.site_code??"",route:"quotation",routeLabel:t.number??t.reference??""}))]}
               groups={combinedFollowups}
               onOpen={(id: string) => {
-                if(id.startsWith("legacy:")){const task=visibleLegacy.find(t=>t.id===id.slice(7));if(task)onOpen?.(task);}
+                if(id.startsWith("legacy:")){const task=visibleLegacy.find(t=>t.id===id.slice(7));if(task){if(task.kind==="Sale confirmation")setQuotationReview({...task,sourceQuotationId:task.id,followupPreview:true});else onOpen?.({...task,followupPreview:true});}}
                 else void open(id).catch((e) => setError(e.message));
               }}
             />

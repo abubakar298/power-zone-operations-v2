@@ -861,6 +861,7 @@ export function Dashboard({
               {(view === "pricing" || view === "quotes") &&
                 (bucketTask?.kind === "C&I proposal" ? (
                   <CniProposals
+                    followupPreview={Boolean(bucketTask.followupPreview)}
                     reviewOnly
                     session={session}
                     masters={{ customers: [] }}
