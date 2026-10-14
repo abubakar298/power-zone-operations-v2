@@ -4,14 +4,14 @@ import {price} from '../server/commercial/engine.js';
 import {allocateDiscount} from '../server/orders/allocation.js';
 import {managementReview} from '../server/commercial/management-review.js';
 const boq:any={survey:{family:'solar-hybrid',saleType:'Cash Deal',cashGstTreatment:'Included in selling price'},customer:{name:'Customer'},engineering:{solutionId:'sample'},summary:[{name:'Solar Panels',cost:'100'},{name:'Structure',cost:'100'},{name:'BESS',cost:'100'}],epc:[],lines:[],total:'400'};
-const input:any={presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',markups:{solar:'10',structure:'10',bess:'10',earthing:'10',balance:'10',rest:'10'}};
+const input:any={saleType:'Cash Deal',cashGstTreatment:'Included in selling price',presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',markups:{solar:'10',structure:'10',bess:'10',earthing:'10',balance:'10',rest:'10'}};
 test('cash retained GST-equivalent increases selling and profit without a GST liability',()=>{
  const p=price(boq,'sample',input);
  assert.equal(p.total,'510.40'); assert.equal(p.tax,'0.00'); assert.equal(p.profit,'110.40');
  assert.equal(p.dealAccounting?.retainedGstEquivalent,'70.40');
  assert.equal(p.input.taxMode,'Tax Included');
- assert.equal(price({...boq,survey:{...boq.survey,cashGstTreatment:'No GST added'}},'sample',input).total,'440.00');
- const legacy=price({...boq,survey:{family:'solar-hybrid'}},'sample',{...input,taxMode:'Tax Included'});
+ assert.equal(price({...boq,survey:{...boq.survey,cashGstTreatment:'No GST added'}},'sample',{...input,cashGstTreatment:'No GST added'}).total,'440.00');
+ const legacy=price({...boq,survey:{family:'solar-hybrid'}},'sample',{...input,saleType:'Tax Deal',taxMode:'Tax Included'});
  assert.equal(legacy.total,'510.40'); assert.equal(legacy.tax,'70.40');assert.equal(legacy.profit,'40.00');
 });
 test('cash discounts stay out of solar and reduce retained selling without manufactured tax',()=>{

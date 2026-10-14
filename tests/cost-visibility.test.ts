@@ -9,20 +9,20 @@ test("BOQ projection keeps equipment, removes BESS rates and recomputes only the
  const before=JSON.stringify(boq),v=restrictedCostView({snapshot:boq});assert.equal(v.snapshot.total,"1000");assert.equal(v.snapshot.costVisibility,"Excluding BESS");assert.equal(v.snapshot.lines[0].rate,null);assert.equal(v.snapshot.lines[0].total,null);assert.equal(v.snapshot.lines[0].qty,"1");assert.equal(v.snapshot.lines[1].rate,"100");assert.equal(v.snapshot.summary.length,1);assert.equal(JSON.stringify(boq),before);
 });
 test("pricing projection preserves non-BESS review and selling totals while removing BESS costs, markup and overall profit",()=>{
- const v=restrictedCostView(pricing,true);assert.equal(v.cost,undefined);assert.equal(v.profit,undefined);assert.equal(v.rows[0].cost,undefined);assert.equal(v.rows[0].markup,undefined);assert.equal(v.rows[0].beforeTax,"472998.8");assert.equal(v.rows[1].cost,"1000");assert.equal(v.rows[1].markup,"25");assert.equal(v.input.markups.bess,undefined);assert.equal(v.policy.markups.bess,undefined);assert.equal(v.netTotal,pricing.netTotal);assert.equal(restrictedCostView({budgeted_markup:'21.75'}).budgeted_markup,undefined);
+ const v=restrictedCostView(pricing,true);assert.equal(v.cost,undefined);assert.equal(v.profit,undefined);assert.equal(v.rows[0].cost,null);assert.equal(v.rows[0].markup,null);assert.equal(v.rows[0].beforeTax,"472998.8");assert.equal(v.rows[1].cost,"1000");assert.equal(v.rows[1].markup,"25");assert.equal(v.input.markups.bess,undefined);assert.equal(v.policy.markups.bess,undefined);assert.equal(v.netTotal,pricing.netTotal);assert.equal(restrictedCostView({budgeted_markup:'21.75'}).budgeted_markup,undefined);
 });
 test("outbound HTTP boundary uses authenticated role at send time, including history, pricing, masters and nested handoffs",async()=>{
- const app=express();app.use(financialVisibility);app.use((req,_res,next)=>{(req as any).authSession={user:{role:req.get("X-Fixture-Role")}};next();});
+ const app=express();app.use(financialVisibility);app.use((req,_res,next)=>{(req as any).authSession={user:{role:req.get("X-Fixture-Role"),restrictedCostAccess:req.get("X-Fixture-Cost-Access")==="yes"}};next();});
  app.get('/api/boqs/:id',(_req,res)=>res.json({snapshot:boq}));app.get('/api/boqs/:id/history',(_req,res)=>res.json({revisions:[{id:'original',total:'364076'}]}));app.get('/api/commercial/pricing/:id',(_req,res)=>res.json({snapshot:pricing}));app.get('/api/masters',(_req,res)=>res.json({rates:[{key:'BAT-HV-05 KW WO BMS',rate:'231962'},{key:'Cable',rate:'100'}]}));app.get('/api/operations/source',(_req,res)=>res.json({nested:{snapshot:boq}}));
  for(const role of ['Coordinator','Operations','Design','Employee']){
   const get=(path:string)=>request(app).get(path).set('X-Fixture-Role',role);
   assert.equal((await get('/api/boqs/fixture')).body.snapshot.lines[0].rate,null);
   assert.equal((await get('/api/boqs/fixture/history')).body.revisions[0].total,undefined);
-  assert.equal((await get('/api/commercial/pricing/fixture')).body.snapshot.rows[0].cost,undefined);
+  assert.equal((await get('/api/commercial/pricing/fixture')).body.snapshot.rows[0].cost,null);
   assert.equal((await get('/api/masters')).body.rates.length,1);
   assert.equal((await get('/api/operations/source')).body.nested.snapshot.total,'1000');
  }
- for(const role of ['Admin','Management','Accounts']){assert.equal((await request(app).get('/api/boqs/fixture').set('X-Fixture-Role',role)).body.snapshot.total,'364076');assert.equal((await request(app).get('/api/commercial/pricing/fixture').set('X-Fixture-Role',role)).body.snapshot.rows[0].markup,'30');}
+ for(const role of ['Admin','Management','Accounts']){assert.equal((await request(app).get('/api/boqs/fixture').set('X-Fixture-Role',role).set('X-Fixture-Cost-Access','yes')).body.snapshot.total,'364076');assert.equal((await request(app).get('/api/commercial/pricing/fixture').set('X-Fixture-Role',role).set('X-Fixture-Cost-Access','yes')).body.snapshot.rows[0].markup,'30');}
 });
 test('all registered BESS equipment rate families are confidential',()=>{for(const key of ['HYB-SP-006','HYB-3P-020','BAT-LV-05 KW WO BMS','BAT-HV-05 KW WO BMS','CH-BMS-LV','CH-BMS-HV'])assert.ok(isBessEquipment({key}));assert.equal(canSeeBessCost('Coordinator'),false);assert.equal(canSeeBessCost('Management'),true);});
 
@@ -34,6 +34,7 @@ test('real authenticated API hides BESS masters/policy and costing while retaini
  const survey=surveySchema.parse({customerId:3,siteName:'Privacy isolated fixture',siteCode:'PRIVACY',location:'Lahore',panelQty:60,panelWattage:'645',structure:'Elevated',dcMetres:'360',acInverter16:'15',acInverter25:'0',acPanel16:'0',acPanel25:'20',earth25:'20',earth6:'90',earth10:'90',inverter:'2×15 kW',batteryKwh:40,smartMeter:true,genset:true,brands:{solar:brand('Solar Panel','Any of the Above'),inverter:brand('Inverter','Chint Power'),battery:brand('Battery & BMS','Chint Power'),cable:brand('Cable','Newage Cables'),switchgear:brand('Switchgear','CHINT')},preparedBy:'Fixture'});
  for(const role of ['Coordinator','Management','Admin']){
  const user=randomUUID(),token=randomBytes(32).toString('base64url'),csrf=randomUUID();await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,'unused',$3)",[user,`${user}@example.test`,role]);await db.pool.query("INSERT INTO auth_sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",[digest(token),user,csrf]);
+ if(role!=='Coordinator')await db.pool.query("INSERT INTO restricted_cost_access(user_id,granted_reason) VALUES($1,'Explicit isolated test capability')",[user]);
  const cookie=`pz_session=${token}`;const master=await request(app).get('/api/masters').set('Cookie',cookie).expect(200);assert.equal(master.body.rates.some((r:any)=>isBessEquipment(r)),role!=='Coordinator');
  const history=await request(app).get('/api/masters/rates/history?key=HYB-3P-012').set('Cookie',cookie);assert.equal(history.status,role==='Coordinator'?403:200);
  if(role==='Coordinator'){const writeRate=await request(app).post('/api/masters/rates').set('Cookie',cookie).set('Origin',origin).set('X-CSRF-Token',csrf).send({id:'HYB-3P-012',version:1,values:{rate:'1',status:'Active',notes:'Fixture'}});assert.equal(writeRate.status,403);}

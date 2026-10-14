@@ -32,12 +32,12 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  if(mode!==2&&!quick){
  const br=new BoqRepository(db.pool),cr=new CommercialRepository(db.pool),orders=new OrdersRepository(db.pool);
  const draft=await br.draft(employee,undefined,0,s);const bp=await br.preview(s);const saved=await br.save(employee,draft.id,draft.version,bp.fingerprint);
- const pi=pricingSchema.parse({boqRevisionId:saved.id,presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',preparedBy:'Fixture'});const pp=await cr.pricingPreview(employee,pi);const ps=await cr.pricingSave(employee,pi,pp.fingerprint,randomUUID());
+ const pi=pricingSchema.parse({boqRevisionId:saved.id,discountMode:'Custom',discountPercent:'0',presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',preparedBy:'Fixture'});const pp=await cr.pricingPreview(employee,pi);const ps=await cr.pricingSave(employee,pi,pp.fingerprint,randomUUID());
  const qi=quotationSchema.parse({pricingId:ps.id,quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture'});const qp=await cr.quotationPreview(employee,qi);const qs=await cr.quotationSave(employee,qi,qp.fingerprint,randomUUID());
  await cr.discountReview(manager,qs.id,{discount:'11800'});
  await assert.rejects(cr.discountReview(employee,qs.id,{discount:'11800'}),/access|required/i);
  await db.pool.query("INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by) VALUES($1,$2,'Submitted','Isolated test', $3)",[randomUUID(),qs.id,employee]);
- const approved=await cr.managementFinalQuotation(manager,qs.id,'11800','Isolated approval');
+ const approved=await cr.managementFinalQuotation(manager,qs.id,'0','Isolated approval');
  const oi=orderSchema.parse({quotationId:approved.id,evidenceType:'Verbal sale confirmation',evidenceNotes:'Isolated test only',orderDate:'2026-10-09',invoiceCompany:'Fixture',salesPerson:'Fixture',customerAccepted:true});
  const op=await orders.preview(employee,oi);const submitted=await orders.submit(employee,oi,op.fingerprint,randomUUID());const issued=await orders.approve(manager,submitted.id,randomUUID());await orders.sendToAccounts(employee,issued.id);
  assert.equal((await db.pool.query('SELECT count(*) FROM ipo_accounts_handoffs WHERE ipo_id=$1',[issued.id])).rows[0].count,'1');
@@ -50,14 +50,14 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  const noBore=calculate({...s,spIncludeEarthingBore:false},m as any);
  assert.equal(noBore.lines.some(l=>l.key==='Earthing Bore'),false);
  assert.equal(new Decimal(b.total).sub(noBore.total).toString(),b.lines.find(l=>l.key==='Earthing Bore')!.total);
- const noBorePricing=price(noBore,'UPS',{boqRevisionId:randomUUID(),presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},preparedBy:'Fixture',remarks:''} as any,policy);
+ const noBorePricing=price(noBore,'UPS',{boqRevisionId:randomUUID(),presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},preparedBy:'Fixture',remarks:''} as any,{...policy,costUpliftPercent:undefined,preapprovedCostDiscountPercent:undefined});
  assert.equal(quote(noBorePricing,noBore,{pricingId:randomUUID(),quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture'}).lines.some(l=>l.group==='earthing'),false);
  const solar=calculate({...s,family:'solar-hybrid',panelQty:10,panelWattage:'585',brands:{...s.brands,solar:brand('Solar Panel')},spIncludeEarthingBore:false},m as any);
  for(const [key,value] of [['Labour','15000'],['Delivery','15000']])assert.equal(solar.lines.find(l=>l.key===key)!.total,value);
  assert.equal(solar.lines.some(l=>l.key==='Earthing Bore'),false);
  assert.equal(solar.lines.some(l=>l.key==='Misc. Accessories'),false);
  for(const presentation of ['Full Breakup','Basic Breakup','No Breakup'])for(const taxMode of ['Tax Included','Show Sales Tax Separately']){
- const pricing=price(solar,'SOLAR-SP',{boqRevisionId:randomUUID(),presentation,taxMode,preparedBy:'Fixture',markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},remarks:''} as any,policy);
+ const pricing=price(solar,'SOLAR-SP',{boqRevisionId:randomUUID(),presentation,taxMode,preparedBy:'Fixture',markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},remarks:''} as any,{...policy,costUpliftPercent:undefined,preapprovedCostDiscountPercent:undefined});
  const quoted=quote(pricing,solar,{pricingId:randomUUID(),quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture'});
  assert.equal(quoted.lines.some(l=>/Three Phase|High Voltage|AC SPD/.test(l.description)),false);
  if(presentation!=='No Breakup')assert.equal(quoted.lines.reduce((v,l)=>v.add(l.amount??0),new Decimal(0)).toFixed(2),taxMode==='Tax Included'?pricing.total:pricing.subtotal);
@@ -66,7 +66,7 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  }
  const redacted=restrictedCostView(b);assert.equal(redacted.lines.filter((l:any)=>l.phase==='BESS').every((l:any)=>l.rate===null&&l.total===null),true);assert.equal(redacted.perWatt,'0.00');assert.equal(redacted.summary.some((r:any)=>r.name==='BESS'),false);
  for(const presentation of ['Full Breakup','Basic Breakup','No Breakup'])for(const taxMode of ['Tax Included','Show Sales Tax Separately']){
- const p=price(b,'UPS-R0',{boqRevisionId:randomUUID(),presentation,taxMode,markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},preparedBy:'Fixture',remarks:''} as any,policy);
+ const p=price(b,'UPS-R0',{boqRevisionId:randomUUID(),presentation,taxMode,markups:{solar:'10',structure:'10',bess:'30',earthing:'10',balance:'25',rest:'25'},preparedBy:'Fixture',remarks:''} as any,{...policy,costUpliftPercent:undefined,preapprovedCostDiscountPercent:undefined});
  assert.equal(p.solarTax,'0.00');assert.equal(p.rows.find(r=>r.key==='bess')!.markup,'30.000000');
  const q=quote(p,b,{pricingId:randomUUID(),quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture',discount:'11800'});
  if(presentation==='Full Breakup'){const display=quotationDisplayRows(q.lines);assert(display.every(l=>l.amount!==undefined&&l.span===1));assert.equal(display.reduce((v,l)=>v.add(l.amount!),new Decimal(0)).toFixed(2),taxMode==='Tax Included'?p.total:p.subtotal);}

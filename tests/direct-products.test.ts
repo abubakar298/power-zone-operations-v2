@@ -33,7 +33,7 @@ test('Direct Product Sale uses approved equipment, policy prices, safe visibilit
  assert.throws(()=>calculate({...s,directProducts:[{kind:'bess',key:'6-10',qty:'1.5'}]},m as any),/whole/);
  assert.throws(()=>calculate({...s,directProducts:[{kind:'item',key:'Delivery',qty:'1'}]},m as any),/products only/);
  for(const presentation of ['No Breakup','Full Breakup'] as const)for(const taxMode of ['Tax Included','Show Sales Tax Separately'] as const)for(const groupBessPackages of [false,true]){
- const pi=pricingSchema.parse({boqRevisionId:randomUUID(),presentation,taxMode,groupBessPackages,preparedBy:'Fixture'});const p=price(b,'PRODUCT-R0',pi,policy);
+ const pi=pricingSchema.parse({boqRevisionId:randomUUID(),presentation,taxMode,groupBessPackages,preparedBy:'Fixture'});const p=price(b,'PRODUCT-R0',pi,{...policy,costUpliftPercent:undefined,preapprovedCostDiscountPercent:undefined});
  assert.equal(p.itemPricing!.find(l=>l.key==='HYB-SP-006')!.markup,'30');assert.equal(p.itemPricing!.find(l=>l.key==='Extra Smart Meter')!.markup,'25');
  const q=quote(p,b,{pricingId:randomUUID(),quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture',discount:'11800'});
  assert.equal(q.lines.length,5);assert.equal(q.lines[0].qty,'2');assert.equal(q.lines[1].qty,'4');assert.equal(q.lines[3].qty,'1');
@@ -48,10 +48,10 @@ test('Direct Product Sale uses approved equipment, policy prices, safe visibilit
  const unclassified={...policy,itemCategories:{...policy.itemCategories}};delete unclassified.itemCategories['Extra Smart Meter'];assert.throws(()=>price(b,'PRODUCT',pricingSchema.parse({boqRevisionId:randomUUID(),presentation:'Full Breakup',taxMode:'Tax Included',preparedBy:'Fixture'}),unclassified),/classification required/);
  const br=new BoqRepository(db.pool),cr=new CommercialRepository(db.pool),orders=new OrdersRepository(db.pool);
  const draft=await br.draft(employee,undefined,0,s);const bp=await br.preview(s);const saved=await br.save(employee,draft.id,draft.version,bp.fingerprint);
- const pi=pricingSchema.parse({boqRevisionId:saved.id,presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',groupBessPackages:true,preparedBy:'Fixture'});const pp=await cr.pricingPreview(employee,pi);const ps=await cr.pricingSave(employee,pi,pp.fingerprint,randomUUID());
+ const pi=pricingSchema.parse({boqRevisionId:saved.id,discountMode:'Custom',discountPercent:'0',presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',groupBessPackages:true,preparedBy:'Fixture'});const pp=await cr.pricingPreview(employee,pi);const ps=await cr.pricingSave(employee,pi,pp.fingerprint,randomUUID());
  const qi=quotationSchema.parse({pricingId:ps.id,quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture'});const qp=await cr.quotationPreview(employee,qi);const qs=await cr.quotationSave(employee,qi,qp.fingerprint,randomUUID());
  await assert.rejects(cr.discountReview(employee,qs.id,{discount:'11800'}),/access|required/i);await cr.discountReview(manager,qs.id,{discount:'11800'});
- await db.pool.query("INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by) VALUES($1,$2,'Submitted','Isolated fixture',$3)",[randomUUID(),qs.id,employee]);const approved=await cr.managementFinalQuotation(manager,qs.id,'11800','Fixture approval');
+ await db.pool.query("INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by) VALUES($1,$2,'Submitted','Isolated fixture',$3)",[randomUUID(),qs.id,employee]);const approved=await cr.managementFinalQuotation(manager,qs.id,'0','Fixture approval');
  const oi=orderSchema.parse({quotationId:approved.id,evidenceType:'Verbal sale confirmation',evidenceNotes:'Isolated fixture',orderDate:'2026-10-09',invoiceCompany:'Fixture',salesPerson:'Fixture',customerAccepted:true});const op=await orders.preview(employee,oi);const submitted=await orders.submit(employee,oi,op.fingerprint,randomUUID());const issued=await orders.approve(manager,submitted.id,randomUUID());await orders.sendToAccounts(employee,issued.id);
  assert.equal((await db.pool.query('SELECT count(*) FROM ipo_accounts_handoffs WHERE ipo_id=$1',[issued.id])).rows[0].count,'1');assert.equal((await br.get(saved.id)).snapshot.survey.family,'direct-product');
  }finally{await db.close();}

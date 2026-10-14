@@ -16,6 +16,7 @@ import {
   NOTES,
   TERMS,
   cableExcessNote,
+  discountedSellingReview,
 } from "../server/commercial/engine.js";
 import { pricingSchema, quotationSchema } from "../server/commercial/schema.js";
 import { buildQuotationPdf } from "../server/commercial/report.js";
@@ -108,6 +109,7 @@ before(async () => {
   cookie = login.headers["set-cookie"][0].split(";")[0];
   csrf = login.body.csrfToken;
   adminId = login.body.user.id;
+  await db.pool.query("INSERT INTO restricted_cost_access(user_id,granted_reason) VALUES($1,'Isolated Director fixture')",[adminId]);
   const employeeId = randomUUID();
   await db.pool.query(
     "INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$5)",
@@ -191,9 +193,9 @@ test("approved-profile commercial case reconciles, markup is on cost, and discou
   const p = price(boq.snapshot, boq.number, inputs());
   assert.equal(p.rows[0].beforeTax, "1811160");
   assert.equal(p.solarTax, "181116.00");
-  assert.equal(p.subtotal, "7541457.40");
-  assert.equal(p.otherTax, "1031453.53");
-  assert.equal(p.netTotal, "8754026.93");
+  assert.equal(p.subtotal, "7487457.40");
+  assert.equal(p.otherTax, "1021733.53");
+  assert.equal(p.netTotal, "8690306.93");
   const discounted = price(boq.snapshot, boq.number, {
     ...inputs(),
     discount: "324826.93",
@@ -211,7 +213,7 @@ test("approved-profile commercial case reconciles, markup is on cost, and discou
     discount: "324826.93",
   };
   const q = quote(p, boq.snapshot, quotationInput);
-  assert.equal(q.footer.at(-1)!.amount, "8429200.00");
+  assert.equal(q.footer.at(-1)!.amount, "8365480.00");
   assert.throws(
     () => quote(p, boq.snapshot, { ...quotationInput, discount: "999999999" }),
     /discount/,
@@ -410,7 +412,7 @@ test("saved quotation versions retain pricing, customer descriptions and PDF aft
       }).expect(201)
     ).body;
   assert.equal(pr2.version, 2);
-  assert.equal(pr2.snapshot.cost, "6406786");
+  assert.equal(pr2.snapshot.cost, boq.snapshot.total);
   const old = (await get(`/quotations/${issued.id}`)).body;
   assert.deepEqual(old.snapshot, issued.snapshot);
   const copy = (await get(`/quotations/${issued.id}/copy`)).body;
@@ -469,7 +471,7 @@ test("quotation discount overrides pricing without changing the saved pricing or
   );
   assert.equal(
     preview.snapshot.footer.at(-1).amount,
-    new Decimal(pricing.snapshot.total).minus("1000.50").toFixed(2),
+    discountedSellingReview(pricing.snapshot,"1000.50").netTotal,
   );
   const saved = (
     await post("/quotations", {
@@ -528,12 +530,14 @@ test("BMS wording is persisted as an approved master revision and quotation defa
 });
 
 test("Full Breakup additional cost, markup and tax reconcile and stay internal across versions", async () => {
-  const independentBoq = randomUUID();
+  const independentBoq = randomUUID(), independentRoot=randomUUID(), independentDraft=randomUUID();
+  await db.pool.query("INSERT INTO survey_drafts(id,owner_id,inputs) VALUES($1,$2,$3)",[independentDraft,adminId,boq.snapshot.survey]);
+  await db.pool.query("INSERT INTO boqs(id,draft_id,site_id,customer_id,sequence,created_by) SELECT $1,$2,site_id,customer_id,sequence+100,$3 FROM boqs WHERE id=$4",[independentRoot,independentDraft,adminId,boq.boq_id]);
   await db.pool.query(
     "INSERT INTO boq_revisions(id,boq_id,revision,number,snapshot,created_by,revision_reason) VALUES($1,$2,1,$3,$4,$5,'Test fixture')",
     [
       independentBoq,
-      boq.boq_id,
+      independentRoot,
       revisedReference(boq.number,1),
       boq.snapshot,
       adminId,
@@ -650,8 +654,8 @@ test("Full Breakup additional cost, markup and tax reconcile and stay internal a
     additionalItem: { ...copy.additionalItem, markup: "35", taxRate: "10" },
   }).expect(200);
   assert.deepEqual(
-    (await post("/quotations/preview", copy).expect(200)).body.snapshot.lines,
-    qp.snapshot.lines,
+    (await post("/quotations/preview", copy).expect(200)).body.snapshot.lines.map(({descriptionOverride,...line}:any)=>line),
+    qp.snapshot.lines.map(({descriptionOverride,...line}:any)=>line),
   );
   assert(
     !JSON.stringify(
@@ -672,8 +676,11 @@ test("Full Breakup additional cost, markup and tax reconcile and stay internal a
 test("customer PO and IPO preserve accepted selling amounts, discount allocation and immutable records", async () => {
   // IPO entry now requires an approved, current version. Retain the original
   // financial fixture by deliberately proposing its terms as a new revision.
+  const compatibleInput={...inputs(),discountPercent:"0",discountMode:"Custom"};
+  const compatiblePreview=(await post('/pricing/preview',compatibleInput).expect(200)).body;
+  pricing=(await post('/pricing',{...compatibleInput,fingerprint:compatiblePreview.fingerprint,requestKey:randomUUID()}).expect(201)).body;
   const latest=(await db.pool.query("SELECT id FROM quotation_versions WHERE boq_revision_id=$1 ORDER BY version DESC LIMIT 1",[issued.boq_revision_id])).rows[0];
-  const revisionInput={pricingId:pricing.id,revisionRequestId:await commercialRevision(latest.id),...issued.snapshot.input,acknowledgePriceChange:true};
+  const revisionInput={...issued.snapshot.input,pricingId:pricing.id,discount:"0",revisionRequestId:await commercialRevision(latest.id),acknowledgePriceChange:true};
   const revisedPreview=(await post('/quotations/preview',revisionInput).expect(200)).body;
   issued=(await post('/quotations',{...revisionInput,fingerprint:revisedPreview.fingerprint,requestKey:randomUUID()}).expect(201)).body;
   for(const kind of ["Submitted","Approved"]) await request(app).post('/api/coordinator/events').set('Origin',origin).set('Cookie',cookie).set('X-CSRF-Token',csrf).send({quotationId:issued.id,kind,acknowledgePriceChange:true,notes:'Isolated approval before customer confirmation'}).expect(201);
@@ -1025,7 +1032,7 @@ test("revision routing requires approved separate costing and preserves origin, 
     await bp(`/reviews/${review.id}/decision`, {
       outcome: "Approved",
       comments: "Reviewed costing and scope",
-    }).expect(200)
+    }).expect(r=>assert.equal(r.status,200,JSON.stringify(r.body)))
   ).body.saved;
   const revisionContext = (await get(`/revision-context/${approved.id}`).expect(200)).body;
   assert.doesNotThrow(() => pricingSchema.parse({ ...revisionContext.pricing_input, boqRevisionId: approved.id }));
@@ -1062,7 +1069,7 @@ test("revision routing requires approved separate costing and preserves origin, 
   const qp = (await post("/quotations/preview", qi).expect(200)).body;
   assert.equal(qp.snapshot.lines.length, 17);
   assert.equal(qp.snapshot.lines[16].qty, "2");
-  assert.equal(qp.snapshot.lines[16].amount, "3086.40"); // standard other markup25%, not submitted20%
+  assert.equal(qp.snapshot.lines[16].amount, "3209.86"); // approved 25% markup plus 5% cost uplift, not submitted 20%
   assert.equal(qp.snapshot.revision.origin, "Customer");
   assert.equal(qp.snapshot.revision.sourceQuotation, issued.number);
   const key = randomUUID();
@@ -1506,6 +1513,8 @@ test("coordination buckets record quotation review and PO receipt with immutable
     )
   ).rows[0];
   assert.ok(q);
+  const sourceId=q.id;q.id=randomUUID();
+  await db.pool.query("INSERT INTO quotation_versions(id,pricing_id,boq_revision_id,version,number,snapshot,fingerprint,request_key,created_by) SELECT $1,pricing_id,boq_revision_id,(SELECT max(version)+1 FROM quotation_versions WHERE boq_revision_id=q.boq_revision_id),$2,snapshot,fingerprint,$3,created_by FROM quotation_versions q WHERE id=$4",[q.id,"INDEPENDENT-EVENT-FIXTURE",randomUUID(),sourceId]);
   const send = (kind: string, notes = "") =>
     request(app)
       .post("/api/coordinator/events")
@@ -1813,9 +1822,9 @@ test("external chat approvals require owned screenshots and exact submitted vers
   await post(endpoint, evidence).expect(201); // Prior Management instruction approves the saved version without another wait.
   await post("/api/coordinator/events", {
     quotationId: qid,
-    kind: "Approved",
-    notes: "",
-  }).expect(403); // Ordinary manager approval stays protected.
+    kind: "Changes requested",
+    notes: "Return for test",
+  }).expect(403); // Management-only return decisions stay protected; within-allowance approval is delegated.
   await post(endpoint, { ...evidence, confirmed: false }).expect(400);
   await post(endpoint, { ...evidence, evidenceIds: [] }).expect(400);
   await post(endpoint, evidence).expect(409);

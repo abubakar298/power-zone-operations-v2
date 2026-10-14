@@ -19,6 +19,13 @@ import { allocateDiscount } from "./allocation.js";
 import { peachtreeDivision } from "./peachtree.js";
 import type { OrderInput } from "./schema.js";
 
+export const IPO_ALLOCATION_PENDING = "IPO allocation is paused pending the Director’s discount-allocation decision. The accepted quotation remains unchanged.";
+export function isPendingIpoAllocation(error: unknown) {
+  return error instanceof HttpError && error.status === 422 &&
+    (error.message === IPO_ALLOCATION_PENDING ||
+      error.message === "Quotation totals do not reconcile with its approved selling amounts.");
+}
+
 export class OrdersRepository {
   constructor(private pool: Pool) {}
   async quotationTypes(ipoIds: string[]) {
@@ -158,8 +165,9 @@ export class OrdersRepository {
           : p.snapshot.rows.find((r: any) => r.key === l.group).taxRate,
     }));
     const beforeTaxDiscount=p.snapshot.input.discountPercent!==undefined && (new Decimal(footer('Special Discount')??'0').gt(0)||p.snapshot.input.roundedTotal!==undefined);
-    if(beforeTaxDiscount)throw new HttpError(422,'This quotation uses discount before GST. Its IPO allocation is awaiting the Director’s decision; the accepted quotation remains unchanged.');
-    const allocation = allocateDiscount(
+    if(beforeTaxDiscount)throw new HttpError(422,IPO_ALLOCATION_PENDING);
+    let allocation: ReturnType<typeof allocateDiscount>;
+    try { allocation = allocateDiscount(
       lines,
       subtotal,
       tax10,
@@ -167,7 +175,10 @@ export class OrdersRepository {
       footer("Special Discount") ?? "0.00",
       footer("Net Total"),
       cashDeal(p.snapshot.input),
-    );
+    ); } catch (error) {
+      if (isPendingIpoAllocation(error)) throw new HttpError(422, IPO_ALLOCATION_PENDING);
+      throw error;
+    }
     const document = await this.checkDocument(c, actor, input.documentId);
     const snapshot = {
       engineVersion: 1,

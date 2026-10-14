@@ -47,9 +47,13 @@ before(async () => {
     .expect(200);
   cookie = l.headers["set-cookie"][0].split(";")[0];
   csrf = l.body.csrfToken;
+  await db.pool.query("INSERT INTO restricted_cost_access(user_id,granted_reason) VALUES($1,'Isolated full-cost regression fixture')",[l.body.user.id]);
   masters = await new MastersRepository(db.pool).list();
   // Golden historical fixture runs the legacy profile; new owner-approved profiles have a dedicated integration suite.
   masters.engineeringProfiles = [];
+  const fixture = JSON.parse(await (await import("node:fs/promises")).readFile(new URL("./fixtures/historical-costings.json",import.meta.url),"utf8"));
+  const historical=fixture.cases.find((c:any)=>c.number.includes("5850"));
+  for(const line of historical.lines){const rate=masters.rates.find((r:any)=>r.key===line.key);if(rate)rate.rate=line.rate;}
   masters.rules.find((r:any)=>r.key==="engineering-20").value=2;
   const brand = (cat: string, name: string) =>
     masters.brands.find((b: any) => b.category === cat && b.name === name).id;
@@ -213,7 +217,7 @@ test("survey authentication, validation, persisted drafts and concurrent save is
     [200, 200],
   );
   assert.equal(responses[0].body.id, responses[1].body.id);
-  assert.match(responses[0].body.number, /^CPZ-BOQ-\d{2}-001-0003-003 \(BAFL-05850\)$/);
+  assert.match(responses[0].body.number, /^CPZ-PBQ-\d{2}-001-0003-003 \(BAFL-05850\)$/);
   assert.equal(
     (
       await db.pool.query("SELECT code FROM sites WHERE id=$1", [
@@ -250,13 +254,13 @@ test("master changes cannot rewrite snapshots and stale previews are rejected", 
     .get(`/api/boqs/${saved.id}`)
     .set("Cookie", cookie)
     .expect(200);
-  assert.equal(r.body.snapshot.total, "6406786");
+  assert.equal(r.body.snapshot.total, "6361786");
   assert.equal(
     r.body.snapshot.lines.find((l: any) => l.key === "Solar PV Modules").rate,
     "39",
   );
   const recalculated = (await post("/preview", s)).body;
-  assert.equal(recalculated.snapshot.total, "6445486");
+  assert.equal(recalculated.snapshot.total, "6400486");
   const submitted = (
     await post("/reviews", {
       draftId: d.id,
