@@ -5130,12 +5130,7 @@ function TechnicalReview({ session, refs, detail, action }: any) {
         batteryKwh: Number(f.get("batteryKwh") ?? 0),
         smartMeter: f.has("smartMeter"),
         genset: f.has("genset"),
-        brands: Object.fromEntries(
-          ["solar", "inverter", "battery", "cable", "switchgear"].map((k) => [
-            k,
-            Number(f.get(`brand-${k}`)),
-          ]),
-        ),
+        brands: { ...(s.brands ?? {}) },
         preparedBy: session.user.displayName,
       };
     for (const k of Object.keys(quantities))
@@ -5205,7 +5200,7 @@ function TechnicalReview({ session, refs, detail, action }: any) {
           <p>
             {framework
               ? "Review the exact approved customer configuration. Financial snapshots stay fixed."
-              : "Select approved database rules, configuration and brands. Costs displayed below exclude restricted equipment."}
+              : "Review the approved engineering rules, configuration and survey quantities."}
           </p>
           {framework ? (
             <>
@@ -5278,39 +5273,6 @@ function TechnicalReview({ session, refs, detail, action }: any) {
                     required
                   />
                 ))}
-                {["solar", "inverter", "battery", "cable", "switchgear"].map(
-                  (k) => (
-                    <label key={k}>
-                      {label(k)} brand
-                      <select
-                        name={`brand-${k}`}
-                        defaultValue={s.brands?.[k] ?? ""}
-                        required
-                      >
-                        <option value="">Select approved brand</option>
-                        {refs.brands
-                          .filter(
-                            (b: any) =>
-                              b.category ===
-                              (
-                                {
-                                  solar: "Solar",
-                                  inverter: "Inverter",
-                                  battery: "Battery & BMS",
-                                  cable: "Cable",
-                                  switchgear: "Switchgear",
-                                } as Record<string, string>
-                              )[k],
-                          )
-                          .map((b: any) => (
-                            <option key={b.id} value={b.id}>
-                              {b.name}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                  ),
-                )}
               </div>
               <label>
                 <input

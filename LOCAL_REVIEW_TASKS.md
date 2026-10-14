@@ -335,3 +335,7 @@ Keep subsequent requests at the end of this queue. The already-started sample jo
 241. The five existing commercial items are C&I proposals. Applied the same Coordinator-only summary/history, saved preview, download and expandable revision-fields layout to CniProposals; existing C&I save/revision and pricing logic retained. Typecheck passed. Published 18f7c81 over 9a50e6a; no migrations/data/master/renderers changed. Live walkthrough pending.
 
 242. Ready to Send: only Approved Survey Groups and Approved Individual Documents below shared compact search/filters. Merge legacy approved quotations into individual table, exclude grouped sites from individual rows, retain group Excel and confirmed Unbind action. No database changes; verification pending.
+
+243. Ready to Send published as 9ed3aa2, Render dep-db7hhi67bikc73atut70 live. Browser verified exactly two sections: Approved Survey Groups (currently empty) and Approved Individual Documents (three existing quotations, each Review). No commercial-work module in this bucket. Typecheck/build passed. No production records modified or dispatch performed.
+
+244. Remove brand selectors from Design Technical Review. Submission retains existing saved brands instead of reading removed controls or zeroing values. Atif placement awaits user instruction; no new placement added. Engineering/rate masters and documents unchanged.
