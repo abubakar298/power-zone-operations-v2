@@ -7,8 +7,12 @@ export function ExternalApproval({
   endpoint,
   onApproved,
   preauthorized = false,
+  expanded = false,
+  quotationApproval = false,
 }: {
   preauthorized?: boolean;
+  expanded?: boolean;
+  quotationApproval?: boolean;
   session: Session;
   endpoint: string;
   onApproved: (row: any) => Promise<void>;
@@ -89,17 +93,13 @@ export function ExternalApproval({
     }
   }
   return (
-    <details className="detail-panel">
+    <details className="detail-panel" open={expanded || undefined}>
       <summary>
-        {preauthorized
+        {quotationApproval ? "Record Quotation Approval" : preauthorized
           ? "Use Management-approved discount instruction"
           : "Record WhatsApp / verbal approval"}
       </summary>
-      <p>
-        Attach Management approval of this exact saved version, including its
-        special discount and final payable. First-issued R1 quotations can use a
-        prior instruction. If the values differ, save a revision first.
-      </p>
+      <p>{quotationApproval ? "Attach Management approval for this exact quotation. Submitting records the evidence and moves it to Ready to Send." : "Attach Management approval of this exact saved version, including its special discount and final payable. First-issued R1 quotations can use a prior instruction. If the values differ, save a revision first."}</p>
       <form
         aria-label="WhatsApp approval evidence"
         onSubmit={(e) => {
@@ -202,7 +202,7 @@ export function ExternalApproval({
             !comments.trim()
           }
         >
-          Record approval & continue
+          {quotationApproval ? "Submit Approval — Ready to Send" : "Record approval & continue"}
         </Button>
       </form>
     </details>

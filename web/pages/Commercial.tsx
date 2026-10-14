@@ -61,6 +61,7 @@ function editablePricing(p: PricingSnapshot): PricingInput {
   return { ...p.input, markups };
 }
 export function QuotationView({
+  showActions = true,
   snapshot: s,
   number,
   pdfUrl,
@@ -70,6 +71,7 @@ export function QuotationView({
   csrf,
   refreshKey,
 }: {
+  showActions?: boolean;
   snapshot: QuotationSnapshot;
   number?: string;
   pdfUrl?: string;
@@ -196,7 +198,7 @@ export function QuotationView({
     <section className="boq-costing quotation-preview">
       <div className="panel-heading">
         <h2>{number ?? "Quotation preview"}</h2>
-        {pdfUrl && (
+        {pdfUrl && showActions && (
           <>
             <a className="dark-button" href={pdfUrl} download>
               Download quotation PDF

@@ -1,11 +1,12 @@
+import {QuotationApproval} from "./QuotationApproval.js";
 import {useEffect,useState} from 'react';
 import {api,type Session} from '../api.js';
 import {Button} from '../ui/Button.js';
 import {QuotationView} from '../pages/Commercial.js';
 import {RevisionEntry} from './RevisionEntry.js';
 
-export function CoordinatorQuotationReview({session,record,onBack,onOpen}:{session:Session;record:any;onBack:()=>void;onOpen?:(task:any)=>void}){
- const [quote,setQuote]=useState<any>(),[error,setError]=useState(''),[revising,setRevising]=useState(false);
+export function CoordinatorQuotationReview({session,record,onBack,onOpen,onApproved}:{session:Session;record:any;onBack:()=>void;onApproved?:()=>Promise<void>;onOpen?:(task:any)=>void}){
+ const [quote,setQuote]=useState<any>(),[error,setError]=useState(''),[revising,setRevising]=useState(false),[approving,setApproving]=useState(Boolean(record.recordApproval));
  const id=record.sourceQuotationId??record.quotation?.id;
  useEffect(()=>{let active=true;setQuote(undefined);setError('');setRevising(false);void api<any>(`/commercial/quotations/${id}`).then(q=>{if(active)setQuote(q);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[id]);
  return <div className="pz-stack">
@@ -18,8 +19,9 @@ export function CoordinatorQuotationReview({session,record,onBack,onOpen}:{sessi
     {quote.workflow_notes&&<p>{quote.workflow_notes}</p>}
     <details><summary>Quotation History</summary><div className="pz-table-scroll"><table><thead><tr><th>Quotation</th><th>Date</th><th>Revision details</th></tr></thead><tbody>{(quote.workflow_history??[]).flatMap((b:any)=>b.quotations??[]).map((q:any)=><tr key={q.id}><td>{q.number}</td><td>{q.quoted_at?new Date(q.quoted_at).toLocaleString('en-PK'):'Not recorded'}</td><td>{q.revision?.reason??'Original quotation'}</td></tr>)}</tbody></table></div></details>
    </section>
-   <section className="pz-panel"><h2>{quote.workflow_status==='Approved'?'Approved Quotation Preview':'Submitted Quotation Preview'}</h2><QuotationView snapshot={quote.snapshot} number={quote.number} pdfUrl={`/api/commercial/quotations/${quote.id}/quotation.pdf`}/>
-   <div className="pz-action-row"><a className="button" href={`/api/commercial/quotations/${quote.id}/quotation.pdf`} download>Download PDF for Sharing</a><Button variant="secondary" onClick={()=>setRevising(v=>!v)} aria-expanded={revising}>Revise Quotation</Button></div></section>
+   <section className="pz-panel"><h2>{quote.workflow_status==='Approved'?'Approved Quotation Preview':'Submitted Quotation Preview'}</h2><QuotationView showActions={false} snapshot={quote.snapshot} number={quote.number} pdfUrl={`/api/commercial/quotations/${quote.id}/quotation.pdf`}/>
+   <div className="pz-action-row">{quote.workflow_status==='Submitted'&&<Button variant="success" onClick={()=>setApproving(v=>!v)} aria-expanded={approving}>Record Approval</Button>}<a className="button" href={`/api/commercial/quotations/${quote.id}/quotation.pdf`} download>Download PDF for Sharing</a><Button variant="secondary" onClick={()=>setRevising(v=>!v)} aria-expanded={revising}>Revise Quotation</Button></div></section>
+   {approving&&quote.workflow_status==='Submitted'&&<QuotationApproval session={session} quotationId={quote.id} onApproved={async()=>{if(onApproved)await onApproved();else onBack();}}/>}
    {revising&&<RevisionEntry embedded session={session} record={{...record,sourceQuotationId:quote.id}} onBack={()=>setRevising(false)} onOpen={onOpen}/>}
   </>}
  </div>;

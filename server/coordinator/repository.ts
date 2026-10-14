@@ -473,7 +473,7 @@ export class CoordinatorRepository {
           [quotationId],
         )
       ).rows[0];
-      if(previous?.kind==='Submitted'&&u.role==='Coordinator'&&kind!=='Submitted')throw new HttpError(403,'This quotation is with Management. Coordination has preview-only access until Management returns it.');
+      if(previous?.kind==='Submitted'&&u.role==='Coordinator'&&kind!=='Submitted'&&!external)throw new HttpError(403,'This quotation is with Management. Coordination has preview-only access until Management returns it.');
       if(!previous && delegatedDiscount){
         previous=(await c.query("INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by) VALUES($1,$2,'Submitted',$3,$4) RETURNING *",[randomUUID(),quotationId,'Standard policy: discount within pre-approved 5% of cost allowance',actor])).rows[0];
       }

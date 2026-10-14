@@ -1,3 +1,4 @@
+import {QuotationApproval} from "../components/QuotationApproval.js";
 import {CoordinatorQuotationReview} from "../components/CoordinatorQuotationReview.js";
 import { CustomerFollowupList } from "../components/CustomerFollowupList.js";
 import { ConfirmSaleForm } from "../components/ConfirmSaleForm.js";
@@ -220,6 +221,8 @@ export function DepartmentWorkspace({
     [notice, setNotice] = useState("");
   const [headsupRefresh, setHeadsupRefresh] = useState(0);
   const [quotationReview, setQuotationReview] = useState<any>();
+  const [approvalTarget,setApprovalTarget]=useState<any>();
+  async function approvalRecorded(){setApprovalTarget(undefined);setQuotationReview(undefined);await load();window.dispatchEvent(new CustomEvent("pz:workflow-completed",{detail:{message:"Approval recorded — moved to Ready to Send."}}));}
   const [revisionRecord, setRevisionRecord] = useState<any>();
   const [selectedSite, setSelectedSite] = useState<any>();
   const [selectedDispatch, setSelectedDispatch] = useState<string>();
@@ -553,7 +556,8 @@ export function DepartmentWorkspace({
         <SavedHeadsupReports session={session} refresh={headsupRefresh} />
       </div>
     );
-  if (quotationReview) return <CoordinatorQuotationReview session={session} record={quotationReview} onBack={()=>setQuotationReview(undefined)} onOpen={onOpen}/>;
+  if(approvalTarget) return <div className="pz-stack"><Button variant="neutral" onClick={()=>setApprovalTarget(undefined)}>Back to Management Review</Button><h2>Record Quotation Approval</h2><p>{approvalTarget.number}</p><QuotationApproval session={session} quotationId={approvalTarget.quotationId} cniId={approvalTarget.cniId} onApproved={approvalRecorded}/></div>;
+  if (quotationReview) return <CoordinatorQuotationReview session={session} record={quotationReview} onApproved={approvalRecorded} onBack={()=>setQuotationReview(undefined)} onOpen={onOpen}/>;
   if (revisionRecord)
     return (
       <RevisionEntry
@@ -926,11 +930,12 @@ export function DepartmentWorkspace({
 
           {department === "coordination" && page === coordinationBuckets[5] && (
             <CustomerFollowupList
-              records={visible}
+              records={[...visible,...visibleLegacy.map(t=>({...t,id:`legacy:${t.id}`,data:{},siteCode:t.site_code??"",route:"quotation",routeLabel:t.number??t.reference??""}))]}
               groups={combinedFollowups}
-              onOpen={(id: string) =>
-                void open(id).catch((e) => setError(e.message))
-              }
+              onOpen={(id: string) => {
+                if(id.startsWith("legacy:")){const task=visibleLegacy.find(t=>t.id===id.slice(7));if(task)onOpen?.(task);}
+                else void open(id).catch((e) => setError(e.message));
+              }}
             />
           )}
           {!readyToSend && !(
@@ -1056,6 +1061,7 @@ export function DepartmentWorkspace({
                                           ? "Review"
                                           : r.nextAction}
                             </Button>
+                            {department === "coordination" && page === coordinationBuckets[2] && r.quotation?.id && <Button variant="success" onClick={()=>setApprovalTarget({quotationId:r.quotation.id,number:r.quotation.number})}>Record Approval</Button>}
                             {groupActionError?.id === r.id && (
                               <ErrorText
                                 error={groupActionError?.message ?? ""}
@@ -1076,7 +1082,7 @@ export function DepartmentWorkspace({
                           ? `${Math.max(0, Math.floor((Date.now() - +new Date(t.started_at)) / 86400000))} days`
                           : "Not recorded"}</td>
                         <td>{t.blocker || "No recorded blocker"}</td>
-                        <td><Button variant="secondary" onClick={() => t.kind === "Sale confirmation" ? setQuotationReview({...t,sourceQuotationId:t.id}) : onOpen?.(t)}>Review</Button></td>
+                        <td><Button variant="secondary" onClick={() => t.kind === "Sale confirmation" ? setQuotationReview({...t,sourceQuotationId:t.id}) : onOpen?.(t)}>Review</Button>{["Sale confirmation","C&I proposal"].includes(t.kind)&&<Button variant="success" onClick={()=>setApprovalTarget({quotationId:t.kind==="Sale confirmation"?t.id:undefined,cniId:t.kind==="C&I proposal"?t.id:undefined,number:t.number})}>Record Approval</Button>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1203,6 +1209,7 @@ export function DepartmentWorkspace({
           {department === "coordination" &&
             page !== coordinationBuckets[1] &&
             !mergedReview &&
+            page !== coordinationBuckets[5] &&
             !readyToSend &&
             visibleLegacy.length > 0 && (
               <section className="pz-panel">

@@ -1,3 +1,5 @@
+import {QuotationApproval} from "../components/QuotationApproval.js";
+import {Button} from "../ui/Button.js";
 import { ExternalApproval } from "../components/ExternalApproval.js";
 import { QuotationDispatch } from "../components/QuotationDispatch.js";
 import { SharePdf } from "../components/SharePdf.js";
@@ -55,6 +57,7 @@ export function CniProposals({
     [remarks, setRemarks] = useState("");
   const [editing, setEditing] = useState<{ id: string; version: number }>();
   const [editingReview, setEditingReview] = useState(false);
+  const [recordingApproval,setRecordingApproval]=useState(false);
   const management = ["Admin", "Management"].includes(session.user.role);
   const load = async () => setRows((await api<any>("/cni")).proposals);
   useEffect(() => {
@@ -359,7 +362,7 @@ export function CniProposals({
       <section className="pz-panel"><h2>Quotation Summary</h2><div className="pz-form-grid"><div><strong>{current.number}</strong><p>{current.snapshot.customer.name} · {current.snapshot.siteName}</p></div><div><p>{action??'Approval requested'} · Version {current.version}</p><p>{displayDate(current.created_at)}</p></div></div>
       <details><summary>Quotation History</summary><div className="pz-table-scroll"><table><thead><tr><th>Document</th><th>Date</th></tr></thead><tbody>{detail.versions.map((v:any)=><tr key={v.id}><td>{v.number}</td><td>{displayDate(v.created_at)}</td></tr>)}</tbody></table></div>{detail.actions.map((a:any)=><p key={a.id}>{a.action} · {displayDate(a.created_at)}{a.remarks?` · ${a.remarks}`:''}</p>)}</details></section>
       <section className="pz-panel"><DocumentPreview title={action==='Approved'?'Approved Quotation Preview':'Submitted Quotation Preview'} url={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`}/>
-      <div className="pz-action-row"><a className="button" href={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`} download>Download PDF for Sharing</a><button disabled={busy} aria-expanded={editingReview} onClick={()=>{              setEditingReview(true);
+      <div className="pz-action-row">{action==='Approval requested'&&<Button variant="success" onClick={()=>setRecordingApproval(v=>!v)} aria-expanded={recordingApproval}>Record Approval</Button>}<a className="button" href={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`} download>Download PDF for Sharing</a><button disabled={busy} aria-expanded={editingReview} onClick={()=>{              setEditingReview(true);
               const s = current.snapshot;
               setEditing({ id: detail.id, version: current.version });
               setCustomerId(String(s.customer.id));
@@ -379,6 +382,7 @@ export function CniProposals({
                 "Original values loaded above. Saving creates a new immutable version.",
               );
 }}>Revise Quotation</button></div></section>
+      {recordingApproval&&action==='Approval requested'&&<QuotationApproval session={session} cniId={detail.id} onApproved={async()=>{window.dispatchEvent(new CustomEvent('pz:workflow-completed',{detail:{message:'Approval recorded — moved to Ready to Send.'}}));onBack();}}/>}
       {editingReview&&<section className="pz-panel"><h2>Revision Settings</h2>{notice&&<p role="status">{notice}</p>}{revisionForm}</section>}
     </>}
   </section>;
