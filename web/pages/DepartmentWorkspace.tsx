@@ -1,3 +1,4 @@
+import {CoordinatorQuotationReview} from "../components/CoordinatorQuotationReview.js";
 import { CustomerFollowupList } from "../components/CustomerFollowupList.js";
 import { ConfirmSaleForm } from "../components/ConfirmSaleForm.js";
 import { PoReceiptSearch } from "../components/PoReceiptSearch.js";
@@ -218,6 +219,7 @@ export function DepartmentWorkspace({
     [performance, setPerformance] = useState<any>(),
     [notice, setNotice] = useState("");
   const [headsupRefresh, setHeadsupRefresh] = useState(0);
+  const [quotationReview, setQuotationReview] = useState<any>();
   const [revisionRecord, setRevisionRecord] = useState<any>();
   const [selectedSite, setSelectedSite] = useState<any>();
   const [selectedDispatch, setSelectedDispatch] = useState<string>();
@@ -324,6 +326,10 @@ export function DepartmentWorkspace({
     setError("");
     setCreating(undefined);
     const loaded = await api<any>(`/project-workflow/${id}`);
+    if (department === "coordination" && page === coordinationBuckets[2] && loaded.record.quotation?.id) {
+      setQuotationReview(loaded.record);
+      return;
+    }
     setDetail(loaded);
     setPage(
       department === "coordination" && page === coordinationBuckets[6]
@@ -360,6 +366,7 @@ export function DepartmentWorkspace({
       sessionStorage.removeItem("pz:department-page");
       setDetail(undefined);
       setRevisionRecord(undefined);
+      setQuotationReview(undefined);
       setCreating(undefined);
       setSelectedDispatch(undefined);
       setDispatchPlanning(false);
@@ -507,6 +514,7 @@ export function DepartmentWorkspace({
         filters,
       ),
   );
+  const mergedReview = department === "coordination" && page === coordinationBuckets[2];
   async function schedulingSaved() {
     await load();
     setDetail(undefined);
@@ -543,6 +551,7 @@ export function DepartmentWorkspace({
         <SavedHeadsupReports session={session} refresh={headsupRefresh} />
       </div>
     );
+  if (quotationReview) return <CoordinatorQuotationReview session={session} record={quotationReview} onBack={()=>setQuotationReview(undefined)} onOpen={onOpen}/>;
   if (revisionRecord)
     return (
       <RevisionEntry
@@ -1041,7 +1050,7 @@ export function DepartmentWorkspace({
                                           department === "coordination"
                                         ? "Remove from Group"
                                         : department === "coordination" &&
-                                            page === coordinationBuckets[1]
+                                            [coordinationBuckets[1], coordinationBuckets[2]].includes(page)
                                           ? "Review"
                                           : r.nextAction}
                             </Button>
@@ -1053,9 +1062,24 @@ export function DepartmentWorkspace({
                           </td>
                         </tr>
                       ))}
+                    {mergedReview && visibleLegacy.map((t: any) => (
+                      <tr key={`commercial-${t.id}`}>
+                        <td>
+                          <strong>{t.customer || "Customer not recorded"} · {t.site}</strong>
+                          <br />{t.number ?? t.reference ?? ""}
+                        </td>
+                        <td>{t.status ?? t.stage}<br />{t.route ?? "Quick BOQ → quotation"}</td>
+                        <td>{t.person ?? t.responsibility ?? "Management"}</td>
+                        <td>{Number.isFinite(+new Date(t.started_at))
+                          ? `${Math.max(0, Math.floor((Date.now() - +new Date(t.started_at)) / 86400000))} days`
+                          : "Not recorded"}</td>
+                        <td>{t.blocker || "No recorded blocker"}</td>
+                        <td><Button variant="secondary" onClick={() => t.kind === "Sale confirmation" ? setQuotationReview({...t,sourceQuotationId:t.id}) : onOpen?.(t)}>Review</Button></td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
-                {!visible.length && <p>No sites match these filters.</p>}
+                {!visible.length && !(mergedReview && visibleLegacy.length) && <p>No sites match these filters.</p>}
               </div>
             )}
 
@@ -1153,6 +1177,7 @@ export function DepartmentWorkspace({
             })}
           {department === "coordination" &&
             page !== coordinationBuckets[1] &&
+            !mergedReview &&
             visibleLegacy.length > 0 && (
               <section className="pz-panel">
                 <h3>Existing commercial work</h3>

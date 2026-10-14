@@ -6,7 +6,7 @@ import {api,type Session} from '../api.js';
 import {Button} from '../ui/Button.js';
 import {confirmTransition} from '../confirm.js';
 
-export function RevisionEntry({session,record,onBack,onOpen,children}:{session:Session;record:any;onBack:()=>void;onOpen?:(task:any)=>void;children?:ReactNode}){
+export function RevisionEntry({session,record,onBack,onOpen,children,embedded=false}:{session:Session;record:any;onBack:()=>void;onOpen?:(task:any)=>void;children?:ReactNode;embedded?:boolean}){
  const [source,setSource]=useState<any>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[origin,setOrigin]=useState('Internal management'),[reason,setReason]=useState(''),[requester,setRequester]=useState(session.user.displayName),[route,setRoute]=useState(''),[choices,setChoices]=useState<any[]>([]),[frameworkId,setFrameworkId]=useState('');
  const request=useRef<{signature:string;key:string}|null>(null);
  const quoteId=record.quotation?.id??record.sourceQuotationId;
@@ -22,7 +22,7 @@ export function RevisionEntry({session,record,onBack,onOpen,children}:{session:S
    else onOpen?.({target:'pricing',boq_revision_id:source.boq_revision_id,request_id:frameworkSource?undefined:result.id,context:frameworkSource?{frameworkPricingInput:source.pricingInput}:undefined,kind:'Commercial revision',id:result.id});
   }catch(e){setError((e as Error).message);}finally{setBusy(false);}
  }
- return <section className="pz-panel pz-stack"><div className="pz-action-row"><Button variant="neutral" onClick={onBack}>Back to Revisions</Button></div><h2>Create Revision</h2>
+ return <section className="pz-panel pz-stack">{!embedded&&<div className="pz-action-row"><Button variant="neutral" onClick={onBack}>Back to Revisions</Button></div>}<h2>Create Revision</h2>
   <p>{record.customerCode??''} · {record.site??record.number??''}{record.siteCode?` (${record.siteCode})`:''}</p>
   {children}
   <RevisionPricingSummary session={session} source={source}/>

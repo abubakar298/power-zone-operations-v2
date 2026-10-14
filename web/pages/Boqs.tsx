@@ -1254,6 +1254,8 @@ export function Boqs({
             <h2>
               {baseRevisionId ? "Revise BOQ" : "Prepare Quotation"}
             </h2>
+            {/* Retain BOQ-list navigation for other roles; archived from Atif’s quotation entry. */}
+            {session.user.role !== "Coordinator" && (
             <button
               onClick={() => {
                 if (confirmLeaveWorkspace()) {
@@ -1265,6 +1267,7 @@ export function Boqs({
             >
               Back to BOQs
             </button>
+            )}
           </div>
           <p>
             {baseRevisionId
