@@ -105,7 +105,12 @@ export function calculate(s: Survey, m: Masters) {
   if (s.family === "direct-product") return calculateDirectProducts(s, m);
   return calculateInstallation(s, m);
 }
-function calculateInstallation(s: Survey, m: Masters) {
+// Design verifies quantities before Coordination chooses commercial brands.
+export function calculateTechnicalReview(s: Survey, m: Masters) {
+  if (s.family === "direct-product") return calculateDirectProducts(s, m);
+  return calculateInstallation(s, m, true);
+}
+function calculateInstallation(s: Survey, m: Masters, deferBrands = false) {
   const bessOnly = s.family === "bess-only";
   const approved = standardProfile(m);
   if (!bessOnly && (s.panelQty < 1 || new Decimal(s.panelWattage).lte(0)))
@@ -174,7 +179,7 @@ function calculateInstallation(s: Survey, m: Masters) {
     cable: "Cable",
     switchgear: "Switchgear",
   })) {
-    if (bessOnly && field === "solar") continue;
+    if (deferBrands || (bessOnly && field === "solar")) continue;
     const b = m.brands.find(
       (b) =>
         b.id === s.brands[field as keyof Survey["brands"]] &&
@@ -243,6 +248,7 @@ function calculateInstallation(s: Survey, m: Masters) {
     bms = sp
       ? new Decimal(sp.bmsQty)
       : modules.div(config.quantity).div(rule(7)).ceil().mul(config.quantity);
+  const deferredBrandKeys = new Set<string>();
   const lines: CostLine[] = [],
     warnings: string[] = [];
   function add(
@@ -263,11 +269,12 @@ function calculateInstallation(s: Survey, m: Masters) {
       warnings.push(
         `${key}: rate marked Needs Rate; current numeric rate used.`,
       );
+    if (deferBrands && brandField) deferredBrandKeys.add(key);
     lines.push({
       key,
       description: key,
-      brand: brandField ? selected[brandField].name : "",
-      brandAlternatives: brandField ? selected[brandField].alternatives : [],
+      brand: brandField ? selected[brandField]?.name ?? "" : "",
+      brandAlternatives: brandField ? selected[brandField]?.alternatives ?? [] : [],
       specification:
         spec?.status === "Approved" ? spec.approved_specification : null,
       specVersion: spec?.version ?? null,
@@ -540,7 +547,7 @@ function calculateInstallation(s: Survey, m: Masters) {
       l.specVersion = null;
     }
   }
-  identifyLines(m, lines, s, warnings);
+  identifyLines(m, lines.filter(line => !deferredBrandKeys.has(line.key)), s, warnings);
   const total = lines.reduce((a, l) => a.add(l.total), new Decimal(0));
   const summary = (
     bessOnly ? ["BESS", "EPC"] : ["Solar Panels", "Structure", "BESS", "EPC"]

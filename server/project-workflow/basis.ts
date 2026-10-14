@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { Decimal } from "decimal.js";
-import { calculate } from "../boq/engine.js";
+import { calculate, calculateTechnicalReview } from "../boq/engine.js";
 import { surveySchema } from "../boq/schema.js";
 import { MastersRepository } from "../masters/repository.js";
 import { selectCatalogueItem } from "../masters/catalogue.js";
@@ -68,7 +68,7 @@ export async function designCalculation(
       422,
       "The selected customer engineering profile does not match this solution configuration. Use the approved framework route for a fixed UBL solar configuration.",
     );
-  const boq: any = calculate(survey, masters);
+  const boq: any = calculateTechnicalReview(survey, masters);
   for (const line of boq.lines) {
     const selected = input.itemSelections?.[line.key];
     if (!selected) continue;

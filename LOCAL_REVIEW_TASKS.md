@@ -339,3 +339,8 @@ Keep subsequent requests at the end of this queue. The already-started sample jo
 243. Ready to Send published as 9ed3aa2, Render dep-db7hhi67bikc73atut70 live. Browser verified exactly two sections: Approved Survey Groups (currently empty) and Approved Individual Documents (three existing quotations, each Review). No commercial-work module in this bucket. Typecheck/build passed. No production records modified or dispatch performed.
 
 244. Remove brand selectors from Design Technical Review. Submission retains existing saved brands instead of reading removed controls or zeroing values. Atif placement awaits user instruction; no new placement added. Engineering/rate masters and documents unchanged.
+
+245. REQUESTED: Design access to editable Engineering Rules. Existing rules editor currently permits Admin only and writes a new rule version that becomes current immediately. Awaiting Director choice: Design edits drafts for approval versus direct activation. Preserve historical versions; no permissions changed or engineering values edited pending this decision.
+
+246. PRIORITY: Design technical review server calculation now defers all commercial brand selection and brand-dependent Item IDs; strict quotation calculation retains its validations. Focused disposable-database regression verifies brandless workflow calculation, obsolete brands do not block Design, and master values are unchanged. No migration or document rendering changes. Publication pending.
+247. Engineering Rules clarification: Design may propose edits; Management approval required for activation. Existing issued documents must retain their saved rules/costs and remain usable. Implementation remains pending after task 246 priority release.
