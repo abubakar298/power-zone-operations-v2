@@ -126,50 +126,7 @@ export function CniProposals({
       setBusy(false);
     }
   }
-  return (
-    <section className="boq-section commercial-section">
-      <div className="section-heading">
-        <h2>{reviewOnly ? "C&I quotation review" : "C&I BESS proposals"}</h2>
-        <button
-          onClick={() => {
-            if (confirmLeaveWorkspace()) onBack();
-          }}
-          disabled={busy}
-        >
-          {reviewOnly ? "Back to dashboard" : "Back to Solar Hybrid BOQ"}
-        </button>
-      </div>
-      {addingCustomer && (
-        <NewCustomer
-          session={session}
-          onLogout={onLogout}
-          onClose={() => setAddingCustomer(false)}
-          onCreated={async (id) => {
-            const updated = await api<any>("/masters");
-            setMasters(updated);
-            setCustomerId(String(id));
-            setSearch(
-              updated.customers.find((c: any) => String(c.id) === String(id))
-                ?.name || "",
-            );
-            setDirty(true);
-          }}
-        />
-      )}
-      {dirty && <p role="status">Unsaved C&I proposal changes</p>}
-      <p>
-        Standard final price: PKR 17,250,000 per cabinet. No separate costing
-        approval is required. Every quotation is sent to Management for
-        approval.
-      </p>
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
-      {notice && <p role="status">{notice}</p>}
-      {(!reviewOnly || editingReview) && (
-        <form
+  const revisionForm = (<form
           className="survey-form"
           onChange={() => setDirty(true)}
           onSubmit={async (e) => {
@@ -393,8 +350,81 @@ export function CniProposals({
               {busy ? "Saving…" : "Save & send for approval"}
             </button>
           </div>
-        </form>
+        </form>);
+  if(reviewOnly && session.user.role === "Coordinator") return <section className="pz-stack">
+    <button onClick={()=>{if(confirmLeaveWorkspace())onBack();}}>Back to Management Review</button>
+    {error&&<p className="form-error" role="alert">{error}</p>}
+    {!current&&<p role="status">Loading quotation…</p>}
+    {current&&<>
+      <section className="pz-panel"><h2>Quotation Summary</h2><div className="pz-form-grid"><div><strong>{current.number}</strong><p>{current.snapshot.customer.name} · {current.snapshot.siteName}</p></div><div><p>{action??'Approval requested'} · Version {current.version}</p><p>{displayDate(current.created_at)}</p></div></div>
+      <details><summary>Quotation History</summary><div className="pz-table-scroll"><table><thead><tr><th>Document</th><th>Date</th></tr></thead><tbody>{detail.versions.map((v:any)=><tr key={v.id}><td>{v.number}</td><td>{displayDate(v.created_at)}</td></tr>)}</tbody></table></div>{detail.actions.map((a:any)=><p key={a.id}>{a.action} · {displayDate(a.created_at)}{a.remarks?` · ${a.remarks}`:''}</p>)}</details></section>
+      <section className="pz-panel"><DocumentPreview title={action==='Approved'?'Approved Quotation Preview':'Submitted Quotation Preview'} url={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`}/>
+      <div className="pz-action-row"><a className="button" href={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`} download>Download PDF for Sharing</a><button disabled={busy} aria-expanded={editingReview} onClick={()=>{              setEditingReview(true);
+              const s = current.snapshot;
+              setEditing({ id: detail.id, version: current.version });
+              setCustomerId(String(s.customer.id));
+              setSearch(s.customer.name);
+              setSiteName(s.siteName);
+              setSiteCode(s.siteCode ?? "");
+              setQuantity(String(s.pricing.quantity));
+              setSaleType(s.pricing.saleType ?? "Tax Deal");setCashGstTreatment(s.pricing.cashGstTreatment ?? "No GST added");
+              setPresentation(s.pricing.presentation);
+              setDiscount(
+                detail.actions
+                  .filter((a: any) => a.version_id === current.id)
+                  .at(-1)?.instructions?.recommendedDiscount ??
+                  s.pricing.discount,
+              );
+              setNotice(
+                "Original values loaded above. Saving creates a new immutable version.",
+              );
+}}>Revise Quotation</button></div></section>
+      {editingReview&&<section className="pz-panel"><h2>Revision Settings</h2>{notice&&<p role="status">{notice}</p>}{revisionForm}</section>}
+    </>}
+  </section>;
+  return (
+    <section className="boq-section commercial-section">
+      <div className="section-heading">
+        <h2>{reviewOnly ? "C&I quotation review" : "C&I BESS proposals"}</h2>
+        <button
+          onClick={() => {
+            if (confirmLeaveWorkspace()) onBack();
+          }}
+          disabled={busy}
+        >
+          {reviewOnly ? "Back to dashboard" : "Back to Solar Hybrid BOQ"}
+        </button>
+      </div>
+      {addingCustomer && (
+        <NewCustomer
+          session={session}
+          onLogout={onLogout}
+          onClose={() => setAddingCustomer(false)}
+          onCreated={async (id) => {
+            const updated = await api<any>("/masters");
+            setMasters(updated);
+            setCustomerId(String(id));
+            setSearch(
+              updated.customers.find((c: any) => String(c.id) === String(id))
+                ?.name || "",
+            );
+            setDirty(true);
+          }}
+        />
       )}
+      {dirty && <p role="status">Unsaved C&I proposal changes</p>}
+      <p>
+        Standard final price: PKR 17,250,000 per cabinet. No separate costing
+        approval is required. Every quotation is sent to Management for
+        approval.
+      </p>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      {notice && <p role="status">{notice}</p>}
+      {(!reviewOnly || editingReview) && revisionForm}
       {!reviewOnly && (
         <>
           <h3>Saved C&amp;I proposals</h3>
