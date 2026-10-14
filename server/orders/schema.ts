@@ -1,6 +1,6 @@
 import { z } from "zod";
 const optional = z.string().trim().max(300).default("");
-export const orderSchema = z
+export const orderBasisInputSchema = z
   .object({
     quotationId: z.uuid(),
     entryVersion: z.literal(2).optional(),
@@ -59,6 +59,9 @@ export const orderSchema = z
         code: "custom",
         message: "NTN and STRN are only recorded from an uploaded customer PO.",
       });
+  });
+// Read-only commercial lookup precedes receipt entry; submitting a sale still requires its PO reference.
+export const orderSchema = orderBasisInputSchema.superRefine((v, c) => {
     if (v.evidenceType === "Customer PO" && !v.poNumber)
       c.addIssue({
         code: "custom",

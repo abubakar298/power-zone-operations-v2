@@ -3650,6 +3650,8 @@ export class ProjectWorkflowRepository {
               actor,
               r,
               uuid(input.quotationId),
+              {},
+              true,
             )
           : await frameworkBasis(
               this.pool,

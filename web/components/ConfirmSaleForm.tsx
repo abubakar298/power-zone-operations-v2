@@ -49,6 +49,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
       poNumber: "",
     }),
     [basis, setBasis] = useState<any>(),
+    [basisError, setBasisError] = useState(""),
     [document, setDocument] = useState<any>(),
     [text, setText] = useState(""),
     [poTotal, setPoTotal] = useState(""),
@@ -67,6 +68,8 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
   useUnsavedChanges(!!document);
   useEffect(() => {
     let active = true;
+    setBasis(undefined);
+    setBasisError("");
     void api<any>(`/project-workflow/${r.id}/preview`, {
       csrf: session.csrfToken,
       body: framework
@@ -84,7 +87,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
         }
       })
       .catch((e) => {
-        if (active) setError(e.message);
+        if (active) setBasisError(e.message);
       });
     if (!framework && r.quotation?.id)
       void api<any>(`/orders/quotation-defaults/${r.quotation.id}`)
@@ -142,7 +145,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
       issues.push("PO scope, quantities and terms require confirmation");
   }
   const confirmationRequirements = [
-    ...(!basis ? ["Approved commercial basis is still loading."] : []),
+    ...(!basis ? [basisError ? `Unable to load approved quotation: ${basisError}` : "Loading approved quotation details…"] : []),
     ...(!input.evidenceType ? ["Select the sale confirmation type."] : []),
     ...(!document ? ["Upload the PO or WhatsApp approval attachment."] : []),
     ...(!input.orderDate ? ["Enter the Order Date."] : []),

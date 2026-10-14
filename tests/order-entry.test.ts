@@ -6,7 +6,7 @@ import { createDashboardSamples } from "../server/coordinator/samples.js";
 import { OrdersRepository } from "../server/orders/repository.js";
 import { OperationsRepository } from "../server/operations/repository.js";
 import { poSuggestions } from "../server/orders/po-extraction.js";
-import { orderSchema } from "../server/orders/schema.js";
+import { orderSchema, orderBasisInputSchema } from "../server/orders/schema.js";
 import { hashPassword } from "../server/auth/crypto.js";
 
 test("PO extraction accepts unique labelled values, rejects ambiguous and invalid dates", () => {
@@ -212,3 +212,12 @@ test("IPO defaults use current customer data and accepted quotation; Operations 
     await db.close();
   }
 });
+
+ test("commercial basis lookup allows a not-yet-entered PO reference but sale submission still requires it", () => {
+ const input={quotationId:randomUUID(),evidenceType:"Customer PO",evidenceNotes:"Read-only basis",orderDate:"2026-10-14",invoiceCompany:"PZES",salesPerson:"Atif",customerAccepted:true};
+ assert.equal(orderBasisInputSchema.safeParse(input).success,true);
+ assert.equal(orderSchema.safeParse(input).success,false);
+ assert.equal(orderSchema.safeParse({...input,poNumber:"PO-1"}).success,true);
+ assert.equal(orderSchema.safeParse({...input,evidenceType:"WhatsApp approval"}).success,true);
+ assert.equal(orderBasisInputSchema.safeParse({...input,entryVersion:2,customerNtn:"123"}).success,false);
+ });

@@ -6,7 +6,7 @@ import { MastersRepository } from "../masters/repository.js";
 import { selectCatalogueItem } from "../masters/catalogue.js";
 import { OrdersRepository } from "../orders/repository.js";
 import { requireEligibleQuotation } from "../commercial/eligibility.js";
-import { orderSchema } from "../orders/schema.js";
+import { orderSchema, orderBasisInputSchema } from "../orders/schema.js";
 import { ublIpoSample } from "../ubl/ipo-sample.js";
 import { HttpError } from "../http/errors.js";
 import { commercialComparison } from "./policy.js";
@@ -589,6 +589,7 @@ export async function quotationBasis(
   r: any,
   id: string,
   extra: any = {},
+  commercialLookupOnly = false,
 ) {
   await requireEligibleQuotation(c, id);
   const q = (
@@ -620,7 +621,7 @@ export async function quotationBasis(
   const customer = (
     await c.query("SELECT * FROM customers WHERE id=$1", [r.customer_id])
   ).rows[0];
-  const input = orderSchema.parse(
+  const input = (commercialLookupOnly ? orderBasisInputSchema : orderSchema).parse(
     orderInput(customer, r, {
       quotationId: id,
       invoiceCompany:
