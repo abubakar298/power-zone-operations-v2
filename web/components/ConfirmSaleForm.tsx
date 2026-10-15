@@ -5,7 +5,7 @@ import { Button } from "../ui/Button.js";
 import { DocumentPreview } from "./DocumentPreview.js";
 import { saleConfirmationFields } from "../pages/Orders.js";
 import { extractText } from "../ocr.js";
-import { poSuggestions } from "../../server/orders/po-extraction.js";
+import { poSuggestions, ublPoSuggestions, upsPoCapacities } from "../../server/orders/po-extraction.js";
 import { confirmTransition } from "../confirm.js";
 import { money } from "../numbers.js";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.js";
@@ -30,15 +30,19 @@ const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(
     new Date(),
   );
-export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
+export function ConfirmSaleForm({ session, detail, action, onBack, initialDirectPo }: any) {
   const r = detail.record,
     c = detail.masterReview.customer,
     framework = r.route.endsWith("framework");
+  const directUps = r.route==='direct-framework' && ['MBL-UPS-6-5','MBL-UPS-6-10','UBL-UPS-6-10'].includes(detail.basis?.source?.key);
+  const preAgreedBank = framework && (String(r.customerCode??c.short_code).toUpperCase()==='UBL'||directUps);
+  const [ipoError,setIpoError]=useState(''),[ipoCheck,setIpoCheck]=useState('');
+  const preAgreedUbl = framework && String(r.customerCode ?? c.short_code).toUpperCase() === "UBL";
   const [input, setInput] = useState<Record<string, string>>({
-      evidenceType: "",
-      orderDate: today(),
+      evidenceType: initialDirectPo ? "Customer PO" : "",
+      orderDate: initialDirectPo?.amounts.orderDate??today(),
       invoiceCompany: "PZES (PVT Ltd)",
-      salesPerson: "Atif",
+      salesPerson: preAgreedBank ? "Waqas ul Haq" : "Atif",
       contactPerson: c.contact_person ?? "",
       phone: c.phone ?? "",
       email: c.email ?? "",
@@ -46,14 +50,18 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
       paymentContact: c.contact_person ?? "",
       paymentPhone: c.phone ?? "",
       evidenceNotes: "",
-      poNumber: "",
+      poNumber: initialDirectPo?.amounts.poNumber??"",
+      customerNtn:initialDirectPo?(c.ntn??""):"",
+      customerStrn:initialDirectPo?(c.strn??""):"",
     }),
     [basis, setBasis] = useState<any>(),
     [basisError, setBasisError] = useState(""),
-    [document, setDocument] = useState<any>(),
-    [text, setText] = useState(""),
-    [poTotal, setPoTotal] = useState(""),
-    [poTax, setPoTax] = useState(""),
+    [document, setDocument] = useState<any>(initialDirectPo?.document),
+    [text, setText] = useState(initialDirectPo?.text??""),
+    [poTotal, setPoTotal] = useState(initialDirectPo?.amounts.total??""),
+    [poTax, setPoTax] = useState(initialDirectPo?.amounts.printedTax??""),
+    [poPrintedTax,setPoPrintedTax]=useState(initialDirectPo?.amounts.printedTax??""),
+    [poInclusive,setPoInclusive]=useState(initialDirectPo?.amounts.taxInclusive??false),
     [scope, setScope] = useState(false),
     [accepted, setAccepted] = useState(false),
     [busy, setBusy] = useState(false),
@@ -79,6 +87,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
       .then((value) => {
         if (active) {
           setBasis(value);
+          if(initialDirectPo?.amounts.taxInclusive&&Number(initialDirectPo.amounts.printedTax)===0)setPoTax(String(value.comparison.tax));
           setInput((old) => ({
             ...old,
             invoiceCompany:
@@ -141,7 +150,8 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
       issues.push(
         `Configuration differs: approved ${expected} kW solar, PO ${solar} kW`,
       );
-    if (!scope)
+    if(directUps){const received=upsPoCapacities(text),expected=detail.basis.source.key.match(/UPS-(\d+)-(\d+)$/);if(received.inverterKw&&expected&&!new Decimal(received.inverterKw).eq(expected[1]))issues.push(`Inverter differs: approved ${expected[1]} kW, PO ${received.inverterKw} kW`);if(received.batteryKwh&&expected&&!new Decimal(received.batteryKwh).eq(expected[2]))issues.push(`Battery differs: approved ${expected[2]} kWh, PO ${received.batteryKwh} kWh`);}
+    if (!scope && !preAgreedBank)
       issues.push("PO scope, quantities and terms require confirmation");
   }
   const confirmationRequirements = [
@@ -201,6 +211,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
               (field === "poNumber" && po)
             }
             value={input[field] ?? ""}
+            readOnly={field==="salesPerson"&&preAgreedBank}
             maxLength={
               field === "remarks" || field === "evidenceNotes"
                 ? 2000
@@ -255,8 +266,11 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
               .map(([key, value]) => [key, String(value)]),
           ),
         }));
-        setPoTotal(amount(read.text, "total"));
-        setPoTax(amount(read.text, "tax"));
+        const ubl=preAgreedBank?ublPoSuggestions(read.text):undefined;
+        if(ubl?.poNumber||ubl?.orderDate)setInput(old=>({...old,...(ubl.poNumber?{poNumber:ubl.poNumber}:{}),...(ubl.orderDate?{orderDate:ubl.orderDate}:{})}));
+        setPoTotal(ubl?.total||amount(read.text, "total"));
+        setPoPrintedTax(ubl?.printedTax??"");setPoInclusive(ubl?.taxInclusive??false);
+        setPoTax(ubl?.taxInclusive&&ubl.printedTax&&Number(ubl.printedTax)===0&&basis?String(basis.comparison.tax):ubl?.printedTax||amount(read.text, "tax"));
       }
     } catch (e) {
       setError((e as Error).message);
@@ -278,6 +292,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
     salePreview?.key === previewKey ? salePreview : undefined;
   function receiptPayload() {
     return {
+      ...(directUps&&input.ipoNumber?.trim()?{ipoNumber:input.ipoNumber.trim()}:{}),
       reference: po ? input.poNumber : `WA-${r.siteCode}-${input.orderDate}`,
       date: input.orderDate,
       evidenceId: document.id,
@@ -285,7 +300,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
       frameworkId: framework ? basis.source.id : undefined,
       quotationId: !framework ? basis.source.id : undefined,
       confirmationType: po ? "Customer PO" : "WhatsApp approval",
-      saleDetails: input,
+      saleDetails: {...input,...(preAgreedBank?{poPrintedTax,poTaxTreatment:poInclusive?"Tax-inclusive payable; approved GST allocation retained":"As printed"}:{})},
       actual: po ? structuredClone(basis.comparison) : undefined,
       reviewed: true,
       customerNtn: po ? (input.customerNtn ?? "") : "",
@@ -296,6 +311,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
   function validation() {
     return [
       ...confirmationRequirements,
+      ...(ipoError?[ipoError]:[]),
       ...(!input.invoiceCompany.trim() ? ["Enter the invoice company."] : []),
       ...(!input.salesPerson.trim() ? ["Enter the sales person."] : []),
       ...(!input.evidenceNotes.trim()
@@ -373,11 +389,11 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
         <form onSubmit={submit} noValidate>
           <fieldset disabled={busy} className="order-fields">
             <label>
-              Accepted quotation / UBL survey
+              {directUps ? "Accepted quotation" : "Accepted quotation / UBL survey"}
               <input
                 readOnly
                 value={
-                  basis?.source.key ??
+                  (directUps?basis?.source.key?.replace("-UPS-"," (")+")":basis?.source.key) ??
                   `${r.customerCode} · ${r.site} (${r.siteCode})`
                 }
               />
@@ -395,14 +411,15 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
                   setInput((old) => ({
                     ...old,
                     poNumber: "",
-                    customerNtn: "",
-                    customerStrn: "",
+                    customerNtn: directUps ? (c.ntn??"") : "",
+                    customerStrn: directUps ? (c.strn??"") : "",
                     orderDate: e.target.value === "Customer PO" ? "" : today(),
                   }));
                   setDocument(undefined);
                   setText("");
                   setPoTotal("");
                   setPoTax("");
+                  setPoPrintedTax("");setPoInclusive(false);
                   setAccepted(false);
                   setScope(false);
                 }}
@@ -412,6 +429,11 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
                 <option>WhatsApp approval</option>
               </select>
             </label>
+            {directUps&&<label>IPO number (optional)
+              <input value={input.ipoNumber??''} maxLength={100} placeholder="Automatic numbering if blank" onChange={e=>{change('ipoNumber',e.target.value);setIpoError('');setIpoCheck('');}} onBlur={async()=>{const number=input.ipoNumber?.trim();if(!number)return;setIpoCheck('Checking IPO number…');try{const result=await api<{available:boolean}>(`/project-workflow/ipo-number-availability?number=${encodeURIComponent(number)}`);setIpoCheck(result.available?'IPO number is available.':'');setIpoError(result.available?'':'This IPO number is already in use. Enter a different number or leave blank for automatic numbering.');}catch(e){setIpoCheck('');setIpoError(e instanceof Error?e.message:'Unable to check IPO number.');}}}/>
+              <small>The number is assigned only after sale confirmation. Duplicate numbers are blocked.</small>
+              {ipoCheck&&<span role="status">{ipoCheck}</span>}{ipoError&&<span className="form-error" role="alert">{ipoError}</span>}
+            </label>}
             {saleConfirmationFields
               .filter(([field]) => !customerFields.includes(field))
               .map(renderField)}
@@ -466,6 +488,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
           {po && document && (
             <>
               <h3>PO Comparison Summary</h3>
+              {preAgreedBank&&poInclusive&&poPrintedTax!==""&&Number(poPrintedTax)===0&&<p className="form-note">Customer PO payable includes tax. Printed Sales Tax: PKR {money(poPrintedTax)}. Approved embedded GST: PKR {money(basis?.comparison.tax??"0")}. The IPO retains the approved GST allocation; the printed zero does not make this a zero-tax deal.</p>}
               {issues.length ? (
                 <ul>
                   {issues.map((issue) => (
@@ -500,7 +523,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
                   </label>
                 </fieldset>
               </details>
-              <label className="pz-review-check">
+              {!preAgreedBank && <label className="pz-review-check">
                 <input
                   type="checkbox"
                   checked={scope}
@@ -508,7 +531,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack }: any) {
                 />
                 I checked the PO’s configuration, scope, quantities and terms
                 against the approved document.
-              </label>
+              </label>}
             </>
           )}
           <label className="pz-review-check">

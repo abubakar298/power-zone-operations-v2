@@ -1,3 +1,4 @@
+import {AdvanceBoqInbox,AdvanceStockReview} from '../components/AdvanceBoqInbox.js';
 import {ProjectCheckpoints} from './ProjectCheckpoints.js';
 import {InventoryWorkspace} from './InventoryWorkspace.js';
 import {Button} from '../ui/Button.js';
@@ -31,6 +32,7 @@ export function Operations({
   initialIpoId?: string;
   portal?: boolean;
 }) {
+  const [advanceReservation,setAdvanceReservation]=useState<any>(),[lastAdvanceReference,setLastAdvanceReference]=useState('');
   const [irrUpload,setIrrUpload]=useState(false);
   const [checkpoints,setCheckpoints]=useState(false);
   const [orders, setOrders] = useState<any[]>([]),
@@ -141,7 +143,7 @@ export function Operations({
   );
   async function load() {
     const [o, r] = await Promise.all([
-      api<any>("/orders"),
+      session.user.role === "Operations" ? Promise.resolve({orders:[]}) : api<any>("/orders"),
       api<any>("/operations/portal"),
     ]);
     setOrders(o.orders);
@@ -251,8 +253,10 @@ export function Operations({
       setBusy(false);
     }
   }
+  if(advanceReservation)return <AdvanceStockReview group={advanceReservation} onBack={()=>setAdvanceReservation(undefined)}/>;
   return (
     <section className="detail-panel operations-panel">
+      {session.user.role === "Operations"&&<AdvanceBoqInbox initialReference={lastAdvanceReference} onReserve={group=>{setLastAdvanceReference(group.number);setAdvanceReservation(group);}}/>}
       <Button variant="secondary" onClick={()=>setCheckpoints(!checkpoints)} aria-expanded={checkpoints}>Installation checkpoints</Button>
       {checkpoints&&<ProjectCheckpoints session={session}/>}
       {["Admin","Management","Operations"].includes(session.user.role)&&<><Button variant="secondary" onClick={()=>setIrrUpload(!irrUpload)}>Upload installation report to Inventory</Button>{irrUpload&&<InventoryWorkspace session={session} receiveOnly/>}</>}

@@ -498,7 +498,7 @@ test("quotation discount overrides pricing without changing the saved pricing or
   await post("/quotations/preview", {
     ...input,
     discount: "999999999999",
-  }).expect(400);
+  }).expect(422);
   await post("/quotations/preview", { ...input, discount: "-1" }).expect(400);
   await post("/quotations", {
     ...input,
@@ -870,8 +870,8 @@ test("customer PO and IPO preserve accepted selling amounts, discount allocation
   ).body;
   assert.equal(approved.submission_id, submitted.id);
   assert.equal(approved.snapshot.preparedBy, "Employee");
-  const legacySnapshot = { ...ep.snapshot };
-  delete legacySnapshot.peachtree;
+  // A second independent approval must not duplicate the first customer's PO.
+  const legacyInput = { ...evidence, evidenceNotes: "Independent legacy approval fixture" };
   const legacyId = randomUUID(),
     legacyKey = randomUUID();
   const legacyOwner = (
@@ -879,11 +879,18 @@ test("customer PO and IPO preserve accepted selling amounts, discount allocation
       "SELECT id FROM users WHERE email='commercial-employee@example.test'",
     )
   ).rows[0].id;
+  // HTTP previews are intentionally cost-redacted. A stored legacy submission
+  // contains the full frozen payload, not its public display projection.
+  const {OrdersRepository}=await import('../server/orders/repository.js');
+  const {orderSchema}=await import('../server/orders/schema.js');
+  const legacyPreview=await new OrdersRepository(db.pool).preview(legacyOwner,orderSchema.parse(legacyInput));
+  const legacySnapshot={...legacyPreview.snapshot};
+  delete (legacySnapshot as any).peachtree;
   await db.pool.query(
     "INSERT INTO ipo_submissions(id,input,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6)",
     [
       legacyId,
-      submitted.input,
+      legacyPreview.snapshot.input,
       legacySnapshot,
       fingerprint(legacySnapshot),
       legacyKey,
@@ -893,7 +900,7 @@ test("customer PO and IPO preserve accepted selling amounts, discount allocation
   const legacyApproved = (
     await op(`/submissions/${legacyId}/approve`, {
       requestKey: randomUUID(),
-    }).expect(201)
+    }).expect(res => assert.equal(res.status, 201, JSON.stringify(res.body)))
   ).body;
   assert.equal(
     legacyApproved.snapshot.peachtree.phaseTotal,
@@ -1616,7 +1623,9 @@ test("discount review and six-format export are read-only and management profita
     new Decimal(review.original.payable)
       .minus(review.proposed.payable)
       .toFixed(2),
-    "1000.00",
+    new Decimal(discountedSellingReview(pricing.snapshot, "0").netTotal)
+      .minus(discountedSellingReview(pricing.snapshot, "1000").netTotal)
+      .toFixed(2),
   );
   assert.ok(new Decimal(review.original.profit).gt(review.proposed.profit));
   assert.ok(

@@ -25,6 +25,13 @@ after(async () => {
 });
 for (const historical of fixture.cases)
   test(`locked workbook costing ${historical.number}`, () => {
+    // Reproduce the archived workbook using its own saved rates, never today's
+    // approved rates. Each case gets a copy so fixtures cannot affect each other.
+    const historicalMasters = structuredClone(masters);
+    for (const line of historical.lines) {
+      const rate = historicalMasters.rates.find(r => r.key === line.key);
+      if (rate) rate.rate = String(line.rate);
+    }
     const brand = (category: string, saved: string | undefined) => {
       const match = masters.brands.find(
         (b) =>
@@ -47,7 +54,7 @@ for (const historical of fixture.cases)
         switchgear: brand("Switchgear", saved["Switchgear Brand"] ?? "CHINT"),
       },
     });
-    const result = calculate(survey, masters);
+    const result = calculate(survey, historicalMasters);
     assert.ok(
       new Decimal(result.total).eq(historical.summary["TOTAL PROJECT COST"]),
       historical.number,

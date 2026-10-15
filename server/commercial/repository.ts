@@ -11,6 +11,7 @@ import {
 import { ownedCondition } from "../http/permissions.js";
 import { workflowHistory } from "../boq/workflow-history.js";
 import { Decimal } from "decimal.js";
+import {managementReviewV5} from './management-review-v5.js';
 import { allocateDiscount } from "../orders/allocation.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -788,6 +789,7 @@ export class CommercialRepository {
     await this.manager(this.pool, actor, false);
     const q = await this.quotationGet(id);
     const p = await this.pricingGet(actor, q.pricing_id);
+    if(p.snapshot.discountStrategy)return managementReviewV5(p.snapshot.discountStrategy,p.snapshot.cost,q.snapshot.discountAllocation?.discount??q.snapshot.footer.find((r:any)=>r.label==='Special Discount')?.amount??'0',typeof adjustment==='string'?{discount:adjustment}:adjustment,cashDeal(p.snapshot.input));
     const b = (
       await this.pool.query("SELECT snapshot FROM boq_revisions WHERE id=$1", [
         q.boq_revision_id,

@@ -169,7 +169,7 @@ test("Combined IPO packs retain accepted amounts, show sale type across all six 
       .expect(200)
       .expect("Content-Type", /application\/pdf/);
     assert.ok(
-      response.headers["content-disposition"].includes("IPO-and-Peachtree.pdf"),
+      response.headers["content-disposition"].includes(" - IPO and PT - "),
     );
     assert.match((await pdfText(response.body)).at(-1)!, /PEACHTREE DIVISION/);
     await request(app).get(`/api/orders/${row.id}/ipo.pdf`).expect(401);

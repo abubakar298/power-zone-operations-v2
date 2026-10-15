@@ -333,6 +333,7 @@ export function uploadHttp(
           "image/jpeg",
           "application/pdf",
           "text/plain",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ]),
         base64: z
           .string()
@@ -345,7 +346,7 @@ export function uploadHttp(
     if (!v.success)
       throw new HttpError(
         400,
-        "Upload a PNG, JPEG, PDF or text file up to 8 MB.",
+        "Upload an Excel (.xlsx), PNG, JPEG, PDF or text file up to 8 MB.",
       );
     const { filename, mime, base64 } = v.data,
       bytes = Buffer.from(base64, "base64");
@@ -360,7 +361,9 @@ export function uploadHttp(
           ? bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
           : mime === "application/pdf"
             ? bytes.subarray(0, 5).toString() === "%PDF-"
-            : !bytes.includes(0);
+            : mime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              ? bytes.subarray(0,4).equals(Buffer.from([80,75,3,4]))
+              : !bytes.includes(0);
     if (!valid)
       throw new HttpError(
         400,

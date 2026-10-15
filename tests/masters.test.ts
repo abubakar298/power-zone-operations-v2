@@ -36,6 +36,7 @@ before(async () => {
       setupToken,
     })
     .expect(201);
+  await db.pool.query("INSERT INTO restricted_cost_access(user_id,granted_reason) SELECT id,'Explicit isolated master-import verification capability' FROM users WHERE email='masters@example.test'");
   const login = await request(app)
     .post("/api/auth/login")
     .set("Origin", origin)
@@ -55,6 +56,26 @@ function save(kind: string, id: string, version: number, values: unknown) {
     .set("X-CSRF-Token", csrf)
     .send({ id, version, values });
 }
+test("branch-code correction preserves leading zeros, other site fields and an attributed before/after audit; stale edits are rejected", async () => {
+  // A private fixture keeps the reviewed imported site register intact for the following checks.
+  const site=(await db.pool.query("INSERT INTO sites(id,customer_id,name,code,location,status) SELECT COALESCE(max(id),0)+1,5,'Disposable branch-code fixture','0000','Isolated','Active' FROM sites RETURNING *")).rows[0];
+  const values={name:site.name,code:"0208",location:site.location??"",status:site.status};
+  await request(app).post("/api/masters/sites").set("Origin",origin).set("Cookie",cookie).set("X-CSRF-Token",csrf).send({id:String(site.id),version:site.version,values,changeReason:"Branch code assigned when PO was received"}).expect(200);
+  const updated=(await db.pool.query("SELECT * FROM sites WHERE id=$1",[site.id])).rows[0];
+  assert.equal(updated.code,"0208");assert.equal(updated.name,site.name);assert.equal(updated.location,site.location);assert.equal(updated.version,site.version+1);
+  const audits=(await db.pool.query("SELECT user_id,action FROM audit_log WHERE action LIKE 'master.site-code.changed:%'")).rows;
+  const audit=audits.find(r=>JSON.parse(r.action.slice("master.site-code.changed:".length)).siteId===String(site.id));assert.ok(audit);assert.ok(audit.user_id);
+  assert.deepEqual(JSON.parse(audit.action.slice("master.site-code.changed:".length)),{siteId:String(site.id),before:site.code,after:"0208",beforeVersion:site.version,afterVersion:site.version+1,reason:"Branch code assigned when PO was received"});
+  await save("sites",String(site.id),site.version,{...values,code:"9999"}).expect(409);
+  assert.equal((await db.pool.query("SELECT code FROM sites WHERE id=$1",[site.id])).rows[0].code,"0208");
+});
+test("customer tax references retain leading zeros and survive edits from older forms", async () => {
+  const row=(await db.pool.query("SELECT * FROM customers WHERE id=5")).rows[0];
+  const values={name:row.name,short_code:row.short_code,contact_person:row.contact_person??"",phone:row.phone??"",email:row.email??"",address:row.address??"",status:row.status,notes:row.notes??""};
+  await save("customers","5",row.version,{...values,ntn:"0801164-8",strn:""}).expect(200);
+  await save("customers","5",row.version+1,values).expect(200);
+  const after=(await db.pool.query("SELECT * FROM customers WHERE id=5")).rows[0];assert.equal(after.ntn,"0801164-8");assert.equal(after.strn,"");assert.equal(after.name,row.name);assert.equal(after.address,row.address);assert.equal(after.phone,row.phone);
+});
 test("reviewed import preserves all IDs, names, codes, site zeros, rates, statuses and rules", async () => {
   const source = JSON.parse(
     await readFile("data/reference-masters.json", "utf8"),
@@ -79,13 +100,19 @@ test("reviewed import preserves all IDs, names, codes, site zeros, rates, status
     assert.equal(imported.short_code, c.shortCode);
   }
   assert.equal(body.sites[0].code, "0128");
+  const approvedProfile=(await db.pool.query("SELECT payload FROM engineering_profiles_current WHERE key='standard-installation'")).rows[0].payload;
+  const approvedRateOverrides:Record<string,unknown>={"AC & DC Boxes":approvedProfile.siteBoxesCost,"Misc. Accessories":approvedProfile.miscCost,"Earthing Bore":approvedProfile.standardBoreCost};
   for (const r of source.rates) {
     const imported = body.rates.find((v: { key: string }) => v.key === r.key);
+    // Original imported rates remain immutable; migration 073 appends the Director's approved standard costs.
+    const original=(await db.pool.query("SELECT rate,status FROM rate_versions WHERE key=$1 AND version=1",[r.key])).rows[0];
+    assert.equal(original.rate===null?null:Number(original.rate),r.rate===null?null:Number(r.rate),r.key+' original rate');
+    assert.ok(imported,'Reviewed rate still available: '+r.key);
     assert.equal(imported.status, r.status);
     assert.equal(imported.unit, r.unit);
     assert.equal(
       imported.rate === null ? null : Number(imported.rate),
-      r.rate === null ? null : Number(r.rate),
+      approvedRateOverrides[r.key]!==undefined?Number(approvedRateOverrides[r.key]):r.rate === null ? null : Number(r.rate),
     );
   }
   for (const r of source.rules)
@@ -326,7 +353,7 @@ test("Coordinator can add customers and edit sites, rates and specifications, wh
   await write("customers", created.body.id, 1, {
     ...customer,
     name: "Not authorised",
-  }).expect(403);
+  }).expect(400); // Existing customer edits now require an attributed correction reason.
   const site = data.sites[0];
   const siteValues = {
     name: "Updated site",

@@ -1,4 +1,5 @@
 import { displayUnit } from "../../server/boq/unit.js";
+import{downloadName,filenameFromDisposition}from'../../shared/download-name.js';
 import { DocumentPreview } from "../components/DocumentPreview.js";
 import { money } from "../numbers.js";
 import { ExternalApproval } from "../components/ExternalApproval.js";
@@ -646,7 +647,7 @@ export function Orders({
                   const u = URL.createObjectURL(await r.blob());
                   const a = window.document.createElement("a");
                   a.href = u;
-                  a.download = `${saved?.number ?? "DRAFT"}-IPO-and-Peachtree.pdf`;
+                  a.download = filenameFromDisposition(r.headers.get('Content-Disposition'))??downloadName({customer:customerName,documentType:'IPO and PT',identity:input.quotationId??'draft',reference:saved?.number,extension:'pdf'});
                   a.click();
                   setTimeout(() => URL.revokeObjectURL(u), 1000);
                 })
@@ -729,7 +730,8 @@ export function Orders({
                   <tr>
                     <th>Item</th>
                     <th>Original before tax</th>
-                    <th>Discount after tax</th>
+                    <th>Allocated discount</th>
+                    {snapshot.allocation.policy==='approved-uplift-special-bess-epc-v1'&&<><th>Approved Discount</th><th>Management Special Discount</th></>}
                     <th>Before-tax reduction</th>
                     <th>Tax reduction</th>
                     <th>Tax rounding</th>
@@ -743,6 +745,7 @@ export function Orders({
                       </td>
                       <td>{money(l.originalBeforeTax)}</td>
                       <td>{money(l.allocatedDiscount)}</td>
+                      {snapshot.allocation.policy==='approved-uplift-special-bess-epc-v1'&&<><td>{money(l.approvedDiscount)}</td><td>{money(l.managementSpecialDiscount)}</td></>}
                       <td>{money(l.beforeTaxReduction)}</td>
                       <td>{money(l.taxReduction)}</td>
                       <td>{money(l.taxRoundingAdjustment)}</td>

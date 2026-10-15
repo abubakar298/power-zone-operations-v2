@@ -1,0 +1,19 @@
+import type{PoolClient}from'pg';import{randomUUID}from'node:crypto';
+const stable=(v:any):string=>v&&typeof v==='object'&&!Array.isArray(v)?'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}':Array.isArray(v)?'['+v.map(stable).join(',')+']':JSON.stringify(v);
+export async function approvedMasterAdditions(c:PoolClient,input:any,actor:string){
+ const changes:any[]=[];if(!input)return changes;
+ const ubl=(await c.query('SELECT * FROM customers WHERE id=5 FOR UPDATE')).rows[0];
+ if(!['','0801164-8'].includes(String(ubl.ntn??'')))throw Error('UBL NTN differs from Director-approved value; no overwrite performed');
+ if(!ubl.ntn){const after=(await c.query("UPDATE customers SET ntn='0801164-8',version=version+1 WHERE id=5 AND version=$1 RETURNING *",[ubl.version])).rows[0];if(!after)throw Error('Concurrent UBL customer edit');changes.push({kind:'UBL NTN',before:{ntn:ubl.ntn??'',version:ubl.version},after:{ntn:after.ntn,version:after.version}})}
+ const expected=['CH-Earthing','CH-Electrical Labor','CH-Deliveries'];if(input.serviceItems?.length!==3||input.serviceItems.some((r:any)=>!expected.includes(r.item_id)||r.rate_key!==null))throw Error('Unapproved service Item ID scope');
+ for(const row of input.serviceItems){const existing=(await c.query('SELECT * FROM inventory_catalogue_current WHERE item_id=$1',[row.item_id])).rows[0];if(existing){if(existing.rate_key!==null||stable(existing.payload)!==stable(row.payload))throw Error('Existing service Item ID differs: '+row.item_id)}else{await c.query('INSERT INTO inventory_catalogue_versions(item_id,version,payload,rate_key) VALUES($1,1,$2,NULL)',[row.item_id,row.payload]);changes.push({kind:'PT service Item ID',id:row.item_id,added:true})}}
+ const wanted=input.employee;if(wanted?.display_name!=='Waqas ul Haq'||wanted.designation!=='Regional Sales Head — South Region'||wanted.region!=='South'||wanted.is_salesperson!==true)throw Error('Unapproved employee scope');
+ const matches=(await c.query("SELECT * FROM employees WHERE regexp_replace(lower(display_name),'[^a-z]','','g') IN('waqasulhaq','waqsulhaq') FOR UPDATE")).rows;if(matches.length>1)throw Error('Multiple Waqas employee identities; Director review required');
+ const accounts=(await c.query("SELECT id FROM users WHERE regexp_replace(lower(display_name),'[^a-z]','','g') IN('waqasulhaq','waqsulhaq')")).rows;if(accounts.length>1)throw Error('Multiple Waqas account identities');
+ const previous=matches[0];let employee=previous;
+ if(!previous){employee=(await c.query('INSERT INTO employees(id,display_name,designation,region,is_salesperson,user_id,active,notes,created_by) VALUES($1,$2,$3,$4,true,$5,true,$6,$7) RETURNING *',[wanted.id,wanted.display_name,wanted.designation,wanted.region,accounts[0]?.id??null,wanted.notes,actor])).rows[0]}
+ else if(previous.designation!==wanted.designation||previous.region!==wanted.region||!previous.is_salesperson){employee=(await c.query('UPDATE employees SET designation=$1,region=$2,is_salesperson=true,version=version+1,updated_at=now() WHERE id=$3 AND version=$4 RETURNING *',[wanted.designation,wanted.region,previous.id,previous.version])).rows[0];if(!employee)throw Error('Concurrent employee correction')}
+ if(stable(previous)!==stable(employee)){await c.query('INSERT INTO employee_directory_events(id,employee_id,actor_id,kind,before_value,after_value,reason) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),employee.id,actor,previous?'Updated':'Registered',previous??null,employee,'Director-authorised local-to-live employee registration; no login credentials or account permissions created.']);changes.push({kind:'Salesperson employee',id:employee.id,added:!previous,designation:employee.designation,accountLinked:!!employee.user_id})}
+ if(changes.length)await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'release.approved-master-additions:'+JSON.stringify(changes)]);
+ return changes;
+}

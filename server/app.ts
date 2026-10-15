@@ -14,6 +14,7 @@ import { notificationWebhook } from "./notifications/webhook.js";
 import { NotificationsRepository } from "./notifications/repository.js";
 import { notificationsHttp } from "./notifications/http.js";
 import { financialVisibility } from "./http/cost-visibility.js";
+import {friendlyExportNames} from './documents/download-http.js';
 import { cniHttp } from "./commercial/cni-http.js";
 import { DesignRepository } from "./design/repository.js";
 import { backupsHttp } from "./backups/http.js";
@@ -62,6 +63,7 @@ export function createApp(
   app.disable("x-powered-by");
   app.set("trust proxy", config.trustProxyHops);
   app.use(financialVisibility);
+  app.use(friendlyExportNames(pool));
   app.use(
     helmet({
       strictTransportSecurity: config.production ? undefined : false,

@@ -10,7 +10,7 @@ export function canWriteMaster(
   return (
     role === "Admin" ||
     (role === "Coordinator" &&
-      ((kind === "customers" && id === "new") ||
+      (kind === "customers" ||
         kind === "sites" ||
         kind === "rates" ||
         kind === "items"))

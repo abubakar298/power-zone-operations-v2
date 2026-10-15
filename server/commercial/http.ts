@@ -10,7 +10,7 @@ import { buildQuotationPdf, buildQuotationComparisonPdf } from "./report.js";
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 const quotationPdfWorkerPath=createRequire(import.meta.url).resolve('pdfjs-dist/build/pdf.worker.min.mjs');
-const quotationPreviewDownloads=new Map<string,{actor:string;bytes:Buffer;expires:number}>();
+const quotationPreviewDownloads=new Map<string,{actor:string;bytes:Buffer;expires:number;context:any}>();
 const pricingPreviewContexts=new Map<string,{actor:string;input:unknown;expires:number}>();
 export function registerPricingPreviewContext(token:string,actor:string,input:unknown){pricingPreviewContexts.set(z.uuid().parse(token),{actor,input:pricingSchema.parse(input),expires:Date.now()+90*60*1000});}
 export function commercialHttp(
@@ -176,12 +176,13 @@ export function commercialHttp(
     const preview=await repo.quotationPreview(req.authSession!.user.id,parse(quotationSchema,req.body));
     for(const [token,file] of quotationPreviewDownloads)if(file.expires<Date.now())quotationPreviewDownloads.delete(token);
     while(quotationPreviewDownloads.size>=32)quotationPreviewDownloads.delete(quotationPreviewDownloads.keys().next().value!);
-    const token=randomUUID();quotationPreviewDownloads.set(token,{actor:req.authSession!.user.id,bytes:buildQuotationPdf(preview.snapshot),expires:Date.now()+15*60*1000});
+    const token=randomUUID();quotationPreviewDownloads.set(token,{actor:req.authSession!.user.id,bytes:buildQuotationPdf(preview.snapshot),expires:Date.now()+15*60*1000,context:{customer:preview.snapshot.customer.shortCode||preview.snapshot.customer.name,site:preview.snapshot.siteName,siteCode:preview.snapshot.siteCode,documentType:'Quotation Preview',identity:`quotation-preview:${preview.fingerprint}`,extension:'pdf'}});
     res.json({url:`/api/commercial/quotations/preview-download/${token}`});
   });
   r.get('/quotations/preview-download/:token',(req,res)=>{
     const file=quotationPreviewDownloads.get(String(req.params.token));
     if(!file||file.actor!==req.authSession!.user.id||file.expires<Date.now())throw new HttpError(404,'Preview download expired. Download the preview again.');
+    res.locals.downloadContext=file.context;
     res.set({'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="Quotation-Preview.pdf"','Cache-Control':'private, no-store','Content-Length':String(file.bytes.length)}).send(file.bytes);
   });
   r.post("/quotations/preview.pdf", async (req, res) => {
@@ -189,6 +190,7 @@ export function commercialHttp(
       req.authSession!.user.id,
       parse(quotationSchema, req.body),
     );
+    res.locals.downloadContext={customer:p.snapshot.customer.shortCode||p.snapshot.customer.name,site:p.snapshot.siteName,siteCode:p.snapshot.siteCode,documentType:'Quotation Preview',identity:`quotation-preview:${p.fingerprint}`,extension:'pdf'};
     res
       .set({
         "Content-Type": "application/pdf",

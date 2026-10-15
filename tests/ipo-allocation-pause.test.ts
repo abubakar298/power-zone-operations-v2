@@ -10,6 +10,7 @@ import { pricingSchema, quotationSchema } from '../server/commercial/schema.js';
 import { OrdersRepository, IPO_ALLOCATION_PENDING, isPendingIpoAllocation } from '../server/orders/repository.js';
 import { orderSchema } from '../server/orders/schema.js';
 import { HttpError } from '../server/http/errors.js';
+import {fingerprint} from '../server/boq/repository.js';
 
 test('Atif receives a clear deferred-allocation message; repeated preview/submit cannot issue or rewrite the accepted quotation', async () => {
   const db = await testDatabase();
@@ -25,7 +26,12 @@ test('Atif receives a clear deferred-allocation message; repeated preview/submit
     const boq = await boqs.save(actor,draft.id,draft.version,preview.fingerprint);
     const input = pricingSchema.parse({boqRevisionId:boq.id,presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',preparedBy:'Atif fixture'});
     const pricingPreview = await commercial.pricingPreview(actor,input);
-    const pricing = await commercial.pricingSave(actor,input,pricingPreview.fingerprint,randomUUID());
+    const modernPricing = await commercial.pricingSave(actor,input,pricingPreview.fingerprint,randomUUID());
+    // Preserve an actual legacy snapshot shape, rather than expecting new verified allocations to pause.
+    const {discountStrategy,sellingDiscountReview,...legacySnapshot}=modernPricing.snapshot;
+    const legacyId=randomUUID();
+    await db.pool.query("INSERT INTO commercial_pricing_versions(id,boq_revision_id,version,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,2,'LEGACY-ALLOCATION-FIXTURE',$3,$4,$5,$6)",[legacyId,boq.id,{...legacySnapshot,engineVersion:3},fingerprint({...legacySnapshot,engineVersion:3}),randomUUID(),actor]);
+    const pricing={id:legacyId};
     const qi = quotationSchema.parse({pricingId:pricing.id,quotedDate:'2026-10-14',validity:'7 Days',proposedBy:'Atif fixture'});
     const qp = await commercial.quotationPreview(actor,qi);
     const quote = await commercial.quotationSave(actor,qi,qp.fingerprint,randomUUID());

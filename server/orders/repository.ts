@@ -1,3 +1,4 @@
+import { ipoSiteIdentity } from "./site-identity.js";
 import {cashDeal, sellingFactor} from "../commercial/deal.js";
 import { requireEligibleQuotation } from "../commercial/eligibility.js";
 import { allocateReference, boqIdentity } from "../documents/references.js";
@@ -15,11 +16,14 @@ import { fingerprint } from "../boq/repository.js";
 import { CommercialRepository } from "../commercial/repository.js";
 import { quote } from "../commercial/engine.js";
 import { HttpError } from "../http/errors.js";
-import { allocateDiscount } from "./allocation.js";
-import { peachtreeDivision } from "./peachtree.js";
+import { allocateDiscount,allocateBeforeTaxDiscount } from "./allocation.js";
+import {discountedSellingReview} from '../commercial/engine.js';
+import {allocateApprovedDiscount,DISCOUNT_POLICY} from '../commercial/discount-strategy.js';
+import { peachtreeDivision } from "./peachtree-v5.js";
+import {ptDetail} from './pt-detail.js';
 import type { OrderInput } from "./schema.js";
 
-export const IPO_ALLOCATION_PENDING = "IPO allocation is paused pending the Director’s discount-allocation decision. The accepted quotation remains unchanged.";
+export const IPO_ALLOCATION_PENDING = "IPO allocation is paused because the saved quotation’s discount and tax cannot be safely reconciled. The accepted quotation remains unchanged.";
 export function isPendingIpoAllocation(error: unknown) {
   return error instanceof HttpError && error.status === 422 &&
     (error.message === IPO_ALLOCATION_PENDING ||
@@ -165,8 +169,29 @@ export class OrdersRepository {
           : p.snapshot.rows.find((r: any) => r.key === l.group).taxRate,
     }));
     const beforeTaxDiscount=p.snapshot.input.discountPercent!==undefined && (new Decimal(footer('Special Discount')??'0').gt(0)||p.snapshot.input.roundedTotal!==undefined);
-    if(beforeTaxDiscount)throw new HttpError(422,IPO_ALLOCATION_PENDING);
     let allocation: ReturnType<typeof allocateDiscount>;
+    if(source.discountAllocation?.policy===DISCOUNT_POLICY&&p.snapshot.discountStrategy?.version===DISCOUNT_POLICY){
+      const accepted=allocateApprovedDiscount(p.snapshot.discountStrategy,source.discountAllocation.discount,p.snapshot.input.roundedTotal);
+      const safe={...accepted,lines:accepted.lines.map(({cost,approvedAllowance,category,...line})=>line)};
+      if(fingerprint(safe)!==fingerprint(source.discountAllocation)||accepted.total!==footer('Net Total'))throw new HttpError(422,'Saved accepted discount allocation does not reconcile with this quotation.');
+      allocation={...accepted,lines:accepted.lines.map(line=>{
+        const item=b.snapshot.lines.find((x:any)=>x.key===line.key);if(!item)throw new HttpError(422,'Accepted selling item is missing from the saved BOQ.');
+        const phase=item.phase==='Solar Panels'?'Solar Panels':item.phase==='Structure'?'Structure':/^(HYB-|CH-PCS-)/.test(item.key)?'Inverter':/^(BAT-|CH-BAT-)/.test(item.key)?'Batteries':/^(BMS-|CH-BMS-)/.test(item.key)?'BMS':item.phase==='BESS'?'BESS':'EPC';
+        const epcCategory=/^(electrical labour|labour)$/i.test(item.key)?'Electrical Labour':/^(delivery\/logistics|delivery|deliveries)$/i.test(item.key)?'Deliveries':item.epc==='Earthing Cost'?'Earthing Cost':'Installation Cost';
+        const {cost,approvedAllowance,category,...selling}=line;
+        return {...selling,description:item.description,qty:item.qty,unit:item.unit,phase,epcCategory,rate:new Decimal(item.qty).gt(0)?new Decimal(line.beforeTax).div(item.qty).toFixed(6):'0.000000'};
+      })};
+    }else{
+    if(beforeTaxDiscount){
+      // Existing accepted v4 quotations retain their original proportional contract.
+      // Never retrofit the new two-layer policy into their immutable snapshots.
+      if(p.snapshot.engineVersion!==4)throw new HttpError(422,IPO_ALLOCATION_PENDING);
+      const original=quote({...p.snapshot,input:{...p.snapshot.input,presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',roundedTotal:undefined}},b.snapshot,{pricingId:p.id,...source.input,discount:'0',additionalItem:extra});
+      const accepted=discountedSellingReview(p.snapshot,footer('Special Discount')??'0');
+      if(accepted.netTotal!==footer('Net Total'))throw new HttpError(422,IPO_ALLOCATION_PENDING);
+      const originalLines=['bess-only','direct-product'].includes(b.snapshot.survey.family)&&p.snapshot.itemPricing?p.snapshot.itemPricing.map((l:any)=>{const item=b.snapshot.lines.find((x:any)=>x.key===l.key);return {description:item.description,qty:item.qty,unit:item.unit,group:l.group,beforeTax:l.beforeTax,taxRate:l.taxRate};}):original.lines.map(l=>({description:l.description,qty:l.qty,unit:l.unit,group:l.group,beforeTax:l.amount!,taxRate:p.snapshot.rows.find((r:any)=>r.key===l.group).taxRate}));
+      try{allocation=allocateBeforeTaxDiscount(originalLines,subtotal,tax10,tax18,accepted.discount,footer('Net Total'),accepted.solarTax,accepted.otherTax);}catch(error){if(error instanceof HttpError&&error.status===422)throw new HttpError(422,IPO_ALLOCATION_PENDING);throw error;}
+    }else{
     try { allocation = allocateDiscount(
       lines,
       subtotal,
@@ -179,6 +204,8 @@ export class OrdersRepository {
       if (isPendingIpoAllocation(error)) throw new HttpError(422, IPO_ALLOCATION_PENDING);
       throw error;
     }
+    }
+    }
     const document = await this.checkDocument(c, actor, input.documentId);
     const snapshot = {
       engineVersion: 1,
@@ -186,7 +213,8 @@ export class OrdersRepository {
       source: "Accepted quotation",
       quotationType:{presentation:p.snapshot.input.presentation,taxMode:p.snapshot.input.taxMode,saleType:p.snapshot.input.saleType,cashGstTreatment:p.snapshot.input.cashGstTreatment},
       dealAccounting:p.snapshot.dealAccounting,
-      documentLayoutVersion:3,
+      documentLayoutVersion:4,
+      approvedPanelQty:b.snapshot.survey.panelQty,
       quotationId: q.id,
       quotationNumber: q.number,
       boqRevisionId: b.id,
@@ -206,6 +234,7 @@ export class OrdersRepository {
     };
     const phaseSource=(name:string)=>b.snapshot.lines.filter((l:any)=>name === "Solar Panels"?l.phase === "Solar Panels":name === "Structure"?l.phase === "Structure":name === "Inverter"?l.key===b.snapshot.inverterConfig?.sku:name === "Batteries"?/^(BAT-|CH-BAT-)/.test(l.key):name === "BMS"?/^(BMS-|CH-BMS-)/.test(l.key):name === "BESS"?l.phase === "BESS":l.phase!=="Solar Panels"&&l.phase!=="Structure"&&l.phase!=="BESS");
     snapshot.peachtree.phases=snapshot.peachtree.phases.map(p=>({...p,description:p.name === "EPC"?"CH-EPC - Installation and balance of system":p.name === "Structure"?"CH-Structure - "+phaseSource(p.name).map((l:any)=>l.description).join("; "):phaseSource(p.name).map((l:any)=>`${l.qty} x ${l.itemId || l.description} (${l.specification || l.description})`).join("; ")}));
+    snapshot.peachtree=ptDetail(snapshot,b.snapshot);
     return { snapshot, fingerprint: fingerprint(snapshot) };
   }
   async checkDocument(c: Pool | PoolClient, actor: string, id?: string) {
@@ -519,8 +548,10 @@ export class OrdersRepository {
       )
     ).rows[0];
     if (!row) throw new HttpError(404, "IPO not found.");
+    const identity = await ipoSiteIdentity(this.pool, row);
     return {
       ...row,
+      ...identity,
       quotationType: (await this.quotationTypes([row.id])).get(row.id),
       external_approval:
         (

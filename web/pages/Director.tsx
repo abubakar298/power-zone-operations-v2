@@ -1,3 +1,4 @@
+import { UblCustomerSend } from "../components/UblCustomerSend.js";
 import { cableInvoiceAdjustment } from "../../server/inventory/reconciliation.js";
 import { jobLabel } from "../components/job-label.js";
 import { ClosureIndicators } from "../components/ClosurePerformance.js";
@@ -92,7 +93,29 @@ export function Director({
       )}
       {tab === "Approvals" && (
         <>
-          <section className="detail-panel"><h3>UBL Survey Reports & Excel</h3>{surveyPackageError&&<p className="form-error" role="alert">{surveyPackageError}</p>}{!surveyPackageError&&!surveyPackages.length&&<p>No submitted UBL survey packages.</p>}{surveyPackages.map(p=><div key={p.id} className="pz-panel"><h4>{p.snapshot.sites.length} site(s) · {new Date(p.created_at).toLocaleDateString('en-PK',{timeZone:'Asia/Karachi'})}</h4><p>{p.snapshot.sites.map((s:any)=>`${s.siteCode} · ${s.siteName}`).join('; ')}</p><p>{p.snapshot.remarks}</p><div className="pz-action-row"><a target="_blank" rel="noreferrer" href={`/api/project-workflow/ubl-survey-packages/${p.id}/pdf`}>Review Report</a><a href={`/api/project-workflow/ubl-survey-packages/${p.id}/xlsx`}>Download UBL Excel</a></div></div>)}</section>
+          <section className="detail-panel">
+            <h3>UBL Survey Reports & Excel</h3>
+            {surveyPackageError && <p className="form-error" role="alert">{surveyPackageError}</p>}
+            {!surveyPackageError && !surveyPackages.length && <p>No submitted UBL survey packages.</p>}
+            {[{label:"Combined Survey Groups", combined:true},{label:"Individual Survey Reports",combined:false}].map(section => {
+              const packages = surveyPackages.filter(p => (p.snapshot.sites.length > 1) === section.combined);
+              if (!packages.length) return null;
+              return <div className="pz-stack" key={section.label}>
+                <h4>{section.label}</h4>
+                {packages.map(p => {
+                  const groupNumber = String(p.snapshot.remarks ?? "").match(/SSG-\d+/)?.[0];
+                  return <article key={p.id} className="pz-panel pz-stack">
+                    <h4>{section.combined ? `${groupNumber ?? "Combined Survey Group"} · ${p.snapshot.sites.length} sites` : `${p.snapshot.sites[0].siteCode} · ${p.snapshot.sites[0].siteName}`}</h4>
+                    <p className="pz-caption">{section.combined ? "One combined report and UBL Excel · send all sites together" : "Individual report and UBL Excel"} · Submitted {new Date(p.created_at).toLocaleDateString('en-PK',{timeZone:'Asia/Karachi'})}</p>
+                    <p><strong>Branch codes:</strong> {p.snapshot.sites.map((site:any)=>site.siteCode).join(', ')}</p>
+                    <details><summary>Sites in this {section.combined ? 'group' : 'report'} ({p.snapshot.sites.length})</summary><div className="pz-table-scroll"><table className="pz-table"><thead><tr><th>Branch code</th><th>Site</th></tr></thead><tbody>{p.snapshot.sites.map((site:any)=><tr key={site.recordId}><td>{site.siteCode}</td><td>{site.siteName}</td></tr>)}</tbody></table></div></details>
+                    <div className="pz-action-row"><a target="_blank" rel="noreferrer" href={`/api/project-workflow/ubl-survey-packages/${p.id}/pdf`}>{section.combined ? 'Review Combined Report' : 'Review Report'}</a><a href={`/api/project-workflow/ubl-survey-packages/${p.id}/xlsx`}>{section.combined ? 'Download Combined UBL Excel' : 'Download UBL Excel'}</a></div>
+                    <UblCustomerSend session={session} pkg={p}/>
+                  </article>;
+                })}
+              </div>;
+            })}
+          </section>
           <section className="detail-panel">
             <h3>Job closure performance</h3>
             {closures

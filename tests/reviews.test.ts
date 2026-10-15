@@ -1,5 +1,6 @@
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
+import { Decimal } from "decimal.js";
 import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { testDatabase } from "./database.js";
@@ -47,6 +48,7 @@ before(async () => {
   employee = await account("Coordinator");
   other = await account("Coordinator");
   manager = await account("Management");
+  await db.pool.query("INSERT INTO restricted_cost_access(user_id,granted_reason) VALUES($1,'Isolated Director fixture')",[manager.id]);
   const masters = await new MastersRepository(db.pool).list();
   const brand = (category: string, name: string) =>
     masters.brands.find((b: any) => b.category === category && b.name === name)!
@@ -95,7 +97,7 @@ function post(actor: Actor, path: string, body: object) {
 function get(actor: Actor, path: string) {
   return request(app).get(`/api/boqs${path}`).set("Cookie", actor.cookie);
 }
-test("first approved BOQ reuses an active master site without changing it; duplicates and inactive sites are rejected", async () => {
+test("separate preliminary BOQs reuse an active site without changing it; approval retries are idempotent and inactive sites rejected", async () => {
   const siteId = 50001;
   await db.pool.query(
     "INSERT INTO sites(id,customer_id,name,code,location,status) VALUES($1,3,'Pre-existing site','READY-SITE','Lahore','Active')",
@@ -130,17 +132,21 @@ test("first approved BOQ reuses an active master site without changing it; dupli
     before,
   );
   const duplicate = await submit({ ...inputs, siteCode: "ready-site" });
-  await post(manager, `/reviews/${duplicate.s.id}/decision`, {
+  const second = (await post(manager, `/reviews/${duplicate.s.id}/decision`, {
     outcome: "Approved",
     comments: "",
-  }).expect(409);
+  }).expect(200)).body.saved;
+  assert.notEqual(second.id, saved.id);
+  assert.notEqual(second.number, saved.number);
+  assert.equal((await post(manager, `/reviews/${duplicate.s.id}/decision`, {outcome:"Approved",comments:""}).expect(200)).body.saved.id, second.id);
+  assert.deepEqual((await db.pool.query("SELECT * FROM sites WHERE id=$1",[siteId])).rows[0],before);
   assert.equal(
     (
       await db.pool.query("SELECT count(*) FROM boqs WHERE site_id=$1", [
         siteId,
       ])
     ).rows[0].count,
-    "1",
+    "2",
   );
   await db.pool.query(
     "INSERT INTO sites(id,customer_id,name,code,location,status) VALUES(50002,3,'Inactive site','INACTIVE-SITE','Lahore','Inactive')",
@@ -279,7 +285,7 @@ test("only reviewers can decide; submitted drafts lock; source access and change
   r0 = approvals[0].body.saved;
   assert.equal(r0.id, approvals[1].body.saved.id);
   assert.equal((await get(manager, `/reviews/${s.id}`)).body.revision_id, null);
-  assert.equal(r0.snapshot.total, "6406786");
+  assert.equal(r0.snapshot.total, "6361786");
   await post(employee, "/drafts", {
     id: d.id,
     version: draft.version,
@@ -326,7 +332,7 @@ test("revision reasons, identities and latest-base checks preserve immutable R0/
     }).expect(200)
   ).body.saved;
   assert.equal(r1.boq_id, r0.boq_id);
-  assert.match(r1.number, /^CPZ-BOQ-\d{2}-\d{3}-0003-\d{3}-R1 \(BAFL-REV001\)$/);
+  assert.match(r1.number, /^CPZ-PBQ-\d{2}-\d{3}-0003-\d{3} \(BAFL-REV001\)$/);
   assert.equal(r1.revision_reason, "Updated DC routing");
   await post(manager, `/reviews/${b.s.id}/decision`, {
     outcome: "Approved",
@@ -351,7 +357,8 @@ test("revision reasons, identities and latest-base checks preserve immutable R0/
       comments: "",
     }).expect(200)
   ).body.saved;
-  assert.equal(r2.number, r1.number.replace("-R1 ","-R2 "));
+  assert.notEqual(r2.number, r1.number);
+  assert.equal(r2.revision,2);
   const history = (await get(employee, `/${r2.id}/history`).expect(200)).body
     .revisions;
   assert.deepEqual(
@@ -360,7 +367,7 @@ test("revision reasons, identities and latest-base checks preserve immutable R0/
   );
   assert.equal(
     (await get(manager, `/${r0.id}`)).body.snapshot.total,
-    "6406786",
+    "6361786",
   );
   await assert.rejects(
     db.pool.query(
@@ -570,6 +577,13 @@ test("external approval preserves evidence, recorder identity and instructions; 
     ),
   );
   assert.equal(row.basis, "Selling values excluding tax");
+  assert.equal(row.allocationIssue, undefined);
+  assert.ok(new Decimal(row.sellingRevenue).gt(0));
+  assert.equal(row.budgetedProfit, new Decimal(row.sellingRevenue).minus(row.budgetedCost).toFixed(2));
+  assert.ok(new Decimal(row.budgetedMarginPercent).gte(0));
+  assert.ok(portfolio.proposals.length>1, "Read-only allocation must not hide other proposals");
+  assert.equal((await db.pool.query("SELECT count(*) FROM internal_purchase_orders")).rows[0].count,"0");
+  assert.deepEqual((await commercial.quotationGet(q2.id)).snapshot,qp2.snapshot);
   assert.equal(
     row.customerPayable,
     qp2.snapshot.footer.find((f: any) => f.label === "Net Total")!.amount,

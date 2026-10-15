@@ -160,6 +160,13 @@ export function Masters({
       const value = String(form.get(field) ?? "");
       values[field] = field === "rate" && value === "" ? null : value;
     }
+    const customerCorrection=edit.kind==='customers'&&!edit.isNew&&session.user.role==='Coordinator';
+    const changeReason=String(form.get('changeReason')??'').trim();
+    if(customerCorrection){
+      values.short_code=edit.row.short_code;values.status=edit.row.status;
+      if(!changeReason){setError('Enter a reason for the customer update.');return;}
+      if(!window.confirm(`Update ${edit.row.name}?\nReason: ${changeReason}\nHistorical documents keep their saved customer details.`)||!window.confirm('Confirm saving these customer details to the database?'))return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -168,6 +175,7 @@ export function Masters({
           id: edit.isNew ? "new" : String(edit.row.id ?? edit.row.key),
           version: Number(edit.row.version ?? 0),
           values,
+          ...(customerCorrection?{changeReason}:{}),
         },
         csrf: session.csrfToken,
       });
@@ -493,7 +501,7 @@ export function Masters({
               {fields[edit.kind].map((field, i) => (
                 <label key={field}>
                   {labels[field]}
-                  {field === "status" ? (
+                  {edit.kind==='customers'&&!edit.isNew&&session.user.role==='Coordinator'&&['short_code','status'].includes(field)?<input name={field} value={String(edit.row[field]??'')} readOnly/>:field === "status" ? (
                     <select
                       aria-label={labels[field]}
                       name={field}
@@ -551,6 +559,7 @@ export function Masters({
                   )}
                 </label>
               ))}
+              {edit.kind==='customers'&&!edit.isNew&&session.user.role==='Coordinator'&&<label>Reason for change<textarea name="changeReason" maxLength={2000} required/></label>}
               {(edit.kind === "rates" ||
                 edit.kind === "rules" ||
                 edit.kind === "items") && (

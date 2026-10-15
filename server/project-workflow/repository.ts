@@ -1,3 +1,7 @@
+import {manualIpoAvailable,requireDirectUps} from "../documents/manual-ipo.js";
+import {approvedMaterialView} from './advance-material-view.js';
+import {ptDetail} from '../orders/pt-detail.js';
+import {ipoReference} from '../documents/historical-ipo.js';
 import { headsupSources, saveHeadsup, sendHeadsup } from "./headsup.js";
 import { readyPackages, readyFile, unbindReady } from "./ready-send.js";
 import {
@@ -110,6 +114,7 @@ function saleInput(basis: any, received: any) {
       received.confirmationType === "WhatsApp approval"
         ? ""
         : received.reference,
+    ...(basis.order.allocation?.policy==="fixed-bank-ups"?{salesPerson:"Waqas ul Haq"}:{}),
     approvalReference: received.reference,
     orderDate: received.date,
     evidenceType: received.confirmationType,
@@ -222,16 +227,20 @@ export class ProjectWorkflowRepository {
     this.requireRole(u, ["Coordinator", "Design", "Accounts"]);
     const m = await new MastersRepository(this.pool).list();
     return {
+      frameworkAttachments: (await this.pool.query('SELECT id,framework_id,filename,summary FROM framework_reference_attachments ORDER BY created_at,id')).rows,
       surveyFormTemplates: await customerSurveyTemplates(this.pool),
       customers: m.customers
         .filter((c: any) => c.status === "Active")
         .map(
-          ({ id, name, short_code, contact_person, phone, address }: any) => ({
+          ({ id, name, short_code, contact_person, phone, email, address, ntn, strn }: any) => ({
             id,
             name,
             short_code,
             contact_person,
             phone,
+            email,
+            ntn,
+            strn,
             address,
           }),
         ),
@@ -264,9 +273,11 @@ export class ProjectWorkflowRepository {
         setting,
         value,
       })),
+      features: {directPoUps:process.env.ENABLE_DEFERRED_UPS_WORKFLOW==='true'},
       frameworks: (
         await this.pool.query(
-          "SELECT id,customer_id,configuration_key,version,source_reference,payload->>'type' AS type,payload->>'pricingStage' AS pricing_stage,payload->'routes' AS routes FROM project_framework_current ORDER BY customer_id,configuration_key",
+          "SELECT id,customer_id,configuration_key,version,source_reference,payload->>'type' AS type,payload->>'pricingStage' AS pricing_stage,payload->'routes' AS routes FROM project_framework_current WHERE ($1 OR payload->>'type' IS DISTINCT FROM 'bank-ups') ORDER BY customer_id,configuration_key",
+          [process.env.ENABLE_DEFERRED_UPS_WORKFLOW==='true'],
         )
       ).rows,
       quotations: (
@@ -277,6 +288,14 @@ export class ProjectWorkflowRepository {
       ).rows,
       routes: routeNames,
     };
+  }
+  async frameworkReferenceAttachment(actor:string,id:string){
+    const u=await this.user(actor);
+    this.requireRole(u,['Coordinator','Design','Accounts']);
+    const file=(await this.pool.query('SELECT filename,mime,content,sha256 FROM framework_reference_attachments WHERE id=$1',[id])).rows[0];
+    if(!file)throw new HttpError(404,'Reference attachment not found.');
+    if(createHash('sha256').update(file.content).digest('hex')!==file.sha256)throw new HttpError(409,'Reference attachment verification failed.');
+    return file;
   }
   async decorate(r: any, u: any, c: Pool | PoolClient = this.pool) {
     const data = r.data ?? {};
@@ -367,14 +386,14 @@ export class ProjectWorkflowRepository {
       r.stage === "issued"
         ? (
             await c.query(
-              "SELECT p.reference,p.input->>'date' AS po_date,i.created_at,h.ipo_id,i.operations_id FROM project_workflow_issuances i JOIN project_po_receipts p ON p.id=i.receipt_id JOIN ipo_accounts_handoffs h ON h.ipo_id=i.ipo_id JOIN operations_boq_issuances o ON o.id=i.operations_id WHERE i.record_id=$1",
+              "SELECT q.number AS ipo_number,p.reference,p.input->>'date' AS po_date,i.created_at,h.ipo_id,i.operations_id FROM project_workflow_issuances i JOIN internal_purchase_orders q ON q.id=i.ipo_id JOIN project_po_receipts p ON p.id=i.receipt_id JOIN ipo_accounts_handoffs h ON h.ipo_id=i.ipo_id JOIN operations_boq_issuances o ON o.id=i.operations_id WHERE i.record_id=$1",
               [r.id],
             )
           ).rows[0]
         : null;
     const headsup = (
       await c.query(
-        "SELECT h.id,h.created_at,h.snapshot,EXISTS(SELECT 1 FROM headsup_department_handoffs d WHERE d.receipt_id=h.id) AS sent FROM customer_headsup_receipts h WHERE NOT EXISTS(SELECT 1 FROM customer_headsup_receipts newer WHERE newer.supersedes_id=h.id) AND EXISTS(SELECT 1 FROM jsonb_array_elements(h.snapshot->'matches') m WHERE m->>'recordId'=$1) ORDER BY h.created_at DESC LIMIT 1",
+        "SELECT h.id,h.created_at,h.snapshot,EXISTS(SELECT 1 FROM headsup_department_handoffs d WHERE d.receipt_id=h.id) AS sent FROM customer_headsup_receipts h WHERE EXISTS(SELECT 1 FROM active_headsup_received_sites binding WHERE binding.record_id::text=$1) AND NOT EXISTS(SELECT 1 FROM audit_log archived WHERE archived.action='customer.headsup.unsaved:'||h.id::text) AND NOT EXISTS(SELECT 1 FROM customer_headsup_receipts newer WHERE newer.supersedes_id=h.id) AND EXISTS(SELECT 1 FROM jsonb_array_elements(h.snapshot->'matches') m WHERE m->>'recordId'=$1) ORDER BY h.created_at DESC LIMIT 1",
         [r.id],
       )
     ).rows[0];
@@ -429,6 +448,8 @@ export class ProjectWorkflowRepository {
         !!scheduled && scheduled < today && r.stage === "survey_scheduled",
       blocker: data.noFeasibleSolution
         ? "Needs Review — No Feasible Solution"
+        : data.ublStandardsReview?.needsReview
+          ? "Needs Review — UBL standards deviation"
         : (data.returnReason ??
           (r.stage === "order_exception"
             ? "PO differs from approved commercial basis"
@@ -490,11 +511,13 @@ export class ProjectWorkflowRepository {
             ?.receivedSolutionId ?? null,
         advanceBoqSent: headsup?.sent ?? false,
         ipoShared: !!shared,
+        ipoNumber: shared?.ipo_number ?? data.ipoNumber ?? null,
         sharedPoReference: shared?.reference ?? null,
         sharedPoDate: shared?.po_date ?? null,
         sharedAt: shared?.created_at ?? null,
         notes: data.notes ?? "",
         noFeasibleSolution: data.noFeasibleSolution ?? null,
+        ublStandardsReview: data.ublStandardsReview ?? null,
         scheduledSurveyDate: data.scheduledSurveyDate ?? "",
         actualSurveyDate: data.actualSurveyDate ?? "",
         submissionRemarks: data.submissionRemarks ?? "",
@@ -635,7 +658,7 @@ export class ProjectWorkflowRepository {
       ).rows;
     const files = (
       await this.pool.query(
-        "SELECT id,kind,filename,mime,created_at FROM project_workflow_files WHERE record_id=$1 ORDER BY created_at",
+        "SELECT id,kind,filename,mime,created_at FROM project_workflow_files WHERE record_id=$1 AND NOT id::text IN (SELECT jsonb_array_elements_text(COALESCE(data->'removedRequestFileIds','[]'::jsonb)) FROM project_workflow_records WHERE id=$1) ORDER BY created_at",
         [id],
       )
     ).rows;
@@ -683,6 +706,7 @@ export class ProjectWorkflowRepository {
       : null;
     return {
       record,
+      informationalTechnicalReport:(await this.pool.query('SELECT t.document_id,d.number,t.created_at FROM informational_technical_reports t JOIN project_workflow_documents d ON d.id=t.document_id WHERE t.record_id=$1 AND t.source_review_id=$2 ORDER BY t.created_at DESC LIMIT 1',[id,r.data.reviewDocumentId??null])).rows[0]??null,
       sharedFinalBoq: finalBoq
         ? {
             number: finalBoq.number,
@@ -747,7 +771,7 @@ export class ProjectWorkflowRepository {
     this.requireRole(u, ["Coordinator"]);
     return (
       await this.pool.query(
-        "SELECT h.id,h.customer_id,h.evidence_id,h.created_at,c.name AS customer,h.snapshot-'ocrText' AS snapshot,EXISTS(SELECT 1 FROM headsup_department_handoffs sent WHERE sent.receipt_id=h.id) AS sent FROM customer_headsup_receipts h JOIN customers c ON c.id=h.customer_id WHERE ($2 OR h.created_by=$1) AND EXISTS(SELECT 1 FROM jsonb_array_elements(h.snapshot->'matches') m JOIN project_workflow_records r ON r.id::text=m->>'recordId' WHERE r.data->>'localPreviewArchived' IS DISTINCT FROM 'true') AND NOT EXISTS(SELECT 1 FROM customer_headsup_receipts newer WHERE newer.supersedes_id=h.id) ORDER BY h.created_at DESC LIMIT 100",
+        "SELECT h.id,h.customer_id,h.evidence_id,h.created_at,c.name AS customer,h.snapshot-'ocrText' AS snapshot,EXISTS(SELECT 1 FROM headsup_department_handoffs sent WHERE sent.receipt_id=h.id) AS sent FROM customer_headsup_receipts h JOIN customers c ON c.id=h.customer_id WHERE ($2 OR h.created_by=$1) AND EXISTS(SELECT 1 FROM jsonb_array_elements(h.snapshot->'matches') m JOIN project_workflow_records r ON r.id::text=m->>'recordId' WHERE r.data->>'localPreviewArchived' IS DISTINCT FROM 'true') AND NOT EXISTS(SELECT 1 FROM audit_log archived WHERE archived.action='customer.headsup.unsaved:'||h.id::text) AND NOT EXISTS(SELECT 1 FROM customer_headsup_receipts newer WHERE newer.supersedes_id=h.id) ORDER BY h.created_at DESC LIMIT 100",
         [actor, management(u.role)],
       )
     ).rows;
@@ -755,8 +779,8 @@ export class ProjectWorkflowRepository {
   async poFollowupSources(actor: string, customerId: number) {
     return headsupSources(this, actor, customerId, this.pool, false);
   }
-  async headsupSources(actor: string, customerId: number) {
-    return headsupSources(this, actor, customerId);
+  async headsupSources(actor: string, customerId: number, pendingOnly=true) {
+    return headsupSources(this, actor, customerId, this.pool, pendingOnly);
   }
   async saveHeadsup(actor: string, input: unknown) {
     return saveHeadsup(this, actor, input);
@@ -1064,6 +1088,10 @@ export class ProjectWorkflowRepository {
     return transaction(this.pool, async (c) => {
       const u = await this.user(actor, c);
       this.requireRole(u, ["Coordinator"]);
+      if(input.route==='direct-framework'&&input.frameworkId&&process.env.ENABLE_DEFERRED_UPS_WORKFLOW!=='true'){
+        const framework=(await c.query("SELECT payload->>'type' AS type FROM project_framework_versions WHERE id=$1",[input.frameworkId])).rows[0];
+        if(framework?.type==='bank-ups')throw new HttpError(403,'Direct UPS orders are deferred and are not enabled in this release.');
+      }
       await c.query(
         "SELECT pg_advisory_xact_lock(hashtext('project-workflow-create'))",
       );
@@ -1350,6 +1378,22 @@ export class ProjectWorkflowRepository {
       )
     ).rows[0];
   }
+  async sendInformationalTechnicalReport(actor:string,id:string,raw:unknown){
+    const input=z.object({version:z.number().int().positive()}).strict().parse(raw);
+    return transaction(this.pool,async c=>{
+      const {u,r}=await this.record(actor,id,c,true);this.requireRole(u,['Coordinator']);
+      if(r.route!=='survey-quote'||r.stage!=='design_handed_off')throw new HttpError(422,'This action is available for technically reviewed survey quotations in Design Review.');
+      await this.requireReceivingDepartment(u,r,c);
+      if(r.version!==input.version)throw new HttpError(409,'This record changed. Reload before sending the report.');
+      const existing=(await c.query('SELECT document_id FROM informational_technical_reports WHERE record_id=$1 AND source_review_id=$2',[id,r.data.reviewDocumentId??null])).rows[0];if(existing)return {...existing,repeated:true};
+      const source=(await c.query("SELECT * FROM project_workflow_documents WHERE id=$1 AND record_id=$2 AND kind='Technical review'",[r.data.reviewDocumentId??null,id])).rows[0];
+      if(!source?.snapshot.boq)throw new HttpError(422,'Save a complete technical review before sending this report.');
+      const document=await this.document(c,r,actor,'Technical review information',{...source.snapshot,costing:safeCosting(source.snapshot.boq,'Admin',source.snapshot.markups),sourceReviewId:source.id,sourceReviewNumber:source.number,sourceReviewHash:fingerprint(source.snapshot),informational:true});
+      const result=(await c.query('INSERT INTO informational_technical_reports(id,record_id,source_review_id,document_id,created_by) VALUES($1,$2,$3,$4,$5) RETURNING document_id,created_at',[randomUUID(),id,source.id,document.id,actor])).rows[0];
+      await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`project.technical-information.sent:${JSON.stringify({recordId:id,reviewId:source.id,documentId:document.id,stageUnchanged:r.stage})}`]);
+      return result;
+    });
+  }
   async action(actor: string, id: string, raw: unknown) {
     const v = actionSchema.parse(raw),
       input: any = v.input;
@@ -1453,7 +1497,7 @@ export class ProjectWorkflowRepository {
         const remarks = note(input.notes);
         const files = (
           await c.query(
-            "SELECT id,kind,filename,mime FROM project_workflow_files WHERE record_id=$1 ORDER BY created_at",
+            "SELECT id,kind,filename,mime FROM project_workflow_files WHERE record_id=$1 AND NOT id::text IN (SELECT jsonb_array_elements_text(COALESCE(data->'removedRequestFileIds','[]'::jsonb)) FROM project_workflow_records WHERE id=$1) ORDER BY created_at",
             [id],
           )
         ).rows;
@@ -1673,7 +1717,7 @@ export class ProjectWorkflowRepository {
           );
         const requestFile = (
           await c.query(
-            "SELECT id FROM project_workflow_files WHERE record_id=$1 AND kind='Request evidence' ORDER BY created_at DESC,id DESC LIMIT 1",
+            "SELECT id FROM project_workflow_files WHERE record_id=$1 AND kind='Request evidence' AND NOT id::text IN (SELECT jsonb_array_elements_text(COALESCE(data->'removedRequestFileIds','[]'::jsonb)) FROM project_workflow_records WHERE id=$1) ORDER BY created_at DESC,id DESC LIMIT 1",
             [r.id],
           )
         ).rows[0];
@@ -2239,6 +2283,11 @@ export class ProjectWorkflowRepository {
               403,
               "Restricted equipment markup is reserved for Management.",
             );
+          const surveyComparison = r.route === "survey-framework" && data.basis
+            ? await ublSurveyComparison(c, { ...r, data }, data.basis) : null;
+          data.ublStandardsReview = surveyComparison?.standardsReview ?? null;
+          if (data.ublStandardsReview?.needsReview && !reviewed.notes.includes(data.ublStandardsReview.message))
+            reviewed.notes = `${reviewed.notes}\n${data.ublStandardsReview.message}`.trim();
           const doc = await this.document(c, r, actor, "Technical review", {
             boq,
             notes: reviewed.notes,
@@ -2247,10 +2296,7 @@ export class ProjectWorkflowRepository {
             profileKey: reviewed.profileKey,
             profileVersion: reviewed.profileVersion,
             enteredSurvey: data.surveyInputs ?? null,
-            surveyComparison:
-              r.route === "survey-framework" && data.basis
-                ? await ublSurveyComparison(c, r, data.basis)
-                : null,
+            surveyComparison,
             originalReportDate: data.actualSurveyDate ?? null,
             originalEvidencePreserved: true,
           });
@@ -2540,7 +2586,7 @@ export class ProjectWorkflowRepository {
           data.headsup ||
           (
             await c.query(
-              "SELECT 1 FROM headsup_received_sites WHERE record_id=$1",
+              "SELECT 1 FROM active_headsup_received_sites WHERE record_id=$1",
               [id],
             )
           ).rowCount
@@ -2674,6 +2720,7 @@ export class ProjectWorkflowRepository {
             "The PO already has issued documents. Open its issuance history.",
           );
         const received = receiptSchema.parse(input);
+        if(received.ipoNumber){requireDirectUps(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id))throw new HttpError(409,'This IPO number is already in use. Enter a different number or select automatic numbering.');}
         await this.requireFile(c, r, received.evidenceId, "PO / confirmation");
         let basis: any;
         if (received.basisType === "quotation") {
@@ -3018,6 +3065,8 @@ export class ProjectWorkflowRepository {
         rateKey: l.key,
         description: l.description,
         brand: l.stockBrand ?? l.brand ?? "General",
+        brandAlternatives: l.brandAlternatives ?? [],
+        phase: l.phase ?? null,
         specification: l.specification ?? "",
         qty: String(l.qty),
         unit: l.unit,
@@ -3043,6 +3092,8 @@ export class ProjectWorkflowRepository {
       )
     ).rows[0];
     if (prior) return prior;
+    // New documents use the assigned master code; earlier snapshots stay immutable.
+    r = { ...r, site_code: r.canonical_site_code ?? r.site_code };
     if (data.originalOrderPreserved) {
       const existing = (
         await c.query(
@@ -3179,13 +3230,7 @@ export class ProjectWorkflowRepository {
     const po = randomUUID(),
       ipo = randomUUID(),
       ops = randomUUID(),
-      number = await allocateReference(
-        c,
-        "IPO",
-        ipo,
-        r.customer_id,
-        r.site_code,
-      ),
+      number = await ipoReference(c,r,ipo,receipt.input.ipoNumber),
       opsNumber = await allocateReference(
         c,
         "BOQ",
@@ -3206,6 +3251,8 @@ export class ProjectWorkflowRepository {
     };
     const snapshot = {
       ...structuredClone(basis.order),
+      siteName: r.site_name,
+      siteCode: r.site_code,
       input,
       boqRevisionId: revisionId,
       boqNumber,
@@ -3215,7 +3262,9 @@ export class ProjectWorkflowRepository {
       approvedCommercialSource: basis.source,
       orderDecisionId: decisionId,
       approvalChannel: "Exact approved commercial basis",
-      documentLayoutVersion: 3,
+      documentLayoutVersion: 4,
+      approvedPanelQty: await this.approvedPanelQuantity(r,c),
+      peachtree: ptDetail(basis.order,basis.boq,await this.approvedPanelQuantity(r,c)),
     };
     await c.query(
       "INSERT INTO customer_purchase_orders(id,quotation_id,boq_revision_id,customer_id,po_number,document_id,input,created_by) VALUES($1,$2,$3,$4,$5,NULL,$6,$7)",
@@ -3374,6 +3423,8 @@ export class ProjectWorkflowRepository {
             [id, v.kind, sha],
           )
         ).rows[0];
+      if ((r.data.removedRequestFileIds ?? []).includes(saved.id))
+        await c.query("UPDATE project_workflow_records SET data=jsonb_set(data,'{removedRequestFileIds}',$2::jsonb),updated_at=now() WHERE id=$1", [id, JSON.stringify(r.data.removedRequestFileIds.filter((fileId: string) => fileId !== saved.id))]);
       await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
         actor,
         `project.workflow.attach:${id}:${saved.id}`,
@@ -3381,8 +3432,28 @@ export class ProjectWorkflowRepository {
       return saved;
     });
   }
+  async removeRequestFile(actor: string, id: string, fileId: string) {
+    return transaction(this.pool, async (c) => {
+      const { u, r } = await this.record(actor, id, c, true);
+      this.requireRole(u, ["Coordinator"]);
+      await this.requireReceivingDepartment(u, r, c);
+      if (r.stage !== "request_review")
+        throw new HttpError(409, "Request evidence can only be removed before sending to Design.");
+      const removed = (await c.query(
+        "SELECT filename FROM project_workflow_files WHERE id=$1 AND record_id=$2 AND kind='Request evidence'",
+        [fileId, id],
+      )).rows[0];
+      if (!removed) throw new HttpError(404, "Request attachment not found.");
+      await c.query("UPDATE project_workflow_records SET data=jsonb_set(data,'{removedRequestFileIds}',$2::jsonb),updated_at=now() WHERE id=$1", [id, JSON.stringify([...new Set([...(r.data.removedRequestFileIds ?? []), fileId])])]);
+      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
+        actor, `project.workflow.remove-request-file:${id}:${fileId}:${removed.filename}`,
+      ]);
+      return { removed: true };
+    });
+  }
   async file(actor: string, id: string, fileId: string) {
-    await this.record(actor, id);
+    const { r } = await this.record(actor, id);
+    if ((r.data.removedRequestFileIds ?? []).includes(fileId)) throw new HttpError(404, "Attachment not found.");
     const f = (
       await this.pool.query(
         "SELECT * FROM project_workflow_files WHERE id=$1 AND record_id=$2",
@@ -3392,11 +3463,18 @@ export class ProjectWorkflowRepository {
     if (!f) throw new HttpError(404, "Attachment not found.");
     return f;
   }
+  async approvedPanelQuantity(r:any,c:Pool|PoolClient=this.pool){
+    if(!r.data.reviewDocumentId)return r.data.surveyInputs?.panelQty;
+    const doc=(await c.query("SELECT COALESCE(NULLIF(snapshot->'enteredSurvey'->>'panelQty','0'),NULLIF(snapshot->'boq'->'survey'->>'panelQty','0')) AS qty FROM project_workflow_documents WHERE id=$1 AND record_id=$2 AND kind='Technical review'",[r.data.reviewDocumentId,r.id])).rows[0];
+    return doc?.qty??r.data.surveyInputs?.panelQty;
+  }
+  async ipoAvailability(actor:string,number:string){const u=await this.user(actor);this.requireRole(u,['Coordinator']);return {available:await manualIpoAvailable(this.pool,number)};}
   async salePreview(actor: string, id: string, raw: unknown) {
     const received = receiptSchema.parse(raw);
     const { u, r } = await this.record(actor, id);
     this.requireRole(u, ["Coordinator"]);
     await this.requireReceivingDepartment(u, r);
+    if(received.ipoNumber){requireDirectUps(r);if(!await manualIpoAvailable(this.pool,received.ipoNumber,r.id))throw new HttpError(409,'This IPO number is already in use. Enter a different number or select automatic numbering.');}
     const current = await this.decorate(r, u);
     if (r.stage !== "customer_tracking" && current.coordinationBucket !== "Customer Decision & Order Tracking" && !(r.stage === "po_receipt" && r.route === "direct-framework" && !r.data.originalOrderPreserved))
       throw new HttpError(
@@ -3435,10 +3513,12 @@ export class ProjectWorkflowRepository {
       ...structuredClone(basis.order),
       input: saleInput(basis, received),
       siteName: r.site_name,
-      siteCode: r.site_code,
+      siteCode: r.canonical_site_code ?? r.site_code,
       preparedBy: r.coordinator,
       checkedBy: r.coordinator,
-      documentLayoutVersion: 3,
+      documentLayoutVersion: 4,
+      approvedPanelQty: await this.approvedPanelQuantity(r),
+      peachtree: ptDetail(basis.order,basis.boq,await this.approvedPanelQuantity(r)),
     };
   }
   async preview(actor: string, id: string, input: any) {
@@ -3906,9 +3986,23 @@ export class ProjectWorkflowRepository {
     ).rows;
     const headsups = (
       await this.pool.query(
-        "SELECT m.record_id,CASE WHEN final.operations_id IS NULL THEN 'Provisional' ELSE 'Heads-up shared — final received' END AS mode,h.created_at AS updated_at,final.operations_id AS confirmed_issuance_id,h.number,1 AS version,jsonb_build_object('label',h.snapshot->>'label','authorization',h.snapshot->>'authorization','items',site->'items','site',r.site_name,'siteCode',r.site_code,'configuration',site->'solutionId','headsupReceiptId',h.receipt_id,'headsupGroup',h.number) AS snapshot,r.customer_id,r.site_name,r.site_code FROM headsup_department_handoffs h JOIN headsup_advance_members m ON m.handoff_id=h.id JOIN project_workflow_records r ON r.id=m.record_id LEFT JOIN headsup_advance_final_links final ON final.record_id=m.record_id JOIN LATERAL jsonb_array_elements(h.snapshot->'sites') site ON site->>'recordId'=m.record_id::text ORDER BY h.created_at DESC",
+        "SELECT m.record_id,CASE WHEN final.operations_id IS NULL THEN 'Provisional' ELSE 'Heads-up shared — final received' END AS mode,h.created_at AS updated_at,final.operations_id AS confirmed_issuance_id,h.number,h.created_at AS headsup_created_at,1 AS version,jsonb_build_object('label',h.snapshot->>'label','authorization',h.snapshot->>'authorization','items',site->'items','site',r.site_name,'siteCode',r.site_code,'configuration',site->'solutionId','headsupReceiptId',h.receipt_id,'headsupGroup',h.number) AS snapshot,r.customer_id,r.site_name,r.site_code FROM headsup_department_handoffs h JOIN headsup_advance_members m ON m.handoff_id=h.id JOIN project_workflow_records r ON r.id=m.record_id LEFT JOIN headsup_advance_final_links final ON final.record_id=m.record_id JOIN LATERAL jsonb_array_elements(h.snapshot->'sites') site ON site->>'recordId'=m.record_id::text WHERE r.data->>'localPreviewArchived' IS DISTINCT FROM 'true' ORDER BY h.created_at DESC",
       )
     ).rows;
+    for(const row of [...headsups,...existing]){
+      const record=(await this.pool.query('SELECT data,short_code FROM project_workflow_records r JOIN customers c ON c.id=r.customer_id WHERE r.id=$1',[row.record_id])).rows[0];
+      const lines=record?.data?.basis?.boq?.lines??[];
+      if(row.snapshot.headsupGroup&&record?.short_code==='UBL'){
+        // Pin the approved configuration version that existed when this forecast was sent.
+        const framework=(await this.pool.query("SELECT id,version,source_reference,payload->'technical' AS technical FROM project_framework_versions WHERE customer_id=$1 AND configuration_key=$2 AND created_at<=$3 ORDER BY version DESC LIMIT 1",[row.customer_id,row.snapshot.configuration+':Revised',row.headsup_created_at])).rows[0];
+        const technicalRows=framework?.technical?.rows??[];
+        row.snapshot.items=approvedMaterialView(row.snapshot.items??[],technicalRows,lines);
+        row.snapshot.approvedBoqSource=framework?{id:framework.id,version:framework.version,kind:'UBL approved pre-agreed BOQ',reference:framework.source_reference,filename:framework.technical?.source?.filename,configuration:row.snapshot.configuration,rows:technicalRows.map((r:any)=>({id:r.id,description:r.description,specification:r.specification,brands:r.brands}))}:null;
+      }else{
+        row.snapshot.items=approvedMaterialView(row.snapshot.items??[],[],lines);
+        row.snapshot.approvedBoqSource={kind:'Customer approved BOQ',...record?.data?.basis?.source};
+      }
+    }
     return [...headsups, ...existing];
   }
 }

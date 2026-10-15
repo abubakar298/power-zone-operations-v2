@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import{filenameFromDisposition}from'../../shared/download-name.js';
 export function SharePdf({ url, filename }: { url: string; filename: string }) {
   const [file, setFile] = useState<File>(),
     [busy, setBusy] = useState(false),
@@ -16,7 +17,7 @@ export function SharePdf({ url, filename }: { url: string; filename: string }) {
       const blob = await r.blob();
       if (!blob.type.includes("application/pdf"))
         throw new Error("The response is not a PDF.");
-      setFile(new File([blob], filename, { type: "application/pdf" }));
+      setFile(new File([blob], filenameFromDisposition(r.headers.get('Content-Disposition'))??filename, { type: "application/pdf" }));
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Unable to prepare PDF.");
     } finally {

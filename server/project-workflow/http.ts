@@ -1,5 +1,6 @@
-import { buildIpoPdf } from "../orders/report.js";
-import { buildPeachtreePdf } from "../orders/peachtree-report.js";
+import {saveHeadsup,submitHeadsup} from './headsup.js';
+import {customerSendEvidence,attachCustomerSendEvidence,removeCustomerSendEvidence,sendPackageToCustomer} from "./ubl-customer-send.js";
+import { buildIpoPdf, buildPeachtreePdf } from "../orders/document-renderers.js";
 import {
   drawReportLogo,
   drawReportFooter,
@@ -29,6 +30,12 @@ export function projectWorkflowHttp(
   });
   const actor = (req: any) => req.authSession.user.id,
     id = (req: any) => z.uuid().parse(req.params.id);
+  r.get('/framework-reference-attachments/:id',async(req,res)=>{
+    const file=await repo.frameworkReferenceAttachment(actor(req),id(req));
+    res.set('Content-Type',file.mime).set('Content-Disposition',`inline; filename="${file.filename.replace(/["\r\n\\]/g,'_')}"`).set('Cache-Control','private, no-store').send(file.content);
+  });
+  r.get('/ipo-number-availability',async(req,res)=>res.json(await repo.ipoAvailability(actor(req),String(req.query.number??''))));
+  r.post('/:id/informational-technical-report',async(req,res)=>res.json(await repo.sendInformationalTechnicalReport(actor(req),id(req),req.body)));
   r.get("/po-followup-sources", async (req, res) =>
     res.json({
       sources: await repo.poFollowupSources(
@@ -42,9 +49,12 @@ export function projectWorkflowHttp(
       sources: await repo.headsupSources(
         actor(req),
         z.coerce.number().int().nonnegative().parse(req.query.customerId),
+        req.query.includeReceived!=="true",
       ),
     }),
   );
+  r.post('/headsup-preview', async(req,res)=>res.json(await saveHeadsup(repo,actor(req),req.body,{preview:true})));
+  r.post('/headsup-submit', async(req,res)=>res.json(await submitHeadsup(repo,actor(req),req.body)));
   r.post("/headsup-receipts/:id/send", async (req, res) =>
     res.json(await repo.sendHeadsup(actor(req), id(req), req.body)),
   );
@@ -165,6 +175,10 @@ export function projectWorkflowHttp(
   r.post("/:id/remove-from-survey-group", async (req, res) =>
     res.json(await repo.removeFromSurveyGroup(actor(req), id(req), req.body)),
   );
+  r.get("/ubl-survey-packages/:id/sending-evidence", async (req,res) => res.json(await customerSendEvidence(repo,actor(req),id(req))));
+  r.post("/ubl-survey-packages/:id/sending-evidence", async (req,res) => res.status(201).json(await attachCustomerSendEvidence(repo,actor(req),id(req),req.body)));
+  r.post("/ubl-survey-packages/:id/sending-evidence/:file/remove", async (req,res) => res.json(await removeCustomerSendEvidence(repo,actor(req),id(req),z.uuid().parse(req.params.file))));
+  r.post("/ubl-survey-packages/:id/send-to-customer", async (req,res) => res.json(await sendPackageToCustomer(repo,actor(req),id(req),req.body)));
   r.post("/ubl-survey-packages/:id/decision", async (req, res) =>
     res.json(await repo.decideUblSurveyPackage(actor(req), id(req), req.body)),
   );
@@ -193,7 +207,7 @@ export function projectWorkflowHttp(
     res
       .set("Cache-Control", "private, no-store")
       .json({
-        ipo: buildIpoPdf(snapshot, "DRAFT - NOT ISSUED").toString("base64"),
+        ipo: buildIpoPdf(snapshot, "DRAFT - NOT ISSUED",snapshot.peachtree,{includePt:false}).toString("base64"),
         pt: buildPeachtreePdf(
           snapshot,
           snapshot.peachtree,
@@ -206,6 +220,9 @@ export function projectWorkflowHttp(
   );
   r.post("/:id/files", async (req, res) =>
     res.status(201).json(await repo.attach(actor(req), id(req), req.body)),
+  );
+  r.post("/:id/files/:file/remove", async (req, res) =>
+    res.json(await repo.removeRequestFile(actor(req), id(req), z.uuid().parse(req.params.file))),
   );
   r.get("/:id/files/:file", async (req, res) => {
     const f = await repo.file(
@@ -294,7 +311,7 @@ export function projectWorkflowHttp(
       },
     });
     let y = (pdf as any).lastAutoTable?.finalY ?? 60;
-    const costing = d.kind === "Technical review" ? s.costing : null;
+    const costing = ['Technical review','Technical review information'].includes(d.kind) ? s.costing : null;
     if (costing) {
       autoTable(pdf, {
         startY: y + 8,

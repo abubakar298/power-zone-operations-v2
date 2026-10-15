@@ -9,6 +9,7 @@ import {
   earthingScopeDescription,
 } from "./customer-scope.js";
 import { standardItemPrices, type CommercialPolicy } from "./active-policy.js";
+import {allocateApprovedDiscount,discountForRoundedPayable,DISCOUNT_POLICY,type DiscountStrategy} from './discount-strategy.js';
 import { Decimal } from "decimal.js";
 import type { BoqSnapshot } from "../boq/engine.js";
 import { HttpError } from "../http/errors.js";
@@ -65,7 +66,7 @@ export function price(
   policy?: CommercialPolicy,
 ) {
   const frameworkPricing=(boq as any).frameworkPricing;
-  if(frameworkPricing){policy=undefined;if(input.saleType!=='Tax Deal'||input.taxMode!=='Show Sales Tax Separately'||new Decimal(input.discountPercent??0).gt(0)||boq.survey.additionalItem)throw new HttpError(422,'UBL pre-agreed prices and tax treatment are fixed; revise the approved Solution ID instead.');}
+  if(frameworkPricing){policy=undefined;if(input.saleType!=='Tax Deal'||input.taxMode!=='Show Sales Tax Separately'||new Decimal(input.discountPercent??0).gt(0)||input.roundedTotal!==undefined||boq.survey.additionalItem)throw new HttpError(422,'UBL pre-agreed prices and tax treatment are fixed; revise the approved Solution ID instead.');}
   if (
     boq.survey.family === "direct-product" &&
     input.presentation === "Basic Breakup"
@@ -208,7 +209,8 @@ export function price(
   );
   const sum = (field: "beforeTax" | "tax" | "profit") =>
     allRows.reduce((a, r) => a.add(r[field]), D("0"));
-  const preapprovedDiscountBeforeTax = policy?.preapprovedCostDiscountPercent !== undefined ? money(cost.mul(policy.preapprovedCostDiscountPercent).div(100)) : undefined;
+  const discountStrategy:DiscountStrategy|undefined=policy?.preapprovedCostDiscountPercent!==undefined&&itemPricing?{version:DISCOUNT_POLICY,items:itemPricing.map(item=>{const sourceRate=item.group==='solar'?'10':item.group==='additional'?(input.additionalTaxRate??boq.survey.additionalItem?.taxRate??'18'):'18';return {...item,approvedAllowance:D(item.cost).mul(policy.preapprovedCostDiscountPercent!).div(100).mul(sellingFactor(input,sourceRate)).toString()};})}:undefined;
+  const preapprovedDiscountBeforeTax = discountStrategy ? money(discountStrategy.items.reduce((sum,item)=>sum.add(item.approvedAllowance),D('0'))) : undefined;
   const preapprovedPercent = preapprovedDiscountBeforeTax === undefined || sum("beforeTax").isZero() ? '0' : D(preapprovedDiscountBeforeTax).div(money(sum("beforeTax"))).mul(100).toDecimalPlaces(6).toString();
   if(preapprovedDiscountBeforeTax!==undefined && (input.discountMode==='Pre-approved' || (input.discountPercent===undefined && input.roundedTotal===undefined))) input={...input,discountMode:'Pre-approved',discountPercent:preapprovedPercent,roundedTotal:undefined};
   // Keep exact component math, round the two presented tax buckets once.
@@ -225,15 +227,19 @@ export function price(
     ),
     tax = money(D(solarTax).add(otherTax)),
     total = money(D(subtotal).add(tax)),
-    discount = preapprovedDiscountBeforeTax!==undefined && input.discountMode==='Pre-approved' ? preapprovedDiscountBeforeTax : input.roundedTotal!==undefined?money(D(subtotal).mul(D('1').sub(D(input.roundedTotal).div(total)))):money(D(subtotal).mul(input.discountPercent??"0").div(100));
+    discount = preapprovedDiscountBeforeTax!==undefined && input.discountMode==='Pre-approved' ? preapprovedDiscountBeforeTax : input.roundedTotal!==undefined?(discountStrategy?discountForRoundedPayable(discountStrategy,input.roundedTotal):money(D(subtotal).mul(D('1').sub(D(input.roundedTotal).div(total))))):money(D(subtotal).mul(input.discountPercent??"0").div(100));
   if(input.roundedTotal!==undefined){
     if(D(input.roundedTotal).gt(total))throw new HttpError(400,'Rounded total cannot exceed the original selling price including tax.');
-    input={...input,discountPercent:D(total).isZero()?'0':D('100').mul(D('1').sub(D(input.roundedTotal).div(total))).toDecimalPlaces(6).toString()};
+    input={...input,discountPercent:discountStrategy?(D(subtotal).isZero()?'0':D(discount).div(subtotal).mul(100).toDecimalPlaces(6).toString()):(D(total).isZero()?'0':D('100').mul(D('1').sub(D(input.roundedTotal).div(total))).toDecimalPlaces(6).toString())};
   }
+  const acceptedDiscount=discountStrategy?allocateApprovedDiscount(discountStrategy,discount,input.roundedTotal):undefined;
+  const sellingDiscountReview=acceptedDiscount?{rows:allRows.map(row=>{const members=acceptedDiscount.lines.filter(line=>line.group===row.key),sum=(key:'beforeTax'|'tax'|'total'|'allocatedDiscount'|'approvedDiscount'|'managementSpecialDiscount')=>money(members.reduce((s,line)=>s.add(line[key]),D('0')));return {...row,discountAmount:sum('allocatedDiscount'),approvedDiscount:sum('approvedDiscount'),managementSpecialDiscount:sum('managementSpecialDiscount'),sellingAfterDiscount:sum('beforeTax'),discountedTax:sum('tax'),discountedAfterTax:sum('total')};}),factor:D(subtotal).isZero()?'1':D(acceptedDiscount.subtotal).div(subtotal).toString(),discount:acceptedDiscount.discount,subtotal:acceptedDiscount.subtotal,solarTax:acceptedDiscount.solarTax,otherTax:acceptedDiscount.otherTax,tax:acceptedDiscount.tax,roundingAdjustment:acceptedDiscount.roundingAdjustment,netTotal:acceptedDiscount.total}:undefined;
   return {
+    ...(sellingDiscountReview?{sellingDiscountReview}:{}),
     ...(preapprovedDiscountBeforeTax!==undefined ? {discountAuthorization:{policyVersion:policy!.version,preapprovedPercent,preapprovedBeforeTax:preapprovedDiscountBeforeTax,requestedBeforeTax:discount,approvedAppliedBeforeTax:money(Decimal.min(D(discount),D(preapprovedDiscountBeforeTax))),managementSpecialBeforeTax:money(Decimal.max(0,D(discount).sub(preapprovedDiscountBeforeTax))),requiresManagementApproval:D(discount).gt(preapprovedDiscountBeforeTax)}} : {}),
     boqFamily: boq.survey.family ?? "solar-hybrid",
-    engineVersion: policy ? 4 : 2,
+    engineVersion: discountStrategy ? 5 : policy ? 4 : 2,
+    ...(discountStrategy?{discountStrategy}:{}),
     ...(policy
       ? {
           policy,
@@ -307,11 +313,18 @@ export function price(
     tax,
     total,
     discount,
-    netTotal: input.roundedTotal!==undefined?money(D(input.roundedTotal)):input.discountPercent!==undefined&&D(discount).gt(0)?discountedSellingReview({rows:allRows,subtotal,discount}).netTotal:money(D(total).minus(discount)),
+    netTotal: discountStrategy?allocateApprovedDiscount(discountStrategy,discount,input.roundedTotal).total:input.roundedTotal!==undefined?money(D(input.roundedTotal)):input.discountPercent!==undefined&&D(discount).gt(0)?discountedSellingReview({rows:allRows,subtotal,discount}).netTotal:money(D(total).minus(discount)),
   };
 }
 export type PricingSnapshot = ReturnType<typeof price>;
-export function discountedSellingReview<T extends {beforeTax:string;taxRate:string}>(p:{rows:T[];subtotal:string;discount:string;input?:{roundedTotal?:string}},discountBeforeTax=p.discount){
+type SavedSellingReview<T>={rows:Array<T&{discountAmount:string;approvedDiscount?:string;managementSpecialDiscount?:string;sellingAfterDiscount:string;discountedTax:string;discountedAfterTax:string}>;factor:string;discount:string;subtotal:string;solarTax:string;otherTax:string;tax:string;roundingAdjustment:string;netTotal:string};
+export function discountedSellingReview<T extends {beforeTax:string;taxRate:string;key?:string}>(p:{rows:T[];subtotal:string;discount:string;input?:{roundedTotal?:string};discountStrategy?:DiscountStrategy;sellingDiscountReview?:SavedSellingReview<T>},discountBeforeTax=p.discount){
+ if(p.discountStrategy){
+  const allocation=allocateApprovedDiscount(p.discountStrategy,discountBeforeTax,D(discountBeforeTax).eq(p.discount)?p.input?.roundedTotal:undefined);
+  const rows=p.rows.map(row=>{const members=allocation.lines.filter(item=>item.group===row.key),sum=(key:'beforeTax'|'tax'|'total'|'allocatedDiscount'|'approvedDiscount'|'managementSpecialDiscount')=>money(members.reduce((s,item)=>s.add(item[key]),D('0')));return {...row,discountAmount:sum('allocatedDiscount'),approvedDiscount:sum('approvedDiscount'),managementSpecialDiscount:sum('managementSpecialDiscount'),sellingAfterDiscount:sum('beforeTax'),discountedTax:sum('tax'),discountedAfterTax:sum('total')};});
+  return {rows,factor:D(p.subtotal).isZero()?D('1'):D(allocation.subtotal).div(p.subtotal),discount:allocation.discount,subtotal:allocation.subtotal,solarTax:allocation.solarTax,otherTax:allocation.otherTax,tax:allocation.tax,roundingAdjustment:allocation.roundingAdjustment,netTotal:allocation.total,itemAllocations:allocation.lines,allocation};
+ }
+ if(p.sellingDiscountReview&&D(discountBeforeTax).eq(p.discount))return {...p.sellingDiscountReview,factor:D(p.sellingDiscountReview.factor),itemAllocations:undefined,allocation:undefined};
  const amount=D(discountBeforeTax),base=D(p.subtotal);
  if(amount.gt(base))throw new HttpError(400,'Discount cannot exceed the selling price before tax.');
  const factor=base.isZero()?D('1'):D('1').sub(amount.div(base));
@@ -323,7 +336,7 @@ export function discountedSellingReview<T extends {beforeTax:string;taxRate:stri
  });
  const solarTax=money(rows.filter(r=>r.taxRate==='10').reduce((sum,r)=>sum.add(r.discountedTax),D('0'))),otherTax=money(rows.filter(r=>r.taxRate==='18').reduce((sum,r)=>sum.add(r.discountedTax),D('0')));
  const unrounded=money(base.sub(amount).add(solarTax).add(otherTax)),target=p.input?.roundedTotal!==undefined&&D(discountBeforeTax).eq(p.discount)?money(D(p.input.roundedTotal)):undefined;
- return {rows,factor,discount:money(amount),subtotal:money(base.sub(amount)),solarTax,otherTax,tax:money(D(solarTax).add(otherTax)),roundingAdjustment:target?money(D(target).sub(unrounded)):'0.00',netTotal:target??unrounded};
+ return {rows,factor,discount:money(amount),subtotal:money(base.sub(amount)),solarTax,otherTax,tax:money(D(solarTax).add(otherTax)),roundingAdjustment:target?money(D(target).sub(unrounded)):'0.00',netTotal:target??unrounded,itemAllocations:undefined,allocation:undefined};
 }
 export interface QuoteLine {
   description: string;
@@ -582,21 +595,22 @@ export function quote(
   bmsDescription?: string,
   currentCableRates?: Record<string, string>,
 ) {
-  if(p.input.discountPercent!==undefined&&(D(input.discount??p.discount).gt(0)||p.input.roundedTotal!==undefined)){
+  if(p.discountStrategy||p.input.discountPercent!==undefined&&(D(input.discount??p.discount).gt(0)||p.input.roundedTotal!==undefined)){
     const review=discountedSellingReview(p,input.discount??p.discount);
-    const adjusted={...p,input:{...p.input,discountPercent:undefined},rows:review.rows.map(row=>({...row,beforeTax:row.sellingAfterDiscount,tax:row.discountedTax,afterTax:row.discountedAfterTax,profit:money(D(row.sellingAfterDiscount).sub(row.cost))})),itemPricing:p.itemPricing?.map(item=>({...item,beforeTax:money(D(item.beforeTax).mul(review.factor))})),subtotal:review.subtotal,solarTax:review.solarTax,otherTax:review.otherTax,tax:review.tax,total:review.netTotal,discount:'0.00',netTotal:review.netTotal};
+    const adjusted={...p,input:{...p.input,discountPercent:undefined},rows:review.rows.map(row=>({...row,beforeTax:row.sellingAfterDiscount,tax:row.discountedTax,afterTax:row.discountedAfterTax,profit:money(D(row.sellingAfterDiscount).sub(row.cost))})),itemPricing:p.itemPricing?.map(item=>({...item,beforeTax:review.itemAllocations?.find(line=>line.key===item.key)?.beforeTax??money(D(item.beforeTax).mul(review.factor))})),subtotal:review.subtotal,solarTax:review.solarTax,otherTax:review.otherTax,tax:review.tax,total:review.netTotal,discount:'0.00',netTotal:review.netTotal};
     const result=quoteBase(adjusted,boq,{...input,discount:'0'},bmsDescription,currentCableRates);
+    if(review.allocation)Object.assign(result,{discountAllocation:{...review.allocation,lines:review.allocation.lines.map(({cost,approvedAllowance,category,...safe})=>safe)}});
     if(p.discountAuthorization)Object.assign(result,{discountAuthorization:{...p.discountAuthorization,requestedBeforeTax:review.discount,requiresManagementApproval:D(review.discount).gt(p.discountAuthorization.preapprovedBeforeTax)}});
     const base=result.footer.find(row=>row.label===(p.input.taxMode==='Tax Included'?'Total':'Subtotal Before Tax'));
     if(base)base.amount=p.input.taxMode==='Tax Included'?money(D(p.subtotal).add(review.tax)):p.subtotal;
     const discountRow=result.footer.find(row=>row.label==='Special Discount');if(discountRow)discountRow.amount=review.discount;
     if(!D(review.roundingAdjustment).isZero())result.footer.splice(result.footer.length-1,0,{label:'Rounding Adjustment',amount:review.roundingAdjustment});
     result.input={...result.input,discount:review.discount};
-    return result as typeof result & {discountAuthorization?: NonNullable<PricingSnapshot['discountAuthorization']>};
+    return result as typeof result & {discountAuthorization?: NonNullable<PricingSnapshot['discountAuthorization']>;discountAllocation?:ReturnType<typeof allocateApprovedDiscount>};
   }
   const result=quoteBase(p,boq,input,bmsDescription,currentCableRates);
   if(p.discountAuthorization)Object.assign(result,{discountAuthorization:{...p.discountAuthorization,requestedBeforeTax:input.discount??p.discount,requiresManagementApproval:D(input.discount??p.discount).gt(p.discountAuthorization.preapprovedBeforeTax)}});
-  return result as typeof result & {discountAuthorization?: NonNullable<PricingSnapshot['discountAuthorization']>};
+  return result as typeof result & {discountAuthorization?: NonNullable<PricingSnapshot['discountAuthorization']>;discountAllocation?:ReturnType<typeof allocateApprovedDiscount>};
 }
 function quoteBase(p:PricingSnapshot,boq:BoqSnapshot,input:QuotationInput,bmsDescription?:string,currentCableRates?:Record<string,string>){
   const full = p.input.presentation === "Full Breakup";

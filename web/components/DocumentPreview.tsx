@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/Button.js";
+import {downloadName,filenameFromDisposition} from '../../shared/download-name.js';
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 /** Read-only authenticated document preview. Existing endpoints enforce access. */
@@ -9,12 +10,14 @@ export function DocumentPreview({
   mime = "application/pdf",
   data,
   onReady,
+  downloadFilename,
 }: {
   url: string;
   title: string;
   mime?: string;
   data?: Blob;
   onReady?: () => void;
+  downloadFilename?:string;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [retry, setRetry] = useState(0);
@@ -136,11 +139,13 @@ export function DocumentDownload({
   title,
   data,
   label = "Download",
+  downloadFilename,
 }: {
   url: string;
   title: string;
   data?: Blob;
   label?: string;
+  downloadFilename?:string;
 }) {
   const [downloadError, setDownloadError] = useState("");
   const [downloading, setDownloading] = useState(false);
@@ -149,6 +154,7 @@ export function DocumentDownload({
     setDownloading(true);
     try {
       let blob = data;
+      let filename=downloadFilename;
       if (!blob) {
         const response = await fetch(url, {
           credentials: "same-origin",
@@ -159,6 +165,7 @@ export function DocumentDownload({
             "Unable to download this document. Please try again.",
           );
         blob = await response.blob();
+        filename=filenameFromDisposition(response.headers.get('Content-Disposition'))??filename;
       }
       if (
         !blob.type.includes("application/pdf") &&
@@ -168,11 +175,7 @@ export function DocumentDownload({
       const href = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = href;
-      a.download =
-        title.replace(/[^a-z0-9 -]/gi, "-") +
-        (blob.type.startsWith("image/")
-          ? "." + blob.type.split("/")[1]
-          : ".pdf");
+      a.download = filename??downloadName({documentType:title,identity:url.startsWith('blob:')?title:url,extension:blob.type.startsWith('image/')?blob.type.split('/')[1]:'pdf'});
       a.click();
       setTimeout(() => URL.revokeObjectURL(href), 1000);
     } catch (e) {

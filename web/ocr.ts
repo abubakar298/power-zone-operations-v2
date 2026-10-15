@@ -4,7 +4,7 @@ export async function extractText(file: File, progress: (s: string) => void, tab
   if (file.type === "text/plain")
     return { text: await file.text(), confidence: null };
   let worker: Awaited<ReturnType<typeof createWorker>> | undefined;
-  async function recognize(image: File | HTMLCanvasElement) {
+  async function recognize(image: File | HTMLCanvasElement, singleLine=false) {
     worker ??= await createWorker("eng", 1, {
       workerPath: "/ocr/worker.min.js",
       corePath: "/ocr",
@@ -14,7 +14,7 @@ export async function extractText(file: File, progress: (s: string) => void, tab
           progress(`${m.status} ${Math.round((m.progress ?? 0) * 100)}%`);
       },
     });
-    if(tableMode)await worker.setParameters({tessedit_pageseg_mode:6 as any});
+    if(tableMode)await worker.setParameters({tessedit_pageseg_mode:(singleLine?7:6) as any});
     const result = await worker.recognize(image);
     return result.data;
   }
@@ -30,7 +30,7 @@ export async function extractText(file: File, progress: (s: string) => void, tab
       if(tableMode){
         const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext('2d')!;context.drawImage(image,0,0);const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;const borders:number[]=[];let last=-10;
         for(let y=0;y<canvas.height;y++){let dark=0;for(let x=0;x<canvas.width;x+=2){const i=(y*canvas.width+x)*4;if((pixels[i]+pixels[i+1]+pixels[i+2])/3<90)dark++;}if(dark>canvas.width*.35){if(y-last>3)borders.push(y);last=y;}}
-        if(borders.length>=3){const parts:string[]=[];for(let i=1;i<borders.length;i++){const height=borders[i]-borders[i-1]-6;if(height<20)continue;const strip=document.createElement('canvas');strip.width=canvas.width;strip.height=height;strip.getContext('2d')!.drawImage(canvas,0,borders[i-1]+3,canvas.width,height,0,0,canvas.width,height);progress(`Reading table row ${i}`);parts.push((await recognize(strip)).text.replace(/\n/g,' '));strip.width=0;strip.height=0;}image.close();canvas.width=0;canvas.height=0;return{text:parts.join('\n'),confidence:null};}canvas.width=0;canvas.height=0;
+        if(borders.length>=3){const parts:string[]=[];for(let i=1;i<borders.length;i++){const height=borders[i]-borders[i-1]-6;if(height<20)continue;const strip=document.createElement('canvas');strip.width=canvas.width*3;strip.height=height*3;strip.getContext('2d')!.drawImage(canvas,0,borders[i-1]+3,canvas.width,height,0,0,strip.width,strip.height);progress(`Reading table row ${i}`);parts.push((await recognize(strip,true)).text.replace(/\n/g,' '));strip.width=0;strip.height=0;}image.close();canvas.width=0;canvas.height=0;return{text:parts.join('\n'),confidence:null};}canvas.width=0;canvas.height=0;
       }
       image.close();
       const d = await recognize(file);
@@ -50,7 +50,9 @@ export async function extractText(file: File, progress: (s: string) => void, tab
         progress(`Reading page ${i} of ${doc.numPages}`);
         const page = await doc.getPage(i),
           text = await page.getTextContent();
-        let value = text.items.map((x) => ("str" in x ? x.str : "")).join("\n");
+        const lines=new Map<number,{x:number;text:string}[]>();
+        for(const item of text.items){if(!('str' in item))continue;const y=Math.round(item.transform[5]/3)*3;const line=lines.get(y)??[];line.push({x:item.transform[4],text:item.str});lines.set(y,line);}
+        let value=[...lines.entries()].sort(([a],[b])=>b-a).map(([,line])=>line.sort((a,b)=>a.x-b.x).map(item=>item.text).join(' ')).join('\n');
         if (value.trim().length < 30) {
           const viewport = page.getViewport({ scale: 1.5 });
           if (viewport.width * viewport.height > 20000000)

@@ -1,4 +1,10 @@
+import {DirectPo} from "../components/DirectPoUpload.js";
+import { IposSharedList, IpoSharedPreview } from "../components/IposSharedList.js";
 import {QuotationApproval} from "../components/QuotationApproval.js";
+import {SiteCodeUpdate} from "../components/SiteCodeUpdate.js";
+import {EditCustomer} from '../components/EditCustomer.js';
+import {InformationalTechnicalReport} from '../components/InformationalTechnicalReport.js';
+import {CustomerSearchSelect} from '../components/CustomerSearchSelect.js';
 import {CoordinatorQuotationReview} from "../components/CoordinatorQuotationReview.js";
 import { CustomerFollowupList } from "../components/CustomerFollowupList.js";
 import { ConfirmSaleForm } from "../components/ConfirmSaleForm.js";
@@ -215,11 +221,14 @@ export function DepartmentWorkspace({
     [error, setError] = useState(""),
     [page, setPage] = useState("Workspace"),
     [detail, setDetail] = useState<any>(),
+    [directPoDraft,setDirectPoDraft]=useState<any>(),
     [filters, setFilters] = useState({ ...emptyWorkspaceFilters }),
     [creating, setCreating] = useState<string>(),
     [performance, setPerformance] = useState<any>(),
     [notice, setNotice] = useState("");
   const [headsupRefresh, setHeadsupRefresh] = useState(0);
+  const [siteCodeTarget,setSiteCodeTarget]=useState<any>();
+  const [customerEditId,setCustomerEditId]=useState<number>(),[customerEditChoice,setCustomerEditChoice]=useState('');
   const [quotationReview, setQuotationReview] = useState<any>();
   const [approvalTarget,setApprovalTarget]=useState<any>();
   async function approvalRecorded(){setApprovalTarget(undefined);setQuotationReview(undefined);await load();window.dispatchEvent(new CustomEvent("pz:workflow-completed",{detail:{message:"Approval recorded — moved to Ready to Send."}}));}
@@ -461,7 +470,7 @@ export function DepartmentWorkspace({
     matchesWorkspace(
       {
         ...r,
-        reference: [r.siteCode, r.id, ...(r.references ?? []), r.location].join(
+        reference: [r.siteCode, r.id, r.data.ipoNumber, r.data.sharedPoReference, ...(r.references ?? []), r.location].join(
           " ",
         ),
         site: `${r.site} ${r.siteCode}`,
@@ -540,6 +549,7 @@ export function DepartmentWorkspace({
         <section className="pz-panel">
           <h2>PO Receipt / Heads-up</h2>
           <div className="pz-action-row">
+            {refs?.features?.directPoUps&&<Button variant="secondary" onClick={()=>setCreating("Direct PO")}>Direct PO</Button>}
             <Button
               variant="secondary"
               onClick={() => setCreating("Record Customer Heads-up")}
@@ -558,6 +568,7 @@ export function DepartmentWorkspace({
         <SavedHeadsupReports session={session} refresh={headsupRefresh} />
       </div>
     );
+  if(creating==='Direct PO')return <DirectPo {...{refs,session}} records={rows} onCancel={()=>setCreating(undefined)} onPrepared={async(id:string,draft:any)=>{setDirectPoDraft(draft);await load();await open(id,false);}}/>;
   if(approvalTarget) return <div className="pz-stack"><Button variant="neutral" onClick={()=>setApprovalTarget(undefined)}>Back to Management Review</Button><h2>Record Quotation Approval</h2><p>{approvalTarget.number}</p><QuotationApproval session={session} quotationId={approvalTarget.quotationId} cniId={approvalTarget.cniId} onApproved={approvalRecorded}/></div>;
   if (quotationReview) return <CoordinatorQuotationReview session={session} record={quotationReview} onApproved={approvalRecorded} onBack={()=>setQuotationReview(undefined)} onOpen={onOpen}/>;
   if (revisionRecord)
@@ -599,6 +610,7 @@ export function DepartmentWorkspace({
       <RecordEditor
         key={detail.record.id}
         {...{ session, department, refs, detail, onOpen, action, page }}
+        initialDirectPo={directPoDraft?.recordId===detail.record.id?directPoDraft:undefined}
         records={rows}
         onRequestOpen={(id: string) => open(id)}
         onDispatched={schedulingSaved}
@@ -692,6 +704,7 @@ export function DepartmentWorkspace({
       )}
       {creating &&
         ![
+          "Direct PO",
           "Record Customer Heads-up",
           "Record PO / Customer Confirmation",
         ].includes(creating) && (
@@ -712,6 +725,7 @@ export function DepartmentWorkspace({
             <h2>PO Receipt / Heads-up</h2>
             <div className="pz-action-row">
               {[
+                "Direct PO",
                 "Record PO / Customer Confirmation",
                 "Record Customer Heads-up",
               ].map((task) => (
@@ -839,13 +853,15 @@ export function DepartmentWorkspace({
           )}
           <WorkspaceFilters
             key={`${department}-${page}`}
-            rows={page === "Workspace" ? departmentTasks : rows}
+            rows={page === iposSharedBucket ? rows.filter((r) => r.stage === "issued" && r.data.ipoShared).map((r) => ({...r, site: `${r.site} ${r.siteCode}`})) : page === "Workspace" ? departmentTasks : rows}
             value={filters}
             onChange={setFilters}
             compact
             showTaskModes={page === "Workspace"}
             searchLabel={
-              department === "coordination" && page === coordinationBuckets[5]
+              page === iposSharedBucket
+                ? "Search IPOs — customer, site, branch code or reference"
+                : department === "coordination" && page === coordinationBuckets[5]
                 ? "Search customer follow-up"
                 : department === "design"
                   ? "Search survey requests"
@@ -858,6 +874,8 @@ export function DepartmentWorkspace({
             page === "Customer & Site Search" && (
               <section className="pz-panel">
                 <h3>Master customer and site register</h3>
+                {customerEditId!==undefined?<EditCustomer key={customerEditId} customerId={customerEditId} session={session} onCancel={()=>setCustomerEditId(undefined)} onSaved={async()=>{setRefs(await api<any>('/project-workflow/references'));await load();setCustomerEditId(undefined);}}/>:<div className="pz-form-grid"><CustomerSearchSelect customers={refs.customers.map((c:any)=>({...c,status:'Active'}))} value={customerEditChoice} onChange={setCustomerEditChoice} label="Select customer to edit"/><div className="pz-action-row"><Button variant="neutral" disabled={!customerEditChoice} onClick={()=>setCustomerEditId(Number(customerEditChoice))}>Edit Customer</Button></div></div>}
+                {siteCodeTarget&&<SiteCodeUpdate site={siteCodeTarget} session={session} onCancel={()=>setSiteCodeTarget(undefined)} onSaved={async()=>{const latest=await api<any>("/project-workflow/references");setRefs(latest);await load();setSiteCodeTarget(undefined);}}/>}
                 <div className="pz-table-scroll">
                   <table>
                     <thead>
@@ -920,6 +938,8 @@ export function DepartmentWorkspace({
                                     ? "Open workflow"
                                     : "Create workflow for this site"}
                                 </Button>
+                                {canWriteMaster(session.user.role,"sites",String(site.id))&&<Button variant="neutral" onClick={()=>setSiteCodeTarget(site)}>Update Branch Code</Button>}
+                                {canWriteMaster(session.user.role,'customers',String(c.id))&&<Button variant="neutral" onClick={()=>setCustomerEditId(c.id)}>Edit Customer</Button>}
                               </td>
                             </tr>
                           );
@@ -940,7 +960,8 @@ export function DepartmentWorkspace({
               }}
             />
           )}
-          {!readyToSend && !(
+          {department === "coordination" && page === iposSharedBucket && <IposSharedList records={visible} onPreview={(id) => void open(id).catch((e) => setError(e.message))} />}
+          {page !== iposSharedBucket && !readyToSend && !(
             department === "coordination" && page === coordinationBuckets[5]
           ) &&
             (department !== "design" || page !== designBuckets[1]) && (
@@ -1843,6 +1864,7 @@ function CreateRecord({
     (s: any) =>
       String(s.id) === siteChoice && String(s.customer_id) === customer,
   );
+  const chosenCustomer = customers.find((c: any) => String(c.id) === customer);
   return (
     <>
       <Action
@@ -1982,6 +2004,18 @@ function CreateRecord({
                 ))}
             </select>
           </label>
+          {chosenCustomer && route.startsWith("survey") && (
+            <dl className="pz-field-wide project-facts" aria-label="Saved customer details">
+              {[
+                ["Contact person", chosenCustomer.contact_person],
+                ["Contact number", chosenCustomer.phone],
+                ["Email", chosenCustomer.email],
+                ["Billing address", chosenCustomer.address],
+              ].map(([label, value]) => (
+                <div key={label}><dt>{label}</dt><dd>{value || "Not entered"}</dd></div>
+              ))}
+            </dl>
+          )}
           <div
             className="pz-field-wide pz-action-row workspace-groups"
             role="group"
@@ -2119,6 +2153,8 @@ function CreateRecord({
   );
 }
 function Upload({
+  files = [],
+  removableRequestFiles = false,
   session,
   id,
   onSaved,
@@ -2213,6 +2249,31 @@ function Upload({
       >
         Attach evidence
       </Button>
+      {removableRequestFiles && (
+        <div className="pz-stack" aria-label="Saved request attachments">
+          <h4>Attached files ({files.filter((f: any) => f.kind === "Request evidence").length})</h4>
+          <div className="pz-table-scroll"><table><thead><tr><th>File name</th><th>Action</th></tr></thead><tbody>
+          {files.filter((f: any) => f.kind === "Request evidence").map((saved: any) => (
+            <tr key={saved.id}><td>
+              <a href={`/api/project-workflow/${id}/files/${saved.id}`} target="_blank" rel="noreferrer">
+                {saved.filename}
+              </a></td><td>
+              <Button variant="danger" disabled={busy} aria-label={`Remove ${saved.filename}`} onClick={async () => {
+                if (!window.confirm(`Remove “${saved.filename}” from this survey request? You can attach it again if needed.`)) return;
+                setBusy(true);
+                setError("");
+                try {
+                  await api(`/project-workflow/${id}/files/${saved.id}/remove`, { csrf: session.csrfToken, body: {} });
+                  await onSaved();
+                } catch (e) { setError((e as Error).message); }
+                finally { setBusy(false); }
+              }}>Remove</Button>
+            </td></tr>
+          ))}
+          </tbody></table></div>
+          {!files.some((f: any) => f.kind === "Request evidence") && <p className="pz-caption">No files attached yet.</p>}
+        </div>
+      )}
       <ErrorText error={error} />
     </section>
   );
@@ -2650,6 +2711,7 @@ function CoordinationCommercialSummary({ session, detail }: any) {
 }
 function RecordEditor({
   page,
+  initialDirectPo,
   session,
   department,
   refs,
@@ -2719,81 +2781,13 @@ function RecordEditor({
     r.coordinationBucket === coordinationBuckets[1] &&
     !!r.data.designHandoffAt;
   if (!design && r.data.ipoShared)
-    return (
-      <div className="pz-stack">
-        <div>
-          <Button variant="neutral" onClick={onBack}>
-            Back to IPOs Shared
-          </Button>
-        </div>
-        <section className="pz-panel pz-stack">
-          <h2>
-            {r.customerCode} · {r.site} ({r.siteCode})
-          </h2>
-          <p>
-            PO / approval reference: {r.data.sharedPoReference} · PO date:{" "}
-            {r.data.sharedPoDate}
-          </p>
-          <p>
-            IPO and PT breakup shared with Accounts. Final BOQ shared with
-            Operations.
-          </p>
-          <div className="pz-action-row">
-            <a
-              href={`/api/orders/${r.data.ipoId}/ipo.pdf`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Preview IPO
-            </a>
-            <a
-              href={`/api/orders/${r.data.ipoId}/peachtree.pdf`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Preview PT Breakup
-            </a>
-          </div>
-          {detail.sharedFinalBoq && (
-            <details className="pz-form-section">
-              <summary>Final BOQ · {detail.sharedFinalBoq.number}</summary>
-              <div className="pz-table-scroll">
-                <table className="pz-table">
-                  <thead>
-                    <tr>
-                      <th>PT Item ID</th>
-                      <th>Description</th>
-                      <th>Brand</th>
-                      <th className="numeric">Quantity</th>
-                      <th>Unit</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detail.sharedFinalBoq.items.map(
-                      (item: any, index: number) => (
-                        <tr key={index}>
-                          <td>{item.itemId}</td>
-                          <td>{item.description}</td>
-                          <td>{item.brand}</td>
-                          <td className="numeric">{item.qty}</td>
-                          <td>{item.unit}</td>
-                        </tr>
-                      ),
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          )}
-        </section>
-      </div>
-    );
+    return <IpoSharedPreview record={r} onBack={onBack} />;
   if (
     !design &&
     page === coordinationBuckets[6] &&
-    (r.stage === "customer_tracking" || r.coordinationBucket === coordinationBuckets[5])
+    (r.stage === "customer_tracking" || r.coordinationBucket === coordinationBuckets[5] || (r.stage === "po_receipt" && r.route === "direct-framework" && !r.data.originalOrderPreserved))
   )
-    return <ConfirmSaleForm {...{ session, detail, action, onBack }} />;
+    return <ConfirmSaleForm {...{ session, detail, action, onBack, initialDirectPo }} />;
   if (!design && r.coordinationBucket === coordinationBuckets[4])
     return (
       <ReadySendReview session={session} record={r} onBack={onBack}>
@@ -2934,6 +2928,7 @@ function RecordEditor({
               ?.display_name ?? "Not available"}
           </p>
           {r.blocker && <p className="form-error">{r.blocker}</p>}
+          {r.data.ublStandardsReview?.needsReview && <p className="pz-survey-difference"><strong>Needs Review — UBL standards deviation</strong><br />{r.data.ublStandardsReview.message}</p>}
           {r.data.noFeasibleSolution && (
             <div className="pz-panel">
               <h3>Needs Review — No Feasible Solution</h3>
@@ -2967,6 +2962,7 @@ function RecordEditor({
           {!design && r.data.designHandoffAt && (
             <CoordinationTechnicalSummary {...{ session, detail }} />
           )}
+          {!design&&r.route==='survey-quote'&&r.stage==='design_handed_off'&&<InformationalTechnicalReport detail={detail} session={session} onSent={refresh}/>}
         </section>
       )}
       {ublSurveyReview && (
@@ -3077,6 +3073,8 @@ function RecordEditor({
               id={r.id}
               onSaved={refresh}
               initialKind="Request evidence"
+              files={detail.files}
+              removableRequestFiles
             />
             <p className="pz-caption">
               {detail.files.some(
@@ -4326,7 +4324,7 @@ function CustomerSurveyForm({ session, refs, detail, template, action }: any) {
                           }
                         >
                           <option value="">Not entered</option>
-                          {field.options.map((option: string) => (
+                          {[...new Set<string>([...field.options, ...(field.key === "property" ? ["N/A"] : [])])].map((option: string) => (
                             <option key={option}>{option}</option>
                           ))}
                         </select>
@@ -4865,6 +4863,7 @@ function QuickSurveyCableComparison({ session, detail }: any) {
   return (
     <section className="pz-panel pz-stack">
       <ErrorText error={error} />
+      {comparison?.standardsReview?.needsReview && <p className="pz-survey-difference" role="status"><strong>Needs Review — UBL standards deviation</strong><br />{comparison.standardsReview.message}</p>}
       {comparison?.pending && <p>{comparison.pending}</p>}
       {comparison?.rows?.length > 0 && (
         <>
@@ -4944,6 +4943,7 @@ function UblSurveyComparison({
   detail,
   frameworkId,
   choose = false,
+  onComparison,
 }: any) {
   const r = detail.record;
   const [selected, setSelected] = useState(frameworkId ?? r.frameworkId ?? "");
@@ -4962,7 +4962,7 @@ function UblSurveyComparison({
         body: { kind: "framework", frameworkId: selected },
       })
         .then((p) => {
-          if (live) setComparison(p.surveyComparison);
+          if (live) { setComparison(p.surveyComparison); onComparison?.(p.surveyComparison); }
         })
         .catch((e) => {
           if (live) setError(e.message);
@@ -5056,6 +5056,8 @@ function TechnicalReview({ session, refs, detail, action }: any) {
     r.frameworkId ?? "",
   );
   const [noFeasible, setNoFeasible] = useState(false);
+  const [reviewRemarks, setReviewRemarks] = useState("");
+  const [standardsFlag, setStandardsFlag] = useState<any>();
   const framework = r.route.endsWith("framework");
   const quantities: Record<string, string> = {
     panelQty: "Panel quantity",
@@ -5170,6 +5172,14 @@ function TechnicalReview({ session, refs, detail, action }: any) {
                   <UblSurveyComparison
                     {...{ session, refs, detail }}
                     frameworkId={selectedFramework}
+                    onComparison={(comparison: any) => {
+                      setStandardsFlag(comparison?.standardsReview);
+                      const message = "Not in line with agreed UBL standards. Please discuss with UBL Management.";
+                      setReviewRemarks((existing: string) => {
+                        const manual = existing.replace(message, "").trim();
+                        return comparison?.standardsReview?.needsReview ? [manual, message].filter(Boolean).join("\n") : manual;
+                      });
+                    }}
                   />
                 )}
             </>
@@ -5254,7 +5264,8 @@ function TechnicalReview({ session, refs, detail, action }: any) {
         {noFeasible
           ? "Reason no feasible solution is available"
           : "Technical verification and remarks"}
-        <textarea name="notes" required />
+        <textarea name="notes" required value={reviewRemarks} onChange={(e) => setReviewRemarks(e.target.value)} />
+        {!noFeasible && standardsFlag?.needsReview && <p className="pz-survey-difference" role="status"><strong>Needs Review — UBL standards deviation</strong><br />This flag is retained when the review is submitted to Atif.</p>}
       </label>
     </Action>
   );

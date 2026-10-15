@@ -5,8 +5,7 @@ import { equalSecrets } from "../auth/crypto.js";
 import { HttpError } from "../http/errors.js";
 import { orderSchema } from "./schema.js";
 import { OrdersRepository } from "./repository.js";
-import { buildIpoPdf } from "./report.js";
-import { buildPeachtreePdf } from "./peachtree-report.js";
+import { buildIpoPdf, buildPeachtreePdf } from "./document-renderers.js";
 export function ordersHttp(
   repo: OrdersRepository,
   requireSession: RequestHandler,
@@ -69,6 +68,7 @@ export function ordersHttp(
           s.snapshot,
           undefined,
           await repo.divisionForSnapshot(s.snapshot),
+          {includePt:false},
         ),
       );
   });
@@ -159,13 +159,14 @@ export function ordersHttp(
       req.authSession!.user.id,
       parse(orderSchema, req.body),
     );
+    res.locals.downloadContext={customer:p.snapshot.customer.shortCode||p.snapshot.customer.name,site:p.snapshot.siteName,siteCode:p.snapshot.siteCode,documentType:'IPO Preview',identity:`ipo-preview:${p.fingerprint}`,extension:'pdf'};
     res
       .type("application/pdf")
       .set(
         "Content-Disposition",
         'attachment; filename="DRAFT-IPO-and-Peachtree.pdf"',
       )
-      .send(buildIpoPdf(p.snapshot));
+      .send(buildIpoPdf(p.snapshot,undefined,p.snapshot.peachtree,{includePt:false}));
   });
   r.post("/documents", async (req, res) => {
     const v = parse(
@@ -220,6 +221,7 @@ export function ordersHttp(
     const { row, division } = await repo.peachtree(
       parse(z.uuid(), req.params.id),
     );
+    res.locals.downloadContext={customer:row.snapshot.customer.shortCode||row.snapshot.customer.name,site:row.snapshot.siteName,siteCode:row.snapshot.siteCode,documentType:'PT Breakup',identity:`internal_purchase_orders:${row.id}`,reference:row.number,extension:'pdf'};
     res
       .type("application/pdf")
       .set(
@@ -232,6 +234,7 @@ export function ordersHttp(
     const { row: q, division } = await repo.peachtree(
       parse(z.uuid(), req.params.id),
     );
+    res.locals.downloadContext={customer:q.snapshot.customer.shortCode||q.snapshot.customer.name,site:q.snapshot.siteName,siteCode:q.snapshot.siteCode,documentType:'IPO and PT',identity:`internal_purchase_orders:${q.id}`,reference:q.number,extension:'pdf'};
     res
       .type("application/pdf")
       .set(

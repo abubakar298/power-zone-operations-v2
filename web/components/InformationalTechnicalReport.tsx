@@ -1,0 +1,8 @@
+import{useState}from'react';
+import{api,type Session}from'../api.js';
+import{Button}from'../ui/Button.js';
+export function InformationalTechnicalReport({detail,session,onSent}:{detail:any;session:Session;onSent:()=>Promise<void>}){
+ const [busy,setBusy]=useState(false),[error,setError]=useState('');
+ async function send(){if(busy)return;if(!window.confirm('Send this saved technical report to Management for information? Quotation preparation will remain available.'))return;if(!window.confirm('Confirm sending the report with its saved costing?'))return;setBusy(true);setError('');try{await api(`/project-workflow/${detail.record.id}/informational-technical-report`,{csrf:session.csrfToken,body:{version:detail.record.version}});await onSent();window.dispatchEvent(new CustomEvent('pz:workflow-completed',{detail:{message:'Technical report sent to Management.'}}));}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
+ return <div className="pz-stack"><p className="form-note">Informational report for Management. You can continue preparing the quotation without sending or waiting for this report.</p>{detail.informationalTechnicalReport?<p role="status">Technical report submitted · <a href={`/api/project-workflow/${detail.record.id}/documents/${detail.informationalTechnicalReport.document_id}/pdf`} target="_blank" rel="noreferrer">{detail.informationalTechnicalReport.number}</a></p>:<div className="pz-action-row"><Button variant="secondary" loading={busy} onClick={()=>void send()}>Send Technical Report to Management</Button></div>}{error&&<p className="form-error" role="alert">{error}</p>}</div>;
+}

@@ -1,5 +1,19 @@
 import {Decimal} from 'decimal.js';
 import type {Pool,PoolClient} from 'pg';
+export const UBL_STANDARD_REVIEW_MESSAGE = "Not in line with agreed UBL standards. Please discuss with UBL Management.";
+export function ublConfigurationReview(s:any, approved:any) {
+ const inverter=String(s.inverter??'').match(/^(?:(\d+)×)?([\d.]+) kW/);
+ const parts=String(approved.solutionId??'').split('-');
+ const differences:string[]=[];
+ const watts=new Decimal(approved.pvWatts??0),panelWatts=new Decimal(s.panelWattage||0);
+ const roundedPanelCount=panelWatts.gt(0)?watts.div(panelWatts).toDecimalPlaces(0,Decimal.ROUND_HALF_UP):null;
+ if(!roundedPanelCount||!roundedPanelCount.eq(s.panelQty??-1)) differences.push('PV capacity differs from the agreed configuration beyond whole-panel rounding.');
+ if(parts.length===3){
+  if(!inverter||!new Decimal(inverter[1]??1).mul(inverter[2]).eq(parts[1])) differences.push('Inverter capacity differs from the agreed configuration.');
+  if(!new Decimal(s.batteryKwh??-1).eq(parts[2])) differences.push('Battery capacity differs from the agreed configuration.');
+ }
+ return {needsReview:differences.length>0,message:differences.length?UBL_STANDARD_REVIEW_MESSAGE:'',differences,panelRoundingOnly:!!roundedPanelCount&&roundedPanelCount.eq(s.panelQty??-1)&&!watts.eq(new Decimal(s.panelQty??0).mul(panelWatts))};
+}
 /** Compare measured inputs to a frozen approved BOQ, without altering costs or commercial basis. */
 export async function ublSurveyComparison(c:Pool|PoolClient,r:any,basis:any){
  const customer=(await c.query('SELECT short_code FROM customers WHERE id=$1',[r.customer_id])).rows[0];
@@ -50,5 +64,5 @@ export async function ublSurveyComparison(c:Pool|PoolClient,r:any,basis:any){
   ['cable','Cable brand',(l:any)=>/Cable/.test(l.key)],
   ['switchgear','Switchgear brand',(l:any)=>/MCB|MCCB|SPD|Breaker|Fuse/.test(l.key)]
  ] as const){const expected=[...new Set(lines.filter(test).map((l:any)=>l.brand))].join(', ');const selected=brands.find(b=>b.id===s.brands?.[key])?.name;if(expected&&selected)add(label,expected,selected);}
- return {source:basis.source,rows,notes:'Panel count and wattage are assessed together against agreed PV capacity. The approved BOQ does not fix an individual panel wattage. The standard UBL smart meter is included with the inverter; Extra smart meter means an additional meter. Brand selection is completed by Atif; unselected brands are not survey discrepancies. Financial snapshots remain unchanged.'};
+ return {source:basis.source,rows,standardsReview:ublConfigurationReview(s,basis.boq.engineering),notes:'Panel count and wattage are assessed together against agreed PV capacity. The approved BOQ does not fix an individual panel wattage. The standard UBL smart meter is included with the inverter; Extra smart meter means an additional meter. Brand selection is completed by Atif; unselected brands are not survey discrepancies. Financial snapshots remain unchanged.'};
 }

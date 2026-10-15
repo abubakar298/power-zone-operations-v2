@@ -30,9 +30,10 @@ export async function saveCustomerSurveyForm(c:PoolClient,r:any,actor:string,raw
   }
   const value=text(input.values[field.key]);
   if(!draft&&!value)throw new HttpError(422,`Enter ${field.label} before saving the UBL survey details. Use None where applicable.`);
+  if(value==='N/A'){values[field.key]='N/A';continue;}
   if(['number','integer'].includes(field.type)){values[field.key]=numeric(value,field.type==='integer');continue;}
   if(field.type==='date'&&value)z.iso.date().parse(value);
-  if(field.type==='select'&&value&&!field.options.includes(value))throw new HttpError(422,`Choose a listed value for ${field.label}.`);
+  if(field.type==='select'&&value&&!field.options.includes(value)&&!(field.key==='property'&&value==='N/A'))throw new HttpError(422,`Choose a listed value for ${field.label}.`);
   values[field.key]=value;
  }
  return{templateKey:template.key,templateVersion:template.version,values,savedAt:new Date().toISOString(),savedBy:actor,standardInputsSavedAt:data.surveyInputsSavedAt??null,sourceReference:template.source_reference,connectedLoadMode:template.payload.connectedLoadMode};

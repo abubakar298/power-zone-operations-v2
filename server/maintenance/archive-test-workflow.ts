@@ -71,7 +71,23 @@ export async function archiveConfirmedTestWorkflow(
       await c.query("COMMIT");
       return existing.counts;
     }
-    await c.query(`LOCK TABLE ${tables.join(",")} IN ACCESS EXCLUSIVE MODE`);
+    // PostgreSQL requires even empty referencing tables in a TRUNCATE set.
+    // Later schema additions are safe only when empty: never CASCADE into
+    // unrelated live workflow data, even when its root is in this old allowlist.
+    const dependencies = (await c.query(`WITH RECURSIVE linked(oid) AS (
+      SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname=current_schema() AND c.relname=ANY($1::text[])
+      UNION SELECT f.conrelid FROM pg_constraint f JOIN linked l ON f.confrelid=l.oid WHERE f.contype='f'
+    ) SELECT c.relname,n.nspname FROM linked l JOIN pg_class c ON c.oid=l.oid JOIN pg_namespace n ON n.oid=c.relnamespace ORDER BY c.relname`, [[...tables]])).rows;
+    if (dependencies.some(r => r.nspname !== "public"))
+      throw new Error("Test cleanup stopped: a dependency is outside the approved schema.");
+    const quoted = (name:string) => '"'+name.replaceAll('"','""')+'"';
+    const lockedTables = dependencies.map(r => String(r.relname));
+    await c.query(`LOCK TABLE ${lockedTables.map(quoted).join(",")} IN ACCESS EXCLUSIVE MODE`);
+    for (const table of lockedTables.filter(t => !(tables as readonly string[]).includes(t))) {
+      if ((await c.query(`SELECT 1 FROM ${quoted(table)} LIMIT 1`)).rowCount)
+        throw new Error(`Test cleanup stopped: unapproved dependent table ${table} contains data. No records were removed.`);
+    }
     const records: Record<string, unknown[]> = {},
       counts: Record<string, number> = {};
     for (const table of tables) {
@@ -105,9 +121,8 @@ export async function archiveConfirmedTestWorkflow(
       "INSERT INTO test_workflow_archives(key,cutoff,counts,records) VALUES($1,$2,$3,$4)",
       [requested, cutoff, counts, records],
     );
-    // Explicit tables only, no CASCADE and no disabled immutability triggers.
-    // TRUNCATE is confined to the archived test dataset, under the same locks.
-    await c.query(`TRUNCATE TABLE ${tables.join(",")}`);
+    // Only archived allowlisted data and verified-empty dependencies. No CASCADE.
+    await c.query(`TRUNCATE TABLE ${lockedTables.map(quoted).join(",")}`);
     await c.query("COMMIT");
     return counts;
   } catch (e) {

@@ -1071,7 +1071,7 @@ export function Commercial({
                           <td className="numeric">{money(r.profit)}</td>
                         )}
                         <td className="numeric">{money(r.beforeTax)}</td>
-                        {sellingOnly&&<><td className="numeric">{new Decimal(p.input.discountPercent||'0').toFixed(1)}%</td><td className="numeric">{money(discountReview!.rows.find(row=>row.key===r.key)!.discountAmount)}</td><td className="numeric">{money(discountReview!.rows.find(row=>row.key===r.key)!.sellingAfterDiscount)}</td></>}
+                        {sellingOnly&&<><td className="numeric">{new Decimal(r.beforeTax).gt(0)?new Decimal(discountReview!.rows.find(row=>row.key===r.key)!.discountAmount).div(r.beforeTax).mul(100).toFixed(1):'0.0'}%</td><td className="numeric">{money(discountReview!.rows.find(row=>row.key===r.key)!.discountAmount)}</td><td className="numeric">{money(discountReview!.rows.find(row=>row.key===r.key)!.sellingAfterDiscount)}</td></>}
                         <td className="numeric">{money(sellingOnly?discountReview!.rows.find(row=>row.key===r.key)!.discountedTax:r.tax)}</td>
                         <td className="numeric">{money(sellingOnly?discountReview!.rows.find(row=>row.key===r.key)!.discountedAfterTax:r.afterTax)}</td>
                       </tr>
@@ -1453,7 +1453,7 @@ export function Commercial({
                 (hasRevisionPriceChange(quotePreview.snapshot) &&
                   !priceChangeAcknowledged)
               }
-              onClick={()=>void action(async()=>{const result=await api<{url:string}>('/commercial/quotations/preview-download',{body:quotePdfInput,csrf:session.csrfToken});const link=document.createElement('a');link.href=result.url;link.download='Quotation-Preview.pdf';document.body.appendChild(link);link.click();link.remove();})}
+              onClick={()=>void action(async()=>{const result=await api<{url:string}>('/commercial/quotations/preview-download',{body:quotePdfInput,csrf:session.csrfToken});const link=document.createElement('a');link.href=result.url;document.body.appendChild(link);link.click();link.remove();})}
             >
               Download Preview
             </Button>

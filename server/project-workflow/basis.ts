@@ -500,7 +500,7 @@ export async function frameworkBasis(
         total: money(gross),
         lines: [
           {
-            description: `UPS ${p.profile.configuration}`,
+            description: `BATTERY ENERGY STORAGE SOLUTION (6 kW INVERTER + ${p.profile.configuration.split("-")[1]} kWh LITHIUM BATTERY BANK)`,
             group: "other",
             qty: "1",
             unit: "JOB",

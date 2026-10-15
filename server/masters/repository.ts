@@ -88,6 +88,7 @@ export class MastersRepository {
     id: string,
     version: number,
     values: Record<string, unknown>,
+    changeReason = "",
   ) {
     try {
       return await transaction(this.pool as Pool, async (c) => {
@@ -105,6 +106,12 @@ export class MastersRepository {
             "You do not have permission to change this master record.",
           );
         let nextId = id;
+        const previousCustomer=kind==='customers'&&id!=='new'?(await c.query('SELECT * FROM customers WHERE id=$1 FOR UPDATE',[id])).rows[0]:undefined;
+        if(user.role==='Coordinator'&&previousCustomer){
+          if(!changeReason.trim())throw new HttpError(400,'Enter a reason for the customer update.');
+          if(values.short_code!==previousCustomer.short_code||values.status!==previousCustomer.status)throw new HttpError(403,'Customer short code and status can only be changed by Admin.');
+        }
+        const previousSite = kind === "sites" ? (await c.query("SELECT code,version FROM sites WHERE id=$1 FOR UPDATE", [id])).rows[0] : undefined;
         if (kind === "rates" || kind === "rules" || kind === "items") {
           const table =
             kind === "rates"
@@ -191,6 +198,8 @@ export class MastersRepository {
               ? [
                   ...(values.city !== undefined ? ["city"] : []),
                   ...(values.province !== undefined ? ["province"] : []),
+                  ...(values.ntn !== undefined ? ["ntn"] : []),
+                  ...(values.strn !== undefined ? ["strn"] : []),
                   "name",
                   "short_code",
                   "contact_person",
@@ -217,6 +226,9 @@ export class MastersRepository {
           actor,
           `master.${kind}.${nextId}.${id === "new" ? "created" : "updated"}`,
         ]);
+        if (previousSite && previousSite.code !== values.code)
+          await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [actor, `master.site-code.changed:${JSON.stringify({siteId: nextId, before: previousSite.code, after: values.code, beforeVersion: previousSite.version, afterVersion: previousSite.version + 1, reason: changeReason})}`]);
+        if(previousCustomer){const after=(await c.query('SELECT * FROM customers WHERE id=$1',[id])).rows[0];await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`master.customer.changed:${JSON.stringify({customerId:id,before:previousCustomer,after,reason:changeReason})}`]);}
         return { id: nextId };
       });
     } catch (error) {

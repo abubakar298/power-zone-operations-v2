@@ -50,7 +50,7 @@ test('UBL originals, amendments, July prices and twelve negotiation stages are i
    assert.equal(snapshot.issues.length,0);assert.equal(snapshot.rows.find(r=>r.id==='H29').cost,'3000');assert.ok(snapshot.combinedTemplateBudget);
    assert.equal(snapshot.rows.find(r=>r.id==='BOX').components[0].quantity,'1');
    assert.equal(snapshot.rows.find(r=>r.id==='G27').cost,'0');assert.equal(snapshot.rows.find(r=>r.id==='G27').components.length,0);
-   assert.equal(snapshot.rows.find(r=>r.id==='F24').cost,'90000');
+   assert.equal(snapshot.rows.find(r=>r.id==='F24').cost,new Decimal(masters.rates.find(r=>r.key==='Earthing Bore')!.rate!).mul(current.snapshot.rows.find((r:any)=>r.id==='F24').quantity).toString()); 
    assert.equal(snapshot.rows.find(r=>r.id==='H28').cost,'10000');
    assert.equal(snapshot.rows.find(r=>r.id==='MISC').components[0].quantity,'1');
    const source=await repo.source(manager,id);assert.equal(createHash('sha256').update(source.content).digest('hex'),source.sha256);

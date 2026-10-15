@@ -1,3 +1,4 @@
+import {manualIpoSchema} from "../documents/manual-ipo.js";
 import { z } from "zod";
 import { surveySchema } from "../boq/schema.js";
 export const workflowRoutes = [
@@ -103,6 +104,7 @@ export const receiptSchema = z
     quotationId: z.uuid().optional(),
     frameworkId: z.uuid().optional(),
     actual: comparisonSchema.optional(),
+    ipoNumber:manualIpoSchema.optional(),
     confirmationType:z.enum(["Customer PO","WhatsApp approval"]).default("Customer PO"),
     saleDetails:z.record(z.string(),z.string().max(2000)).optional(),
     reviewed: z.literal(true),

@@ -55,6 +55,12 @@ test("operator test archive is recoverable, atomic, cutoff guarded and preserves
       0,
     );
     await db.pool.query("DELETE FROM survey_drafts WHERE id=$1", [newer]);
+    await db.pool.query("CREATE TABLE future_workflow_child(id uuid PRIMARY KEY, draft_id uuid REFERENCES survey_drafts(id))");
+    await db.pool.query("INSERT INTO future_workflow_child VALUES($1,$2)", [randomUUID(),draft]);
+    await assert.rejects(archiveConfirmedTestWorkflow(db.pool,testArchiveKey), /unapproved dependent table.*contains data/);
+    assert.equal((await db.pool.query("SELECT count(*) FROM survey_drafts")).rows[0].count,"1");
+    assert.equal((await db.pool.query("SELECT count(*) FROM test_workflow_archives")).rows[0].count,"0");
+    await db.pool.query("DELETE FROM future_workflow_child");
     const counts = await archiveConfirmedTestWorkflow(db.pool, testArchiveKey);
     assert.equal(counts.survey_drafts, 1);
     assert.equal(

@@ -29,6 +29,8 @@ const schemas = {
       province: text.max(200).optional(),
       status,
       notes: text,
+      ntn: text.max(100).optional(),
+      strn: text.max(100).optional(),
     })
     .strict(),
   sites: z
@@ -130,6 +132,7 @@ export function mastersHttp(
         id: z.string().min(1).max(200),
         version: z.number().int().min(0),
         values: z.unknown(),
+        changeReason: z.string().trim().max(2000).optional(),
       })
       .strict()
       .safeParse(req.body);
@@ -197,7 +200,7 @@ export function mastersHttp(
           "This rule requires a positive size or whole quantity.",
         );
     }
-    res.json(await repo.save(s.user.id, kind.data, id, version, input.data));
+    res.json(await repo.save(s.user.id, kind.data, id, version, input.data, request.data.changeReason));
   });
   return router;
 }

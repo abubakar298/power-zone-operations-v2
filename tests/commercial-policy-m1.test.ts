@@ -49,6 +49,9 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
     const admin = login.body.user.id,
       cookie = login.headers["set-cookie"][0].split(";")[0],
       csrf = login.body.csrfToken;
+    // This suite compares full immutable financial payloads. Normal Admin API
+    // responses intentionally redact confidential costs without this grant.
+    await db.pool.query("INSERT INTO restricted_cost_access(user_id,granted_reason) VALUES($1,'Isolated immutable financial snapshot regression')",[admin]);
     const post = (path: string, body: object) =>
       request(app)
         .post(path)
@@ -57,7 +60,9 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
         .set("X-CSRF-Token", csrf)
         .send(body);
     const policy = await repo.standardPolicy(admin);
-    assert.equal(policy.version, 2);
+    assert.equal(policy.version, 3);
+    assert.equal(policy.costUpliftPercent, "5");
+    assert.equal(policy.preapprovedCostDiscountPercent, "5");
     assert.deepEqual(policy.markups, {
       solar: "10",
       structure: "10",
@@ -171,7 +176,7 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
       assert.equal(
         l.beforeTax,
         new Decimal(l.cost)
-          .mul(new Decimal(l.markup).div(100).add(1))
+          .mul(new Decimal(l.markup).add(policy.costUpliftPercent ?? "0").div(100).add(1))
           .toString(),
       );
     assert.equal(
@@ -278,7 +283,7 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
       { ...input, additionalCategory: "other" },
       policy,
     );
-    assert.equal(classified.itemPricing!.at(-1)!.beforeTax, "125.0125");
+    assert.equal(classified.itemPricing!.at(-1)!.beforeTax, "130.013");
     assert.equal(classified.itemPricing!.at(-1)!.markup, "25");
     const next = await repo.saveStandardPolicy(
       admin,

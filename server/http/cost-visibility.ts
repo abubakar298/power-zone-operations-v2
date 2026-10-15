@@ -26,6 +26,7 @@ export function restrictedCostView(value: any, commercial = false): any {
   const result: any = {};
   const boq = Array.isArray(value.lines) && value.engineering && value.survey;
   for (const [key, v] of Object.entries(value)) {
+    if(key==='discountStrategy')continue; // Frozen internal per-item costs/allowances stay server-side.
     if (key === "budgeted_markup") continue;
     if(commercial && key==='standardDiscountStrategy' && (v as any)?.version==='PZ-STANDARD-DISCOUNT-2')continue;
     if(commercial && key==='discountAuthorization' && v){const {preapprovedBeforeTax,...safe}=v as any;result[key]=safe;continue;}
@@ -83,7 +84,7 @@ export function restrictedCostView(value: any, commercial = false): any {
       "margin",
       "profit",
     ])
-      if (k in result) result[k] = null;
+      if (k in result && !(['rate','total'].includes(k)&&typeof value.originalBeforeTax==='string'&&typeof value.beforeTax==='string'&&typeof value.allocatedDiscount==='string')) result[k] = null;
   }
   if (
     !boq &&
