@@ -89,6 +89,9 @@ export function Dashboard({
   const [view, setView] = useState<
     | "ubl-workflow"
     | "ubl"
+    | "ubl-ups"
+    | "mbl-ups"
+    | "bafl-solar"
     | "projects"
     | "documents"
     | "newboq"
@@ -174,6 +177,9 @@ export function Dashboard({
     next:
       | "ubl-workflow"
       | "ubl"
+      | "ubl-ups"
+      | "mbl-ups"
+      | "bafl-solar"
       | "projects"
       | "documents"
       | "newboq"
@@ -222,6 +228,13 @@ export function Dashboard({
     function followHash() {
       const params = new URLSearchParams(window.location.hash.slice(1)),
         destination = params.get("workspace");
+      if (
+        ["ubl-ups", "mbl-ups", "bafl-solar"].includes(destination ?? "") &&
+        ["Admin", "Management"].includes(session.user.role)
+      ) {
+        setView(destination as "ubl-ups" | "mbl-ups" | "bafl-solar");
+        return;
+      }
       if (
         destination === "ubl-workflow" &&
         [
@@ -294,7 +307,23 @@ export function Dashboard({
           </button>
         </div>
         <div className="sidebar-navigation">
-          {["Coordinator", "Design"].includes(session.user.role) ? (
+          {["Admin", "Management"].includes(session.user.role) ? (
+            <nav aria-label="Customer workspaces">
+              {([
+                ["ubl", "UBL Solar"],
+                ["ubl-ups", "UBL UPS"],
+                ["mbl-ups", "MBL UPS"],
+                ["bafl-solar", "BAFL Solar"],
+              ] as const).map(([destination, label]) => (
+                <button key={destination}
+                  className={view === destination ? "nav-active" : ""}
+                  aria-current={view === destination ? "page" : undefined}
+                  onClick={() => navigate(destination)}>
+                  <Icon name="file" /><span>{label}</span>
+                </button>
+              ))}
+            </nav>
+          ) : ["Coordinator", "Design"].includes(session.user.role) ? (
             <>
               <div className="nav-label">DAILY WORK</div>
               <nav aria-label="Main navigation">
@@ -548,6 +577,9 @@ export function Dashboard({
                 "customers",
                 "rates",
                 "ubl",
+                "ubl-ups",
+                "mbl-ups",
+                "bafl-solar",
                 "ubl-workflow",
               ].includes(view)
                 ? (
@@ -558,6 +590,9 @@ export function Dashboard({
                       customers: "Customers & Sites",
                       rates: "Rate Master",
                       ubl: "UBL Solar",
+                      "ubl-ups": "UBL UPS",
+                      "mbl-ups": "MBL UPS",
+                      "bafl-solar": "BAFL Solar",
                       "ubl-workflow": "UBL Site Workflow",
                     } as Record<string, string>
                   )[view]
@@ -661,6 +696,9 @@ export function Dashboard({
                       "customers",
                       "rates",
                       "ubl",
+                "ubl-ups",
+                "mbl-ups",
+                "bafl-solar",
                       "ubl-workflow",
                     ].includes(view)
                       ? (
@@ -671,6 +709,9 @@ export function Dashboard({
                             customers: "Customers & Sites",
                             rates: "Rate Master",
                             ubl: "UBL Solar",
+                      "ubl-ups": "UBL UPS",
+                      "mbl-ups": "MBL UPS",
+                      "bafl-solar": "BAFL Solar",
                             "ubl-workflow": "UBL Site Workflow",
                           } as Record<string, string>
                         )[view]
@@ -708,6 +749,9 @@ export function Dashboard({
                       "customers",
                       "rates",
                       "ubl",
+                "ubl-ups",
+                "mbl-ups",
+                "bafl-solar",
                       "ubl-workflow",
                     ].includes(view)
                       ? "Select the relevant customer, site or document to continue your work."
@@ -992,6 +1036,12 @@ export function Dashboard({
                     onBack={() => navigate("customers")}
                   />
                 )}
+              {["ubl-ups", "mbl-ups", "bafl-solar"].includes(view) &&
+                ["Admin", "Management"].includes(session.user.role) && (
+                  <section className="detail-panel" aria-label="Workspace setup">
+                    <p>This workspace is ready for you to define its layout and contents.</p>
+                  </section>
+                )}
               {view === "account" && (
                 <div
                   className={`dashboard-grid ${view === "account" ? "account-view" : ""}`}
@@ -1137,3 +1187,4 @@ function PasswordChange({
     </form>
   );
 }
+
