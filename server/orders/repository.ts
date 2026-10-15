@@ -1,4 +1,5 @@
 import { ipoSiteIdentity } from "./site-identity.js";
+import {archivedDocumentIds} from '../maintenance/archived-documents.js';
 import {cashDeal, sellingFactor} from "../commercial/deal.js";
 import { requireEligibleQuotation } from "../commercial/eligibility.js";
 import { allocateReference, boqIdentity } from "../documents/references.js";
@@ -291,7 +292,7 @@ export class OrdersRepository {
   async submissions(actor: string) {
     return (
       await this.pool.query(
-        "SELECT s.*,jsonb_build_object('presentation',p.snapshot->'input'->>'presentation','taxMode',p.snapshot->'input'->>'taxMode') AS \"quotationType\",u.display_name AS prepared_by,i.id AS ipo_id,i.number AS ipo_number FROM ipo_submissions s LEFT JOIN quotation_versions q ON q.id::text=s.input->>'quotationId' LEFT JOIN commercial_pricing_versions p ON p.id=q.pricing_id JOIN users u ON u.id=s.created_by LEFT JOIN internal_purchase_orders i ON i.submission_id=s.id WHERE s.created_by=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role IN('Admin','Management')) ORDER BY s.created_at DESC LIMIT 200",
+        "SELECT s.*,jsonb_build_object('presentation',p.snapshot->'input'->>'presentation','taxMode',p.snapshot->'input'->>'taxMode') AS \"quotationType\",u.display_name AS prepared_by,i.id AS ipo_id,i.number AS ipo_number FROM ipo_submissions s LEFT JOIN quotation_versions q ON q.id::text=s.input->>'quotationId' LEFT JOIN commercial_pricing_versions p ON p.id=q.pricing_id JOIN users u ON u.id=s.created_by LEFT JOIN internal_purchase_orders i ON i.submission_id=s.id WHERE (s.created_by=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role IN('Admin','Management'))) AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? s.id::text) ORDER BY s.created_at DESC LIMIT 200",
         [actor],
       )
     ).rows;
@@ -311,7 +312,7 @@ export class OrdersRepository {
     const s = (
       await this.pool.query("SELECT * FROM ipo_submissions WHERE id=$1", [id])
     ).rows[0];
-    if (!s) throw new HttpError(404, "IPO submission not found.");
+    if (!s || (await archivedDocumentIds(this.pool)).has(id)) throw new HttpError(404, "IPO submission not found.");
     return this.save(
       actor,
       s.input,

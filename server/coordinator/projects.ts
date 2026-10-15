@@ -1,8 +1,10 @@
 import type { Pool } from "pg";
+import {archivedDocumentIds} from '../maintenance/archived-documents.js';
 import { ownedCondition } from "../http/permissions.js";
 import { HttpError } from "../http/errors.js";
 // This index deliberately selects metadata, never costing/pricing snapshots or audit payloads.
 export async function projectCatalog(pool: Pool, actor: string) {
+  const archived=await archivedDocumentIds(pool);
   const queries = [
     `SELECT d.id,'Survey draft' AS type,d.inputs->>'siteName' AS number,d.version,d.inputs->>'customerId' AS customer_id,d.inputs->>'siteCode' AS site_code,d.inputs->>'siteName' AS site,d.inputs->>'location' AS location,COALESCE(d.inputs->>'family','solar-hybrid') AS family,d.updated_at AS created_at,d.owner_id AS actor_id,'draft' AS resource FROM survey_drafts d WHERE ${ownedCondition("draft", "d.id", "$1")}`,
     `SELECT r.id,'BOQ' AS type,r.number,r.revision AS version,b.customer_id::text,b.site_id,s.code AS site_code,r.snapshot->'survey'->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,r.created_at,r.created_by AS actor_id,'boq' AS resource FROM boq_revisions r JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("boq", "r.id", "$1")}`,
@@ -15,7 +17,7 @@ export async function projectCatalog(pool: Pool, actor: string) {
   ];
   const documents = (
     await Promise.all(queries.map((sql) => pool.query(sql, [actor])))
-  ).flatMap((r) => r.rows);
+  ).flatMap((r) => r.rows).filter(d=>!archived.has(d.id));
   const customers = (
     await pool.query(
       "SELECT id,name,short_code,contact_person,phone,email,address FROM customers WHERE id::text=ANY($1::text[])",

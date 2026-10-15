@@ -521,6 +521,7 @@ export class ProjectWorkflowRepository {
         scheduledSurveyDate: data.scheduledSurveyDate ?? "",
         actualSurveyDate: data.actualSurveyDate ?? "",
         submissionRemarks: data.submissionRemarks ?? "",
+        sitePictureFolder: data.sitePictureFolder ?? null,
         surveyInputs: data.surveyInputs ?? null,
         surveyInputsSavedAt: data.surveyInputsSavedAt ?? null,
         customerSurveyForms: data.customerSurveyForms ?? {},
@@ -1826,6 +1827,13 @@ export class ProjectWorkflowRepository {
         data.surveyTeam = team;
         if (stage === "survey_requested") stage = "survey_scheduled";
         reason = note(input.notes);
+      } else if (v.action === "save-site-picture-link") {
+        this.requireRole(u, ["Design"]);
+        requireStage(["survey_scheduled", "report_received", "technical_review", "technical_revision"]);
+        const {sitePictureFolder} = await import('./site-picture-link.js');
+        const url = sitePictureFolder(input.url);
+        data.sitePictureFolder = {url, savedBy: actor, savedAt: new Date().toISOString()};
+        reason = "Site pictures and videos linked to their Google Drive folder; media remains in Drive.";
       } else if (v.action === "start-survey") {
         this.requireRole(u, ["Design"]);
         requireStage(["survey_scheduled"]);
@@ -2034,10 +2042,10 @@ export class ProjectWorkflowRepository {
                 422,
                 "Attach the completed survey report before completing submission.",
               );
-            if (!files.some((file: any) => file.kind === "Survey photo"))
+            if (!files.some((file: any) => file.kind === "Survey photo") && !data.sitePictureFolder?.url)
               throw new HttpError(
                 422,
-                "Attach at least one site picture before completing submission.",
+                "Save the site pictures folder link before completing submission.",
               );
             data.actualSurveyDate = date;
             data.submissionRemarks = submissionNote;
@@ -2141,11 +2149,11 @@ export class ProjectWorkflowRepository {
               "SELECT 1 FROM project_workflow_files WHERE record_id=$1 AND kind='Survey photo' UNION SELECT 1 FROM ubl_workflow_attachments WHERE request_id=$2 AND kind='Survey photo'",
               [id, r.legacy_type === "ubl" ? r.legacy_id : null],
             )
-          ).rowCount
+          ).rowCount && !data.sitePictureFolder?.url
         )
           throw new HttpError(
             422,
-            "Attach at least one survey photo before submitting the survey report.",
+            "Save the site pictures folder link before submitting the survey report.",
           );
         const reportCustomer = (
           await c.query("SELECT short_code FROM customers WHERE id=$1", [

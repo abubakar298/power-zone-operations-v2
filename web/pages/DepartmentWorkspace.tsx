@@ -2278,13 +2278,36 @@ function Upload({
     </section>
   );
 }
-function SurveyReportAttachments({ session, id, files = [], onSaved }: any) {
+function SitePicturesFolder({session, record, onSaved, readOnly = false}: any) {
+  const saved = record.data.sitePictureFolder?.url ?? "";
+  const [url, setUrl] = useState(saved);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  useEffect(() => setUrl(saved), [saved]);
+  return <section className="pz-stack">
+    <h4>Site Pictures & Videos</h4>
+    {saved && <a href={saved} target="_blank" rel="noopener noreferrer">Open site folder in Google Drive</a>}
+    {!readOnly && <>
+      <Field id={`site-folder-${record.id}`} label="Google Drive site folder" hint="Pictures and videos remain in Drive. This saves the folder link only.">
+        <input id={`site-folder-${record.id}`} type="url" value={url} onChange={e=>{setUrl(e.target.value);setNotice("");}} disabled={busy}/>
+      </Field>
+      <div><Button variant="secondary" loading={busy} disabled={!url.trim() || url.trim()===saved} onClick={async()=>{
+        setBusy(true);setError("");setNotice("");
+        try{await api(`/project-workflow/${record.id}/actions`,{csrf:session.csrfToken,body:{action:"save-site-picture-link",version:record.version,requestKey:crypto.randomUUID(),input:{url}}});await onSaved();setNotice("Site folder link saved.");}catch(e){setError((e as Error).message);}finally{setBusy(false);}
+      }}>Save Folder Link</Button></div>
+      {notice && <p role="status">{notice}</p>}<ErrorText error={error}/>
+    </>}
+    {readOnly && !saved && <p>No site folder link saved.</p>}
+  </section>;
+}
+function SurveyReportAttachments({ session, id, record, files = [], onSaved }: any) {
   return (
     <section className="pz-panel pz-stack">
       <h3>Survey Form & Site Pictures</h3>
       <p>
-        Upload the completed survey form and site pictures separately, then
-        submit the report for technical review.
+        Attach the survey report, BOQ input form and load assessment report.
+        Save the site's Drive folder link for pictures and videos.
       </p>
       <div className="pz-form-grid">
         <SurveyAttachmentGroup
@@ -2295,15 +2318,9 @@ function SurveyReportAttachments({ session, id, files = [], onSaved }: any) {
           existing={files.filter((f: any) => f.kind === "Survey report")}
           onSaved={onSaved}
         />
-        <SurveyAttachmentGroup
-          session={session}
-          id={id}
-          kind="Survey photo"
-          title="Attach Site Pictures"
-          existing={files.filter((f: any) => f.kind === "Survey photo")}
-          onSaved={onSaved}
-        />
+        <SitePicturesFolder {...{session,record,onSaved}}/>
       </div>
+      {files.some((f:any)=>f.kind==="Survey photo") && <details><summary>Previously Uploaded Site Pictures</summary>{files.filter((f:any)=>f.kind==="Survey photo").map((f:any)=><p key={f.id}><a href={`/api/project-workflow/${id}/files/${f.id}`} target="_blank" rel="noopener noreferrer">{f.filename}</a></p>)}</details>}
     </section>
   );
 }
@@ -3131,6 +3148,7 @@ function RecordEditor({
           <SurveyReportAttachments
             session={session}
             id={r.id}
+            record={r}
             files={detail.files}
             onSaved={refresh}
           />
@@ -3897,6 +3915,7 @@ function SurveyReviewInputs({
         )}
       </section>
       <section className="pz-panel pz-stack">
+        <SitePicturesFolder session={session} record={r} readOnly/>
         <h3>Standard BOQ Inputs</h3>
         {canEdit && (
           <Button

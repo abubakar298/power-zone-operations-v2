@@ -1,4 +1,5 @@
 import {finalizeCustomerBoq} from '../boq/lifecycle.js';
+import {archivedDocumentIds} from '../maintenance/archived-documents.js';
 import { Decimal } from "decimal.js";
 import { projectCatalog, projectContext } from "./projects.js";
 import { resourceOwnership, ownedCondition } from "../http/permissions.js";
@@ -37,6 +38,7 @@ export class CoordinatorRepository {
     };
   }
   async overview(actor: string, team: boolean, includeTraining = false) {
+    const archived = await archivedDocumentIds(this.pool);
     // Explicit sample-batch metadata is the only training classifier.
     const batches = (
       await this.pool.query("SELECT records FROM dashboard_sample_batches")
@@ -78,7 +80,7 @@ export class CoordinatorRepository {
       )
     ).rows;
     for (const row of descendants) trainingIds.add(row.id);
-    const excluded = includeTraining ? [] : [...trainingIds];
+    const excluded = [...new Set([...archived,...(includeTraining ? [] : [...trainingIds])])];
     const pending = `WITH pending AS (
  SELECT d.id,'Survey / BOQ'::text AS kind,COALESCE(d.inputs->>'siteName','Survey draft') AS reference,COALESCE(d.inputs->>'siteName','') AS site,CASE WHEN s.id IS NULL THEN 'Draft' WHEN s.outcome IS NULL THEN 'Awaiting review' ELSE 'Changes requested' END AS status,COALESCE(s.decision_at,s.created_at,d.created_at) AS started_at,'boqs'::text AS target,d.id AS draft_id,NULL::uuid AS boq_revision_id,NULL::uuid AS ipo_id,NULL::uuid AS request_id,(SELECT name FROM customers WHERE id::text=d.inputs->>'customerId') AS customer
  FROM survey_drafts d LEFT JOIN LATERAL (SELECT r.id,r.created_at,c.created_at AS decision_at,c.outcome FROM boq_review_submissions r LEFT JOIN boq_review_decisions c ON c.submission_id=r.id WHERE r.draft_id=d.id ORDER BY r.created_at DESC LIMIT 1) s ON true
@@ -106,6 +108,10 @@ export class CoordinatorRepository {
         [actor, team],
       )
     ).rows[0];
+    result.tasks = result.tasks.filter((t:any)=>![t.id,t.draft_id,t.boq_revision_id,t.ipo_id].some(id=>archived.has(id)));
+    result.total = result.tasks.length;
+    result.counts = {};
+    for(const task of result.tasks) result.counts[task.kind]=(result.counts[task.kind]??0)+1;
     const activity = (
       await this.pool.query(
         `SELECT

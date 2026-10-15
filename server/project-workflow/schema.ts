@@ -122,6 +122,7 @@ export const actionSchema = z
       "edit-request",
       "assign",
       "start-survey",
+      "save-site-picture-link",
       "save-survey-inputs",
       "review-survey-inputs",
       "save-survey-completion",
