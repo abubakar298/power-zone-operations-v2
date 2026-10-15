@@ -79,8 +79,28 @@ const toForm = (d: SiteRow): FormState => ({
 const stageTone = (s: SiteRow): "pending" | "success" | "warning" | "danger" =>
   s.stage === "closed" ? "success" : s.late ? "danger" : "pending";
 
-export function SiteExecution({ session }: { session: Session }) {
+interface StockSummary { short: number; uncounted: number; reserved: number; reservedSites: number }
+
+/** `home` adds the stock shortage and reserved-stock tiles above the board (the Operations landing page). */
+export function SiteExecution({ session, home = false, onOpenStock }: { session: Session; home?: boolean; onOpenStock?: () => void }) {
   const canEdit = ["Admin", "Management", "Operations"].includes(session.user.role);
+  const [stockSummary, setStockSummary] = useState<StockSummary | null>(null);
+  useEffect(() => {
+    if (!home) return;
+    let cancelled = false;
+    api<{ items: { shortage: string; counted: boolean }[]; reservations: { executionId: string }[] }>("/site-execution/stock")
+      .then((s) => {
+        if (cancelled) return;
+        setStockSummary({
+          short: s.items.filter((i) => Number(i.shortage) > 0).length,
+          uncounted: s.items.filter((i) => !i.counted).length,
+          reserved: s.reservations.length,
+          reservedSites: new Set(s.reservations.map((r) => r.executionId)).size,
+        });
+      })
+      .catch(() => setStockSummary(null));
+    return () => { cancelled = true; };
+  }, [home]);
   const [data, setData] = useState<Overview | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
@@ -601,6 +621,23 @@ export function SiteExecution({ session }: { session: Session }) {
   return (
     <div className="pz-stack">
       {error && <p className="pz-feedback pz-feedback--danger" role="alert">{error}</p>}
+      {home && (
+        <section className="pz-panel pz-stack">
+          <h3>Stock</h3>
+          <div className="stage-grid">
+            <button type="button" className="stage-card" onClick={onOpenStock}>
+              <strong>{stockSummary ? stockSummary.short : "…"}</strong><span>Items with a stock shortage</span>
+            </button>
+            <button type="button" className="stage-card" onClick={onOpenStock}>
+              <strong>{stockSummary ? stockSummary.reserved : "…"}</strong><span>Reservations{stockSummary?.reservedSites ? ` across ${stockSummary.reservedSites} site${stockSummary.reservedSites === 1 ? "" : "s"}` : ""}</span>
+            </button>
+            <button type="button" className="stage-card" onClick={onOpenStock}>
+              <strong>{stockSummary ? stockSummary.uncounted : "…"}</strong><span>Items Store has not counted</span>
+            </button>
+          </div>
+          <p><small>Open Stock &amp; procurement for the full shortage list, counts, vendors and requests for quotation.</small></p>
+        </section>
+      )}
       <section className="pz-panel">
         <div className="stage-grid">
           <button type="button" className={`stage-card${stageFilter === "" ? " active" : ""}`} onClick={() => setStageFilter("")}>

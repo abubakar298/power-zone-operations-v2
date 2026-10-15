@@ -919,7 +919,7 @@ export function Dashboard({
                             : session.user.role === "Accounts"
                               ? "Review IPOs and collect supporting documents for accounting."
                               : session.user.role === "Operations"
-                                ? operationsArea==='procurement'?'Review procurement work.':"Plan delivery and issue received BOQs to Store."
+                                ? "Every site after its IPO, with stock shortage and reserved stock."
                                 : ["Admin", "Management"].includes(
                                       session.user.role,
                                     )
@@ -1044,7 +1044,7 @@ export function Dashboard({
                 </section>
               )}
               {view === "dashboard" && session.user.role === "Operations" && (
-                operationsArea==='procurement'?<ProcurementWorkspace/>:<Operations session={session} portal />
+                <SiteExecution session={session} home onOpenStock={() => navigate("stock")} />
               )}
               {managementHome && <ManagementApprovals session={session} onOpen={(task)=>{
                 setRevisionDraftId(task.draft_id);
