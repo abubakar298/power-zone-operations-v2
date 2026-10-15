@@ -66,7 +66,7 @@ export const resourceOwnership = {
     "SELECT 1 FROM quotation_versions q JOIN boq_revisions r ON r.id=q.boq_revision_id JOIN boqs b ON b.id=r.boq_id JOIN survey_drafts d ON d.id=b.draft_id WHERE q.id=$1 AND (q.created_by=$2 OR b.created_by=$2 OR d.owner_id=$2)",
   ipo: "SELECT 1 FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE i.id=$1 AND (i.created_by=$2 OR s.created_by=$2)",
   revisionRequest:
-    "SELECT 1 FROM quotation_revision_requests WHERE id=$1 AND created_by=$2",
+    "SELECT 1 FROM quotation_revision_requests req JOIN quotation_versions quote ON quote.id=req.source_quotation_id JOIN boq_revisions rev ON rev.id=quote.boq_revision_id JOIN boqs boq ON boq.id=rev.boq_id JOIN survey_drafts draft ON draft.id=boq.draft_id WHERE req.id=$1 AND (req.created_by=$2 OR quote.created_by=$2 OR boq.created_by=$2 OR draft.owner_id=$2)",
   draft: "SELECT 1 FROM survey_drafts WHERE id=$1 AND owner_id=$2",
   submission: "SELECT 1 FROM ipo_submissions WHERE id=$1 AND created_by=$2",
   review:

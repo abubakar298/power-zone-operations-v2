@@ -8,7 +8,7 @@ import {
   commercialPolicySchema,
   type CommercialPolicy,
 } from "./active-policy.js";
-import { ownedCondition } from "../http/permissions.js";
+import { ownedCondition, resourceOwnership } from "../http/permissions.js";
 import { workflowHistory } from "../boq/workflow-history.js";
 import { Decimal } from "decimal.js";
 import {managementReviewV5} from './management-review-v5.js';
@@ -25,7 +25,7 @@ export class CommercialRepository {
   async revisionRequests(actor: string) {
     return (
       await this.pool.query(
-        "SELECT q.*,v.number AS source_number,v.pricing_id AS source_pricing_id,v.boq_revision_id AS source_boq_id,f.revision_id AS approved_revision_id,l.quotation_id AS completed_quotation_id FROM quotation_revision_requests q JOIN quotation_versions v ON v.id=q.source_quotation_id LEFT JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id LEFT JOIN quotation_revision_links l ON l.request_id=q.id WHERE q.created_by=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role IN('Admin','Management')) ORDER BY q.created_at DESC LIMIT 200",
+        `SELECT q.*,v.number AS source_number,v.pricing_id AS source_pricing_id,v.boq_revision_id AS source_boq_id,f.revision_id AS approved_revision_id,l.quotation_id AS completed_quotation_id FROM quotation_revision_requests q JOIN quotation_versions v ON v.id=q.source_quotation_id LEFT JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id LEFT JOIN quotation_revision_links l ON l.request_id=q.id WHERE q.created_by=$1 OR ${ownedCondition('quotation','v.id','$1')} ORDER BY q.created_at DESC LIMIT 200`,
         [actor],
       )
     ).rows;
@@ -38,6 +38,7 @@ export class CommercialRepository {
     reason: string,
     requestedBy: string,
     key: string,
+    intent: "edit" | "return" = "edit",
   ) {
     return transaction(this.pool, async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(742019003)");
@@ -48,7 +49,9 @@ export class CommercialRepository {
         )
       ).rows[0];
       if (!user?.active) throw new HttpError(401, "Your access has ended.");
-      if (!costingChange) await this.manager(c, actor);
+      await this.manager(c, actor, intent !== 'return');
+      if(user.role==='Coordinator' && !(await c.query(resourceOwnership.quotation,[sourceId,actor])).rowCount)
+        throw new HttpError(404,'Document not found or unavailable to your account.');
       const previous = (
         await c.query(
           "SELECT * FROM quotation_revision_requests WHERE request_key=$1",
@@ -77,7 +80,26 @@ export class CommercialRepository {
       ).rows[0];
       if (!source) throw new HttpError(404, "Quotation not found.");
       const status=(await c.query('SELECT kind FROM coordination_events WHERE quotation_id=$1 ORDER BY created_at DESC LIMIT 1',[sourceId])).rows[0]?.kind;
-      if(status==='Submitted'&&!['Admin','Management'].includes(user.role))throw new HttpError(403,'This quotation is with Management. Only Management can return it for revision.');
+      // A self revision forks the saved document; it cannot approve or alter its source.
+      if(intent==='return'&&status!=='Submitted')throw new HttpError(409,'Only a submitted quotation can be returned to Coordination.');
+      const open=(await c.query(`SELECT r.* FROM quotation_revision_requests r WHERE source_quotation_id=$1 AND NOT EXISTS(SELECT 1 FROM quotation_revision_links l WHERE l.request_id=r.id) ORDER BY r.created_at DESC LIMIT 1`,[sourceId])).rows[0];
+      const recordReturn=async()=>{
+        if(intent!=='return')return;
+        await c.query("INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by,created_at) VALUES($1,$2,'Changes requested',$3,$4,clock_timestamp())",[randomUUID(),sourceId,reason,actor]);
+        const records=(await c.query("SELECT * FROM project_workflow_records WHERE stage NOT IN('issued','order_exception','customer_tracking') AND (data->>'quotationId'=$1 OR data->>'latestQuotationId'=$1) FOR UPDATE",[sourceId])).rows;
+        for(const r of records){
+          const data={...r.data,returnReason:reason,revisionCategory:costingChange?'Technical scope':'Commercial only'};
+          await c.query("UPDATE project_workflow_records SET stage='commercial_revision',data=$2,version=version+1,updated_at=now() WHERE id=$1",[r.id,data]);
+          await c.query("INSERT INTO project_workflow_events(id,record_id,version,action,snapshot,request_key,input_fingerprint,created_by) VALUES($1,$2,$3,'management-return-quotation',$4,$5,$6,$7)",[randomUUID(),r.id,r.version+1,{stage:'commercial_revision',reason,data},randomUUID(),fingerprint({sourceId,reason,costingChange}),actor]);
+        }
+      };
+      if(open){
+        if(open.costing_change!==costingChange)throw new HttpError(409,'A different revision route is already open for this quotation. Continue that revision first.');
+        await recordReturn();
+        return open;
+      }
+      if(intent==='return'&&(await c.query('SELECT 1 FROM quotation_versions WHERE boq_revision_id=$1 AND version>$2',[source.boq_revision_id,source.version])).rowCount)
+        throw new HttpError(409,'Choose the latest quotation version.');
       let draftId: string | null = null;
       if (costingChange) {
         const latest = (
@@ -87,6 +109,7 @@ export class CommercialRepository {
           )
         ).rows[0];
         draftId = randomUUID();
+        const assignedOwner=intent==='return'?(await c.query('SELECT d.owner_id FROM boqs b JOIN survey_drafts d ON d.id=b.draft_id WHERE b.id=$1',[latest.boq_id])).rows[0]?.owner_id??source.created_by:actor;
         const survey = {
           ...latest.snapshot.survey,
           preparedBy: user.display_name,
@@ -108,7 +131,7 @@ export class CommercialRepository {
           };
         await c.query(
           "INSERT INTO survey_drafts(id,owner_id,inputs,base_revision_id,revision_reason,revision_origin) VALUES($1,$2,$3,$4,$5,$6)",
-          [draftId, actor, survey, latest.id, reason, origin],
+          [draftId, assignedOwner, survey, latest.id, reason, origin],
         );
       }
       const request = (
@@ -127,9 +150,10 @@ export class CommercialRepository {
           ],
         )
       ).rows[0];
+      await recordReturn();
       await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
         actor,
-        `quotation.revision.${request.id}.${costingChange ? "costing" : "commercial"}.requested`,
+        `quotation.revision.${intent}.${request.id}.${costingChange ? "costing" : "commercial"}.requested`,
       ]);
       return request;
     });
@@ -500,17 +524,8 @@ export class CommercialRepository {
           snapshot.lines
             .slice(0, snapshot.scopeCount)
             .forEach((l, i) => (l.description = expected[i].description));
-        if (
-          JSON.stringify(
-            snapshot.lines
-              .slice(0, snapshot.scopeCount)
-              .map((l) => l.description),
-          ) !== JSON.stringify(expected.map((l) => l.description))
-        )
-          throw new HttpError(
-            409,
-            "Technical description changes require a BOQ revision first.",
-          );
+        // Customer-facing wording is a commercial edit. Quantities, item identities,
+        // costs and tax basis still come from the unchanged source BOQ/pricing.
         const oldExtra = (
           await c.query(
             "SELECT input FROM quotation_additional_inputs WHERE quotation_id=$1",
@@ -520,8 +535,7 @@ export class CommercialRepository {
         if (
           !!input.additionalItem !== !!oldExtra ||
           (oldExtra &&
-            (input.additionalItem!.cost !== oldExtra.cost ||
-              input.additionalItem!.description !== oldExtra.description))
+            (input.additionalItem!.cost !== oldExtra.cost))
         )
           throw new HttpError(
             409,

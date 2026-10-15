@@ -417,12 +417,15 @@ test("saved quotation versions retain pricing, customer descriptions and PDF aft
   assert.deepEqual(old.snapshot, issued.snapshot);
   const copy = (await get(`/quotations/${issued.id}/copy`)).body;
   copy.revisionRequestId = await commercialRevision(issued.id);
-  await post("/quotations/preview", {
+  const wordingOnly=(await post("/quotations/preview", {
     ...copy,
     descriptions: copy.descriptions.map((d: string, i: number) =>
-      i === 0 ? "Altered technical specification" : d,
+      i === 0 ? "Updated customer-facing specification wording" : d,
     ),
-  }).expect(409);
+  }).expect(200)).body;
+  assert.equal(wordingOnly.snapshot.lines[0].description,"Updated customer-facing specification wording");
+  assert.equal(wordingOnly.snapshot.footer.at(-1).amount,issued.snapshot.footer.at(-1).amount);
+  assert.deepEqual(wordingOnly.snapshot.lines.map((l:any)=>[l.qty,l.unit,l.amount]),issued.snapshot.lines.map((l:any)=>[l.qty,l.unit,l.amount]));
   copy.validity = "14 Days";
   const qp = (await post("/quotations/preview", copy)).body;
   const q2 = (

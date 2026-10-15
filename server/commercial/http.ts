@@ -66,6 +66,7 @@ export function commercialHttp(
       z
         .object({
           sourceQuotationId: z.uuid(),
+          intent: z.enum(["edit","return"]).default("edit"),
           origin: z.enum(["Internal management", "Customer"]),
           costingChange: z.boolean(),
           reason: z.string().trim().min(1).max(2000),
@@ -86,6 +87,7 @@ export function commercialHttp(
           v.reason,
           v.requestedBy,
           v.requestKey,
+          v.intent,
         ),
       );
   });
