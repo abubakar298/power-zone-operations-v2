@@ -9,6 +9,7 @@ export function confirmTransition(action: string, detail: string): boolean {
 export function confirmRevision(
   action: string,
   detail: string,
+  confirmLabel = "Confirm and send",
 ): Promise<boolean> {
   return new Promise((resolve) => {
     const previous = document.activeElement as HTMLElement | null;
@@ -24,10 +25,11 @@ export function confirmRevision(
     const cancel = document.createElement("button");
     cancel.type = "button";
     cancel.textContent = "Cancel";
+    cancel.className = "pz-button pz-button--neutral";
     const confirm = document.createElement("button");
     confirm.type = "button";
-    confirm.textContent = "Confirm and send";
-    confirm.className = "primary";
+    confirm.textContent = confirmLabel;
+    confirm.className = "pz-button pz-button--primary";
     const finish = (answer: boolean) => {
       dialog.close();
       dialog.remove();

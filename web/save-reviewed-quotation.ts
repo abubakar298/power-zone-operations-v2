@@ -1,5 +1,13 @@
 import {Decimal} from 'decimal.js';
 import type {QuotationInput} from '../server/commercial/schema.js';
+/** Repriced revisions use the reviewed pricing discount, never the source quote's old override.
+ * Copy-only description revisions keep their saved discount unchanged. */
+export async function prepareReviewedQuotationInput(input:QuotationInput,request:(path:string,body?:any)=>Promise<any>){
+ const current=structuredClone(input);
+ if(!current.previewPricing)return current;
+ const pricing=await request('/commercial/pricing/preview',current.previewPricing);
+ return {...current,discount:pricing.snapshot.discount};
+}
 /** Persist current form values, then open the saved ID. Never submit an earlier preview/source ID. */
 export async function saveReviewedQuotation(options:{input:QuotationInput;requestKey:string;pricingFingerprint?:string;acknowledgePriceChange:boolean;onPreview?:(preview:any,input:QuotationInput)=>void},request:(path:string,body?:any)=>Promise<any>){
  let input=structuredClone(options.input);input.discount=input.discount?.trim()||'0';

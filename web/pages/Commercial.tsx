@@ -1,4 +1,4 @@
-import {saveReviewedQuotation} from '../save-reviewed-quotation.js';
+import {prepareReviewedQuotationInput,saveReviewedQuotation} from '../save-reviewed-quotation.js';
 import {RevisionPricingSummary} from '../components/RevisionPricingSummary.js';
 import {RevisionReasonFields} from '../components/RevisionReasonFields.js';
 import {
@@ -581,7 +581,7 @@ export function Commercial({
   async function prepareQuote(copy?: QuotationInput) {
     if (!savedPrice && !copy) return;
     await action(async () => {
-      const data: QuotationInput = copy ?? {
+      let data: QuotationInput = copy ?? {
         pricingId: savedPrice.id,
         revisionRequestId: savedPrice.snapshot.input.revisionRequestId,
         quotedDate: new Intl.DateTimeFormat("en-CA", {
@@ -607,6 +607,7 @@ export function Commercial({
       }
       if (
         data.revisionRequestId &&
+        !data.previewPricing &&
         data.discount === undefined &&
         revisionInfo
       ) {
@@ -626,6 +627,7 @@ export function Commercial({
         );
         data.additionalItem = prior.additionalItem;
       }
+      data=await prepareReviewedQuotationInput(data,(path,body)=>api<any>(path,{body,csrf:session.csrfToken}));
       const result = await api<{
         snapshot: QuotationSnapshot;
         fingerprint: string;
@@ -672,12 +674,13 @@ export function Commercial({
   async function saveQuote(submit = false) {
     if (!quoteInput || !quotePreview) return;
     if (
-      !confirmTransition(
+      !(await confirmRevision(
         submit
           ? quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput.additionalItem ? "Approve quotation within pre-approved allowance" : "Save and send quotation for approval"
           : quoteInput.revisionRequestId ? "Save revision" : "Save quotation version",
         "This preserves the quotation prices, discount and terms as an immutable version.",
-      )
+        submit ? "Save and send" : quoteInput.revisionRequestId ? "Save Revision" : "Save quotation",
+      ))
     )
       return;
     await action(async () => {
@@ -1201,16 +1204,16 @@ export function Commercial({
               `${revisionInfo.origin} revision: ${revisionInfo.reason}`}
           </p>
           {revisionInfo && !revisionInfo.costing_change && (
-            <button
+            <Button variant="secondary"
               onClick={() =>
                 onRevisionPricing?.(
-                  savedPrice.snapshot.input.boqRevisionId,
+                  savedPrice?.snapshot.input.boqRevisionId ?? input.boqRevisionId,
                   revisionInfo.id,
                 )
               }
             >
               Edit revision margins / tax
-            </button>
+            </Button>
           )}
           <form
             className="survey-form"

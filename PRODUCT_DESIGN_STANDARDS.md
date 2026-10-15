@@ -92,3 +92,6 @@ Build/typecheck; ensure keyboard-visible focus and44px targets; check normal/sel
 
 ## Sidebar visual baseline — user instruction, 14 October 2026
 Keep the established sidebar layout, colors and selected-state treatment across departments. Clicking a navigation item must not increase the label's font weight; labels remain normal weight. Document-count badges retain consistent styling in both states. Do not redesign sidebar visuals unless the user explicitly requests it. Functional actions/counts may be updated without changing this visual baseline.
+
+## Button appearance — Director instruction, 15 October 2026
+Never introduce browser-default grey/bevelled buttons. All new or touched action buttons use the shared Button component and semantic theme variants, including revision settings/navigation actions. Preserve the existing Power Zone purple/white theme and aligned44px controls.
