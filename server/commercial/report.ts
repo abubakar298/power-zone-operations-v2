@@ -50,7 +50,7 @@ function appendQuotation(
   if(s.discountAuthorization){
     const allowance=new Decimal(s.discountAuthorization.preapprovedBeforeTax),requested=new Decimal(s.discountAuthorization.requestedBeforeTax);
     const approved=Decimal.min(allowance,requested),special=Decimal.max(0,requested.sub(allowance));
-    const footer=s.footer.flatMap(row=>row.label==='Special Discount'?[{label:'Approved Discount',amount:approved.toFixed(2)},{label:'Management Special Discount',amount:special.toFixed(2)}]:[row]);
+    const footer=s.footer.flatMap(row=>row.label==='Special Discount'?[{label:'Approved Discount',amount:approved.toFixed(2)},...(special.gt(0)?[{label:'Management Special Discount',amount:special.toFixed(2)}]:[])]:[row]);
     s={...s,footer};
   }
   const margin = 14;

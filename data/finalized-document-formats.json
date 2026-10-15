@@ -1,8 +1,8 @@
 {
-  "version": 1,
-  "fingerprint": "c5edf5cc722a7592a6998be1349171c50071c341fc2949f8fe287240f311d72f",
+  "version": 2,
+  "fingerprint": "e23d663438de355f3d297d3c2155990304da3bc39e7041faceed5b3c9d96609c",
   "files": {
-    "server/commercial/report.ts": "8f92844066cebccd7a2c307f77488b41f2fab70376a90babe2972456ebd3083c",
+    "server/commercial/report.ts": "62db8e4f3cccd36107cf99b834579705d0a6725d65303bf00bba47b98f3ab1c2",
     "server/commercial/quotation-rows.ts": "ce0aeccd27e5775f37bdb398ff7c740d98c85ac7b2a7064b1fc6317bb527aeee",
     "server/commercial/cni-report.ts": "289f38ab434ee9459446c82ff88a45ea57e91ef06998ea81f9032697769f0b24",
     "server/commercial/cni-approved-report.ts": "170d42b4ec0328711cf5b3c4ec1a3cd991e0934a3476783077e6a92d6894677f",
@@ -17,5 +17,7 @@
     "server/operations/report.ts": "b3be8c94b286970314a71afcda0b1b4c70d657c33f0bd300058394db3b8b8898",
     "server/reports/branding.ts": "15dc0b5aa21f55a893ca90abee7402d42dfa3f8a07e16e908cd3c24e53a7840a",
     "server/reports/brand-assets.ts": "942554f9f269c7dfea745e6a835c5f24a2402f54287323b54fb452ce4f60c7e0"
-  }
+  },
+  "previousVersionManifest": "data/finalized-document-formats-v1.json",
+  "change": "Owner requested hiding Management Special Discount when zero; calculations and all other layouts unchanged."
 }
