@@ -1,3 +1,4 @@
+import {saveReviewedQuotation} from '../save-reviewed-quotation.js';
 import {RevisionPricingSummary} from '../components/RevisionPricingSummary.js';
 import {RevisionReasonFields} from '../components/RevisionReasonFields.js';
 import {
@@ -674,32 +675,15 @@ export function Commercial({
       !confirmTransition(
         submit
           ? quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput.additionalItem ? "Approve quotation within pre-approved allowance" : "Save and send quotation for approval"
-          : "Save quotation version",
+          : quoteInput.revisionRequestId ? "Save revision" : "Save quotation version",
         "This preserves the quotation prices, discount and terms as an immutable version.",
       )
     )
       return;
     await action(async () => {
-      let savingInput={...quoteInput};let expected=quotePreview.fingerprint;
-      if(savingInput.previewPricing){
-        const pricingInput=savingInput.previewPricing;
-        const currentPricing=await api<{fingerprint:string}>('/commercial/pricing/preview',{body:pricingInput,csrf:session.csrfToken});
-        if(currentPricing.fingerprint!==preview?.fingerprint)throw new Error('Pricing changed. Return to Quotation Settings and review the updated prices before sending.');
-        const pricingVersion=await api<any>('/commercial/pricing',{body:{...pricingInput,fingerprint:currentPricing.fingerprint,requestKey:crypto.randomUUID()},csrf:session.csrfToken});
-        savingInput={...savingInput,pricingId:pricingVersion.id,previewPricing:undefined};
-        setSavedPrice(pricingVersion);setQuoteInput(savingInput);
-        const currentQuote=await api<{fingerprint:string}>('/commercial/quotations/preview',{body:savingInput,csrf:session.csrfToken});if(currentQuote.fingerprint!==quotePreview.fingerprint)throw new Error('Quotation details changed. Review the updated preview before sending.');expected=currentQuote.fingerprint;
-      }
-      const q = await api<any>("/commercial/quotations", {
-        body: {
-          ...savingInput,
-          acknowledgePriceChange: priceChangeAcknowledged,
-          discount: quoteInput.discount?.trim() || "0",
-          fingerprint: expected,
-          requestKey: key,
-        },
-        csrf: session.csrfToken,
-      });
+      const {quotation:q}=await saveReviewedQuotation({input:quoteInput,requestKey:key,pricingFingerprint:preview?.fingerprint,acknowledgePriceChange:priceChangeAcknowledged,onPreview:(latest,current)=>{setQuotePreview(latest);setQuotePdfInput(current);}},(path,body)=>body===undefined?api<any>(path):api<any>(path,{body,csrf:session.csrfToken}));
+      // The saved review is recoverable even if the later send action fails.
+      setDirty(false);setSavedQuote(q);setQuoteInput(undefined);
       if (submit) {
         try{await api("/coordinator/events", {
           body: { quotationId: q.id, kind: quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput.additionalItem ? "Approved" : "Submitted", notes: "" },
@@ -1235,7 +1219,7 @@ export function Commercial({
               void calculateQuote();
             }}
           >
-            <fieldset>
+            <fieldset disabled={busy}>
               <legend>Customer quotation details</legend>
               <div className="survey-grid">
                 <label>
@@ -1410,6 +1394,7 @@ export function Commercial({
             >
               Preview quotation
             </Button>
+            {quoteInput.revisionRequestId&&<div className="pz-send-action"><Button variant="primary" loading={busy} loadingLabel="Saving revision…" onClick={()=>void saveQuote(false)}>Save Revision</Button>{error&&<p className="form-error" role="alert">{error}</p>}</div>}
           </form>
         </>
       )}
@@ -1421,14 +1406,14 @@ export function Commercial({
             </p>
           )}
           {!quotePreview.fingerprint && <p role="status">Quotation details changed. Press Preview Quotation to refresh the document.</p>}
-          <QuotationView
+          {quotePreview.fingerprint&&<QuotationView
             refreshKey={quotePreview.refreshVersion}
             snapshot={quotePreview.snapshot}
             discount={quoteInput?.discount}
             onDiscount={manager ? changeQuotationDiscount : undefined}
             draftInput={quotePdfInput}
             csrf={session.csrfToken}
-          />
+          />}
           {!quotePreview.fingerprint && (
             <button
               className="primary"
@@ -1443,7 +1428,7 @@ export function Commercial({
             acknowledged={priceChangeAcknowledged}
             onAcknowledge={setPriceChangeAcknowledged}
           />
-          <p>{quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput?.additionalItem ? 'Download the preview or approve it within the pre-approved discount allowance.' : 'Download the preview or send the reviewed quotation to Management for approval.'}</p>
+          {quoteInput?.revisionRequestId?<p>Save Revision to review the saved quotation, then send that saved version to Management.</p>:<p>{quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput?.additionalItem ? 'Download the preview or approve it within the pre-approved discount allowance.' : 'Download the preview or send the reviewed quotation to Management for approval.'}</p>}
           <div className="pz-action-row">
             <Button
               variant="secondary"
@@ -1457,7 +1442,7 @@ export function Commercial({
             >
               Download Preview
             </Button>
-            <div className="pz-send-action">
+            {!quoteInput?.revisionRequestId&&<div className="pz-send-action">
             <Button
               variant="primary"
               loading={busy}
@@ -1471,12 +1456,13 @@ export function Commercial({
               {quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput?.additionalItem ? 'Approve Quotation' : 'Send to Management'}
             </Button>
               {sendError&&<p className="form-error" role="alert">{sendError}</p>}
-            </div>
+            </div>}
           </div>
         </>
       )}
       {savedQuote && (
         <>
+          {savedQuote.snapshot.revision&&!savedQuote.workflow_status&&<p role="status">Revision saved: {savedQuote.number}. Review this saved quotation before sending it to Management.</p>}
           {savedQuote.workflow_status==='Approved'&&<><h3>Submitted Pricing Summary</h3><RevisionPricingSummary session={session} source={savedQuote}/></>}
           <QuotationWorkflow
             key={savedQuote.id}
