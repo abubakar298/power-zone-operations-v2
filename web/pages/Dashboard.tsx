@@ -44,6 +44,9 @@ const Operations = lazy(() =>
 const SiteExecution = lazy(() =>
   import("./SiteExecution.js").then((module) => ({ default: module.SiteExecution })),
 );
+const StockProcurement = lazy(() =>
+  import("./StockProcurement.js").then((module) => ({ default: module.StockProcurement })),
+);
 const CniProposals = lazy(() =>
   import("./CniProposals.js").then((module) => ({
     default: module.CniProposals,
@@ -132,6 +135,7 @@ export function Dashboard({
     | "quotes"
     | "operations"
     | "sites"
+    | "stock"
     | "inventory"
     | "finance"
     | "design"
@@ -222,6 +226,7 @@ export function Dashboard({
       | "quotes"
       | "operations"
       | "sites"
+      | "stock"
       | "inventory"
       | "finance"
       | "design"
@@ -623,6 +628,17 @@ export function Dashboard({
                     Sites
                   </button>
                 )}
+                {["Admin", "Management", "Operations", "Inventory", "Accounts"].includes(
+                  session.user.role,
+                ) && (
+                  <button
+                    className={view === "stock" ? "nav-active" : ""}
+                    onClick={() => navigate("stock")}
+                  >
+                    <Icon name="file" />
+                    Stock & procurement
+                  </button>
+                )}
                 {["Admin", "Management", "Inventory"].includes(
                   session.user.role,
                 ) && (
@@ -714,7 +730,9 @@ export function Dashboard({
                             ? session.user.role === "Coordinator" ? "Quotation Settings" : "Commercial pricing"
                             : view === "quotes"
                               ? "Quotations"
-                              : view === "sites"
+                              : view === "stock"
+                                ? "Stock & procurement"
+                                : view === "sites"
                                 ? "Sites"
                                 : view === "operations"
                                 ? "BOQ to Operations"
@@ -844,7 +862,9 @@ export function Dashboard({
                                   ? session.user.role === "Coordinator" ? "Quotation Settings" : "Commercial pricing"
                                   : view === "quotes"
                                     ? "Quotations"
-                                    : view === "sites"
+                                    : view === "stock"
+                                      ? "Stock & procurement"
+                                      : view === "sites"
                                       ? "Sites"
                                       : view === "operations"
                                       ? "Operations delivery portal"
@@ -897,7 +917,9 @@ export function Dashboard({
                                   ? "Prepare and share immutable customer quotation versions."
                                   : view === "team"
                                     ? "Invite and manage authorised team members."
-                                    : view === "sites"
+                                    : view === "stock"
+                                      ? "Items required, Store counts, reserved stock, shortages, vendors and requests for quotation."
+                                      : view === "sites"
                                       ? "Every site after its IPO: stage, dates, daily picture checks, problems and documents."
                                       : view === "operations"
                                       ? "Send approved site requirements to Operations after IPO creation."
@@ -1119,6 +1141,7 @@ export function Dashboard({
                 />
               )}
               {view === "sites" && <SiteExecution session={session} />}
+              {view === "stock" && <StockProcurement session={session} />}
               {view === "operations" && (
                 <Operations session={session} initialIpoId={operationsIpoId} portal={departmentView==='operations'} />
               )}

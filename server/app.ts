@@ -29,6 +29,9 @@ import { coordinatorHttp } from "./coordinator/http.js";
 import { OperationsRepository } from "./operations/repository.js";
 import { SiteExecutionRepository } from "./site-execution/repository.js";
 import { siteExecutionHttp } from "./site-execution/http.js";
+import { StockRepository } from "./site-execution/stock.js";
+import { VendorsRepository } from "./site-execution/vendors.js";
+import { ProcurementRepository } from "./site-execution/procurement.js";
 import { operationsHttp } from "./operations/http.js";
 import { CommercialRepository } from "./commercial/repository.js";
 import { commercialHttp } from "./commercial/http.js";
@@ -228,7 +231,15 @@ export function createApp(
   app.use(
     "/api/site-execution",
     auth.requireSession,
-    siteExecutionHttp(new SiteExecutionRepository(pool), auth.requireSession),
+    siteExecutionHttp(
+      {
+        sites: new SiteExecutionRepository(pool),
+        stock: new StockRepository(pool),
+        vendors: new VendorsRepository(pool),
+        procurement: new ProcurementRepository(pool),
+      },
+      auth.requireSession,
+    ),
   );
   app.use(
     "/api/coordinator",

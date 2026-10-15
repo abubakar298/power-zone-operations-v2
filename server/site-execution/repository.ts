@@ -153,7 +153,7 @@ export class SiteExecutionRepository {
     await this.reader(c, actor);
     const r = (await c.query(`${LIST_SQL} WHERE e.id=$1`, [id])).rows[0];
     if (!r) throw new HttpError(404, "Site record not found.");
-    const [checks, problems, events, headsUp] = await Promise.all([
+    const [checks, problems, events, headsUp, assignments, reservations] = await Promise.all([
       c.query(
         "SELECT to_char(check_date,'YYYY-MM-DD') AS check_date, pictures, updated_at FROM site_photo_checks WHERE execution_id=$1 ORDER BY check_date",
         [id],
@@ -172,6 +172,18 @@ export class SiteExecutionRepository {
         [id],
       ),
       this.headsUp(r.issuance_id, c),
+      c.query(
+        `SELECT a.id, a.category, a.vendor_id, to_char(a.agreed_date,'YYYY-MM-DD') AS agreed_date, a.notes, a.created_at, v.name, v.phone, v.contact_person, u.display_name AS assigned_by
+         FROM site_vendor_assignments a JOIN vendors v ON v.id=a.vendor_id JOIN users u ON u.id=a.created_by
+         WHERE a.execution_id=$1 AND a.removed_at IS NULL ORDER BY a.category`,
+        [id],
+      ),
+      c.query(
+        `SELECT r.id, r.item_key, r.quantity, r.note, r.reserved_at, u.display_name AS reserved_by, m.display_name AS item_name
+         FROM stock_reservations r JOIN users u ON u.id=r.reserved_by LEFT JOIN item_master m ON m.key=r.item_key
+         WHERE r.execution_id=$1 AND r.released_at IS NULL ORDER BY r.reserved_at DESC`,
+        [id],
+      ),
     ]);
     return {
       ...shape(r),
@@ -200,6 +212,14 @@ export class SiteExecutionRepository {
         at: e.created_at,
       })),
       headsUp,
+      vendors: assignments.rows.map((a) => ({
+        id: a.id, category: a.category, vendorId: a.vendor_id, vendorName: a.name, phone: a.phone, contactPerson: a.contact_person,
+        agreedDate: a.agreed_date, notes: a.notes, assignedAt: a.created_at, assignedBy: a.assigned_by,
+      })),
+      reservations: reservations.rows.map((x) => ({
+        id: x.id, itemKey: x.item_key, name: x.item_name ?? x.item_key, quantity: String(Number(x.quantity)), note: x.note,
+        reservedAt: x.reserved_at, reservedBy: x.reserved_by,
+      })),
     };
   }
 

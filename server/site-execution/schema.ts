@@ -73,3 +73,63 @@ export const problemSchema = z
 export const resolveSchema = z
   .object({ resolution: z.string().trim().max(2000).default("") })
   .strict();
+
+// Slice 2: stock, vendors and procurement.
+const quantity = z.string().trim().regex(/^\d{1,14}(\.\d{1,6})?$/, "Enter a quantity as a number, up to six decimals.");
+const positiveQuantity = quantity.refine((v) => Number(v) > 0, "Quantity must be more than zero.");
+const money = z.string().trim().regex(/^\d{1,18}(\.\d{1,2})?$/, "Enter an amount as a number, up to two decimals.");
+export const VENDOR_CATEGORY_VALUES = ["Structure", "Delivery", "Electrical labour", "Earthing", "Material supplier"] as const;
+export const PROCUREMENT_STATUS_VALUES = ["Not started", "Quoted", "Ordered", "Received", "Cancelled"] as const;
+export const stockCountSchema = z
+  .object({ itemKey: z.string().trim().min(1).max(200), quantity, note: z.string().trim().max(500).default("") })
+  .strict();
+export const reservationSchema = z
+  .object({ itemKey: z.string().trim().min(1).max(200), quantity: positiveQuantity, note: z.string().trim().max(500).default("") })
+  .strict();
+export const releaseSchema = z.object({ reason: z.string().trim().max(500).default("") }).strict();
+export const vendorSchema = z
+  .object({
+    id: z.uuid().optional(),
+    name: z.string().trim().min(1).max(200),
+    category: z.enum(VENDOR_CATEGORY_VALUES),
+    regions: z.array(z.enum(REGIONS)).max(10).default([]),
+    contactPerson: z.string().trim().max(200).default(""),
+    phone: z.string().trim().max(50).default(""),
+    email: z.string().trim().max(200).default(""),
+    notes: z.string().trim().max(2000).default(""),
+    status: z.enum(["Active", "Inactive"]).default("Active"),
+  })
+  .strict();
+export const vendorAssignSchema = z
+  .object({
+    category: z.enum(VENDOR_CATEGORY_VALUES),
+    vendorId: z.uuid(),
+    agreedDate: isoDate.nullable().default(null),
+    notes: z.string().trim().max(500).default(""),
+  })
+  .strict();
+export const procurementCreateSchema = z
+  .object({
+    executionId: z.uuid().nullable().default(null),
+    itemKey: z.string().trim().min(1).max(200).nullable().default(null),
+    serviceCategory: z.enum(VENDOR_CATEGORY_VALUES).nullable().default(null),
+    description: z.string().trim().min(1).max(500),
+    quantity: positiveQuantity.nullable().default(null),
+    unit: z.string().trim().max(50).default(""),
+    vendorId: z.uuid().nullable().default(null),
+    expectedDate: isoDate.nullable().default(null),
+    amount: money.nullable().default(null),
+    notes: z.string().trim().max(2000).default(""),
+  })
+  .strict()
+  .refine((v) => v.itemKey || v.serviceCategory, "Choose an item or a service category.");
+export const procurementUpdateSchema = z
+  .object({
+    status: z.enum(PROCUREMENT_STATUS_VALUES).optional(),
+    vendorId: z.uuid().nullable().optional(),
+    expectedDate: isoDate.nullable().optional(),
+    amount: money.nullable().optional(),
+    notes: z.string().trim().max(2000).optional(),
+    note: z.string().trim().max(500).default(""),
+  })
+  .strict();

@@ -25,7 +25,14 @@ interface Detail extends SiteRow {
   problems: { id: string; problem: string; status: "Open" | "Resolved"; createdBy: string; createdAt: string; resolvedBy: string | null; resolvedAt: string | null; resolution: string }[];
   events: { kind: string; fromStage: string | null; toStage: string | null; changes: Record<string, any>; note: string; actor: string; at: string }[];
   headsUp: { source: string; number: string; mode: string; expectedDate: string | null; notes: string; items: number; createdAt: string } | null;
+  vendors: { id: string; category: string; vendorId: string; vendorName: string; phone: string; contactPerson: string; agreedDate: string | null; notes: string; assignedAt: string; assignedBy: string }[];
+  reservations: { id: string; itemKey: string; name: string; quantity: string; note: string; reservedAt: string; reservedBy: string }[];
 }
+interface Materials {
+  lines: { lineNumber: number; itemKey: string; name: string; brand: string; specification: string; unit: string; boqQty: string; reserved: string; existing: string | null; available: string | null; outstanding: string }[];
+  reservations: { id: string; itemKey: string; quantity: string; note: string; reservedAt: string; reservedBy: string; releasedAt: string | null; releaseReason: string }[];
+}
+interface VendorRef { id: string; name: string; category: string; status: "Active" | "Inactive" }
 type FormState = {
   siteType: string; region: string; materialDeliveryPlanned: string; materialDeliveryActual: string; startDate: string;
   endDate: string; matriCloudStatus: string; fourGStatus: string; customerSignoff: string; doDate: string;
@@ -85,6 +92,18 @@ export function SiteExecution({ session }: { session: Session }) {
   const [stageNote, setStageNote] = useState("");
   const [newProblem, setNewProblem] = useState("");
   const [resolutions, setResolutions] = useState<Record<string, string>>({});
+  const [materials, setMaterials] = useState<Materials | null>(null);
+  const [vendorList, setVendorList] = useState<VendorRef[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [reserveQty, setReserveQty] = useState<Record<string, string>>({});
+  const [assignForm, setAssignForm] = useState<Record<string, { vendorId: string; agreedDate: string; notes: string }>>({});
+
+  const loadMaterials = useCallback(async (id: string) => {
+    try { setMaterials(await api<Materials>(`/site-execution/${id}/materials`)); } catch { setMaterials(null); }
+  }, []);
+  const loadVendors = useCallback(async () => {
+    try { const v = await api<{ vendors: VendorRef[]; categories: string[] }>("/site-execution/vendors"); setVendorList(v.vendors); setCategories(v.categories); } catch { /* read-only roles may still see the page */ }
+  }, []);
 
   const load = useCallback(async () => {
     try { setData(await api<Overview>("/site-execution")); setError(""); }
@@ -96,8 +115,27 @@ export function SiteExecution({ session }: { session: Session }) {
     try {
       const d = await api<Detail>(`/site-execution/${id}`);
       setDetail(d); setForm(toForm(d)); setNextStage(d.stage); setStageNote(""); setError(""); setNotice("");
+      setMaterials(null); void loadMaterials(id); void loadVendors();
     } catch (e) { setError(e instanceof ApiError ? e.message : "Unable to open the site."); }
-  }, []);
+  }, [loadMaterials, loadVendors]);
+  const reserve = useCallback(async (siteId: string, itemKey: string, quantity: string) => {
+    setBusy(true);
+    try {
+      setMaterials(await api<Materials>(`/site-execution/${siteId}/reservations`, { body: { itemKey, quantity, note: "" }, csrf: session.csrfToken }));
+      setReserveQty((q) => ({ ...q, [itemKey]: "" })); setNotice("Stock reserved."); setError("");
+      setDetail(await api<Detail>(`/site-execution/${siteId}`)); void load();
+    } catch (e) { setError(e instanceof ApiError ? e.message : "Could not reserve stock."); setNotice(""); }
+    finally { setBusy(false); }
+  }, [session.csrfToken, load]);
+  const release = useCallback(async (siteId: string, reservationId: string) => {
+    setBusy(true);
+    try {
+      setMaterials(await api<Materials>(`/site-execution/${siteId}/reservations/${reservationId}/release`, { body: { reason: "" }, csrf: session.csrfToken }));
+      setNotice("Reservation released."); setError("");
+      setDetail(await api<Detail>(`/site-execution/${siteId}`)); void load();
+    } catch (e) { setError(e instanceof ApiError ? e.message : "Could not release the reservation."); setNotice(""); }
+    finally { setBusy(false); }
+  }, [session.csrfToken, load]);
   const apply = useCallback((d: Detail, message: string, resetForm: boolean) => {
     setDetail(d); setNextStage(d.stage); setNotice(message); setError("");
     if (resetForm) setForm(toForm(d));
@@ -271,6 +309,97 @@ export function SiteExecution({ session }: { session: Session }) {
         </section>
 
         <section className="pz-panel pz-stack">
+          <h3>Vendors for this site</h3>
+          <div className="pz-table-scroll">
+            <table className="pz-table">
+              <thead><tr><th>Category</th><th>Vendor</th><th>Agreed date</th><th>Notes</th>{canEdit && <th></th>}</tr></thead>
+              <tbody>
+                {categories.map((cat) => {
+                  const current = detail.vendors.find((v) => v.category === cat);
+                  const f = assignForm[cat] ?? { vendorId: "", agreedDate: "", notes: "" };
+                  const options = vendorList.filter((v) => v.category === cat && v.status === "Active");
+                  return (
+                    <tr key={cat}>
+                      <td>{cat}</td>
+                      {current ? (
+                        <>
+                          <td><strong>{current.vendorName}</strong>{(current.contactPerson || current.phone) && <><br /><small>{[current.contactPerson, current.phone].filter(Boolean).join(" · ")}</small></>}</td>
+                          <td>{fmt(current.agreedDate)}</td>
+                          <td>{current.notes || "—"}<br /><small>{current.assignedBy} · {fmtAt(current.assignedAt)}</small></td>
+                          {canEdit && <td><Button variant="secondary" loading={busy} onClick={() => void post(`/site-execution/${detail.id}/vendors/${current.id}/remove`, {}, `${cat} vendor removed.`, false)}>Remove</Button></td>}
+                        </>
+                      ) : canEdit ? (
+                        <>
+                          <td>
+                            <select aria-label={`${cat} vendor`} value={f.vendorId} onChange={(e) => setAssignForm({ ...assignForm, [cat]: { ...f, vendorId: e.target.value } })}>
+                              <option value="">—</option>
+                              {options.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                            </select>
+                            {options.length === 0 && <><br /><small>No active {cat.toLowerCase()} vendor yet. Add one under Stock &amp; procurement.</small></>}
+                          </td>
+                          <td><input aria-label={`${cat} agreed date`} type="date" value={f.agreedDate} onChange={(e) => setAssignForm({ ...assignForm, [cat]: { ...f, agreedDate: e.target.value } })} /></td>
+                          <td><input aria-label={`${cat} notes`} value={f.notes} maxLength={500} onChange={(e) => setAssignForm({ ...assignForm, [cat]: { ...f, notes: e.target.value } })} /></td>
+                          <td>
+                            <Button variant="secondary" loading={busy} disabled={!f.vendorId}
+                              onClick={() => void post(`/site-execution/${detail.id}/vendors`, { category: cat, vendorId: f.vendorId, agreedDate: f.agreedDate || null, notes: f.notes }, `${cat} vendor assigned.`, false)}>
+                              Assign
+                            </Button>
+                          </td>
+                        </>
+                      ) : (
+                        <><td>—</td><td>—</td><td>—</td></>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="pz-panel pz-stack">
+          <h3>Material plan</h3>
+          {!materials ? <p>Loading materials…</p> : materials.lines.length === 0 ? <p>No BOQ lines for this site.</p> : (
+            <div className="pz-table-scroll">
+              <table className="pz-table">
+                <thead><tr><th>Item</th><th>BOQ qty</th><th>Reserved for this site</th><th>Still needed</th><th>In stock (available of existing)</th>{canEdit && <th>Reserve</th>}</tr></thead>
+                <tbody>
+                  {materials.lines.map((l) => (
+                    <tr key={l.lineNumber}>
+                      <td><strong>{l.name}</strong><br /><small>{l.brand}{l.specification ? ` · ${l.specification}` : ""}</small></td>
+                      <td>{l.boqQty} {l.unit}</td>
+                      <td>{l.reserved}</td>
+                      <td>{Number(l.outstanding) > 0 ? <StatusBadge tone="warning">{l.outstanding}</StatusBadge> : <StatusBadge tone="success">0</StatusBadge>}</td>
+                      <td>{l.existing == null ? <StatusBadge tone="warning">No count</StatusBadge> : `${l.available} of ${l.existing}`}</td>
+                      {canEdit && (
+                        <td>
+                          <div className="pz-action-row">
+                            <input aria-label={`Reserve ${l.name}`} style={{ width: "6rem" }} value={reserveQty[l.itemKey] ?? ""} placeholder={l.outstanding}
+                              onChange={(e) => setReserveQty({ ...reserveQty, [l.itemKey]: e.target.value })} />
+                            <Button variant="secondary" loading={busy} disabled={!(reserveQty[l.itemKey] ?? "").trim()} onClick={() => void reserve(detail.id, l.itemKey, (reserveQty[l.itemKey] ?? "").trim())}>Reserve</Button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {materials && materials.reservations.some((r) => !r.releasedAt) && (
+            <ul>
+              {materials.reservations.filter((r) => !r.releasedAt).map((r) => (
+                <li key={r.id} className="pz-action-row">
+                  <span>{r.quantity} × {materials.lines.find((l) => l.itemKey === r.itemKey)?.name ?? r.itemKey} · {r.reservedBy} · {fmtAt(r.reservedAt)}{r.note ? ` · ${r.note}` : ""}</span>
+                  {canEdit && <Button variant="neutral" loading={busy} onClick={() => void release(detail.id, r.id)}>Release</Button>}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p><small>Shortages across all sites and requests for quotation are under Stock &amp; procurement.</small></p>
+        </section>
+
+        <section className="pz-panel pz-stack">
           <h3>Pictures by day</h3>
           {!detail.startDate ? (
             <p>Enter the start date to list the days.</p>
@@ -353,7 +482,13 @@ export function SiteExecution({ session }: { session: Session }) {
                     e.kind === "stage_change" ? `Stage ${e.fromStage ?? "—"} → ${e.toStage}` :
                     e.kind === "field_update" ? `Updated ${Object.keys(e.changes).join(", ")}` :
                     e.kind === "photo_check" ? `Pictures for ${fmt(e.changes.date)}: ${e.changes.pictures ? "yes" : "no"}` :
-                    e.kind === "problem_added" ? "Problem added" : "Problem resolved"
+                    e.kind === "problem_added" ? "Problem added" :
+                    e.kind === "problem_resolved" ? "Problem resolved" :
+                    e.kind === "reservation" ? `Reserved ${e.changes.quantity} of ${e.changes.itemKey}` :
+                    e.kind === "reservation_released" ? `Released ${e.changes.quantity} of ${e.changes.itemKey}` :
+                    e.kind === "vendor_assigned" ? `${e.changes.category} vendor: ${e.changes.vendor}` :
+                    e.kind === "vendor_removed" ? `${e.changes.category} vendor removed` :
+                    e.kind === "procurement" ? `Procurement ${e.changes.status ?? ""}` : e.kind
                   }{e.note ? ` · ${e.note}` : ""}
                 </li>
               ))}

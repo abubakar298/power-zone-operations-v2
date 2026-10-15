@@ -31,6 +31,8 @@ export function workflowBoundary(pool: Pool): RequestHandler {
       // Site operations after IPO issue: Operations works the record, Store and Accounts read it.
       if (role === "Operations") return next();
       if ((role === "Inventory" || role === "Accounts") && req.method === "GET") return next();
+      // Store enters the stock counts.
+      if (role === "Inventory" && path === "/api/site-execution/stock/counts") return next();
     }
     if (
       role === "Inventory" &&
