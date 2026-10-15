@@ -1,3 +1,5 @@
+import {DocumentListDetails} from '../components/DocumentListDetails.js';
+import {documentListSearch} from '../../shared/document-list-search.js';
 import {bucketLabel} from '../workspaces/project-routes.js';
 import { DepartmentWorkspace } from "./DepartmentWorkspace.js";
 import { UblWorkflow } from "./UblWorkflow.js";
@@ -182,7 +184,7 @@ export function LegacyCoordinator({
           workGroup === "all" ||
           (workGroup === "action" ? needsAction(t) : !needsAction(t))) &&
         (!search.trim() ||
-          [t.customer, t.site, t.reference, stageLabel(t.stage)].some((v) =>
+          [t.customer, t.site, t.reference, stageLabel(t.stage), documentListSearch(t)].some((v) =>
             String(v ?? "")
               .toLowerCase()
               .includes(search.trim().toLowerCase()),
@@ -651,6 +653,7 @@ export function LegacyCoordinator({
                           {new Date(t.started_at).toLocaleString()}
                         </small>
                       )}
+                      <DocumentListDetails record={t}/>
                       {t.training && <small>Training record</small>}
                     </td>
                     <td>

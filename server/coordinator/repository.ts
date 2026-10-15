@@ -1,3 +1,4 @@
+import {loadDocumentListMetadata} from '../documents/list-metadata.js';
 import {finalizeCustomerBoq} from '../boq/lifecycle.js';
 import {archivedDocumentIds} from '../maintenance/archived-documents.js';
 import { Decimal } from "decimal.js";
@@ -171,8 +172,10 @@ export class CoordinatorRepository {
         ],
       )
     ).rows;
+    const documentMetadata=await loadDocumentListMetadata(this.pool,result.tasks.map((t:any)=>t.id));
     const tasks = result.tasks.map((t: any) => ({
       ...t,
+      ...documentMetadata.get(t.id),
       ...(submissionDetails.find((s) => s.id === t.id) ?? {}),
       training: [t.id, t.draft_id, t.boq_revision_id, t.ipo_id].some((id) =>
         trainingIds.has(id),

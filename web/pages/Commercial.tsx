@@ -583,6 +583,7 @@ export function Commercial({
     await action(async () => {
       let data: QuotationInput = copy ?? {
         pricingId: savedPrice.id,
+        discount: savedPrice.snapshot.discount,
         revisionRequestId: savedPrice.snapshot.input.revisionRequestId,
         quotedDate: new Intl.DateTimeFormat("en-CA", {
           timeZone: "Asia/Karachi",

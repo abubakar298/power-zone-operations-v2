@@ -1,3 +1,4 @@
+import {DocumentListDetails} from '../components/DocumentListDetails.js';
 import {DirectPo} from "../components/DirectPoUpload.js";
 import { IposSharedList, IpoSharedPreview } from "../components/IposSharedList.js";
 import {QuotationApproval} from "../components/QuotationApproval.js";
@@ -1011,6 +1012,7 @@ export function DepartmentWorkspace({
                             )}
                             <br />
                             {r.siteCode}
+                            {department === "coordination"&&<DocumentListDetails record={r}/>}
                           </td>
                           <td>
                             {department === "design" &&
@@ -1097,7 +1099,7 @@ export function DepartmentWorkspace({
                       <tr key={`commercial-${t.id}`}>
                         <td>
                           <strong>{t.customer || "Customer not recorded"} · {t.site}</strong>
-                          <br />{t.number ?? t.reference ?? ""}
+                          <br />{t.number ?? t.reference ?? ""}<DocumentListDetails record={t}/>
                         </td>
                         <td>{t.status ?? t.stage}<br />{t.route ?? "Quick BOQ → quotation"}</td>
                         <td>{t.person ?? t.responsibility ?? "Management"}</td>
@@ -1128,13 +1130,13 @@ export function DepartmentWorkspace({
                 <tbody>
                   {readyIndividuals.map(r=><tr key={r.id}>
                     <td><strong>{r.customerCode} · {r.site}</strong><br/>{r.siteCode}</td>
-                    <td>{r.quotation?.number ?? r.references?.join(" · ") ?? r.routeLabel}</td>
+                    <td>{r.quotation?.number ?? r.references?.join(" · ") ?? r.routeLabel}<DocumentListDetails record={r}/></td>
                     <td>Approved · Awaiting dispatch</td>
                     <td><Button variant="secondary" onClick={()=>void open(r.id).catch(e=>setError(e.message))}>Review</Button></td>
                   </tr>)}
                   {visibleLegacy.map((t:any)=><tr key={`commercial-${t.id}`}>
                     <td><strong>{t.customer} · {t.site}</strong></td>
-                    <td>{t.number ?? t.reference}</td>
+                    <td>{t.number ?? t.reference}<DocumentListDetails record={t}/></td>
                     <td>{t.status}</td>
                     <td><Button variant="secondary" onClick={()=>onOpen?.(t)}>Review</Button></td>
                   </tr>)}
@@ -5903,3 +5905,4 @@ function PoRecordSelect({ session, customers, onOpen, onCancel }: any) {
     </section>
   );
 }
+

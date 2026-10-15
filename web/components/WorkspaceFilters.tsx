@@ -1,3 +1,4 @@
+import {documentListSearch} from '../../shared/document-list-search.js';
 import { Field } from "../ui/Field.js";
 import { Button } from "../ui/Button.js";
 import { taskDay } from "../workspaces/tasks.js";
@@ -16,7 +17,7 @@ export type WorkspaceFilterValues = typeof emptyWorkspaceFilters;
 export function matchesWorkspace(t: any, f: WorkspaceFilterValues) {
   return (
     (!f.search ||
-      [t.customer, t.site, t.reference, t.person, t.blocker, t.route]
+      [t.customer, t.site, t.reference, t.person, t.blocker, t.route, documentListSearch(t)]
         .join(" ")
         .toLowerCase()
         .includes(f.search.toLowerCase())) &&
@@ -58,7 +59,7 @@ export function WorkspaceFilters({
     </div>}
     <div className="pz-filter-toolbar">
       <div className="pz-filter-search"><Field id="task-search" label={searchLabel}>
-        <input id="task-search" type="search" placeholder="Customer, site or reference" value={value.search} onChange={(e) => change("search", e.target.value)} />
+        <input id="task-search" type="search" placeholder="Customer, site, reference, amount or solution type" value={value.search} onChange={(e) => change("search", e.target.value)} />
       </Field></div>
       <Button variant="neutral" aria-expanded={filtersOpen} aria-controls="task-extra-filters" onClick={() => setFiltersOpen(!filtersOpen)}>
         Filters{activeFilters ? ` (${activeFilters})` : ""}

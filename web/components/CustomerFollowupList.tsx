@@ -1,3 +1,5 @@
+import {Decimal} from 'decimal.js';
+import {DocumentListDetails} from './DocumentListDetails.js';
 import { Button } from "../ui/Button.js";
 
 function HeadsupStatus({ record }: { record: any }) {
@@ -64,7 +66,7 @@ function SitesTable({
                   : "Quotation"}
                 <span className="pz-followup-secondary">
                   {record.routeLabel}
-                </span>
+                </span><DocumentListDetails record={record}/>
               </td>
               <td>
                 <HeadsupStatus record={record} />
@@ -131,6 +133,7 @@ export function CustomerFollowupList({
                     .join(", ")}
                 </span>
               </span>
+              <DocumentListDetails record={{solutionType:'Solar Hybrid',documentAmount:group.sites.every((site:any)=>site.documentAmount!=null)?group.sites.reduce((sum:Decimal,site:any)=>sum.add(site.documentAmount),new Decimal(0)).toFixed(2):null}}/>
               <span className="pz-headsup-tag">
                 {group.sites.length} site{group.sites.length === 1 ? "" : "s"}
               </span>

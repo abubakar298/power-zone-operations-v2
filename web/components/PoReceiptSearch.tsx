@@ -1,3 +1,4 @@
+import {DocumentListDetails} from './DocumentListDetails.js';
 import {coordinationBuckets} from "../workspaces/project-routes.js";
 import { useState } from "react";
 import {
@@ -64,7 +65,7 @@ export function PoReceiptSearch({ records, legacy = [], onConfirm, onLegacy }: a
               <tr key={r.id}>
                 <td>{r.customer}</td>
                 <td>{r.site}</td>
-                <td>{r.quotation?.number ?? r.kind}</td>
+                <td>{r.quotation?.number ?? r.kind}<DocumentListDetails record={r}/></td>
                 <td>
                   {r.data.headsupReceived ? (
                     <span className="pz-headsup-tag">Heads-up Received</span>
@@ -86,3 +87,4 @@ export function PoReceiptSearch({ records, legacy = [], onConfirm, onLegacy }: a
     </section>
   );
 }
+

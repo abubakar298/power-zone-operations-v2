@@ -1,3 +1,4 @@
+import {loadDocumentListMetadata,snapshotListMetadata} from '../documents/list-metadata.js';
 import {manualIpoAvailable,requireDirectUps} from "../documents/manual-ipo.js";
 import {approvedMaterialView} from './advance-material-view.js';
 import {ptDetail} from '../orders/pt-detail.js';
@@ -592,6 +593,13 @@ export class ProjectWorkflowRepository {
     ).rows;
     const records = [];
     for (const r of rows) records.push(await this.decorate(r, u));
+    const documentMetadata=await loadDocumentListMetadata(this.pool,[...records.flatMap((r:any)=>[r.data.ipoId,r.quotation?.id,r.task?.id]),...rows.flatMap((r:any)=>[r.data?.latestQuotationId,r.data?.quotationId])].filter(Boolean));
+    for(const record of records){
+      const source=rows.find(r=>r.id===record.id),basis=source?.data?.basis;
+      const family=basis?.boq?.survey?.family??(source?.route==='survey-framework'?'solar-hybrid':source?.route==='direct-framework'?'bess-only':undefined);
+      const fallback=snapshotListMetadata(basis?.order,family),saved=documentMetadata.get(record.data.ipoId)??documentMetadata.get(record.quotation?.id)??documentMetadata.get(source?.data?.latestQuotationId)??documentMetadata.get(source?.data?.quotationId)??documentMetadata.get(record.task?.id);
+      Object.assign(record,saved?{...saved,solutionType:saved.solutionType==='Not recorded'?fallback.solutionType:saved.solutionType}:fallback);
+    }
     // The existing ordinary commercial tasks stay actionable until adopted into a route.
     const linked = new Set(
       rows.flatMap((r) =>
@@ -4014,3 +4022,4 @@ export class ProjectWorkflowRepository {
     return [...headsups, ...existing];
   }
 }
+

@@ -59,7 +59,7 @@ test('repriced revisions discard inherited discount: 1,960,000 to 1,990,000 surv
  const pp=await repo.pricingPreview(owner,base),ps=await repo.pricingSave(owner,base,pp.fingerprint,randomUUID());
  const qi=quotationSchema.parse({pricingId:ps.id,discount:pp.snapshot.discount,quotedDate:'2026-10-15',validity:'7 Days',proposedBy:'Atif'}),qp=await repo.quotationPreview(owner,qi),source=await repo.quotationSave(owner,qi,qp.fingerprint,randomUUID());
  assert.equal(source.snapshot.footer.at(-1)!.amount,'1960000.00');const original=JSON.stringify(source.snapshot);
- for(const route of ['management-return','self-commercial','resumed-technical']){
+ for(const route of ['management-return','self-commercial','resumed-technical','saved-pricing']){
   if(route==='management-return')await coord.event(owner,source.id,'Submitted','Isolated test');
   const revision=await repo.revisionStart(route==='management-return'?manager:owner,source.id,'Internal management',route==='resumed-technical','Update quote','Atif',randomUUID(),route==='management-return'?'return':'edit');
   let boqId=boq.id;if(route==='resumed-technical'){
@@ -74,7 +74,8 @@ test('repriced revisions discard inherited discount: 1,960,000 to 1,990,000 surv
   const prepared=await prepareReviewedQuotationInput(inherited,request);
   assert.equal(prepared.discount,fresh.snapshot.discount);assert.notEqual(prepared.discount,qi.discount);
   assert.equal((await repo.quotationPreview(owner,prepared)).snapshot.footer.at(-1)!.amount,'1990000.00');
-  const saved=await saveReviewedQuotation({input:prepared,requestKey:randomUUID(),pricingFingerprint:fresh.fingerprint,acknowledgePriceChange:true},request);
+  const saveInput=route==='saved-pricing'?{...prepared,previewPricing:undefined,pricingId:(await repo.pricingSave(owner,pricing,fresh.fingerprint,randomUUID())).id,discount:fresh.snapshot.discount}:prepared;
+  const saved=await saveReviewedQuotation({input:saveInput,requestKey:randomUUID(),pricingFingerprint:fresh.fingerprint,acknowledgePriceChange:true},request);
   assert.equal(saved.quotation.snapshot.footer.at(-1)!.amount,'1990000.00');
   assert.match(await textOf(buildQuotationPdf(saved.quotation.snapshot,saved.quotation.number)),/1,990,000/);
   await coord.event(owner,saved.quotation.id,'Submitted','Isolated saved revision');assert.equal((await repo.quotationGet(saved.quotation.id)).snapshot.footer.at(-1)!.amount,'1990000.00');

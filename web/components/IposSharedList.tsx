@@ -1,3 +1,4 @@
+import {DocumentListDetails} from './DocumentListDetails.js';
 import { useState } from "react";
 import{downloadName,filenameFromDisposition}from'../../shared/download-name.js';
 import { Button } from "../ui/Button.js";
@@ -36,7 +37,7 @@ export function IposSharedList({ records, onPreview }: { records: any[]; onPrevi
       <tbody>{records.map((record) => <tr key={record.id}>
         <td>{record.customerCode || record.customer}</td>
         <td>{record.site}<br/><span className="pz-caption">{record.siteCode || "Not entered"}</span></td>
-        <td>{record.data.ipoNumber || "Not available"}</td>
+        <td>{record.data.ipoNumber || "Not available"}<DocumentListDetails record={record}/></td>
         <td>{record.data.sharedPoReference || "Not entered"}<br/><span className="pz-caption">{record.data.sharedPoDate ? String(record.data.sharedPoDate).slice(0,10) : "Not entered"}</span></td>
         <td><div className="pz-action-row pz-ipo-list-actions"><Button variant="secondary" onClick={() => onPreview(record.id)}>Preview</Button><DownloadIpo record={record}/></div>
         </td>
