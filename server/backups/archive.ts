@@ -105,16 +105,31 @@ export async function exportBackup(pool: Pool, passphrase: string) {
       for (const table of tables) {
         if (omitted.has(table)) continue;
         await client.query(
-          `DECLARE backup_rows NO SCROLL CURSOR FOR SELECT row_to_json(t)::text AS row FROM public.${quote(table)} t`,
+          `DECLARE backup_rows NO SCROLL CURSOR FOR SELECT * FROM public.${quote(table)}`,
         );
         while (true) {
-          const batch = await client.query("FETCH 1 FROM backup_rows");
+          // Avoid constructing another huge JSON value inside PostgreSQL for
+          // historical archives. Stream existing JSON fields unchanged instead.
+          const batch = await client.query({text:"FETCH 1 FROM backup_rows",rowMode:'array',types:{
+            // Keep SQL textual values verbatim: in particular microsecond
+            // timestamps, big integers and numerics must not pass through Date
+            // or Number. Restore casts them through the original column type.
+            getTypeParser(){return (value:string)=>value;},
+          }});
           if (!batch.rowCount) break;
-          const line = `{"table":${JSON.stringify(table)},"row":${batch.rows[0].row}}\n`;
-          bytes += Buffer.byteLength(line);
-          if (bytes > 512 * 1024 * 1024)
-            throw new Error("Backup exceeds the supported archive size.");
-          yield line;
+          const chunks=[`{"table":${JSON.stringify(table)},"row":{`];
+          for(const [index,field] of batch.fields.entries()){
+            const value=batch.rows[0][index];
+            const raw=value===null?'null':field.dataTypeID===114||field.dataTypeID===3802
+              ? value : JSON.stringify(Buffer.isBuffer(value)?'\\x'+value.toString('hex'):value);
+            chunks.push(`${index?',':''}${JSON.stringify(field.name)}:`,raw);
+          }
+          chunks.push('}}\n');
+          for(const chunk of chunks){
+            bytes += Buffer.byteLength(chunk);
+            if(bytes>512*1024*1024)throw new Error("Backup exceeds the supported archive size.");
+            yield chunk;
+          }
         }
         await client.query("CLOSE backup_rows");
       }
