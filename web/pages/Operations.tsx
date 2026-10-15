@@ -1,4 +1,5 @@
 import {AdvanceBoqInbox,AdvanceStockReview} from '../components/AdvanceBoqInbox.js';
+import {AdvanceBoqSearch} from '../components/AdvanceBoqSearch.js';
 import {ProjectCheckpoints} from './ProjectCheckpoints.js';
 import {InventoryWorkspace} from './InventoryWorkspace.js';
 import {Button} from '../ui/Button.js';
@@ -257,6 +258,13 @@ export function Operations({
     }
   }
   if(advanceReservation)return <AdvanceStockReview group={advanceReservation} onBack={()=>setAdvanceReservation(undefined)}/>;
+  // Operations, Admin and Management: the advance BOQ search and the opened advance BOQ only (Moaz, 15 Oct 2026).
+  if (["Admin","Management","Operations"].includes(session.user.role)) return (
+    <section className="detail-panel operations-panel">
+      <AdvanceBoqSearch onOpen={reference=>setLastAdvanceReference(reference)}/>
+      {lastAdvanceReference&&<AdvanceBoqInbox key={lastAdvanceReference} initialReference={lastAdvanceReference} detailOnly onReserve={group=>{setLastAdvanceReference(group.number);setAdvanceReservation(group);}}/>}
+    </section>
+  );
   return (
     <section className="detail-panel operations-panel">
       <Button variant="secondary" onClick={()=>setCheckpoints(!checkpoints)} aria-expanded={checkpoints}>Installation checkpoints</Button>
