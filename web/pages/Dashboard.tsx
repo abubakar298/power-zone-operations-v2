@@ -41,6 +41,9 @@ const Coordinator = lazy(() =>
 const Operations = lazy(() =>
   import("./Operations.js").then((module) => ({ default: module.Operations })),
 );
+const SiteExecution = lazy(() =>
+  import("./SiteExecution.js").then((module) => ({ default: module.SiteExecution })),
+);
 const CniProposals = lazy(() =>
   import("./CniProposals.js").then((module) => ({
     default: module.CniProposals,
@@ -128,6 +131,7 @@ export function Dashboard({
     | "pricing"
     | "quotes"
     | "operations"
+    | "sites"
     | "inventory"
     | "finance"
     | "design"
@@ -217,6 +221,7 @@ export function Dashboard({
       | "pricing"
       | "quotes"
       | "operations"
+      | "sites"
       | "inventory"
       | "finance"
       | "design"
@@ -607,6 +612,17 @@ export function Dashboard({
                     </button>
                   </>
                 )}
+                {["Admin", "Management", "Coordinator", "Operations", "Inventory", "Accounts"].includes(
+                  session.user.role,
+                ) && (
+                  <button
+                    className={view === "sites" ? "nav-active" : ""}
+                    onClick={() => navigate("sites")}
+                  >
+                    <Icon name="file" />
+                    Sites
+                  </button>
+                )}
                 {["Admin", "Management", "Inventory"].includes(
                   session.user.role,
                 ) && (
@@ -698,7 +714,9 @@ export function Dashboard({
                             ? session.user.role === "Coordinator" ? "Quotation Settings" : "Commercial pricing"
                             : view === "quotes"
                               ? "Quotations"
-                              : view === "operations"
+                              : view === "sites"
+                                ? "Sites"
+                                : view === "operations"
                                 ? "BOQ to Operations"
                                 : view === "orders"
                                   ? "Customer PO & IPO"
@@ -826,7 +844,9 @@ export function Dashboard({
                                   ? session.user.role === "Coordinator" ? "Quotation Settings" : "Commercial pricing"
                                   : view === "quotes"
                                     ? "Quotations"
-                                    : view === "operations"
+                                    : view === "sites"
+                                      ? "Sites"
+                                      : view === "operations"
                                       ? "Operations delivery portal"
                                       : view === "orders"
                                         ? "Customer PO & IPO"
@@ -877,7 +897,9 @@ export function Dashboard({
                                   ? "Prepare and share immutable customer quotation versions."
                                   : view === "team"
                                     ? "Invite and manage authorised team members."
-                                    : view === "operations"
+                                    : view === "sites"
+                                      ? "Every site after its IPO: stage, dates, daily picture checks, problems and documents."
+                                      : view === "operations"
                                       ? "Send approved site requirements to Operations after IPO creation."
                                       : view === "orders"
                                         ? "Turn an accepted quotation and customer PO into an internal purchase order."
@@ -1096,6 +1118,7 @@ export function Dashboard({
                   }}
                 />
               )}
+              {view === "sites" && <SiteExecution session={session} />}
               {view === "operations" && (
                 <Operations session={session} initialIpoId={operationsIpoId} portal={departmentView==='operations'} />
               )}

@@ -27,6 +27,8 @@ import { directorHttp } from "./director/http.js";
 import { CoordinatorRepository } from "./coordinator/repository.js";
 import { coordinatorHttp } from "./coordinator/http.js";
 import { OperationsRepository } from "./operations/repository.js";
+import { SiteExecutionRepository } from "./site-execution/repository.js";
+import { siteExecutionHttp } from "./site-execution/http.js";
 import { operationsHttp } from "./operations/http.js";
 import { CommercialRepository } from "./commercial/repository.js";
 import { commercialHttp } from "./commercial/http.js";
@@ -107,6 +109,7 @@ export function createApp(
       "/api/coordinator",
       "/api/director",
       "/api/operations",
+      "/api/site-execution",
       "/api/departments",
       "/api/masters",
     ],
@@ -221,6 +224,11 @@ export function createApp(
     auth.requireSession,
     coordinatorRecords(pool),
     operationsHttp(new OperationsRepository(pool), auth.requireSession),
+  );
+  app.use(
+    "/api/site-execution",
+    auth.requireSession,
+    siteExecutionHttp(new SiteExecutionRepository(pool), auth.requireSession),
   );
   app.use(
     "/api/coordinator",
