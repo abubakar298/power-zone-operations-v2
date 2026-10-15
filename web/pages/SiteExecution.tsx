@@ -33,6 +33,8 @@ interface Materials {
   reservations: { id: string; itemKey: string; quantity: string; note: string; reservedAt: string; reservedBy: string; releasedAt: string | null; releaseReason: string }[];
 }
 interface VendorRef { id: string; name: string; category: string; status: "Active" | "Inactive" }
+interface CableLine { itemKey: string; name: string; unit: string; boqQty: string; issuedQty: string | null; usedQty: string | null; returnedQty: string; variance: string | null; direction: string; flagged: boolean; note: string; updatedAt: string | null; updatedBy: string | null }
+interface AdditionalItem { id: string; itemKey: string | null; itemName: string | null; description: string; quantity: string; unit: string; reason: string; createdAt: string; createdBy: string; removedAt: string | null; removedBy: string | null; removalReason: string }
 type FormState = {
   siteType: string; region: string; materialDeliveryPlanned: string; materialDeliveryActual: string; startDate: string;
   endDate: string; matriCloudStatus: string; fourGStatus: string; customerSignoff: string; doDate: string;
@@ -98,9 +100,48 @@ export function SiteExecution({ session }: { session: Session }) {
   const [reserveQty, setReserveQty] = useState<Record<string, string>>({});
   const [assignForm, setAssignForm] = useState<Record<string, { vendorId: string; agreedDate: string; notes: string }>>({});
 
+  const [cables, setCables] = useState<CableLine[] | null>(null);
+  const [cableForm, setCableForm] = useState<Record<string, { usedQty: string; returnedQty: string; note: string }>>({});
+  const [additionalItems, setAdditionalItems] = useState<AdditionalItem[]>([]);
+  const [additionalForm, setAdditionalForm] = useState({ description: "", quantity: "", unit: "", reason: "" });
+
   const loadMaterials = useCallback(async (id: string) => {
     try { setMaterials(await api<Materials>(`/site-execution/${id}/materials`)); } catch { setMaterials(null); }
   }, []);
+  const loadClosure = useCallback(async (id: string) => {
+    try {
+      const [c, a] = await Promise.all([api<{ cables: CableLine[] }>(`/site-execution/${id}/cables`), api<{ items: AdditionalItem[] }>(`/site-execution/${id}/additional-items`)]);
+      setCables(c.cables); setAdditionalItems(a.items); setCableForm({});
+    } catch { setCables(null); }
+  }, []);
+  const saveCable = useCallback(async (siteId: string, itemKey: string, f: { usedQty: string; returnedQty: string; note: string }) => {
+    setBusy(true);
+    try {
+      const r = await api<{ cables: CableLine[] }>(`/site-execution/${siteId}/cables`, { body: { itemKey, usedQty: f.usedQty.trim(), returnedQty: f.returnedQty.trim() || "0", note: f.note.trim() }, csrf: session.csrfToken });
+      setCables(r.cables); setCableForm((c) => { const n = { ...c }; delete n[itemKey]; return n; }); setNotice("Cable usage saved."); setError("");
+      setDetail(await api<Detail>(`/site-execution/${siteId}`));
+    } catch (e) { setError(e instanceof ApiError ? e.message : "Could not save cable usage."); setNotice(""); }
+    finally { setBusy(false); }
+  }, [session.csrfToken]);
+  const addAdditional = useCallback(async (siteId: string) => {
+    setBusy(true);
+    try {
+      const f = additionalForm;
+      const r = await api<{ items: AdditionalItem[] }>(`/site-execution/${siteId}/additional-items`, { body: { itemKey: null, description: f.description.trim(), quantity: f.quantity.trim(), unit: f.unit.trim(), reason: f.reason.trim() }, csrf: session.csrfToken });
+      setAdditionalItems(r.items); setAdditionalForm({ description: "", quantity: "", unit: "", reason: "" }); setNotice("Additional item recorded."); setError("");
+      setDetail(await api<Detail>(`/site-execution/${siteId}`));
+    } catch (e) { setError(e instanceof ApiError ? e.message : "Could not record the item."); setNotice(""); }
+    finally { setBusy(false); }
+  }, [additionalForm, session.csrfToken]);
+  const withdrawAdditional = useCallback(async (siteId: string, itemId: string) => {
+    setBusy(true);
+    try {
+      const r = await api<{ items: AdditionalItem[] }>(`/site-execution/${siteId}/additional-items/${itemId}/remove`, { body: { reason: "" }, csrf: session.csrfToken });
+      setAdditionalItems(r.items); setNotice("Item withdrawn."); setError("");
+      setDetail(await api<Detail>(`/site-execution/${siteId}`));
+    } catch (e) { setError(e instanceof ApiError ? e.message : "Could not withdraw the item."); setNotice(""); }
+    finally { setBusy(false); }
+  }, [session.csrfToken]);
   const loadVendors = useCallback(async () => {
     try { const v = await api<{ vendors: VendorRef[]; categories: string[] }>("/site-execution/vendors"); setVendorList(v.vendors); setCategories(v.categories); } catch { /* read-only roles may still see the page */ }
   }, []);
@@ -115,9 +156,9 @@ export function SiteExecution({ session }: { session: Session }) {
     try {
       const d = await api<Detail>(`/site-execution/${id}`);
       setDetail(d); setForm(toForm(d)); setNextStage(d.stage); setStageNote(""); setError(""); setNotice("");
-      setMaterials(null); void loadMaterials(id); void loadVendors();
+      setMaterials(null); setCables(null); void loadMaterials(id); void loadVendors(); void loadClosure(id);
     } catch (e) { setError(e instanceof ApiError ? e.message : "Unable to open the site."); }
-  }, [loadMaterials, loadVendors]);
+  }, [loadMaterials, loadVendors, loadClosure]);
   const reserve = useCallback(async (siteId: string, itemKey: string, quantity: string) => {
     setBusy(true);
     try {
@@ -473,6 +514,61 @@ export function SiteExecution({ session }: { session: Session }) {
         </section>
 
         <section className="pz-panel pz-stack">
+          <h3>Cables used against the BOQ</h3>
+          <p><small>Every difference is flagged: extra cable used is invoiced to the customer, cable charged but not used is refunded.</small></p>
+          {!cables ? <p>Loading cables…</p> : cables.length === 0 ? <p>No cable lines on this site's BOQ.</p> : (
+            <div className="pz-table-scroll">
+              <table className="pz-table">
+                <thead><tr><th>Cable</th><th>BOQ</th><th>Sent to Store</th><th>Used</th><th>Returned</th><th>Variance</th>{canEdit && <th>Note</th>}{canEdit && <th></th>}</tr></thead>
+                <tbody>
+                  {cables.map((l) => {
+                    const f = cableForm[l.itemKey] ?? { usedQty: l.usedQty ?? "", returnedQty: l.returnedQty ?? "0", note: l.note ?? "" };
+                    const dirty = f.usedQty !== (l.usedQty ?? "") || f.returnedQty !== (l.returnedQty ?? "0") || f.note !== (l.note ?? "");
+                    return (
+                      <tr key={l.itemKey}>
+                        <td><strong>{l.name}</strong><br /><small>{l.unit}</small></td>
+                        <td>{l.boqQty}</td>
+                        <td>{l.issuedQty ?? "—"}</td>
+                        <td>{canEdit ? <input aria-label={`Used ${l.name}`} style={{ width: "6rem" }} value={f.usedQty} onChange={(e) => setCableForm({ ...cableForm, [l.itemKey]: { ...f, usedQty: e.target.value } })} /> : (l.usedQty ?? "—")}</td>
+                        <td>{canEdit ? <input aria-label={`Returned ${l.name}`} style={{ width: "6rem" }} value={f.returnedQty} onChange={(e) => setCableForm({ ...cableForm, [l.itemKey]: { ...f, returnedQty: e.target.value } })} /> : l.returnedQty}</td>
+                        <td>{l.variance == null ? <small>Not entered</small> : <><StatusBadge tone={l.flagged ? "danger" : "success"}>{Number(l.variance) > 0 ? `+${l.variance}` : l.variance}</StatusBadge><br /><small>{l.direction}</small></>}</td>
+                        {canEdit && <td><input aria-label={`Note ${l.name}`} value={f.note} maxLength={500} onChange={(e) => setCableForm({ ...cableForm, [l.itemKey]: { ...f, note: e.target.value } })} /></td>}
+                        {canEdit && <td><Button variant="secondary" loading={busy} disabled={!dirty || !f.usedQty.trim()} onClick={() => void saveCable(detail.id, l.itemKey, f)}>Save</Button></td>}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="pz-panel pz-stack">
+          <h3>Additional items used outside the quotation</h3>
+          {canEdit && (
+            <div className="pz-form-grid">
+              <Field id="ai-desc" label="Item or description"><input id="ai-desc" value={additionalForm.description} maxLength={500} onChange={(e) => setAdditionalForm({ ...additionalForm, description: e.target.value })} /></Field>
+              <Field id="ai-qty" label="Quantity"><input id="ai-qty" value={additionalForm.quantity} onChange={(e) => setAdditionalForm({ ...additionalForm, quantity: e.target.value })} /></Field>
+              <Field id="ai-unit" label="Unit"><input id="ai-unit" value={additionalForm.unit} maxLength={50} onChange={(e) => setAdditionalForm({ ...additionalForm, unit: e.target.value })} /></Field>
+              <Field id="ai-reason" label="Reason" hint="Why it was needed. Accounts sees this."><input id="ai-reason" value={additionalForm.reason} maxLength={1000} onChange={(e) => setAdditionalForm({ ...additionalForm, reason: e.target.value })} /></Field>
+              <div className="pz-action-row">
+                <Button variant="secondary" loading={busy} disabled={!additionalForm.description.trim() || !additionalForm.quantity.trim()} onClick={() => void addAdditional(detail.id)}>Record item</Button>
+              </div>
+            </div>
+          )}
+          {additionalItems.length === 0 ? <p>No additional items recorded.</p> : (
+            <ul className="pz-stack">
+              {additionalItems.map((a) => (
+                <li key={a.id} className="pz-action-row">
+                  <span style={a.removedAt ? { textDecoration: "line-through" } : undefined}>{a.quantity} {a.unit} · {a.description}{a.reason ? ` · ${a.reason}` : ""} · {a.createdBy} · {fmtAt(a.createdAt)}</span>
+                  {a.removedAt ? <small>Withdrawn by {a.removedBy}{a.removalReason ? ` · ${a.removalReason}` : ""}</small> : canEdit && <Button variant="neutral" loading={busy} onClick={() => void withdrawAdditional(detail.id, a.id)}>Withdraw</Button>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="pz-panel pz-stack">
           <h3>History</h3>
           {detail.events.length === 0 ? <p>No changes yet.</p> : (
             <ul>
@@ -488,7 +584,10 @@ export function SiteExecution({ session }: { session: Session }) {
                     e.kind === "reservation_released" ? `Released ${e.changes.quantity} of ${e.changes.itemKey}` :
                     e.kind === "vendor_assigned" ? `${e.changes.category} vendor: ${e.changes.vendor}` :
                     e.kind === "vendor_removed" ? `${e.changes.category} vendor removed` :
-                    e.kind === "procurement" ? `Procurement ${e.changes.status ?? ""}` : e.kind
+                    e.kind === "procurement" ? `Procurement ${e.changes.status ?? ""}` :
+                    e.kind === "cable_usage" ? `Cable ${e.changes.itemKey}: used ${e.changes.usedQty}, returned ${e.changes.returnedQty}` :
+                    e.kind === "additional_item" ? `Additional item: ${e.changes.quantity} ${e.changes.unit ?? ""} ${e.changes.description}` :
+                    e.kind === "additional_item_removed" ? `Additional item withdrawn: ${e.changes.description}` : e.kind
                   }{e.note ? ` · ${e.note}` : ""}
                 </li>
               ))}

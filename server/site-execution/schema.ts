@@ -133,3 +133,24 @@ export const procurementUpdateSchema = z
     note: z.string().trim().max(500).default(""),
   })
   .strict();
+
+// Slice 3: cables against BOQ, additional items.
+const nonNegativeQuantity = quantity;
+export const cableUsageSchema = z
+  .object({
+    itemKey: z.string().trim().min(1).max(200),
+    usedQty: nonNegativeQuantity,
+    returnedQty: nonNegativeQuantity.default("0"),
+    note: z.string().trim().max(500).default(""),
+  })
+  .strict();
+export const additionalItemSchema = z
+  .object({
+    itemKey: z.string().trim().min(1).max(200).nullable().default(null),
+    description: z.string().trim().min(1).max(500),
+    quantity: positiveQuantity,
+    unit: z.string().trim().max(50).default(""),
+    reason: z.string().trim().max(1000).default(""),
+  })
+  .strict();
+export const removalSchema = z.object({ reason: z.string().trim().max(500).default("") }).strict();

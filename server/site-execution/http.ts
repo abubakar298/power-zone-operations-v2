@@ -15,6 +15,9 @@ import {
   vendorAssignSchema,
   procurementCreateSchema,
   procurementUpdateSchema,
+  cableUsageSchema,
+  additionalItemSchema,
+  removalSchema,
   STAGES,
   STAGE_LABELS,
   LATE_AFTER_DAYS,
@@ -26,16 +29,18 @@ import { SiteExecutionRepository } from "./repository.js";
 import { StockRepository } from "./stock.js";
 import { VendorsRepository, VENDOR_CATEGORIES } from "./vendors.js";
 import { ProcurementRepository, PROCUREMENT_STATUSES } from "./procurement.js";
+import { ClosureRepository } from "./closure.js";
 
 export interface SiteExecutionRepositories {
   sites: SiteExecutionRepository;
   stock: StockRepository;
   vendors: VendorsRepository;
   procurement: ProcurementRepository;
+  closure: ClosureRepository;
 }
 
 export function siteExecutionHttp(repos: SiteExecutionRepositories, requireSession: RequestHandler) {
-  const { sites, stock, vendors, procurement } = repos;
+  const { sites, stock, vendors, procurement, closure } = repos;
   const r = Router();
   r.use(requireSession);
   r.use((req, _res, next) => {
@@ -94,6 +99,10 @@ export function siteExecutionHttp(repos: SiteExecutionRepositories, requireSessi
     res.json({ requests: await procurement.list(actor(req)) });
   });
 
+  // Reports across sites. Registered before /:id.
+  r.get("/reports/cable-variance", async (req, res) => res.json(await closure.cableVarianceReport(actor(req))));
+  r.get("/reports/additional-items", async (req, res) => res.json({ items: await closure.additionalItemsReport(actor(req)) }));
+
   // One site.
   r.get("/:id", async (req, res) => res.json(await sites.get(actor(req), id(req.params.id))));
   r.get("/:id/materials", async (req, res) => res.json(await stock.siteMaterials(actor(req), id(req.params.id))));
@@ -123,6 +132,23 @@ export function siteExecutionHttp(repos: SiteExecutionRepositories, requireSessi
     const siteId = id(req.params.id);
     await vendors.unassign(actor(req), siteId, id(req.params.aid, "vendor assignment"));
     res.json(await sites.get(actor(req), siteId));
+  });
+  r.get("/:id/cables", async (req, res) => res.json({ cables: await closure.cables(actor(req), id(req.params.id)) }));
+  r.post("/:id/cables", async (req, res) => {
+    const siteId = id(req.params.id);
+    await closure.setCableUsage(actor(req), siteId, parse(cableUsageSchema, req.body));
+    res.json({ cables: await closure.cables(actor(req), siteId) });
+  });
+  r.get("/:id/additional-items", async (req, res) => res.json({ items: await closure.additionalItems(actor(req), id(req.params.id)) }));
+  r.post("/:id/additional-items", async (req, res) => {
+    const siteId = id(req.params.id);
+    await closure.addAdditionalItem(actor(req), siteId, parse(additionalItemSchema, req.body));
+    res.status(201).json({ items: await closure.additionalItems(actor(req), siteId) });
+  });
+  r.post("/:id/additional-items/:aid/remove", async (req, res) => {
+    const siteId = id(req.params.id);
+    await closure.removeAdditionalItem(actor(req), siteId, id(req.params.aid, "additional item"), parse(removalSchema, req.body));
+    res.json({ items: await closure.additionalItems(actor(req), siteId) });
   });
   return r;
 }

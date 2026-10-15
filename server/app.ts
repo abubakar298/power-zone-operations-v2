@@ -32,6 +32,7 @@ import { siteExecutionHttp } from "./site-execution/http.js";
 import { StockRepository } from "./site-execution/stock.js";
 import { VendorsRepository } from "./site-execution/vendors.js";
 import { ProcurementRepository } from "./site-execution/procurement.js";
+import { ClosureRepository } from "./site-execution/closure.js";
 import { operationsHttp } from "./operations/http.js";
 import { CommercialRepository } from "./commercial/repository.js";
 import { commercialHttp } from "./commercial/http.js";
@@ -237,6 +238,7 @@ export function createApp(
         stock: new StockRepository(pool),
         vendors: new VendorsRepository(pool),
         procurement: new ProcurementRepository(pool),
+        closure: new ClosureRepository(pool),
       },
       auth.requireSession,
     ),

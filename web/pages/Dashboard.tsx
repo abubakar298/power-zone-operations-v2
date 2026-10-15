@@ -47,6 +47,9 @@ const SiteExecution = lazy(() =>
 const StockProcurement = lazy(() =>
   import("./StockProcurement.js").then((module) => ({ default: module.StockProcurement })),
 );
+const SiteReports = lazy(() =>
+  import("./SiteReports.js").then((module) => ({ default: module.SiteReports })),
+);
 const CniProposals = lazy(() =>
   import("./CniProposals.js").then((module) => ({
     default: module.CniProposals,
@@ -136,6 +139,7 @@ export function Dashboard({
     | "operations"
     | "sites"
     | "stock"
+    | "reports"
     | "inventory"
     | "finance"
     | "design"
@@ -227,6 +231,7 @@ export function Dashboard({
       | "operations"
       | "sites"
       | "stock"
+      | "reports"
       | "inventory"
       | "finance"
       | "design"
@@ -639,6 +644,17 @@ export function Dashboard({
                     Stock & procurement
                   </button>
                 )}
+                {["Admin", "Management", "Operations", "Inventory", "Accounts"].includes(
+                  session.user.role,
+                ) && (
+                  <button
+                    className={view === "reports" ? "nav-active" : ""}
+                    onClick={() => navigate("reports")}
+                  >
+                    <Icon name="file" />
+                    Site reports
+                  </button>
+                )}
                 {["Admin", "Management", "Inventory"].includes(
                   session.user.role,
                 ) && (
@@ -730,7 +746,9 @@ export function Dashboard({
                             ? session.user.role === "Coordinator" ? "Quotation Settings" : "Commercial pricing"
                             : view === "quotes"
                               ? "Quotations"
-                              : view === "stock"
+                              : view === "reports"
+                                ? "Site reports"
+                                : view === "stock"
                                 ? "Stock & procurement"
                                 : view === "sites"
                                 ? "Sites"
@@ -862,7 +880,9 @@ export function Dashboard({
                                   ? session.user.role === "Coordinator" ? "Quotation Settings" : "Commercial pricing"
                                   : view === "quotes"
                                     ? "Quotations"
-                                    : view === "stock"
+                                    : view === "reports"
+                                      ? "Site reports"
+                                      : view === "stock"
                                       ? "Stock & procurement"
                                       : view === "sites"
                                       ? "Sites"
@@ -917,7 +937,9 @@ export function Dashboard({
                                   ? "Prepare and share immutable customer quotation versions."
                                   : view === "team"
                                     ? "Invite and manage authorised team members."
-                                    : view === "stock"
+                                    : view === "reports"
+                                      ? "Site stages, cable variance and items used outside quotations. Downloadable."
+                                      : view === "stock"
                                       ? "Items required, Store counts, reserved stock, shortages, vendors and requests for quotation."
                                       : view === "sites"
                                       ? "Every site after its IPO: stage, dates, daily picture checks, problems and documents."
@@ -1142,6 +1164,7 @@ export function Dashboard({
               )}
               {view === "sites" && <SiteExecution session={session} />}
               {view === "stock" && <StockProcurement session={session} />}
+              {view === "reports" && <SiteReports session={session} />}
               {view === "operations" && (
                 <Operations session={session} initialIpoId={operationsIpoId} portal={departmentView==='operations'} />
               )}
