@@ -11,6 +11,8 @@ export const earthingScopeDescription = 'Earthing Bore — Target earth resistan
 /** New quotation scope only. Never changes BOQ quantities, classifications or selling amounts. */
 export function customerScopeItems(boq:BoqSnapshot, sources:BoqSnapshot['lines'], pricing?:ScopePricing):Item[] {
   const output:Item[]=[];
+  const sortDescriptions=new WeakMap<Item,string>();
+  const append=(item:Item,sortDescription:string)=>{output.push(item);sortDescriptions.set(item,sortDescription);};
   const protection=(side:'AC'|'DC',keys:Set<string>)=>{
     const present=sources.filter(l=>keys.has(l.key)&&new Decimal(l.qty).gt(0));
     if(!present.length)return;
@@ -21,7 +23,8 @@ export function customerScopeItems(boq:BoqSnapshot, sources:BoqSnapshot['lines']
     if(present.some(l=>/VPD/.test(l.key)))parts.push('VPD');
     if(present.some(l=>/Fuse/.test(l.key)))parts.push('fuses and holders');
     if(present.some(l=>/Box|Boxes|Enclosures/.test(l.key)))parts.push('enclosures and accessories');
-    output.push({description:`${side} Protection Box (${parts.join(', ')})`,unit:'Set',qty:'1',...(pricing?.(present,new Decimal(1))??{})});
+    const commercial = present.every(l=>l.commercialDescription) ? [...new Set(present.map(l=>l.commercialDescription!))].join('; ') : undefined;
+    append({description:commercial || `${side} Protection Box (${parts.join(', ')})`,unit:'Set',qty:'1',...(pricing?.(present,new Decimal(1))??{})},`${side} Protection Box`);
   };
   for(const l of sources){
     if(!new Decimal(l.qty).gt(0)||acKeys.has(l.key)||dcKeys.has(l.key))continue;
@@ -39,15 +42,18 @@ export function customerScopeItems(boq:BoqSnapshot, sources:BoqSnapshot['lines']
       inverter=Decimal.min(total,inverter);
       const size=l.key.replace(' AC Cable','').replace('1C','1-core').replace('4C','4-core');
       for(const [purpose,qty] of [['Inverter Termination',inverter],['Load Panel Termination',total.minus(inverter)]] as const)
-        if(qty.gt(0))output.push({description:`AC Cable ${purpose} — ${size}${quotedBrand?' — '+quotedBrand:''}`,unit:l.unit,qty:qty.toString(),...(pricing?.([l],qty.div(total))??{})});
+        if(qty.gt(0))append({description:l.commercialDescription?`${l.commercialDescription} — ${purpose}`:`AC Cable ${purpose} — ${size}${quotedBrand?' — '+quotedBrand:''}`,unit:l.unit,qty:qty.toString(),...(pricing?.([l],qty.div(total))??{})},`AC Cable ${purpose}`);
       continue;
     }
     const labels:Record<string,string>={'2.5mm² Earthing Cable':'2.5mm² Earthing Cable — Panel to Panel','6mm² Earthing Cable':boq.survey.family==='bess-only'?'6mm² Earthing Cable — AC Side':'6mm² Earthing Cable — DC Side','10mm² Earthing Cable':'10mm² Earthing Cable — AC Side','Earthing Bore':earthingScopeDescription,'Misc. Accessories':'Miscellaneous Accessories','Labour':'Installation, Testing & Commissioning','Delivery':'Project Delivery / Logistics'};
     const description=labels[l.key]??(/Cable/.test(l.key)?l.key:l.specification&&l.specification.trim()!=='General'?l.specification:l.description.trim()!=='General'?l.description:l.key);
-    output.push({description:[description,quotedBrand].filter(Boolean).join(' — '),unit:l.unit,qty:l.qty,...(pricing?.([l],new Decimal(1))??{})});
+    const commercial=l.commercialDescription;
+    const color=l.colour||(/DC Cable Red/.test(l.key)?'Red':/DC Cable Black/.test(l.key)?'Black':'');
+    const wording=commercial?(color&&!new RegExp(`\\b${color}\\b`,'i').test(commercial)?`${commercial} — ${color}`:commercial):[description,quotedBrand].filter(Boolean).join(' — ');
+    append({description:wording,unit:l.unit,qty:l.qty,...(pricing?.([l],new Decimal(1))??{})},description);
   }
   protection('AC',acKeys);protection('DC',dcKeys);
-  const rank=(i:Item)=> /AC Cable Inverter/.test(i.description)?0:/AC Cable Load/.test(i.description)?1:/DC Cable Red/.test(i.description)?2:/DC Cable Black/.test(i.description)?3:/2.5mm² Earthing/.test(i.description)?4:/6mm² Earthing/.test(i.description)?5:/10mm² Earthing/.test(i.description)?6:/AC Protection Box/.test(i.description)?7:/DC Protection Box/.test(i.description)?8:/Earthing Bore/.test(i.description)?9:/Installation,/.test(i.description)?11:/Delivery/.test(i.description)?12:10;
+  const rank=(i:Item)=>{const key=sortDescriptions.get(i)??i.description;return /AC Cable Inverter/.test(key)?0:/AC Cable Load/.test(key)?1:/DC Cable Red/.test(key)?2:/DC Cable Black/.test(key)?3:/2.5mm² Earthing/.test(key)?4:/6mm² Earthing/.test(key)?5:/10mm² Earthing/.test(key)?6:/AC Protection Box/.test(key)?7:/DC Protection Box/.test(key)?8:/Earthing Bore/.test(key)?9:/Installation,/.test(key)?11:/Delivery/.test(key)?12:10;};
   return output.sort((a,b)=>rank(a)-rank(b));
 }
 

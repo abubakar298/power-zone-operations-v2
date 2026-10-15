@@ -586,6 +586,20 @@ export function quotationLines(
         { description: row.description, unit: source.unit, qty: source.qty },
       ];
   }
+  // Exact Item ID wording is customer-facing only. Composite groups keep their
+  // established headings and expose each source through customerScopeItems.
+  const primaryKeys = ["Solar PV Modules", s.lines.find(l=>l.phase==="Structure")?.key ?? s.lines.find(l=>l.key.startsWith("Structure -"))?.key, s.inverterConfig.sku,
+    ...(full || D(s.engineering.batteryModules).gt(0) ? [sp?"BAT-LV-05 KW WO BMS":"BAT-HV-05 KW WO BMS"] : []),
+    ...(full || D(s.engineering.bms).gt(0) ? [sp?"CH-BMS-LV":"CH-BMS-HV"] : []), "Earthing Bore"];
+  primaryKeys.forEach((key,index)=>{const wording=key?line(key)?.commercialDescription:undefined;if(wording)rows[index].description=wording;});
+  for(const row of rows){
+    const source=s.lines.find(l=>/Earthing Cable/.test(l.key)&&row.description.startsWith(l.key));
+    if(source?.commercialDescription)row.description=source.commercialDescription;
+    if(row.items?.length===1 && ["Installation, Testing & Commissioning Labour","Project Delivery / Logistics"].includes(row.description)) {
+      const key=row.description.startsWith("Installation")?"Labour":"Delivery",wording=line(key)?.commercialDescription;
+      if(wording){row.description=wording;row.items[0].description=wording;}
+    }
+  }
   return rows;
 }
 export function quote(
@@ -892,7 +906,7 @@ export type QuotationSnapshot = ReturnType<typeof quote>;
 function bessOnlyLines(boq: BoqSnapshot, presentation: string): QuoteLine[] {
   const equipment = boq.lines.filter((l) => l.phase === "BESS");
   const rows: QuoteLine[] = equipment.map((l) => ({
-    description: [l.brand, l.specification ?? l.description]
+    description: l.commercialDescription || [l.brand, l.specification ?? l.description]
       .filter(Boolean)
       .join(" "),
     unit: l.unit,
@@ -1074,7 +1088,7 @@ function directQuotationLines(boq: BoqSnapshot): QuoteLine[] {
     group.components.map((component) => {
       const source = boq.lines.find((l) => l.key === component.key)!;
       return {
-        description: [source.specification || source.description, source.brand]
+        description: source.commercialDescription || [source.specification || source.description, source.brand]
           .filter(Boolean)
           .join(" — "),
         unit: source.unit,

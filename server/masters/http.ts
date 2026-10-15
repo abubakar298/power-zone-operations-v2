@@ -70,6 +70,13 @@ export function mastersHttp(
   const router = Router();
   router.use(requireSession);
   router.get("/", async (_req, res) => res.json(await repo.list()));
+  router.post("/catalogue-commercial-description", async (req, res) => {
+    const session = req.authSession!;
+    if (!equalSecrets(req.get("X-CSRF-Token") ?? "", session.csrfToken)) throw new HttpError(403, "Refresh and try again.");
+    const input = z.object({itemId:z.string().min(1).max(200),version:z.number().int().min(1),commercialDescription:z.string().trim().min(1).max(1500)}).strict().safeParse(req.body);
+    if (!input.success) throw new HttpError(400, "Only the item commercial description can be edited here.");
+    res.json(await repo.saveCommercialDescription(session.user.id, input.data.itemId, input.data.version, input.data.commercialDescription));
+  });
   router.post("/customer-import/preview", async (req, res) => {
     if (
       !equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken)

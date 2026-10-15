@@ -337,3 +337,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pz-customer-edit .pz-field{grid-template-rows:auto auto;}
 .pz-customer-edit .pz-field small[data-empty=true]{display:none;}
 .pz-customer-edit .pz-field:has(#edit-customer-reason){grid-column:1/-1;}
+
+.pz-commercial-description-input{display:block;width:100%;min-width:280px;min-height:88px;resize:vertical;font:inherit;line-height:1.5;padding:10px;border:1px solid var(--pz-border);border-radius:var(--pz-radius-control);background:var(--pz-surface);color:var(--pz-text)}
+

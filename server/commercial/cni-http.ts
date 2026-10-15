@@ -1,3 +1,4 @@
+import {cniCommercialItem} from './cni-commercial-description.js';
 import {
   externalEvidenceSchema,
   validateExternal,
@@ -174,7 +175,9 @@ export function cniHttp(pool: Pool, requireSession: RequestHandler) {
                 ),
                 version,
               );
+      const commercialItem=await cniCommercialItem(client);
       const snapshot = {
+        ...(commercialItem?{commercialItem}:{}),
         customer: customer.rows[0],
         siteName: v.siteName,
         siteCode,

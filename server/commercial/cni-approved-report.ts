@@ -71,21 +71,32 @@ export function buildApprovedCniPdf(s:CniSnapshot,reference:string,draft:boolean
  y=H-226;technical.forEach(([a,b],i)=>{if(i%2===0)rect(42,y-46,511,54,light);text(54,y-10,a,10,blue,true);para(b,225,y,310,9,14);y-=60;});
 
  header(4,"03 / Commercial offer","A clear, consolidated offer.","One consolidated commercial offer. No component pricing.");
- y=H-230;rect(42,y-45,511,45,blue,5);text(56,y-28,"CPS ES-125kW/261kWh",12,"#FFFFFF",true);text(540,y-28,`${qty} ${qty===1?"CABINET":"CABINETS"}`,11,"#FFFFFF",true,"right");
+ let commercialPage=4;
+ y=H-230;
+ p.setFont("helvetica","bold");p.setFontSize(12);
+ const descriptionLines=p.splitTextToSize(s.commercialItem?.description || "CPS ES-125kW/261kWh",350) as string[];
+ let headingHeight=45;
+ for(let offset=0;offset<descriptionLines.length;offset+=25){
+  if(offset){header(++commercialPage,"03 / Commercial offer continued","A clear, consolidated offer.","One consolidated commercial offer. No component pricing.");y=H-230;}
+  const block=descriptionLines.slice(offset,offset+25);headingHeight=Math.max(45,block.length*14+16);
+  rect(42,y-headingHeight,511,headingHeight,blue,5);
+  block.forEach((line,index)=>text(56,y-28-index*14,line,12,"#FFFFFF",true));
+  if(!offset)text(540,y-28,`${qty} ${qty===1?"CABINET":"CABINETS"}`,11,"#FFFFFF",true,"right");
+ }
  const offer=s.pricing.displayedOffer??s.pricing.standardPayable;
  const rows:Array<[string,string]>=[["Standard unit offer price",`PKR ${money(new Decimal(offer).div(qty).toFixed(2))}`],["Quantity",`${qty} ${qty===1?"cabinet":"cabinets"}`],["Offer before discounts",`PKR ${money(offer)}`]];
  if(s.pricing.standardDiscount)rows.push(["Management-approved discount",`PKR ${money(s.pricing.standardDiscount)}`]);
  if(new Decimal(s.pricing.discount).gt(0))rows.push(["Special discount",`PKR ${money(s.pricing.discount)}`]);
  if(s.pricing.presentation==="Separate")rows.push(["Price before GST",`PKR ${money(s.pricing.beforeTax)}`],[`GST ${s.pricing.taxRate}%`,`PKR ${money(s.pricing.tax)}`]);
  rows.push(["Total payable",`PKR ${money(s.pricing.payable)}`]);
- y-=81;const spacing=Math.min(58,340/rows.length);
- rows.forEach(([a,b],i)=>{const last=i===rows.length-1;if(last)rect(42,y-14,511,Math.min(48,spacing+12),light,5);text(55,y,a,11,blue,last);text(540,y,b,12,blue,last,"right");y-=spacing;});
+ y-=headingHeight+36;const spacing=Math.min(58,340/rows.length);
+ rows.forEach(([a,b],i)=>{if(y<220){header(++commercialPage,"03 / Commercial offer continued","A clear, consolidated offer.","One consolidated commercial offer. No component pricing.");y=H-230;}const last=i===rows.length-1;if(last)rect(42,y-14,511,Math.min(48,spacing+12),light,5);text(55,y,a,11,blue,last);text(540,y,b,12,blue,last,"right");y-=spacing;});
  para("Installation, commissioning, and delivery are excluded and will be charged as per actual.",42,180,510,9,14);
 
  const raw=cniReferenceTerms.replace(/Security Level: Confidential/g,"").replace(/±/g,"+/-").replace(/℃/g," degrees C");
  const blocks=raw.split(/\n(?=(?:Notes:|[1-9]\. |[A-H]\. |[1-9]-))/).map(v=>v.replace(/\n/g," ").replace(/[^\x20-\x7e]/g,""));
  const joined:string[]=[];for(const block of blocks){const last=joined.at(-1);if(last&&/^(?:Notes:|[1-9]\. )/.test(last)&&last.length<100&&!/^[1-9]\. /.test(block))joined[joined.length-1]+="\n\n"+block;else joined.push(block);}
- let n=5;header(n,"04 / Commercial terms","Terms, warranty & services.");y=H-223;
+ let n=commercialPage+1;header(n,"04 / Commercial terms","Terms, warranty & services.");y=H-223;
  for(const block of joined){const lines=fit(block,511);const height=lines.length*14;
   if(block.startsWith("5. Warranty and Services")){
    // Restore the reference's structured services table instead of extracted prose.

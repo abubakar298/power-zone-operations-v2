@@ -235,8 +235,8 @@ export function Masters({
           <button
             key={k}
             role="tab"
-            aria-selected={kind === k}
-            className={kind === k ? "selected" : ""}
+            aria-selected={!catalogueOpen && kind === k}
+            className={!catalogueOpen && kind === k ? "selected" : ""}
             onClick={() => {
               setCatalogueOpen(false);
               setKind(k);
@@ -245,15 +245,16 @@ export function Masters({
               setMessage("");
             }}
           >
-            {titles[k]} <span>{data?.[k].length ?? "…"}</span>
+            {session.user.role === "Coordinator" && k === "customers" ? "Customer Database" : titles[k]} <span>{data?.[k].length ?? "…"}</span>
           </button>
         ))}
+        {session.user.role === "Coordinator" && <button role="tab" aria-selected={catalogueOpen} className={catalogueOpen ? "selected" : ""} onClick={()=>setCatalogueOpen(true)}>Item Descriptions <span>{data ? (data as any).catalogue?.length ?? 0 : "…"}</span></button>}
       </div>
-      {data && <Button variant="secondary" onClick={()=>setCatalogueOpen(!catalogueOpen)}>{catalogueOpen?"Back to master records":"PT Item catalogue & approved rules"}</Button>}
-      {catalogueOpen && data ? <InventoryCatalogue data={data}/> : <>
+      {data && session.user.role !== "Coordinator" && <Button variant="secondary" onClick={()=>setCatalogueOpen(!catalogueOpen)}>{catalogueOpen?"Back to master records":"PT Item catalogue & approved rules"}</Button>}
+      {catalogueOpen && data ? <InventoryCatalogue data={data} session={session} onSaved={load}/> : <>
       <div className="master-toolbar">
         <div>
-          <h2>{titles[kind]}</h2>
+          <h2>{session.user.role === "Coordinator" && kind === "customers" ? "Customer Database" : titles[kind]}</h2>
           <p>
             {kind === "rates"
               ? "Buying rates and their supplied statuses. Needs Rate may still carry a numeric rate."

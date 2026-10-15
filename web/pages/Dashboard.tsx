@@ -229,6 +229,9 @@ export function Dashboard({
       const params = new URLSearchParams(window.location.hash.slice(1)),
         destination = params.get("workspace");
       if (
+        destination === "masters" && ["Admin", "Management", "Coordinator"].includes(session.user.role)
+      ) { setView("masters"); return; }
+      if (
         ["ubl-ups", "mbl-ups", "bafl-solar"].includes(destination ?? "") &&
         ["Admin", "Management"].includes(session.user.role)
       ) {
@@ -328,14 +331,21 @@ export function Dashboard({
               <div className="nav-label">DAILY WORK</div>
               <nav aria-label="Main navigation">
                 <button
-                  className={departmentPage === "Workspace" ? "nav-active" : ""}
-                  aria-current={departmentPage === "Workspace" ? "page" : undefined}
+                  className={view === "dashboard" && departmentPage === "Workspace" ? "nav-active" : ""}
+                  aria-current={view === "dashboard" && departmentPage === "Workspace" ? "page" : undefined}
                   onClick={() => navigate("dashboard", undefined, true)}
                 >
                   <Icon name="dashboard" />
                   Workspace
                 </button>
-                <SidebarBuckets department={session.user.role === 'Design' ? 'design' : 'coordination'} page={departmentPage} onSelect={bucket=>{if(navigate('dashboard')){sessionStorage.setItem('pz:department-page',bucket);window.dispatchEvent(new CustomEvent('pz:department-page',{detail:bucket}));}}}/>
+                <SidebarBuckets department={session.user.role === 'Design' ? 'design' : 'coordination'} page={view === 'dashboard' ? departmentPage : ''} onSelect={bucket=>{if(navigate('dashboard')){sessionStorage.setItem('pz:department-page',bucket);window.dispatchEvent(new CustomEvent('pz:department-page',{detail:bucket}));}}}/>
+                {session.user.role === "Coordinator" && (
+                  <button className={view === "masters" ? "nav-active" : ""}
+                    aria-current={view === "masters" ? "page" : undefined}
+                    onClick={() => navigate("masters")}>
+                    <span className="sidebar-bucket-label">Databases</span>
+                  </button>
+                )}
                 {session.user.role === "Design" && <>
                 <button
                   onClick={() => {
@@ -603,7 +613,7 @@ export function Dashboard({
                   : view === "design"
                     ? "Design workspace"
                     : view === "masters"
-                      ? "Master data"
+                      ? session.user.role === "Coordinator" ? "Databases" : "Master data"
                       : view === "team"
                         ? "Team access"
                         : (view === "boqs" || view === "newboq")
@@ -722,7 +732,7 @@ export function Dashboard({
                         : view === "design"
                           ? "Design workspace"
                           : view === "masters"
-                            ? "Master data"
+                            ? session.user.role === "Coordinator" ? "Databases" : "Master data"
                             : view === "team"
                               ? "Team access"
                               : (view === "boqs" || view === "newboq")
@@ -1017,7 +1027,7 @@ export function Dashboard({
                       ? ["customers", "sites"]
                       : view === "rates"
                         ? ["rates", "items", "brands", "rules"]
-                        : undefined
+                        : session.user.role === "Coordinator" ? ["customers"] : undefined
                   }
                   session={session}
                   onLogout={onLogout}
@@ -1187,4 +1197,3 @@ function PasswordChange({
     </form>
   );
 }
-

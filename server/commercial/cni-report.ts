@@ -7,6 +7,7 @@ import type { priceCni } from "./cni-policy.js";
 import { buildApprovedCniPdf } from "./cni-approved-report.js";
 export interface CniSnapshot {
  customer:{name:string;contact_person:string;phone:string;address:string;city:string;province:string;email:string};
+ commercialItem?:{itemId:string;version:number;description:string};
  siteName:string;pricing:ReturnType<typeof priceCni>;validityDays:number;preparedBy:string;issuedDate:string;pdfTemplate?:string;
 }
 const blue=[52,60,145] as const,red=[229,45,59] as const;
@@ -38,7 +39,7 @@ export function buildCniPdf(s:CniSnapshot,number:string,draft:boolean) {
  page("02 / TECHNICAL SOLUTION","An integrated cabinet system.");
  table([["System",`${s.pricing.quantity} x CPS ES-125kW/261kWh`],["PCS",`125 kW per cabinet; AC 400 V / 50 Hz. Total: ${totalKw} kW`],["Battery",`261 kWh per cabinet; 832 V / 314 Ah; 0.5C at 25 C. Total: ${totalKwh} kWh`],["Battery management","BMU, control box and communication cables"],["Fire suppression","Aerosol chamber, detectors, alarms and explosion-proof vent"],["Liquid cooling","3 kW liquid cooling machine, pipes and cables per cabinet"],["Auxiliary system","Breakers, UPS and dehumidifier"],["Enclosure","IP55 enclosure and accessories"],["Control unit","BAU and operation monitoring system for Microgrid"]],78);
  page("03 / COMMERCIAL OFFER","A clear, consolidated offer.");
- autoTable(p,{startY:80,head:[["Description","UOM","Qty","Amount (PKR)"]],body:[["CPS ES-125kW/261kWh integrated cabinet system","Cabinet",String(s.pricing.quantity),money(s.pricing.displayedOffer??s.pricing.standardPayable)]],theme:"grid",margin:{left:15,right:15,bottom:20},styles:{font:"helvetica",fontSize:10,cellPadding:4},headStyles:{fillColor:[...blue]},columnStyles:{0:{cellWidth:100},1:{cellWidth:20,halign:"center",valign:"middle"},2:{cellWidth:15},3:{cellWidth:45,halign:"right"}},didParseCell(data){if(data.column.index===1){data.cell.styles.halign="center";data.cell.styles.valign="middle";}},rowPageBreak:"avoid"});
+ autoTable(p,{startY:80,head:[["Description","UOM","Qty","Amount (PKR)"]],body:[[s.commercialItem?.description || "CPS ES-125kW/261kWh integrated cabinet system","Cabinet",String(s.pricing.quantity),money(s.pricing.displayedOffer??s.pricing.standardPayable)]],theme:"grid",margin:{left:15,right:15,bottom:20},styles:{font:"helvetica",fontSize:10,cellPadding:4},headStyles:{fillColor:[...blue]},columnStyles:{0:{cellWidth:100},1:{cellWidth:20,halign:"center",valign:"middle"},2:{cellWidth:15},3:{cellWidth:45,halign:"right"}},didParseCell(data){if(data.column.index===1){data.cell.styles.halign="center";data.cell.styles.valign="middle";}},rowPageBreak:"avoid"});
  const commercialStart=(p as any).lastAutoTable.finalY+8;
  const rows:any[]=[];
  if(s.pricing.standardDiscount)rows.push(["Offer before standard discount",`PKR ${money(s.pricing.displayedOffer)}`],["Standard discount",`PKR ${money(s.pricing.standardDiscount)}`]);

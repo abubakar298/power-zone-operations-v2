@@ -78,6 +78,26 @@ export class MastersRepository {
       itemAliases: itemAliases.rows,
     };
   }
+  /** Version only customer-facing wording; technical data and costing remain untouched. */
+  async saveCommercialDescription(actor: string, itemId: string, version: number, description: string) {
+    if (!itemId || !Number.isInteger(version) || version < 1 || !description.trim() || description.trim().length > 1500)
+      throw new HttpError(400, "Enter a commercial description of up to 1,500 characters.");
+    return transaction(this.pool as Pool, async c => {
+      await c.query("SELECT pg_advisory_xact_lock(742019002)");
+      const user = (await c.query("SELECT active,role FROM users WHERE id=$1 FOR SHARE", [actor])).rows[0];
+      if (!user?.active || !["Admin", "Management", "Coordinator"].includes(user.role))
+        throw new HttpError(403, "Commercial description editing access required.");
+      const current = (await c.query("SELECT * FROM inventory_catalogue_current WHERE item_id=$1", [itemId])).rows[0];
+      if (!current) throw new HttpError(404, "Item ID not found.");
+      if (current.version !== version) throw new HttpError(409, "This item changed. Refresh and review its latest description.");
+      const wording = description.trim();
+      if (current.payload.commercialDescription === wording) return current;
+      const payload = {...current.payload, commercialDescription: wording};
+      const saved = (await c.query("INSERT INTO inventory_catalogue_versions(item_id,version,payload,rate_key) VALUES($1,$2,$3,$4) RETURNING *", [itemId, version + 1, payload, current.rate_key])).rows[0];
+      await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [actor, `master.commercial-description.changed:${JSON.stringify({itemId, beforeVersion:version, afterVersion:version+1, before:current.payload.commercialDescription, after:wording})}`]);
+      return saved;
+    });
+  }
   private async resolveRateKey(key: string, pool: Pool | PoolClient = this.pool) {
     const row = (await pool.query(`SELECT rate_key FROM inventory_catalogue_current WHERE item_id=$1 UNION ALL SELECT c.rate_key FROM inventory_item_aliases a JOIN inventory_catalogue_current c ON c.item_id=a.item_id WHERE a.alias=$1 LIMIT 1`, [key])).rows[0];
     return row?.rate_key || key;

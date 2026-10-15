@@ -77,6 +77,8 @@ export interface Masters {
   engineeringProfiles?: EngineeringProfile[];
 }
 export interface CostLine {
+  /** Customer wording resolved for a new quotation, never used for costing. */
+  commercialDescription?: string;
   item_group?: string;
   costRestricted?: boolean;
   itemId?: string;
