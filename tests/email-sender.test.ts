@@ -62,3 +62,14 @@ test("email delivery refuses disabled sending and sanitizes provider failure det
   assert.throws(()=>readConfig({...env,EMAIL_REPLY_TO:'bad\r\nBcc: other@example.test'}));
  }finally{globalThis.fetch=previous;}
 });
+
+test('quotation PDF bytes are passed to Resend as a named Base64 attachment',async()=>{
+ const previous=globalThis.fetch;let body:any,headers:any;
+ globalThis.fetch=async(_url,options)=>{body=JSON.parse(String(options?.body));headers=options?.headers;return new Response(JSON.stringify({id:'attachment-test'}),{status:200});};
+ try{
+  const attachments=[{filename:'UBL - Walton Road 1236 - Quotation - Q123-R1.pdf',content:Buffer.from('%PDF-1.4\nfixture').toString('base64')}];
+  await new ResendDelivery(readConfig(env)).send({to:'director@example.test',subject:'Quotation approval',text:'Exact saved quotation',attachments},'stable-notification-id');
+  assert.deepEqual(body.attachments,attachments);assert.deepEqual(body.to,['director@example.test']);assert.equal(headers['Idempotency-Key'],'stable-notification-id');
+  assert.equal(Buffer.from(body.attachments[0].content,'base64').subarray(0,5).toString(),'%PDF-');
+ }finally{globalThis.fetch=previous;}
+});

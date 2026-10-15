@@ -1,3 +1,4 @@
+import {quotationApprovalAttachments} from './quotation-attachment.js';
 import type { Pool } from "pg";
 import { transaction } from "../db/transaction.js";
 import type { User } from "../auth/repository.js";
@@ -140,7 +141,7 @@ export class NotificationsRepository {
     if (!delivery.configured) return;
     return transaction(this.pool, async (c) => {
       const row = (
-        await c.query(`SELECT q.*,COALESCE(t.title,n.title) AS title,n.reference,n.target,n.user_id,n.resolved_at,n.kind,n.created_at,t.critical,t.email_enabled AS type_enabled,u.email,u.active,u.role,u.display_name, e.audience,e.owner_id,COALESCE(a.display_name,'Power Zone') AS actor,
+        await c.query(`SELECT q.*,COALESCE(t.title,n.title) AS title,n.reference,n.target,n.user_id,n.resolved_at,n.kind,n.created_at,t.critical,t.email_enabled AS type_enabled,u.email,u.active,u.role,u.display_name, e.audience,e.owner_id,e.source_key AS event_source_key,e.kind AS event_kind,COALESCE(a.display_name,'Power Zone') AS actor,
     COALESCE(p.email_enabled,true) AS opted_in,s.email_enabled AS enabled FROM notification_email_queue q JOIN notifications n ON n.id=q.id JOIN notification_events e ON e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1) JOIN notification_types t ON t.kind=n.kind JOIN users u ON u.id=n.user_id LEFT JOIN users a ON a.id=n.actor_id LEFT JOIN notification_preferences p ON p.user_id=u.id CROSS JOIN notification_settings s WHERE q.state='queued' AND q.next_attempt_at<=now() ORDER BY q.next_attempt_at FOR UPDATE OF q SKIP LOCKED LIMIT 1`)
       ).rows[0];
       if (!row) return;
@@ -169,17 +170,17 @@ export class NotificationsRepository {
         return;
       }
       try {
-        const provider = await delivery.send(
-          notificationMessage(
+        const attachments=await quotationApprovalAttachments(c,row);
+        const message=notificationMessage(
             row.email,
             row.title,
             row.reference,
             row.actor,
             `${origin}/dashboard#notification=${row.id}`,
             row.created_at,
-          ),
-          row.id,
-        );
+          );
+        if(attachments.length)message.attachments=attachments;
+        const provider = await delivery.send(message,row.id);
         await c.query(
           "UPDATE notification_email_queue SET state='sent',provider_id=$2,delivered_at=now(),attempts=attempts+1,last_error=NULL WHERE id=$1",
           [row.id, provider],
