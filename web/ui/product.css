@@ -1,5 +1,5 @@
 /* Shared standards; legacy module layouts remain in styles.css. */
-.pz-ups-ageing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:var(--pz-space-4);align-items:start}
+.pz-ups-ageing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:var(--pz-space-4);align-items:stretch}
 .pz-ups-ageing-grid>.pz-panel{min-width:0}
 .pz-ups-ageing{position:relative;display:flex;align-items:center;gap:var(--pz-space-4);flex-wrap:wrap}
 .pz-ups-ageing-chart{position:relative;width:220px;max-width:calc(100% - 186px);aspect-ratio:1;flex:none;border-radius:50%;display:grid;place-items:center}
