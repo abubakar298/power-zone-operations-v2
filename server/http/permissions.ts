@@ -14,7 +14,7 @@ export function workflowBoundary(pool: Pool): RequestHandler {
     const path = req.originalUrl.split("?")[0];
     if (commercialRoles.has(role)) return next();
     // Shared operational alerts expose no Director costing or portfolio data.
-    if(role === "Operations" && req.method === "GET" && path === "/api/director/ups-alerts") return next();
+    if(["Operations","Accounts"].includes(role) && req.method === "GET" && path === "/api/director/ups-alerts") return next();
     if (role === "Design" && path.startsWith("/api/survey-uploads"))
       return next();
     if (role === "Operations" && path.startsWith("/api/operations")) {

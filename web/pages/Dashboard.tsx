@@ -272,7 +272,7 @@ export function Dashboard({
         return;
       }
       if(!departmentUser)setDepartmentView(undefined);
-      if(destination === "alerts" && ["Admin","Management","Operations"].includes(session.user.role)){setView("alerts");return;}
+      if(destination === "alerts" && ["Admin","Management","Operations","Accounts"].includes(session.user.role)){setView("alerts");return;}
       if (
         destination === "masters" && ["Admin", "Management", "Coordinator"].includes(session.user.role)
       ) { setView("masters"); return; }
@@ -447,7 +447,7 @@ export function Dashboard({
                   <Icon name="dashboard" />
                   Dashboard
                 </button>
-                {session.user.role === "Operations" && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
+                {["Operations","Accounts"].includes(session.user.role) && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
 
                 {["Admin", "Management", "Coordinator"].includes(
                   session.user.role,
@@ -1099,7 +1099,7 @@ export function Dashboard({
                   }
                 />
               )}
-              {view === "alerts" && ["Admin","Management","Operations"].includes(session.user.role) && <UpsAlerts/>}
+              {view === "alerts" && ["Admin","Management","Operations","Accounts"].includes(session.user.role) && <UpsAlerts/>}
               {view === "ubl-workflow" && <UblWorkflow session={session} />}
               {view === "ubl" &&
                 ["Admin", "Management"].includes(session.user.role) && (

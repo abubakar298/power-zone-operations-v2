@@ -1,5 +1,5 @@
 import {workflowBoundary} from '../server/http/permissions.js';
-import {flagUpsInstallations,upsInstallationAlerts} from '../server/director/ups-alerts.js';
+import {flagUpsInstallations,upsInstallationAlerts,daysSinceDelivery} from '../server/director/ups-alerts.js';
 import {approveUpsRegisterCompletions} from '../server/director/ups-completions.js';
 import {Decimal} from 'decimal.js';
 import {frameworkBasis} from '../server/project-workflow/basis.js';
@@ -61,14 +61,17 @@ test('Management register is additive, idempotent, source-linked and independent
   assert.equal(completed.actual.sites,1);assert.equal(completed.actual.sellingExGst,'762711.86');assert.equal(completed.actual.cost,null);assert.equal(completed.actual.markup,null);assert.equal(completed.actual.markupPercent,null);assert.equal(completed.actual.costPending,true);
   const operations=randomUUID();
   await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash)VALUES($1,$2,'Operations','Operations','isolated-only')",[operations,operations+'@test.invalid']);
+  const accounts=randomUUID();
+  await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash)VALUES($1,$2,'Accounts','Accounts','isolated-only')",[accounts,accounts+'@test.invalid']);
   const flags={programKey:'UPS:UBL:CHP-163',expectedVersion:2,notes:'Delivered; site not ready for installation.',sites:[{orderNumber:'2/250',reason:'Site not ready for installation',nextAction:'Confirm site readiness and schedule installation',followUpDate:null}]};
   await assert.rejects(flagUpsInstallations(db.pool,operations,flags),/Management approval/);
-  await assert.rejects(upsInstallationAlerts(db.pool,atif),/Management or Operations/);
+  await assert.rejects(upsInstallationAlerts(db.pool,atif),/Management, Operations or Accounts/);
   await assert.rejects(flagUpsInstallations(db.pool,actor,{...flags,expectedVersion:1}),/register changed/);
   await assert.rejects(flagUpsInstallations(db.pool,actor,{...flags,sites:[{...flags.sites[0],orderNumber:'1/250'}]}),/already approved closed/);
   await assert.rejects(flagUpsInstallations(db.pool,actor,{...flags,sites:[{...flags.sites[0],orderNumber:'99/250'}]}),/existing order/);
   assert.equal((await flagUpsInstallations(db.pool,actor,flags)).flagged,1);
   assert.equal((await flagUpsInstallations(db.pool,actor,flags)).unchanged,1);
+  assert.equal((await upsInstallationAlerts(db.pool,accounts)).total,0,'Accounts sees only alerts assigned to Accounts');
   const alerts=await upsInstallationAlerts(db.pool,operations);
   assert.deepEqual(alerts,await upsInstallationAlerts(db.pool,actor));assert.equal(alerts.total,1);assert.equal(alerts.rows[0].orderNumber,'2/250');assert.equal(alerts.rows[0].followUpDate,null);
   assert.ok(!JSON.stringify(alerts).includes('unreviewedCosting'));assert.ok(!JSON.stringify(alerts).includes('sellingExGst'));
@@ -76,6 +79,16 @@ test('Management register is additive, idempotent, source-linked and independent
   assert.equal(flagged.register.rows.find(r=>r.orderNumber==='2/250').status,'Delivered — installation pending');
   assert.deepEqual(flagged.budgeted,completed.budgeted);assert.deepEqual(flagged.actual,completed.actual);
   await assert.rejects(approveUpsRegisterCompletions(db.pool,actor,{...completion,expectedVersion:3,sites:[{...completion.sites[0],orderNumber:'2/250',overridePendingInstallation:true,evidence:[{...completion.sites[0].evidence[0],invoice:'INV-2/250'}]}]}),/unresolved installation alert/);
+  const withDelivery={...flags,expectedVersion:3,sites:[{...flags.sites[0],deliveryDate:'2026-07-11',deliveryDateSource:'Recovery D118'}]};
+  assert.equal((await flagUpsInstallations(db.pool,actor,withDelivery)).updated,1);
+  assert.equal((await flagUpsInstallations(db.pool,actor,withDelivery)).unchanged,1);
+  assert.equal((await upsInstallationAlerts(db.pool,operations)).rows[0].deliveryDate,'2026-07-11');
+  const newRegister={...input('UBL','CHP-998',250)};
+  await importUpsManagementRegister(db.pool,actor,newRegister);
+  const accountsFlag={...flags,programKey:'UPS:UBL:CHP-998',expectedVersion:1,sites:[{...flags.sites[0],status:'Review needed by Accounts',responsibleDepartment:'Accounts',reason:'Conflicting installation evidence: completion date and pending note'},{...flags.sites[0],orderNumber:'1/250',status:'Further information required — documents awaited',responsibleDepartment:'Operations',reason:'Delivery or installation documents awaited; both stages unconfirmed'}]};
+  await flagUpsInstallations(db.pool,actor,accountsFlag);
+  assert.equal((await flagUpsInstallations(db.pool,actor,accountsFlag)).unchanged,2);
+  const accountsAlerts=await upsInstallationAlerts(db.pool,accounts);assert.equal(accountsAlerts.total,1);assert.equal(accountsAlerts.rows[0].status,'Review needed by Accounts');assert.equal(accountsAlerts.rows[0].responsibleDepartment,'Accounts');
   assert.deepEqual(completed.budgeted,ubl.budgeted);assert.deepEqual(await fingerprint(),before,'Historical approvals do not invent IPOs, Accounts reports or actual expenses');
 
  }finally{await db.close();}
@@ -86,5 +99,14 @@ test('Operations boundary permits only the shared read-only alert list',async()=
  const boundary=workflowBoundary({} as any);
  async function check(role:string,method:string,url:string){let passed=false;await boundary({authSession:{user:{role}},method,originalUrl:url} as any,{} as any,()=>{passed=true;});return passed;}
  assert.equal(await check('Operations','GET','/api/director/ups-alerts'),true);
- for(const [role,method,url]of [['Operations','POST','/api/director/ups-alerts'],['Operations','GET','/api/director/ups?customer=UBL'],['Accounts','GET','/api/director/ups-alerts'],['Inventory','GET','/api/director/ups-alerts'],['Design','GET','/api/director/ups-alerts']])await assert.rejects(check(role,method,url),/does not have access/);
+ assert.equal(await check('Accounts','GET','/api/director/ups-alerts'),true);
+ for(const [role,method,url]of [['Operations','POST','/api/director/ups-alerts'],['Accounts','POST','/api/director/ups-alerts'],['Accounts','GET','/api/director/ups?customer=UBL'],['Operations','GET','/api/director/ups?customer=UBL'],['Inventory','GET','/api/director/ups-alerts'],['Design','GET','/api/director/ups-alerts']])await assert.rejects(check(role,method,url),/does not have access/);
+});
+
+
+test('Delivery age uses Karachi calendar days and leaves unknown dates blank',()=>{
+ assert.equal(daysSinceDelivery('2026-07-11',new Date('2026-10-16T20:00:00Z')),98);
+ assert.equal(daysSinceDelivery('2026-07-24',new Date('2026-10-16T20:00:00Z')),85);
+ assert.equal(daysSinceDelivery('2026-10-17',new Date('2026-10-16T20:00:00Z')),0);
+ assert.equal(daysSinceDelivery(null),null);assert.equal(daysSinceDelivery('2099-01-01'),null);
 });
