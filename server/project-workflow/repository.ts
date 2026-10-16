@@ -534,6 +534,7 @@ export class ProjectWorkflowRepository {
         surveyTeam: data.surveyTeam ?? [],
         returnReason: data.returnReason ?? "",
         designHandoffAt: data.designHandoffAt ?? null,
+        reviewDocumentId: data.reviewDocumentId ?? null,
         recipientId: data.recipientId ?? null,
         dispatchVia: data.dispatchVia ?? null,
         salesSendConfirmed: data.salesSendConfirmed ?? false,
@@ -754,6 +755,7 @@ export class ProjectWorkflowRepository {
       review:
         lastReview && r.data.reviewDocumentId === lastReview.id
           ? {
+              notes: lastReview.snapshot.notes ?? "",
               survey: lastReview.snapshot.boq?.survey,
               profile: lastReview.snapshot.boq?.workflowProfile,
               itemSelections: lastReview.snapshot.itemSelections ?? {},
@@ -2450,7 +2452,9 @@ export class ProjectWorkflowRepository {
             r.route === "survey-framework" && !ublSurvey
               ? "approved_dispatch"
               : "design_handed_off";
-          reason = note(input.notes);
+          reason = v.action === "submit-technical-review"
+            ? review.snapshot.notes.trim() || "Technical review submitted to Coordination."
+            : note(input.notes);
         }
       } else if (v.action === "technical-return") {
         this.requireRole(u, ["Coordinator"]);
