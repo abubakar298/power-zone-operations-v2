@@ -8,6 +8,7 @@ export function directorHttp(
 ) {
   const r = Router();
   r.use(requireSession);
+  r.get('/ups-alerts',async(req,res)=>{res.json(await repo.upsInstallationAlerts(req.authSession!.user.id));});
   r.get('/ups',async(req,res)=>{
     const customer=z.enum(['MBL','UBL']).safeParse(req.query.customer);
     if(!customer.success)throw new HttpError(400,'Choose a UPS customer.');

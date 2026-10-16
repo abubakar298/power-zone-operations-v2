@@ -24,6 +24,7 @@ export async function approveUpsRegisterCompletions(pool:Pool,actor:string,raw:u
   for(const s of input.sites){
    if(seen.has(s.orderNumber)||!register.sites.some((r:any)=>r.orderNumber===s.orderNumber))throw new HttpError(422,'Completion must match one existing order position.');
    seen.add(s.orderNumber);
+   if(register.installationAlerts?.[s.orderNumber])throw new HttpError(409,'This site has an unresolved installation alert; installation must be completed before closure.');
    if(!s.overridePendingInstallation&&(!s.completionDate||s.evidence.some(e=>/pend/i.test(e.installationText))))throw new HttpError(422,'Pending installation needs explicit Management override.');
    if(s.evidence.some(e=>!e.invoice.replace(/\s/g,'').endsWith(s.orderNumber)))throw new HttpError(422,'Invoice order number does not match the site.');
   }

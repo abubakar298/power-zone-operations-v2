@@ -1,3 +1,4 @@
+import {UpsAlerts} from '../components/UpsAlerts.js';
 import {ManagementApprovals} from "../components/ManagementApprovals.js";
 import {UpsManagementPortfolio} from "../components/UpsManagementPortfolio.js";
 import {DepartmentViewSwitcher} from "../components/DepartmentViewSwitcher.js";
@@ -99,6 +100,7 @@ export function Dashboard({
     | "ubl"
     | "ubl-ups"
     | "mbl-ups"
+    | "alerts"
     | "bafl-solar"
     | "projects"
     | "documents"
@@ -187,6 +189,7 @@ export function Dashboard({
       | "ubl"
       | "ubl-ups"
       | "mbl-ups"
+      | "alerts"
       | "bafl-solar"
       | "projects"
       | "documents"
@@ -269,6 +272,7 @@ export function Dashboard({
         return;
       }
       if(!departmentUser)setDepartmentView(undefined);
+      if(destination === "alerts" && ["Admin","Management","Operations"].includes(session.user.role)){setView("alerts");return;}
       if (
         destination === "masters" && ["Admin", "Management", "Coordinator"].includes(session.user.role)
       ) { setView("masters"); return; }
@@ -356,6 +360,7 @@ export function Dashboard({
                 ["ubl-ups", "UBL UPS"],
                 ["mbl-ups", "MBL UPS"],
                 ["bafl-solar", "BAFL Solar"],
+                ["alerts", "Alerts"],
               ] as const).map(([destination, label]) => (
                 <button key={destination}
                   className={view === destination ? "nav-active" : ""}
@@ -442,6 +447,7 @@ export function Dashboard({
                   <Icon name="dashboard" />
                   Dashboard
                 </button>
+                {session.user.role === "Operations" && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
 
                 {["Admin", "Management", "Coordinator"].includes(
                   session.user.role,
@@ -629,6 +635,7 @@ export function Dashboard({
                 "ubl-ups",
                 "mbl-ups",
                 "bafl-solar",
+                "alerts",
                 "ubl-workflow",
               ].includes(view)
                 ? (
@@ -642,6 +649,7 @@ export function Dashboard({
                       "ubl-ups": "UBL UPS",
                       "mbl-ups": "MBL UPS",
                       "bafl-solar": "BAFL Solar",
+                      alerts: "Alerts",
                       "ubl-workflow": "UBL Site Workflow",
                     } as Record<string, string>
                   )[view]
@@ -754,6 +762,7 @@ export function Dashboard({
                 "ubl-ups",
                 "mbl-ups",
                 "bafl-solar",
+                "alerts",
                       "ubl-workflow",
                     ].includes(view)
                       ? (
@@ -767,6 +776,7 @@ export function Dashboard({
                       "ubl-ups": "UBL UPS",
                       "mbl-ups": "MBL UPS",
                       "bafl-solar": "BAFL Solar",
+                      alerts: "Alerts",
                             "ubl-workflow": "UBL Site Workflow",
                           } as Record<string, string>
                         )[view]
@@ -809,9 +819,10 @@ export function Dashboard({
                 "ubl-ups",
                 "mbl-ups",
                 "bafl-solar",
+                "alerts",
                       "ubl-workflow",
                     ].includes(view)
-                      ? "Select the relevant customer, site or document to continue your work."
+                      ? view === "alerts" ? "Review sites awaiting action." : "Select the relevant customer, site or document to continue your work."
                       : view === "dashboard"
                         ? session.user.role === "Design"
                           ? "Prepare technical surveys and send them to Coordination."
@@ -1088,6 +1099,7 @@ export function Dashboard({
                   }
                 />
               )}
+              {view === "alerts" && ["Admin","Management","Operations"].includes(session.user.role) && <UpsAlerts/>}
               {view === "ubl-workflow" && <UblWorkflow session={session} />}
               {view === "ubl" &&
                 ["Admin", "Management"].includes(session.user.role) && (

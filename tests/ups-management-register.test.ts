@@ -1,3 +1,4 @@
+import {flagUpsInstallations,upsInstallationAlerts} from '../server/director/ups-alerts.js';
 import {approveUpsRegisterCompletions} from '../server/director/ups-completions.js';
 import {Decimal} from 'decimal.js';
 import {frameworkBasis} from '../server/project-workflow/basis.js';
@@ -57,6 +58,23 @@ test('Management register is additive, idempotent, source-linked and independent
   const completed=await upsPortfolio(db.pool,actor,'UBL');
   assert.equal(completed.register.activeSites,2);assert.equal(completed.register.rows.filter(r=>r.status==='Approved closed').length,1);
   assert.equal(completed.actual.sites,1);assert.equal(completed.actual.sellingExGst,'762711.86');assert.equal(completed.actual.cost,null);assert.equal(completed.actual.markup,null);assert.equal(completed.actual.markupPercent,null);assert.equal(completed.actual.costPending,true);
+  const operations=randomUUID();
+  await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash)VALUES($1,$2,'Operations','Operations','isolated-only')",[operations,operations+'@test.invalid']);
+  const flags={programKey:'UPS:UBL:CHP-163',expectedVersion:2,notes:'Delivered; site not ready for installation.',sites:[{orderNumber:'2/250',reason:'Site not ready for installation',nextAction:'Confirm site readiness and schedule installation',followUpDate:null}]};
+  await assert.rejects(flagUpsInstallations(db.pool,operations,flags),/Management approval/);
+  await assert.rejects(upsInstallationAlerts(db.pool,atif),/Management or Operations/);
+  await assert.rejects(flagUpsInstallations(db.pool,actor,{...flags,expectedVersion:1}),/register changed/);
+  await assert.rejects(flagUpsInstallations(db.pool,actor,{...flags,sites:[{...flags.sites[0],orderNumber:'1/250'}]}),/already approved closed/);
+  await assert.rejects(flagUpsInstallations(db.pool,actor,{...flags,sites:[{...flags.sites[0],orderNumber:'99/250'}]}),/existing order/);
+  assert.equal((await flagUpsInstallations(db.pool,actor,flags)).flagged,1);
+  assert.equal((await flagUpsInstallations(db.pool,actor,flags)).unchanged,1);
+  const alerts=await upsInstallationAlerts(db.pool,operations);
+  assert.deepEqual(alerts,await upsInstallationAlerts(db.pool,actor));assert.equal(alerts.total,1);assert.equal(alerts.rows[0].orderNumber,'2/250');assert.equal(alerts.rows[0].followUpDate,null);
+  assert.ok(!JSON.stringify(alerts).includes('unreviewedCosting'));assert.ok(!JSON.stringify(alerts).includes('sellingExGst'));
+  const flagged=await upsPortfolio(db.pool,actor,'UBL');
+  assert.equal(flagged.register.rows.find(r=>r.orderNumber==='2/250').status,'Delivered — installation pending');
+  assert.deepEqual(flagged.budgeted,completed.budgeted);assert.deepEqual(flagged.actual,completed.actual);
+  await assert.rejects(approveUpsRegisterCompletions(db.pool,actor,{...completion,expectedVersion:3,sites:[{...completion.sites[0],orderNumber:'2/250',overridePendingInstallation:true,evidence:[{...completion.sites[0].evidence[0],invoice:'INV-2/250'}]}]}),/unresolved installation alert/);
   assert.deepEqual(completed.budgeted,ubl.budgeted);assert.deepEqual(await fingerprint(),before,'Historical approvals do not invent IPOs, Accounts reports or actual expenses');
 
  }finally{await db.close();}

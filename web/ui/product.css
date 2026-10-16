@@ -406,3 +406,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pz-department-switcher > .pz-button svg { width:16px; height:16px; }
 .pz-department-switcher-menu { position:absolute; top:calc(100% + 8px); right:0; min-width:220px; max-width:calc(100vw - 32px); padding:8px; display:grid; gap:4px; background:var(--pz-surface); border:1px solid var(--pz-border); border-radius:var(--pz-radius-control,8px); box-shadow:0 10px 35px rgb(0 0 0 / 8%); z-index:110; }
 .pz-department-switcher-menu > .pz-button { width:100%; justify-content:flex-start; text-align:left; white-space:nowrap; }
+
+/* Shared Management / Operations installation alerts. */
+.pz-ups-alerts{align-content:start;gap:var(--pz-space-4)}
+.pz-ups-alerts-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--pz-space-3)}
+.pz-ups-alerts-toolbar .pz-field{flex:1;max-width:500px}
+.pz-ups-alerts .master-table{min-width:900px}
+.pz-ups-alerts p,.pz-ups-alerts h2{margin:0}
