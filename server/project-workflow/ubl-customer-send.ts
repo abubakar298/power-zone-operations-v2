@@ -4,9 +4,13 @@ import {transaction} from '../db/transaction.js';
 import {HttpError} from '../http/errors.js';
 import {fingerprint} from '../boq/repository.js';
 async function packageRecord(repo:any,actor:string,id:string,c=repo.pool){
- const u=await repo.user(actor,c);if(!['Admin','Management'].includes(u.role))throw new HttpError(403,'Management access required.');
+ const u=await repo.user(actor,c);if(!['Admin','Management','Coordinator'].includes(u.role))throw new HttpError(403,'Management or responsible Coordination access required.');
  const pkg=(await c.query('SELECT * FROM ubl_survey_review_packages WHERE id=$1',[id])).rows[0];
  if(!pkg||pkg.status!=='Submitted for Management'||!pkg.snapshot.sites.length)throw new HttpError(404,'Submitted survey package not found.');
+ if(u.role==='Coordinator'){
+  const sites=(await c.query('SELECT coordinator_id,stage,data FROM project_workflow_records WHERE id=ANY($1::uuid[])',[pkg.snapshot.sites.map((s:any)=>s.recordId)])).rows;
+  if(pkg.created_by!==actor||sites.length!==pkg.snapshot.sites.length||sites.some((s:any)=>s.coordinator_id!==actor||s.data.ublSurveyPackageId!==id||s.data.readySendUnbound||!['approved_dispatch','customer_tracking'].includes(s.stage)))throw new HttpError(403,'Only the responsible coordinator can dispatch the complete approved survey group.');
+ }
  const {r}=await repo.record(actor,pkg.snapshot.sites[0].recordId,c);
  return{u,pkg,r};
 }

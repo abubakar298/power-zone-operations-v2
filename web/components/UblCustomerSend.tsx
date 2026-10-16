@@ -9,7 +9,7 @@ export function UblCustomerSend({session,pkg}:{session:Session;pkg:any}){
  const path=`/project-workflow/ubl-survey-packages/${pkg.id}`;
  async function load(){setData(await api<any>(path+'/sending-evidence'));}
  useEffect(()=>{void load().catch(e=>setError(e.message));},[pkg.id]);
- const firstId=pkg.snapshot.sites[0].recordId;
+ const firstId=pkg.firstRecordId??pkg.snapshot.sites[0].recordId;
  return <section className="pz-panel pz-stack">
   <h4>{pkg.snapshot.sites.length > 1 ? 'Group Sending Evidence' : 'Customer Sending Evidence'}</h4>
   <p className="pz-caption">Attach the email or delivery evidence for this report and Excel. One send action marks every site in this package sent together and moves them to Customer Follow-up.</p>
