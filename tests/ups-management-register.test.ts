@@ -138,3 +138,9 @@ test('Historical actuals use the exact saved site cost, sum without duplication 
   assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM internal_purchase_orders')).rows[0].n,0);assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM accounts_job_closures')).rows[0].n,0);
  }finally{await db.close();}
 });
+
+test('issued order outside the historical import remains in progress totals without assumed delivery or completion',()=>{
+ const p={...input('MBL','CHP-338',60),sites:[{orderNumber:'1/60',siteName:'Imported site'}]};
+ const r=upsActiveRegister([{program_key:'UPS:MBL:CHP-338',version:1,snapshot:{managementRegister:p}}],[{id:'real-issued',number:'CHP-338',orderNumber:'20/60',configuration:'6-5',site:'Consumer Hub',issuedAt:'2026-10-17T00:00:00Z'}],['6-5','6-10']);
+ assert.equal(r.activeSites,2);assert.equal(r.programs[0].progressSummary.listedSites,2);assert.equal(r.programs[0].progressSummary.unverified,2);assert.equal(r.programs[0].progressSummary.awaitingDeliveryAgeing.length,0);assert.equal(r.programs[0].progressSummary.completed,0);assert.equal(r.programs[0].remainingSites,58);
+});
