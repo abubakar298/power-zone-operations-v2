@@ -22,7 +22,8 @@
 .pz-ups-receivables-label>strong{white-space:nowrap;font-variant-numeric:tabular-nums}
 .pz-ups-receivables-track{position:relative;display:flex;align-items:center;margin-top:8px;border-radius:8px;background:var(--pz-canvas);min-height:44px}
 .pz-ups-receivables-track>.pz-caption{padding:8px 12px}
-.pz-ups-receivables-segment{height:44px;min-width:0;padding:0;border:1px solid var(--pz-surface);cursor:pointer;flex:none;font-size:var(--pz-text-xs);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.pz-ups-receivables-segment{height:44px;min-width:0;padding:0;border:1px solid var(--pz-surface);cursor:pointer;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:var(--pz-text-xs);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.pz-ups-receivables-segment small{font-size:var(--pz-text-xs);font-weight:400}
 .pz-ups-receivables-segment:first-child{border-radius:8px 0 0 8px}
 .pz-ups-receivables-segment:last-child{border-radius:0 8px 8px 0}
 .pz-ups-receivables-segment[aria-pressed=true]{outline:2px solid var(--pz-focus);outline-offset:2px;z-index:1}
