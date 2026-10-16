@@ -5,23 +5,23 @@ import {UpsDeliveryAgeing} from './UpsDeliveryAgeing.js';
 export function UpsActiveSites({register,children}:{register:any,onPreview:(id:string)=>void,children?:ReactNode,prices?:any[]}){
  const [configuration,setConfiguration]=useState(register.configurations.find((c:any)=>c.activeSites>0)?.configuration??register.configurations[0]?.configuration??'');
  const programs=register.programs.filter((p:any)=>p.configuration===configuration),scoped=register.configurations.find((c:any)=>c.configuration===configuration);
- const isUbl=register.programs.some((p:any)=>p.programKey.startsWith('UPS:UBL:'));
+ const isBank=register.programs.length>0;
  const total=(key:string)=>programs.reduce((n:number,p:any)=>n+(p.progressSummary?.[key]??0),0);
  const agreedSites=programs.reduce((n:number,p:any)=>n+p.totalSites,0);
  const cards=[
-  {label:'Active Sites',count:`${scoped?.activeSites??0}/${agreedSites}`,detail:''},
-  {label:'Completed',count:`${total('completed')}/${scoped?.activeSites??0}`,detail:`Incomplete Sites: ${total('remainingToComplete')}`},
-  {label:'Delivered',count:`${total('delivered')}/${total('remainingToComplete')}`,detail:'Installation pending'},
-  ...(isUbl?[{label:'Installation Pending',count:`${total('installationPending')}/${total('delivered')}`,detail:''}]:total('reviewRequired')?[{label:'Accounts review required',count:total('reviewRequired'),detail:'Installation evidence needs reconciliation'}]:[])
+  {label:'Active Sites',count:`${scoped?.activeSites??0}/${agreedSites}`,detail:isBank?`Pending: ${Math.max(0,agreedSites-(scoped?.activeSites??0))} POs`:''},
+  {label:'Completed',count:`${total('completed')}/${scoped?.activeSites??0}`,detail:isBank?`Completed ${total('completed')} Sites`:`Incomplete Sites: ${total('remainingToComplete')}`},
+  {label:'Delivered',count:`${total('delivered')}/${total('remainingToComplete')}`,detail:isBank?`Pending: ${Math.max(0,total('remainingToComplete')-total('delivered'))} Sites`:'Installation pending'},
+  ...(isBank?[{label:'Installation Pending',count:`${total('installationPending')}/${total('delivered')}`,detail:`Pending: ${total('installationPending')} Sites`}]:total('reviewRequired')?[{label:'Accounts review required',count:total('reviewRequired'),detail:'Installation evidence needs reconciliation'}]:[])
  ];
  return <section className="pz-stack" aria-label="Active UPS sites">
-  <section className={isUbl?'workspace-buckets pz-panel pz-stack':'workspace-buckets pz-stack'} aria-label={isUbl?'Project Summary':'UPS site summary'}>
-  <h3>{isUbl?'Project Summary':configuration==='6-5'?'6 kW + 5 kWh':'6 kW + 10 kWh'}</h3>
-  {isUbl&&<p className="pz-caption">{configuration==='6-5'?'6 kW + 5 kWh':'6 kW + 10 kWh'}</p>}
+  <section className={isBank?'workspace-buckets pz-panel pz-stack':'workspace-buckets pz-stack'} aria-label={isBank?'Project Summary':'UPS site summary'}>
+  <h3>{isBank?'Project Summary':configuration==='6-5'?'6 kW + 5 kWh':'6 kW + 10 kWh'}</h3>
+  {isBank&&<p className="pz-caption">{configuration==='6-5'?'6 kW + 5 kWh':'6 kW + 10 kWh'}</p>}
   {register.configurations.length>1&&<div className="pz-action-row">{register.configurations.map((c:any)=><Button key={c.configuration} variant={configuration===c.configuration?'secondary':'neutral'} aria-pressed={configuration===c.configuration} onClick={()=>setConfiguration(c.configuration)}>{c.configuration==='6-5'?'6 kW + 5 kWh':'6 kW + 10 kWh'}</Button>)}</div>}
   <div className="stage-grid">{cards.map(c=><article className="stage-card" key={c.label}><span style={['Active Sites','Completed','Delivered'].includes(c.label)?{fontSize:'var(--pz-text-lg)'}:undefined}>{c.label}</span><strong>{c.count}</strong>{c.detail&&<small>{c.detail}</small>}</article>)}</div>
   </section>
-  {isUbl&&<section className="pz-panel pz-stack" aria-label="Delivery ageing charts"><div className="pz-ups-ageing-grid">
+  {isBank&&<section className="pz-panel pz-stack" aria-label="Delivery ageing charts"><div className="pz-ups-ageing-grid">
   <UpsDeliveryAgeing key={configuration} rows={programs.flatMap((p:any)=>(p.progressSummary?.deliveryAgeing??[]).map((r:any)=>({...r,id:`${p.programKey}:${r.orderNumber}`})))} asOf={programs[0]?.progressSummary?.deliveryAgeingAsOf}/>
   <UpsDeliveryAgeing key={`${configuration}-awaiting-delivery`} awaitingDelivery rows={programs.flatMap((p:any)=>(p.progressSummary?.awaitingDeliveryAgeing??[]).map((r:any)=>({...r,id:`${p.programKey}:${r.orderNumber}`})))} asOf={programs[0]?.progressSummary?.deliveryAgeingAsOf}/>
   </div></section>}
