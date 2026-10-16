@@ -1,3 +1,4 @@
+import {FileUpload} from '../ui/FileUpload.js';
 import { DepartmentWorkspace } from "./DepartmentWorkspace.js";
 import { Button } from "../ui/Button.js";
 import { UblWorkflow } from "./UblWorkflow.js";
@@ -671,7 +672,7 @@ export function LegacyDesign({ session }: { session: Session }) {
               <legend>3 · Physical survey and notes</legend>
               <label>
                 Completed survey form (PDF, PNG or JPEG; up to 8 MB each)
-                <input
+                <FileUpload attachments={uploads.map(u=>({...u,url:`/api/design/uploads/${u.id}`}))} onRemoveAttachment={file=>setUploads(old=>old.filter(u=>u.id!==file.id))}
                   type="file"
                   accept="application/pdf,image/png,image/jpeg"
                   onChange={(e) => {
@@ -680,24 +681,6 @@ export function LegacyDesign({ session }: { session: Session }) {
                   }}
                 />
               </label>
-              <ul>
-                {uploads.map((u) => (
-                  <li key={u.id}>
-                    <a href={`/api/design/uploads/${u.id}`}>{u.filename}</a>
-                    {!locked && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          setUploads((old) => old.filter((a) => a.id !== u.id))
-                        }
-                      >
-                        Remove {u.filename}
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
               <label>
                 Technical notes
                 <textarea

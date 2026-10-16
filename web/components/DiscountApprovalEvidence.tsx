@@ -1,3 +1,4 @@
+import {FileUpload} from '../ui/FileUpload.js';
 import {useState} from 'react';
 import {api,type Session} from '../api.js';
 import {Button} from '../ui/Button.js';
@@ -14,5 +15,5 @@ export function DiscountApprovalEvidence({session,files,onChange}:{session:Sessi
    onChange([...files,attachment]);
   }catch(e){setError(e instanceof Error?e.message:'Upload failed. Try again.');}finally{setBusy(false);}
  }
- return <div className="pz-discount-evidence"><label className="pz-discount-upload">Attach Management discount approval<input type="file" accept="application/pdf,image/png,image/jpeg,text/plain" disabled={busy} onChange={e=>{void upload(e.target.files?.[0]);e.target.value='';}}/></label><small>PDF, PNG, JPEG or text · Up to 10 files · 8 MB per file.</small>{busy&&<p role="status">Uploading approval evidence…</p>}{error&&<p role="alert" className="form-error">{error}</p>}{files.map(file=><div className="pz-discount-file" key={file.id}><a href={`/api/boqs/uploads/${file.id}`} target="_blank" rel="noreferrer">{file.filename}</a><Button disabled={busy} onClick={()=>onChange(files.filter(other=>other.id!==file.id))}>Remove</Button></div>)}<small>Evidence is linked when sent to Management. Uploading does not record approval.</small></div>;
+ return <div className="pz-discount-evidence"><label className="pz-discount-upload">Attach Management discount approval<FileUpload attachments={files} onRemoveAttachment={file=>onChange(files.filter(other=>other.id!==file.id))} type="file" accept="application/pdf,image/png,image/jpeg,text/plain" disabled={busy} onChange={e=>{void upload(e.target.files?.[0]);e.target.value='';}}/></label><small>PDF, PNG, JPEG or text · Up to 10 files · 8 MB per file.</small>{busy&&<p role="status">Uploading approval evidence…</p>}{error&&<p role="alert" className="form-error">{error}</p>}<small>Evidence is linked when sent to Management. Uploading does not record approval.</small></div>;
 }

@@ -57,6 +57,8 @@ export class OrdersRepository {
     if (!row) throw new HttpError(404, "Quotation customer not found.");
     return {
       customerName: row.name,
+      customerNtn: row.ntn ?? "",
+      customerStrn: row.strn ?? "",
       invoiceCompany: row.sale_type === "Cash Deal" ? "Energy Solutions" : "PZES (PVT Ltd)",
       quotationType: { presentation: row.presentation, taxMode: row.tax_mode,saleType:row.sale_type,cashGstTreatment:row.cash_gst_treatment },
       contactPerson: row.contact_person || row.name,

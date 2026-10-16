@@ -78,7 +78,7 @@ test("customer tax references retain leading zeros and survive edits from older 
 });
 test("reviewed import preserves all IDs, names, codes, site zeros, rates, statuses and rules", async () => {
   const source = JSON.parse(
-    await readFile("data/reference-masters.json", "utf8"),
+    await readFile(new URL("./fixtures/reference-masters.json", import.meta.url), "utf8"),
   );
   const { body } = await request(app)
     .get("/api/masters")

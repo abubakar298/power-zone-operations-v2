@@ -7,6 +7,8 @@ import { transaction } from "../db/transaction.js";
 import { HttpError } from "../http/errors.js";
 import { fingerprint } from "../boq/repository.js";
 import type { IssuanceInput, DeliveryPlanInput } from "./schema.js";
+const visibleOperations = `(SELECT source.* FROM operations_boq_issuances source WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? source.id::text))`;
+const visibleIpos = `(SELECT source.* FROM internal_purchase_orders source WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? source.id::text))`;
 export class OperationsRepository {
   constructor(private pool: Pool) {}
   async withQuotationTypes(rows: any[]) {
@@ -19,19 +21,19 @@ export class OperationsRepository {
     const role = actor ? (await this.pool.query("SELECT role FROM users WHERE id=$1", [actor])).rows[0]?.role : undefined;
     const rows = (
       await this.pool.query(
-        `SELECT o.*,p.id AS delivery_plan_id,p.version AS delivery_plan_version,p.details AS delivery,s.id AS store_issuance_id,s.number AS store_number,s.created_at AS sent_to_store_at FROM operations_boq_issuances o LEFT JOIN LATERAL(SELECT * FROM operations_delivery_plans WHERE issuance_id=o.id ORDER BY version DESC LIMIT 1)p ON true LEFT JOIN store_boq_issuances s ON s.issuance_id=o.id ${role === "Coordinator" ? `WHERE ${ownedCondition("issuance", "o.id", "$1")}` : ""} ORDER BY o.created_at DESC LIMIT 500`,
+        `SELECT o.*,p.id AS delivery_plan_id,p.version AS delivery_plan_version,p.details AS delivery,s.id AS store_issuance_id,s.number AS store_number,s.created_at AS sent_to_store_at FROM ${visibleOperations} o LEFT JOIN LATERAL(SELECT * FROM operations_delivery_plans WHERE issuance_id=o.id ORDER BY version DESC LIMIT 1)p ON true LEFT JOIN store_boq_issuances s ON s.issuance_id=o.id ${role === "Coordinator" ? `WHERE ${ownedCondition("issuance", "o.id", "$1")}` : ""} ORDER BY o.created_at DESC LIMIT 500`,
         role === "Coordinator" ? [actor] : [],
       )
     ).rows;
     const ipos = (
       await this.pool.query(
-        `SELECT i.id,i.number,i.created_at,i.snapshot->>'quotationNumber' AS quotation_number,i.snapshot->'customer'->>'name' AS customer,i.snapshot->>'siteName' AS site,o.id AS issuance_id FROM internal_purchase_orders i LEFT JOIN operations_boq_issuances o ON o.ipo_id=i.id ${role === "Coordinator" ? `WHERE ${ownedCondition("ipo", "i.id", "$1")}` : role === "Operations" ? "WHERE o.id IS NOT NULL" : ""} ORDER BY i.created_at DESC LIMIT 500`,
+        `SELECT i.id,i.number,i.created_at,i.snapshot->>'quotationNumber' AS quotation_number,i.snapshot->'customer'->>'name' AS customer,i.snapshot->>'siteName' AS site,o.id AS issuance_id FROM ${visibleIpos} i LEFT JOIN ${visibleOperations} o ON o.ipo_id=i.id ${role === "Coordinator" ? `WHERE ${ownedCondition("ipo", "i.id", "$1")}` : role === "Operations" ? "WHERE o.id IS NOT NULL" : ""} ORDER BY i.created_at DESC LIMIT 500`,
         role === "Coordinator" ? [actor] : [],
       )
     ).rows;
     const demand = (
       await this.pool.query(
-        `SELECT d.item_key,d.brand,d.specification,d.unit,SUM(d.quantity)::text AS required_quantity,SUM(CASE WHEN s.id IS NULL THEN d.quantity ELSE 0 END)::text AS awaiting_store_quantity,SUM(CASE WHEN s.id IS NOT NULL THEN d.quantity ELSE 0 END)::text AS sent_to_store_quantity,COUNT(DISTINCT d.issuance_id)::integer AS sites FROM operations_stock_demand d LEFT JOIN store_boq_issuances s ON s.issuance_id=d.issuance_id ${role === "Coordinator" ? `WHERE ${ownedCondition("issuance", "d.issuance_id", "$1")}` : ""} GROUP BY d.item_key,d.brand,d.specification,d.unit ORDER BY d.item_key,d.brand`,
+        `SELECT d.item_key,d.brand,d.specification,d.unit,SUM(d.quantity)::text AS required_quantity,SUM(CASE WHEN s.id IS NULL THEN d.quantity ELSE 0 END)::text AS awaiting_store_quantity,SUM(CASE WHEN s.id IS NOT NULL THEN d.quantity ELSE 0 END)::text AS sent_to_store_quantity,COUNT(DISTINCT d.issuance_id)::integer AS sites FROM operations_stock_demand d JOIN ${visibleOperations} active_issuance ON active_issuance.id=d.issuance_id LEFT JOIN store_boq_issuances s ON s.issuance_id=d.issuance_id ${role === "Coordinator" ? `WHERE ${ownedCondition("issuance", "d.issuance_id", "$1")}` : ""} GROUP BY d.item_key,d.brand,d.specification,d.unit ORDER BY d.item_key,d.brand`,
         role === "Coordinator" ? [actor] : [],
       )
     ).rows;
@@ -164,7 +166,7 @@ export class OperationsRepository {
   async list(actor?: string) {
     const rows = (
       await this.pool.query(
-        `SELECT o.* FROM operations_boq_issuances o ${actor ? `WHERE (${ownedCondition("issuance", "o.id", "$1")} OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role='Operations'))` : ""} ORDER BY o.created_at DESC LIMIT 200`,
+        `SELECT o.* FROM ${visibleOperations} o ${actor ? `WHERE (${ownedCondition("issuance", "o.id", "$1")} OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role='Operations'))` : ""} ORDER BY o.created_at DESC LIMIT 200`,
         actor ? [actor] : [],
       )
     ).rows;

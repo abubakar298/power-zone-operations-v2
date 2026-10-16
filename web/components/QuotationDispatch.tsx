@@ -1,3 +1,4 @@
+import {FileUpload} from '../ui/FileUpload.js';
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
 import { Button } from "../ui/Button.js";
@@ -82,9 +83,8 @@ export function QuotationDispatch({
               onChange={(e) => setNotes(e.target.value)}
             />
           </Field>
-          <Field id="dispatch-evidence" label="Dispatch evidence" hint="PDF, PNG or JPEG · maximum 8 MB"><input id="dispatch-evidence" type="file" accept="application/pdf,image/png,image/jpeg" onChange={e=>setFile(e.target.files?.[0])}/></Field>
+          <Field id="dispatch-evidence" label="Dispatch evidence" hint="PDF, PNG or JPEG · maximum 8 MB"><FileUpload selectedFiles={file?[file]:[]} attachments={uploads} onRemoveAttachment={attachment=>setUploads(old=>old.filter(f=>f.id!==attachment.id))} onClear={()=>setFile(undefined)} id="dispatch-evidence" type="file" accept="application/pdf,image/png,image/jpeg" onChange={e=>setFile(e.target.files?.[0])}/></Field>
           <Button variant="secondary" disabled={!file||busy||uploads.length>=10} onClick={async()=>{setBusy(true);setError('');try{if(!file||file.size>8388608)throw Error('Choose a file up to 8 MB.');const base64=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});const saved=await api<{id:string;filename:string}>('/survey-uploads',{csrf:session.csrfToken,body:{filename:file.name,mime:file.type,base64}});setUploads(old=>[...old,saved]);setFile(undefined);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>Upload Dispatch Evidence</Button>
-          {uploads.length>0&&<p role="status">Attached: {uploads.map(u=>u.filename).join(', ')}</p>}
           <label>
             <input
               type="checkbox"

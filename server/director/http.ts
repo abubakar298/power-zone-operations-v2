@@ -8,6 +8,11 @@ export function directorHttp(
 ) {
   const r = Router();
   r.use(requireSession);
+  r.get('/ups',async(req,res)=>{
+    const customer=z.enum(['MBL','UBL']).safeParse(req.query.customer);
+    if(!customer.success)throw new HttpError(400,'Choose a UPS customer.');
+    res.json(await repo.upsPortfolio(req.authSession!.user.id,customer.data));
+  });
   r.get("/portfolio", async (req, res) => {
     const v = z.coerce.number().int().min(0).safeParse(req.query.customerId);
     if (req.query.customerId !== undefined && !v.success)

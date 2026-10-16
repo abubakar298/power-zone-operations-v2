@@ -8,3 +8,14 @@ test('UBL configuration flag excludes whole-panel rounding and flags material PV
  assert.equal(ublConfigurationReview({...survey,batteryKwh:40},approved).needsReview,true);
  assert.equal(ublConfigurationReview({panelWattage:'620',panelQty:56,inverter:'2×15 kW',batteryKwh:40},{pvWatts:'35000',solutionId:'35-30-40'}).needsReview,false);
 });
+
+test('UBL panel rounding uses nearest whole panel and prefers the lower count on an exact tie',()=>{
+ const s={panelWattage:'620',inverter:'20 kW',batteryKwh:30};
+ const approved={pvWatts:'20000',solutionId:'20-20-30'};
+ assert.equal(ublConfigurationReview({...s,panelQty:31},approved).needsReview,true);
+ assert.equal(ublConfigurationReview({...s,panelQty:33},approved).needsReview,true);
+ assert.equal(ublConfigurationReview({...s,panelQty:32},approved).needsReview,false);
+ assert.equal(ublConfigurationReview({...s,panelQty:32},{...approved,pvWatts:'20150'}).needsReview,false);
+ assert.equal(ublConfigurationReview({...s,panelQty:33},{...approved,pvWatts:'20150'}).needsReview,true);
+ assert.equal(ublConfigurationReview({...s,panelQty:33},{...approved,pvWatts:'20300'}).needsReview,false);
+});

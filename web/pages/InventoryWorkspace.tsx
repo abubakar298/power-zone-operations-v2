@@ -1,3 +1,4 @@
+import {FileUpload} from '../ui/FileUpload.js';
 import { jobLabel } from "../components/job-label.js";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.js";
 import { useEffect, useState } from "react";
@@ -769,7 +770,7 @@ export function InventoryWorkspace({
                 label="Installation report / evidence"
                 hint="Attach the signed installation report. PDF, PNG or JPEG; 8 MB maximum. A draft is saved automatically when needed."
               >
-                <input
+                <FileUpload
                   id="irr-file"
                   type="file"
                   accept="application/pdf,image/png,image/jpeg"

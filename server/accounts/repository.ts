@@ -144,9 +144,40 @@ export class AccountsRepository {
       )
     ).rows;
     const a = i.snapshot.allocation;
-    const approved = q?.snapshot.footer?.find(
+    let approved = q?.snapshot.footer?.find(
       (f: any) => f.label === "Net Total",
     )?.amount;
+    let agreement: any;
+    let agreementAmountsMatch = false;
+    // Read the immutable authorisation behind this exact issuance, never current rates.
+    if (!q && i.snapshot.approvedCommercialSource?.type === "framework") {
+      const saved = (await this.pool.query(
+        `SELECT d.authorised_basis AS basis,f.id,f.configuration_key,f.version,f.source_reference,f.payload,
+                r.customer_id,p.customer_id AS po_customer
+         FROM project_workflow_issuances w
+         JOIN project_order_decisions d ON d.id=w.decision_id AND d.receipt_id=w.receipt_id AND d.record_id=w.record_id
+         JOIN project_workflow_records r ON r.id=w.record_id
+         JOIN project_po_receipts p ON p.id=w.receipt_id
+         JOIN project_framework_versions f ON f.id::text=d.authorised_basis->'source'->>'id' AND f.customer_id=r.customer_id
+         WHERE w.ipo_id=$1 AND d.outcome IN('Matched','Approved exception')`, [id],
+      )).rows[0];
+      const source = i.snapshot.approvedCommercialSource;
+      if (saved && saved.basis.source.type === "framework" && saved.id === source.id &&
+          saved.version === source.version && saved.configuration_key === source.key &&
+          saved.customer_id === saved.po_customer && saved.customer_id === i.snapshot.customer?.id) {
+        const allocation = saved.basis.order?.allocation;
+        const fixedPrice = saved.payload.type === "bank-ups" ? saved.payload.profile?.sellingPriceInclusiveTaxPkr : undefined;
+        if (allocation && (!fixedPrice || D(fixedPrice).eq(allocation.total))) {
+          approved = allocation.total;
+          agreement = {id:saved.id,number:saved.configuration_key,version:saved.version,
+            reference:saved.source_reference,terms:saved.basis.comparison?.terms,
+            lines:allocation.lines.map((l:any)=>({description:l.description,amount:l.total})),
+            total:allocation.total};
+          agreementAmountsMatch = allocation.lines.length === a.lines.length && allocation.lines.every((line:any,n:number)=>
+            ["qty","beforeTax","taxRate","tax","total","allocatedDiscount"].every(key=>D(line[key]).eq(a.lines[n][key])));
+        }
+      }
+    }
     const sum = (field: string) =>
       a.lines.reduce((s: Decimal, l: any) => s.add(l[field]), D("0"));
     const reconciles =
@@ -156,10 +187,16 @@ export class AccountsRepository {
       sum("allocatedDiscount").eq(a.originalDiscount) &&
       a.lines
         .filter((l: any) => l.taxRate === "10")
-        .every((l: any) => D(l.allocatedDiscount).isZero());
+        .every((l: any) => D(l.allocatedDiscount).isZero()) &&
+      (!agreement || (agreementAmountsMatch && sum("beforeTax").eq(a.subtotal) && sum("tax").eq(a.tax) &&
+        D(a.subtotal).add(a.tax).eq(a.total) &&
+        !!i.snapshot.peachtree?.phases && i.snapshot.peachtree.phases.reduce((s:Decimal,p:any)=>s.add(p.amount),D("0")).eq(i.snapshot.peachtree.taxMode === "Tax Included" ? a.total : a.subtotal) &&
+        D(i.snapshot.peachtree.ipoPayable).eq(a.total)));
     return {
       ipo: i,
       quotation: q,
+      agreement,
+      approvedBasisLabel: agreement ? "approved agreement" : "approved quotation",
       history: h,
       reconciles,
       saleType:
@@ -172,7 +209,7 @@ export class AccountsRepository {
           } as Record<string, string>
         )[q?.family] ??
         q?.family ??
-        "Project Sale",
+        (agreement ? "Pre-agreed Direct PO" : "Project Sale"),
     };
   }
   async review(
@@ -190,7 +227,7 @@ export class AccountsRepository {
     if (input.decision === "Verified" && !comp.reconciles)
       throw new HttpError(
         409,
-        "IPO and approved quotation do not reconcile. Return for revision.",
+        "IPO and " + comp.approvedBasisLabel + " do not reconcile. Return for revision.",
       );
     return transaction(this.pool, async (c) => {
       await this.access(actor, c);
@@ -234,6 +271,9 @@ export class AccountsRepository {
             {
               request: input,
               quotationId: comp.quotation?.id,
+              agreementId: comp.agreement?.id,
+              agreementVersion: comp.agreement?.version,
+              approvedBasisLabel: comp.approvedBasisLabel,
               ipoNumber: comp.ipo.number,
               reconciles: comp.reconciles,
             },

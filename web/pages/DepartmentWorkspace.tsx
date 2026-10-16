@@ -1,4 +1,6 @@
+import {FileUpload} from '../ui/FileUpload.js';
 import {DocumentListDetails} from '../components/DocumentListDetails.js';
+import {roundedSurveyCableMetres} from "../../shared/survey-cables.js";
 import {DirectPo} from "../components/DirectPoUpload.js";
 import { IposSharedList, IpoSharedPreview } from "../components/IposSharedList.js";
 import {QuotationApproval} from "../components/QuotationApproval.js";
@@ -365,7 +367,7 @@ export function DepartmentWorkspace({
       .catch((e) => setError(e.message));
     const pendingPage = sessionStorage.getItem("pz:department-page");
     if (pendingPage) {
-      setPage(pendingPage);
+      if(pendingPage==='Direct PO'){setPage(coordinationBuckets[6]);setCreating('Direct PO');}else setPage(pendingPage);
       sessionStorage.removeItem("pz:department-page");
     }
     const reload = () => {
@@ -383,7 +385,7 @@ export function DepartmentWorkspace({
       setCreating(undefined);
       setSelectedDispatch(undefined);
       setDispatchPlanning(false);
-      setPage(e.detail ?? "Workspace");
+      if(e.detail==='Direct PO'){setPage(coordinationBuckets[6]);setCreating('Direct PO');}else setPage(e.detail ?? 'Workspace');
     };
     window.addEventListener("pz:department-page", handle);
     return () => {
@@ -2214,7 +2216,7 @@ function Upload({
           label="Attachment"
           hint="PDF, PNG or JPEG · maximum 8 MB"
         >
-          <input
+          <FileUpload selectedFiles={file?[file]:[]} onClear={()=>setFile(undefined)}
             id={`evidence-file-${id}`}
             type="file"
             accept="application/pdf,image/png,image/jpeg"
@@ -2349,7 +2351,7 @@ function SurveyAttachmentGroup({
         label={pictures ? "Site pictures" : "Survey report files"}
         hint={`${existing.length}/10 files saved · maximum 8 MB per file`}
       >
-        <input
+        <FileUpload selectedFiles={selected} onClear={()=>setSelected([])}
           ref={input}
           id={`survey-upload-${id}-${pictures ? "photos" : "report"}`}
           type="file"
@@ -4587,6 +4589,11 @@ function standardSurveySaveInput(
     survey.spLoadPanelRunMetres = String(
       Number(f.get("spLoadPanelTotalMetres")) / 2,
     );
+  if(detail.record.customerCode?.toUpperCase()==='UBL'&&detail.record.route==='survey-framework') {
+    for(const key of ['dcMetres','acInverter16','acInverter25','acPanel16','acPanel25','earth25','earth6','earth10','spInverterTerminationMetres','spLoadPanelRunMetres']) {
+      if(survey[key]!=null&&survey[key]!=='')survey[key]=roundedSurveyCableMetres(key,survey[key]);
+    }
+  }
   const master = detail.masterReview;
   const masterDetails = {
     customerName: master.customer.name,
@@ -5905,4 +5912,3 @@ function PoRecordSelect({ session, customers, onOpen, onCancel }: any) {
     </section>
   );
 }
-

@@ -1,3 +1,4 @@
+import {FileUpload} from '../ui/FileUpload.js';
 import { displayUnit } from "../../server/boq/unit.js";
 import{downloadName,filenameFromDisposition}from'../../shared/download-name.js';
 import { DocumentPreview } from "../components/DocumentPreview.js";
@@ -160,11 +161,9 @@ export function Orders({
   ];
   function renderField([field, label]: [keyof OrderInput, string]) {
     if (
-      ["poNumber", "customerNtn", "customerStrn"].includes(field) &&
+      field === "poNumber" &&
       input.evidenceType !== "Customer PO"
     )
-      return null;
-    if (["customerNtn", "customerStrn"].includes(field) && !document)
       return null;
     return (
       <label key={field}>
@@ -335,8 +334,6 @@ export function Orders({
                     change("evidenceType", e.target.value);
                     setInput((v) => ({
                       ...v,
-                      customerNtn: "",
-                      customerStrn: "",
                       poNumber: "",
                       orderDate:
                         e.target.value === "Customer PO"
@@ -393,7 +390,7 @@ export function Orders({
                   ? "Customer PO document"
                   : "Sale approval attachment"}{" "}
                 (PDF, PNG or JPEG; up to 8 MB)
-                <input
+                <FileUpload attachments={document?[document]:undefined} onRemoveAttachment={()=>{setDocument(undefined);change('documentId','');setExtraction('');}} onClear={()=>{setDocument(undefined);change('documentId','');setExtraction('');}}
                   type="file"
                   accept="application/pdf,image/png,image/jpeg"
                   onChange={(e) => {

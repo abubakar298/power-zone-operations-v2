@@ -7,6 +7,7 @@ export function ublPoSuggestions(text: string) {
   const payable=unique(/^\s*Net\s+Payable\s*[:=]?\s*([0-9][0-9,]*(?:\.\d+)?)\s*(?:PKR|Rs\.?)?\s*$/gim);
   const printedTax=unique(/^\s*Sales\s+Tax\s*[:=]?\s*([0-9][0-9,]*(?:\.\d+)?)\s*$/gim);
   const headers=[...text.matchAll(/\bPO\s+ID\s+PO\s+Date\s*\n\s*(POF\d+)\s+(\d{2})\/(\d{2})\/(\d{2}|\d{4})\b/gi)];
+  headers.push(...text.matchAll(/\bPO\s+ID\s*[:=]?\s*(POF\d+)\s+PO\s+Date\s*[:=]?\s*(\d{2})\/(\d{2})\/(\d{2}|\d{4})\b/gi));
   let poNumber="",orderDate="";
   if(headers.length===1){const m=headers[0];poNumber=m[1];const year=m[4].length===2?`20${m[4]}`:m[4];const iso=`${year}-${m[3]}-${m[2]}`;if(!Number.isNaN(Date.parse(iso))&&new Date(iso).toISOString().slice(0,10)===iso)orderDate=iso;}
   return {total:total||payable,printedTax,taxInclusive:/Prices\s+are\s+inclusive\s+of\s+(?:all\s+)?(?:applicable\s+)?Taxes\b/i.test(text),poNumber,orderDate};

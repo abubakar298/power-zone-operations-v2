@@ -26,6 +26,9 @@ test("C&I standard/revision/discount workflow, immutable history and departmenta
  await request(app).post("/api/cni").set("Cookie",users.Coordinator.cookie).set("Origin",origin).send(base).expect(403);
  const saved=(await post("/",base).expect(201)).body;
  assert.equal(saved.snapshot.pdfTemplate,"PHOTON-APPROVED-1");
+ assert.equal(saved.snapshot.commercialItem.itemId,"CH-CNI-125-261");
+ assert.equal(saved.snapshot.commercialItem.description,"Chint Power Cabinet");
+ assert.equal(saved.snapshot.commercialItem.version,1);
  const pending=await cniTasks();assert.equal(pending.length,1);assert.equal(pending[0].id,saved.id);assert.equal(pending[0].stage,"Quotation approval");assert.equal(pending[0].target,"quotes");assert.equal(pending[0].customer,saved.snapshot.customer.name);
  assert.equal((await cniTasks("OtherCoordinator")).length,0);
  for(const role of ["Management","Admin"])assert.equal((await cniTasks(role,true))[0].id,saved.id);

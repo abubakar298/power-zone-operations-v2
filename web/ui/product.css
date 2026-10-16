@@ -338,5 +338,66 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pz-customer-edit .pz-field small[data-empty=true]{display:none;}
 .pz-customer-edit .pz-field:has(#edit-customer-reason){grid-column:1/-1;}
 
+/* Director-approved Direct PO field alignment; presentation only. */
+.pz-direct-po-fields{border:0;padding:0;margin:0;min-width:0;width:100%;gap:16px 24px;}
+.pz-direct-po-fields>.pz-field{grid-row:auto;grid-template-rows:auto var(--pz-control-height) auto;align-content:start;}
+.pz-direct-po-fields>.pz-field:has(input[data-wide]){grid-column:1/-1;}
+.pz-direct-po-fields .pz-field input{box-sizing:border-box;min-width:0;height:var(--pz-control-height);font:inherit;font-size:var(--pz-text-sm);font-weight:400;}
+.pz-direct-po-fields small[data-empty=true]{display:none;}
+
+/* Director-approved upload control: fixed picker, compact removable filenames. */
+.pz-file-upload{display:flex;align-items:flex-start;gap:8px;min-width:0;max-width:100%;font-size:13px;line-height:1.5}
+.pz-file-upload input.pz-file-upload__input{position:absolute!important;width:1px!important;height:1px!important;min-height:0!important;padding:0!important;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none}
+.pz-file-upload:focus-within .pz-file-upload__choose{outline:2px solid var(--pz-focus);outline-offset:2px}
+.pz-file-upload .pz-file-upload__choose{flex:0 0 auto;font-size:inherit;white-space:nowrap}
+.pz-file-upload__files{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0;min-height:44px;flex:1}
+.pz-file-upload__file{display:inline-flex;align-items:center;max-width:min(100%,180px);min-width:0;height:44px;border:1px solid var(--pz-border);border-radius:8px;background:var(--pz-surface);font-size:inherit}
+.pz-file-upload__name{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;padding-left:10px;font:inherit;color:var(--pz-text)}
+.pz-file-upload .pz-file-upload__remove{flex:0 0 44px;min-width:44px;padding:0;border:0;background:transparent;font-size:18px;border-radius:8px}
+.pz-file-upload__empty{color:var(--pz-muted);font-size:inherit}
+.pz-direct-po-upload-row{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:700px){.pz-direct-po-upload-row{grid-template-columns:1fr}}
+
 .pz-commercial-description-input{display:block;width:100%;min-width:280px;min-height:88px;resize:vertical;font:inherit;line-height:1.5;padding:10px;border:1px solid var(--pz-border);border-radius:var(--pz-radius-control);background:var(--pz-surface);color:var(--pz-text)}
 
+.order-fields>.pz-field-wide{grid-column:1/-1;min-width:0}.order-fields>.pz-field-wide>label{display:grid;gap:6px;font-size:13px;font-weight:600}
+
+/* Evidence picker stays left; explicit upload action aligns with the right margin. */
+.pz-direct-po-evidence-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto auto;gap:8px 24px;align-items:start;min-width:0}
+.pz-direct-po-evidence-row>.pz-field{grid-row:1/span 3;grid-template-rows:subgrid;min-width:0}
+.pz-direct-po-evidence-row>.pz-direct-po-upload-action{grid-column:2;grid-row:2}
+@media(max-width:700px){.pz-direct-po-evidence-row{column-gap:12px}}
+
+/* Direct PO uses one aligned edge and compact section/field spacing. */
+.pz-direct-po-form>h2{margin:0}
+.pz-direct-po-form>.pz-form-grid{row-gap:16px}
+.pz-direct-po-details{padding:20px;border:1px solid var(--pz-border);border-radius:var(--pz-radius-control);gap:16px}
+.pz-direct-po-details-heading h3{margin:0 0 6px;font-size:16px;line-height:1.5}
+.pz-direct-po-details-heading p,.pz-direct-po-details>.pz-direct-po-configuration{margin:0;text-align:left;color:var(--pz-muted);font-size:13px;line-height:1.5}
+.pz-direct-po-details>.pz-direct-po-fields{border:0;padding:0;margin:0;min-width:0;gap:16px 24px}
+.pz-direct-po-details .pz-direct-po-fields>.pz-field{row-gap:6px}
+@media(max-width:700px){.pz-direct-po-details{padding:16px}}
+/* Document preview disclosure: native keyboard behavior with a consistent chevron. */
+.pz-document-review{border:1px solid var(--pz-border);border-radius:var(--pz-radius-control);overflow:hidden;background:var(--pz-surface)}
+.pz-document-review>summary{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:48px;padding:12px 16px;cursor:pointer;list-style:none;color:var(--pz-text);font-size:14px;font-weight:600;background:var(--pz-surface)}
+.pz-document-review>summary::-webkit-details-marker{display:none}
+.pz-document-review>summary::marker{content:""}
+.pz-document-review>summary:hover,.pz-document-review[open]>summary{background:var(--pz-selected-bg)}
+.pz-document-review>summary:focus-visible{outline:2px solid var(--pz-focus);outline-offset:-3px}
+.pz-document-review>summary>svg{flex:none;color:var(--pz-primary);transition:transform .15s ease}
+.pz-document-review[open]>summary>svg{transform:rotate(180deg)}
+.pz-document-review[open]>summary{border-bottom:1px solid var(--pz-border)}
+@media(prefers-reduced-motion:reduce){.pz-document-review>summary>svg{transition:none}}
+.pz-document-review-note{align-self:stretch;text-align:left!important;margin-inline:0}
+.pz-ups-note{margin:0;text-align:left}
+.pz-ups-totals{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.pz-ups-totals>div{display:grid;gap:8px;padding:16px;border:1px solid var(--pz-border);border-radius:var(--pz-radius-control);background:var(--pz-surface)}
+.pz-ups-totals span{font-size:12px;color:var(--pz-muted)}
+.pz-ups-totals strong{font-size:16px;font-variant-numeric:tabular-nums}
+.pz-ups-toolbar{display:flex;align-items:end;gap:16px}.pz-ups-toolbar>.pz-field{flex:1}
+.pz-ups-orders{width:100%;border-collapse:collapse;font-size:13px}.pz-ups-orders th,.pz-ups-orders td{padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--pz-border)}
+.pz-ups-orders .numeric{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pz-ups-download{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 16px;border:1px solid var(--pz-border);border-radius:var(--pz-radius-control);color:var(--pz-secondary-text);background:var(--pz-secondary-bg);text-decoration:none}
+.pz-ups-download:focus-visible{outline:2px solid var(--pz-focus);outline-offset:2px}
+@media(max-width:1000px){.pz-ups-totals{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.pz-ups-toolbar{align-items:stretch;flex-direction:column}.pz-ups-totals{grid-template-columns:1fr}}

@@ -27,6 +27,8 @@ const columns: Record<Kind, [string, string][]> = {
     ["short_code", "Short code"],
     ["contact_person", "Contact"],
     ["phone", "Phone"],
+    ["ntn", "NTN"],
+    ["strn", "STRN"],
     ["city", "City"],
     ["province", "Province"],
     ["status", "Status"],
@@ -75,6 +77,8 @@ const fields: Record<Kind, string[]> = {
     "contact_person",
     "phone",
     "email",
+    "ntn",
+    "strn",
     "address",
     "city",
     "province",
@@ -93,6 +97,8 @@ const labels: Record<string, string> = {
   contact_person: "Contact person",
   phone: "Phone",
   email: "Email",
+  ntn: "Customer NTN",
+  strn: "Customer STRN",
   address: "Address",
   city: "City",
   province: "Province",
@@ -544,7 +550,7 @@ export function Masters({
                       maxLength={
                         field === "short_code" || field === "code"
                           ? 30
-                          : field === "phone"
+                          : ["phone", "ntn", "strn"].includes(field)
                             ? 100
                             : field === "email"
                               ? 254

@@ -8,9 +8,11 @@ export const orderBasisInputSchema = z
       "Customer PO",
       "Written approval",
       "WhatsApp approval",
+      "Email approval",
       "Verbal sale confirmation",
     ]),
     evidenceNotes: z.string().trim().min(1).max(2000),
+    orderNumber: z.string().trim().max(100).default(""),
     poNumber: z.string().trim().max(100).default(""),
     orderDate: z.iso.date(),
     deliveryDate: optional,
@@ -50,15 +52,7 @@ export const orderBasisInputSchema = z
         message:
           "Delivery details must be entered by Operations after BOQ receipt.",
       });
-    if (
-      v.entryVersion === 2 &&
-      (v.customerNtn || v.customerStrn) &&
-      (v.evidenceType !== "Customer PO" || !v.documentId)
-    )
-      c.addIssue({
-        code: "custom",
-        message: "NTN and STRN are only recorded from an uploaded customer PO.",
-      });
+
   });
 // Read-only commercial lookup precedes receipt entry; submitting a sale still requires its PO reference.
 export const orderSchema = orderBasisInputSchema.superRefine((v, c) => {

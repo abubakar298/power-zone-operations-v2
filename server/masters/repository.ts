@@ -197,7 +197,7 @@ export class MastersRepository {
             ).rows[0].id,
           );
           await c.query(
-            "INSERT INTO customers(id,name,short_code,contact_person,phone,email,address,status,notes,city,province) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+            "INSERT INTO customers(id,name,short_code,contact_person,phone,email,address,status,notes,city,province,ntn,strn) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
             [
               nextId,
               values.name,
@@ -210,6 +210,8 @@ export class MastersRepository {
               values.notes,
               values.city ?? "",
               values.province ?? "",
+              values.ntn ?? "",
+              values.strn ?? "",
             ],
           );
         } else {

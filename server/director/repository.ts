@@ -4,6 +4,7 @@ import { OrdersRepository } from "../orders/repository.js";
 import { orderSchema } from "../orders/schema.js";
 import { HttpError } from "../http/errors.js";
 import type { BoqSnapshot } from "../boq/engine.js";
+import {upsPortfolio} from './ups-portfolio.js';
 const names = [
   "Solar Panels",
   "Structure",
@@ -73,6 +74,7 @@ export function phaseBudgets(
 }
 export class DirectorRepository {
   constructor(private pool: Pool) {}
+  upsPortfolio(actor:string,customer:'MBL'|'UBL'){return upsPortfolio(this.pool,actor,customer);}
   async portfolio(actor: string, customerId?: number) {
     const user = (
       await this.pool.query("SELECT active,role FROM users WHERE id=$1", [

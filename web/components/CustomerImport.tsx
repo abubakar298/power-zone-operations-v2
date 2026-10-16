@@ -1,3 +1,4 @@
+import {FileUpload} from '../ui/FileUpload.js';
 import { useState } from "react";
 import { api, type Session } from "../api.js";
 import { confirmRevision } from "../confirm.js";
@@ -72,7 +73,7 @@ export function CustomerImport({
       </p>
       <label>
         Customer import file
-        <input
+        <FileUpload onClear={()=>{setInput(undefined);setPlan(undefined);setBackup(false);setError('');}}
           type="file"
           accept=".json,application/json"
           disabled={busy}

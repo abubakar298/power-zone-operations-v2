@@ -1,3 +1,4 @@
+import {FileUpload} from '../ui/FileUpload.js';
 import { DocumentPreview } from "../components/DocumentPreview.js";
 import { useEffect, useState } from "react";
 import { api, type Session } from "../api.js";
@@ -677,7 +678,7 @@ export function UblWorkflow({
                 label="Attach evidence"
                 hint="PDF, PNG, JPEG or text · up to 8 MB"
               >
-                <input
+                <FileUpload
                   id="ubl-file"
                   type="file"
                   accept=".pdf,.png,.jpg,.jpeg,.txt"

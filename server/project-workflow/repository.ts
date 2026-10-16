@@ -1,4 +1,5 @@
 import {loadDocumentListMetadata,snapshotListMetadata} from '../documents/list-metadata.js';
+import {directPoFields,directPoSiteMatches,directPoChanges,validOrderPosition,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
 import {manualIpoAvailable,requireDirectUps} from "../documents/manual-ipo.js";
 import {approvedMaterialView} from './advance-material-view.js';
 import {ptDetail} from '../orders/pt-detail.js';
@@ -87,7 +88,10 @@ const saleFields = [
   "customerStrn",
 ];
 function saleInput(basis: any, received: any) {
+  if(received.confirmationType==='Email approval'&&!/^MBL-UPS-6-(5|10)$/.test(basis.source?.key??''))
+    throw new HttpError(422,'Email approval is available for Meezan Direct PO agreements only.');
   const sale = received.saleDetails ?? {};
+  if(sale.orderNumber&&!validOrderPosition(sale.orderNumber))throw new HttpError(422,'Enter the order unit and total, for example 20/60.');
   if (received.saleDetails) {
     if (
       !["PZES", "PZES (PVT Ltd)", "Energy Solutions"].includes(
@@ -111,8 +115,9 @@ function saleInput(basis: any, received: any) {
     ...Object.fromEntries(
       Object.entries(sale).filter(([key]) => saleFields.includes(key)),
     ),
+    orderNumber: sale.orderNumber??basis.order.input.orderNumber??"",
     poNumber:
-      received.confirmationType === "WhatsApp approval"
+      received.confirmationType !== "Customer PO"
         ? ""
         : received.reference,
     ...(basis.order.allocation?.policy==="fixed-bank-ups"?{salesPerson:"Waqas ul Haq"}:{}),
@@ -516,6 +521,7 @@ export class ProjectWorkflowRepository {
         sharedPoReference: shared?.reference ?? null,
         sharedPoDate: shared?.po_date ?? null,
         sharedAt: shared?.created_at ?? null,
+        directPoDetails: data.directPoDetails??null,
         notes: data.notes ?? "",
         noFeasibleSolution: data.noFeasibleSolution ?? null,
         ublStandardsReview: data.ublStandardsReview ?? null,
@@ -1128,14 +1134,22 @@ export class ProjectWorkflowRepository {
         )
       ).rows[0];
       if (!customer) throw new HttpError(422, "Choose an active customer.");
-      let site = (
-        await c.query(
-          input.siteId
-            ? "SELECT * FROM sites WHERE customer_id=$1 AND id=$2 FOR UPDATE"
-            : "SELECT * FROM sites WHERE customer_id=$1 AND lower(code)=lower($2)",
-          [input.customerId, input.siteId ?? input.siteCode],
-        )
-      ).rows[0];
+      const selectedFramework = input.frameworkId ? (await c.query(
+        "SELECT customer_id,configuration_key,payload->>'type' AS type FROM project_framework_versions WHERE id=$1", [input.frameworkId],
+      )).rows[0] : undefined;
+      const sharedUblConstruction = input.route === 'direct-framework' && input.siteCode === '0999' &&
+        customer.short_code === 'UBL' && selectedFramework?.customer_id === customer.id &&
+        selectedFramework?.type === 'bank-ups' && selectedFramework.configuration_key === 'UBL-UPS-6-10';
+      const lookupSite=async()=>{
+        const candidates=(await c.query(input.siteId
+          ? 'SELECT * FROM sites WHERE customer_id=$1 AND id=$2 FOR UPDATE'
+          : 'SELECT * FROM sites WHERE customer_id=$1 AND lower(code)=lower($2) FOR UPDATE',
+          [input.customerId,input.siteId??input.siteCode])).rows;
+        const matches=candidates.filter((v:any)=>directPoSiteMatches(v,input.customerId,input.siteCode,input.siteName,input.siteAddress??'',sharedUblConstruction));
+        if(matches.length>1)throw new HttpError(409,'More than one site matches this branch name and delivery address. Review the site identity.');
+        return matches[0];
+      };
+      let site=await lookupSite();
       let siteCreatedHere = false;
       if (input.siteId && site?.id !== input.siteId)
         throw new HttpError(
@@ -1145,8 +1159,8 @@ export class ProjectWorkflowRepository {
       if (
         (
           await c.query(
-            "SELECT id FROM project_workflow_records WHERE customer_id=$1 AND (lower(site_code)=lower($2) OR site_id=$3) AND stage NOT IN('issued','declined')",
-            [input.customerId, input.siteCode, input.siteId ?? null],
+            "SELECT id FROM project_workflow_records WHERE customer_id=$1 AND ((NOT $4::boolean AND lower(site_code)=lower($2)) OR site_id=$3) AND stage NOT IN('issued','declined') AND data->>'localPreviewArchived' IS DISTINCT FROM 'true'",
+            [input.customerId, input.siteCode, site?.id ?? null,sharedUblConstruction],
           )
         ).rowCount
       )
@@ -1156,12 +1170,7 @@ export class ProjectWorkflowRepository {
         );
       if (!site) {
         await c.query("LOCK TABLE sites IN SHARE ROW EXCLUSIVE MODE");
-        site = (
-          await c.query(
-            "SELECT * FROM sites WHERE customer_id=$1 AND lower(code)=lower($2)",
-            [input.customerId, input.siteCode],
-          )
-        ).rows[0];
+        site = await lookupSite();
         if (!site) {
           const next = (
             await c.query("SELECT COALESCE(max(id),0)+1 AS id FROM sites")
@@ -1213,8 +1222,8 @@ export class ProjectWorkflowRepository {
           if (
             (
               await c.query(
-                "SELECT 1 FROM sites WHERE customer_id=$1 AND lower(code)=lower($2) AND id<>$3",
-                [input.customerId, input.siteCode, site.id],
+                "SELECT 1 FROM sites WHERE customer_id=$1 AND lower(code)=lower($2) AND id<>$3 AND NOT $4::boolean",
+                [input.customerId, input.siteCode, site.id,sharedUblConstruction],
               )
             ).rowCount
           )
@@ -1290,6 +1299,7 @@ export class ProjectWorkflowRepository {
             : "request_review";
       const data: any = {
         creationFingerprint: fingerprint(input),
+        ...(sharedUblConstruction ? {sharedConstructionBranch:'UBL-UPS',branchCodeStatus:'Under construction — branch code not assigned'} : {}),
         notes: input.notes,
         siteAddress: site.location,
         siteContact: site.contact_person,
@@ -1471,7 +1481,23 @@ export class ProjectWorkflowRepository {
           422,
           "This survey needs review because no feasible solution was found. Return it to Design for a revised solution before commercial processing.",
         );
-      if (v.action === "review-survey-handoff") {
+      if(v.action==='save-direct-po-details'){
+        this.requireRole(u,['Coordinator']);requireStage(['po_receipt']);requireDirectUps(r);
+        const fields=z.object(Object.fromEntries(directPoFields.map(([key])=>[key,z.string().trim().max(key==='siteAddress'||key==='billingAddress'?1000:200)]))).strict();
+        const saved=z.object({evidenceId:z.uuid(),evidenceType:z.enum(['Customer PO','Email approval','WhatsApp approval']),extracted:fields,sourceText:z.string().max(150000).default('').transform(value=>value.replace(/\u0000/g,'').replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,'\uFFFD')),values:fields,notes:z.string().max(2000)}).strict().parse(input);
+        await this.requireFile(c,r,saved.evidenceId,'PO / confirmation');
+        if(saved.evidenceType==='Email approval'&&!/^MBL-UPS-/.test(data.basis?.source?.key??''))throw new HttpError(422,'Email approval is available for Meezan Direct PO agreements only.');
+        if(saved.values.siteCode!==r.site_code)throw new HttpError(422,'The edited branch code must match this order site. Open a Direct PO for the correct branch.');
+        if(!saved.values.siteName)throw new HttpError(422,'Enter the site name.');
+        z.iso.date().parse(saved.values.approvalDate);
+        if(saved.values.orderNumber&&!validOrderPosition(saved.values.orderNumber))throw new HttpError(422,'Enter the unit number and total, for example 20/60.');
+        if(saved.values.ipoNumber&&!await manualIpoAvailable(c,saved.values.ipoNumber,r.id))throw new HttpError(409,'This IPO number is already in use.');
+        const capacityIssues=directPoCapacityIssues(saved.sourceText,data.basis?.source?.key??'');if(capacityIssues.length)throw new HttpError(422,capacityIssues.join(' '));
+        const previous=data.directPoDetails;
+        const changes=directPoChanges(previous?.values??saved.extracted,saved.values);
+        data.directPoDetails={...saved,savedAt:new Date().toISOString(),savedBy:actor,history:[...(previous?.history??[]),{actor,actorName:u.display_name,at:new Date().toISOString(),evidenceId:saved.evidenceId,extracted:saved.extracted,changes}]};
+        reason='Direct PO evidence details saved'+(changes.length?': '+changes.map(x=>x.label).join(', '):' without corrections');
+      } else if (v.action === "review-survey-handoff") {
         this.requireRole(u, ["Coordinator"]);
         requireStage(["approved_dispatch"]);
         const customer = (
@@ -2798,8 +2824,13 @@ export class ProjectWorkflowRepository {
             "This customer PO reference belongs to another site.",
           );
         basis.order.input = saleInput(basis, received);
+        if(data.directPoDetails&&received.saleDetails){
+          const previous=data.directPoDetails.values,values={...previous,...Object.fromEntries(directPoFields.filter(([key])=>typeof received.saleDetails?.[key]==='string').map(([key])=>[key,received.saleDetails![key]])),approvalDate:received.date};
+          const changes=directPoChanges(previous,values);
+          if(changes.length)data.directPoDetails={...data.directPoDetails,values,history:[...data.directPoDetails.history,{actor,actorName:u.display_name,at:new Date().toISOString(),evidenceId:received.evidenceId,changes}]};
+        }
         const differences =
-            received.confirmationType === "WhatsApp approval"
+            received.confirmationType !== "Customer PO"
               ? []
               : compareBasis(basis.comparison, received.actual),
           rid = randomUUID(),
@@ -2835,8 +2866,8 @@ export class ProjectWorkflowRepository {
                 randomUUID(),
                 rid,
                 id,
-                received.confirmationType === "WhatsApp approval"
-                  ? "Uploaded WhatsApp approval of the exact approved source"
+                received.confirmationType !== "Customer PO"
+                  ? `Uploaded ${received.confirmationType} of the exact approved source`
                   : "Exact PO comparison against approved source",
                 basis,
                 actor,
@@ -3257,7 +3288,7 @@ export class ProjectWorkflowRepository {
     const input = {
       ...basis.order.input,
       poNumber:
-        receipt.input.confirmationType === "WhatsApp approval"
+        receipt.input.confirmationType && receipt.input.confirmationType !== "Customer PO"
           ? ""
           : receipt.input.reference,
       approvalReference: receipt.input.reference,
@@ -3267,7 +3298,8 @@ export class ProjectWorkflowRepository {
     };
     const snapshot = {
       ...structuredClone(basis.order),
-      siteName: r.site_name,
+      directPoApproval: data.directPoDetails??null,
+      siteName: data.directPoDetails?.values.siteName??r.site_name,
       siteCode: r.site_code,
       input,
       boqRevisionId: revisionId,
@@ -3317,6 +3349,8 @@ export class ProjectWorkflowRepository {
       )
     ).rowCount;
     const operations = {
+      directPoApproval: data.directPoDetails??null,
+      orderNumber: input.orderNumber??"",
       headsupStatus: headsupAdvance ? "Heads-up shared — final received" : null,
       version: 1,
       ipoId: ipo,
@@ -3326,7 +3360,7 @@ export class ProjectWorkflowRepository {
       boqRevisionId: revisionId,
       boqNumber,
       customer: snapshot.customer,
-      siteName: r.site_name,
+      siteName: data.directPoDetails?.values.siteName??r.site_name,
       siteCode: r.site_code,
       customerPoNumber: input.poNumber,
       contactPerson: input.contactPerson,
@@ -3517,7 +3551,7 @@ export class ProjectWorkflowRepository {
               uuid(received.frameworkId ?? r.framework_id),
             );
     const differences =
-      received.confirmationType === "WhatsApp approval"
+      received.confirmationType !== "Customer PO"
         ? []
         : compareBasis(basis.comparison, received.actual);
     if (differences.length)
@@ -3528,7 +3562,7 @@ export class ProjectWorkflowRepository {
     return {
       ...structuredClone(basis.order),
       input: saleInput(basis, received),
-      siteName: r.site_name,
+      siteName: r.data.directPoDetails?.values.siteName??r.site_name,
       siteCode: r.canonical_site_code ?? r.site_code,
       preparedBy: r.coordinator,
       checkedBy: r.coordinator,
@@ -4022,4 +4056,3 @@ export class ProjectWorkflowRepository {
     return [...headsups, ...existing];
   }
 }
-

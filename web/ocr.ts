@@ -1,6 +1,6 @@
 import { createWorker } from "tesseract.js";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-export async function extractText(file: File, progress: (s: string) => void, tableMode=false) {
+export async function extractText(file: File, progress: (s: string) => void, tableMode=false, maxPdfPages=5) {
   if (file.type === "text/plain")
     return { text: await file.text(), confidence: null };
   let worker: Awaited<ReturnType<typeof createWorker>> | undefined;
@@ -32,18 +32,32 @@ export async function extractText(file: File, progress: (s: string) => void, tab
         for(let y=0;y<canvas.height;y++){let dark=0;for(let x=0;x<canvas.width;x+=2){const i=(y*canvas.width+x)*4;if((pixels[i]+pixels[i+1]+pixels[i+2])/3<90)dark++;}if(dark>canvas.width*.35){if(y-last>3)borders.push(y);last=y;}}
         if(borders.length>=3){const parts:string[]=[];for(let i=1;i<borders.length;i++){const height=borders[i]-borders[i-1]-6;if(height<20)continue;const strip=document.createElement('canvas');strip.width=canvas.width*3;strip.height=height*3;strip.getContext('2d')!.drawImage(canvas,0,borders[i-1]+3,canvas.width,height,0,0,strip.width,strip.height);progress(`Reading table row ${i}`);parts.push((await recognize(strip,true)).text.replace(/\n/g,' '));strip.width=0;strip.height=0;}image.close();canvas.width=0;canvas.height=0;return{text:parts.join('\n'),confidence:null};}canvas.width=0;canvas.height=0;
       }
-      image.close();
-      const d = await recognize(file);
-      return { text: d.text, confidence: d.confidence };
+      try {
+        const d = await recognize(file);
+        // Small photographed forms can look empty to automatic layout detection.
+        // Retry at readable scale while preserving the original uploaded bytes.
+        if (image.width < 1200 && d.text.trim().length < 4000) {
+          const scale = Math.min(3, 3200 / image.width, Math.sqrt(20000000 / (image.width * image.height)));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale);
+          try {
+            const context=canvas.getContext("2d")!;context.imageSmoothingQuality="high";context.drawImage(image, 0, 0, canvas.width, canvas.height);
+            await worker!.setParameters({tessedit_pageseg_mode:6 as any});
+            const retry = await recognize(canvas);
+            if (retry.text.trim().length > d.text.trim().length) return {text:retry.text,confidence:retry.confidence};
+          } finally { canvas.width = 0; canvas.height = 0; }
+        }
+        return { text: d.text, confidence: d.confidence };
+      } finally { image.close(); }
     }
     const pdf = await import("pdfjs-dist");
     pdf.GlobalWorkerOptions.workerSrc = pdfWorker;
     const loadingTask = pdf.getDocument({ data: await file.arrayBuffer() });
     const doc = await loadingTask.promise;
     try {
-      if (doc.numPages > 5)
+      if (doc.numPages > maxPdfPages)
         throw new Error(
-          "Upload a PDF with up to 5 pages, or split the survey into smaller files.",
+          `Upload a PDF with up to ${maxPdfPages} pages, or split it into smaller files.`,
         );
       const parts: string[] = [];
       for (let i = 1; i <= doc.numPages; i++) {

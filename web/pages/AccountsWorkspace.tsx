@@ -1,3 +1,4 @@
+import {FileUpload} from '../ui/FileUpload.js';
 import { cableInvoiceAdjustment } from "../../server/inventory/reconciliation.js";
 import { jobLabel } from "../components/job-label.js";
 import { ProjectCheckpoints } from "./ProjectCheckpoints.js";
@@ -620,7 +621,7 @@ export function AccountsWorkspace({
                     <td>{i.accountsReview?.decision ?? "Received"}</td>
                     <td>
                       <Button onClick={() => void openIpo(i.id)}>
-                        Compare approved quote & IPO
+                        {i.snapshot.approvedCommercialSource?.type === 'framework' ? 'Compare agreement & IPO' : 'Compare approved quote & IPO'}
                       </Button>
                     </td>
                   </tr>
@@ -698,15 +699,22 @@ export function AccountsWorkspace({
                 {selected.ipo.number} · {selected.saleType}
               </h3>
               <p>
-                {selected.ipo.quotationType?.presentation ??
-                  "Accepted quotation"}{" "}
+                {selected.agreement ? "Pre-agreed Direct PO" : (selected.ipo.quotationType?.presentation ??
+                  "Accepted quotation")}{" "}
                 ·{" "}
                 {selected.reconciles
-                  ? "Totals reconcile with approved quotation"
+                  ? "Totals reconcile with " + selected.approvedBasisLabel
                   : "Reconciliation needs attention"}
               </p>
               <div className="pz-form-grid">
-                {selected.quotation?.id ? (
+                {selected.agreement ? (
+                  <section className="pz-panel pz-stack">
+                    <h3>Approved agreement · {selected.agreement.number} v{selected.agreement.version}</h3>
+                    <p>{selected.agreement.reference || "Reference not entered"}</p>
+                    <p>Agreed payable including GST: {money(selected.agreement.total)}</p>
+                    {selected.agreement.terms && <dl>{Object.entries(selected.agreement.terms).map(([key,value])=><div key={key}><dt>{key}</dt><dd>{String(value)}</dd></div>)}</dl>}
+                  </section>
+                ) : selected.quotation?.id ? (
                   <DocumentPreview
                     title={"Approved quotation " + selected.quotation.number}
                     url={
@@ -730,7 +738,7 @@ export function AccountsWorkspace({
                 <summary>Selling amount comparison</summary>
                 <div className="pz-form-grid">
                   <section>
-                    <h3>Approved quotation · {selected.quotation?.number}</h3>
+                    <h3>{selected.agreement ? "Approved agreement · " + selected.agreement.number : "Approved quotation · " + (selected.quotation?.number ?? "Not available")}</h3>
 
                     <div className="table-scroll">
                       <table>
@@ -741,6 +749,8 @@ export function AccountsWorkspace({
                           </tr>
                         </thead>
                         <tbody>
+                          {selected.agreement?.lines.map((line:any,index:number)=><tr key={"agreement-"+index}><td>{line.description}</td><td className="pz-number">{money(line.amount)}</td></tr>)}
+                          {selected.agreement && <tr><th>Agreed payable including GST</th><td className="pz-number">{money(selected.agreement.total)}</td></tr>}
                           {quotationDisplayRows(
                             selected.quotation?.snapshot
                               .customerScopeVersion === 1
@@ -807,8 +817,7 @@ export function AccountsWorkspace({
               </details>
               <h3>Discount allocation summary</h3>
               <p>
-                Solar has zero discount. Allocation is preserved from the
-                accepted quotation.
+                {selected.agreement ? "Allocation is preserved from the approved agreement." : "Solar has zero discount. Allocation is preserved from the accepted quotation."}
               </p>
               <div className="table-scroll">
                 <table>
@@ -1219,7 +1228,7 @@ export function AccountsWorkspace({
                 label="Attach PT costing screenshot"
                 hint="PNG or JPEG · up to 8 MB"
               >
-                <input
+                <FileUpload attachments={(job.evidence??[]).filter((f:any)=>f.id===ptAttachmentId)} onRemoveAttachment={()=>setPtAttachmentId(null)} onClear={()=>setPtAttachmentId(null)}
                   id="closure-pt-upload"
                   type="file"
                   accept="image/png,image/jpeg"

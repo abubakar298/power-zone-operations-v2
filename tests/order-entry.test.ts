@@ -33,7 +33,7 @@ test("PO extraction accepts unique labelled values, rejects ambiguous and invali
   assert.deepEqual(poSuggestions("Date: 2026-02-30"), {});
 });
 
-test("new IPO entry excludes delivery fields and tax IDs without an uploaded PO; legacy input still parses", () => {
+test("new IPO entry excludes delivery fields and accepts customer tax IDs with any approval evidence; legacy input still parses", () => {
   const base = {
     quotationId: randomUUID(),
     evidenceType: "Verbal sale confirmation",
@@ -52,7 +52,7 @@ test("new IPO entry excludes delivery fields and tax IDs without an uploaded PO;
     }).success,
   );
   assert.ok(
-    !orderSchema.safeParse({ ...base, entryVersion: 2, customerNtn: "123" })
+    orderSchema.safeParse({ ...base, entryVersion: 2, customerNtn: "123" })
       .success,
   );
   assert.ok(
@@ -94,7 +94,7 @@ test("IPO defaults use current customer data and accepted quotation; Operations 
       )
     ).rows;
     await db.pool.query(
-      "UPDATE customers SET contact_person='Fresh contact',phone='03000000001',email='',address='Fresh billing address' WHERE id=(SELECT b.customer_id FROM quotation_versions q JOIN boq_revisions r ON r.id=q.boq_revision_id JOIN boqs b ON b.id=r.boq_id WHERE q.id=$1)",
+      "UPDATE customers SET contact_person='Fresh contact',phone='03000000001',email='',address='Fresh billing address',ntn='0801164-8',strn='001234-00' WHERE id=(SELECT b.customer_id FROM quotation_versions q JOIN boq_revisions r ON r.id=q.boq_revision_id JOIN boqs b ON b.id=r.boq_id WHERE q.id=$1)",
       [qRecord.quotationId],
     );
     for(const record of records.filter((r:any)=>r.quotationId && [3,4,5].includes(r.stage))) {
@@ -105,6 +105,8 @@ test("IPO defaults use current customer data and accepted quotation; Operations 
     assert.equal(defaults.paymentContact, "Fresh contact");
     assert.equal(defaults.paymentPhone, defaults.phone);
     assert.equal(defaults.email, "");
+    assert.equal(defaults.customerNtn, "0801164-8");
+    assert.equal(defaults.customerStrn, "001234-00");
     assert.equal(defaults.billingAddress, "Fresh billing address");
     assert.equal(defaults.salesPerson, "Atif Hameed (sample)");
     await assert.rejects(orders.defaults(randomUUID()), /not found/i);
@@ -219,5 +221,5 @@ test("IPO defaults use current customer data and accepted quotation; Operations 
  assert.equal(orderSchema.safeParse(input).success,false);
  assert.equal(orderSchema.safeParse({...input,poNumber:"PO-1"}).success,true);
  assert.equal(orderSchema.safeParse({...input,evidenceType:"WhatsApp approval"}).success,true);
- assert.equal(orderBasisInputSchema.safeParse({...input,entryVersion:2,customerNtn:"123"}).success,false);
+ assert.equal(orderBasisInputSchema.safeParse({...input,entryVersion:2,customerNtn:"123"}).success,true);
  });

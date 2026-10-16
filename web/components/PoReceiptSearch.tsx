@@ -12,12 +12,12 @@ export function PoReceiptSearch({ records, legacy = [], onConfirm, onLegacy }: a
   const [filters, setFilters] = useState({ ...emptyWorkspaceFilters }),
     [headsOnly, setHeadsOnly] = useState("all");
   const candidates = records
-    .filter((r: any) => r.coordinationBucket === coordinationBuckets[5] || r.stage === "customer_tracking")
+    .filter((r: any) => r.coordinationBucket === coordinationBuckets[5] || r.stage === "customer_tracking" || (r.route==="direct-framework"&&r.stage==="po_receipt"))
     .map((r: any) => ({
       ...r,
       site: `${r.site} (${r.siteCode})`,
-      reference: r.quotation?.number ?? (r.references??[]).join(" "),
-      kind: r.quotation ? "Quotation" : "UBL survey / recommendation",
+      reference: [r.quotation?.number,...(r.references??[]),r.data?.directPoDetails?.values?.ipoNumber,r.data?.directPoDetails?.values?.orderNumber].filter(Boolean).join(" "),
+      kind: r.quotation ? "Quotation" : r.route==="direct-framework"?`Direct PO · ${r.data?.directPoDetails?.evidenceType??"Customer PO"}`:"UBL survey / recommendation",
       customer: r.customer,
       original: r,
     })).concat(legacy.map((t:any)=>({...t,id:`legacy:${t.id}`,data:{},reference:t.number??t.reference??"",kind:"Quotation",quotation:{number:t.number??t.reference},original:t,legacy:true})));
@@ -87,4 +87,3 @@ export function PoReceiptSearch({ records, legacy = [], onConfirm, onLegacy }: a
     </section>
   );
 }
-

@@ -1,3 +1,4 @@
+import {FileUpload} from '../ui/FileUpload.js';
 import {CustomerSearchSelect} from "../components/CustomerSearchSelect.js";
 import {
   confirmLeaveWorkspace,
@@ -1086,7 +1087,7 @@ export function Boqs({
                   />
                   <label>
                     Approval screenshots
-                    <input
+                    <FileUpload attachments={approvalEvidence} onRemoveAttachment={file=>setApprovalEvidence(old=>old.filter(u=>u.id!==file.id))}
                       aria-label="Approval screenshots"
                       type="file"
                       accept="image/png,image/jpeg"
@@ -1097,21 +1098,6 @@ export function Boqs({
                       }}
                     />
                   </label>
-                  {approvalEvidence.map((e) => (
-                    <p key={e.id}>
-                      <span>{e.filename}</span>{" "}
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          setApprovalEvidence(
-                            approvalEvidence.filter((x) => x.id !== e.id),
-                          )
-                        }
-                      >
-                        Remove screenshot
-                      </button>
-                    </p>
-                  ))}
                   <label>
                     <input
                       type="checkbox"
@@ -1487,7 +1473,7 @@ export function Boqs({
                       text file. OCR runs on your device. Manual entry is always
                       available.
                     </p>
-                    <input
+                    <FileUpload attachments={uploads.map(u=>({...u,url:`/api/boqs/uploads/${u.id}`}))} onRemoveAttachment={file=>{setDirty(true);setUploads(old=>old.filter(u=>u.id!==file.id));setReviewed(false);setPreview(undefined);}}
                       aria-label="Upload survey document"
                       type="file"
                       accept="image/png,image/jpeg,application/pdf,text/plain"
@@ -1498,23 +1484,6 @@ export function Boqs({
                       }}
                     />
                     {progress && <p role="status">{progress}</p>}
-                    {uploads.map((u) => (
-                      <p key={u.id}>
-                        <a href={`/api/boqs/uploads/${u.id}`}>{u.filename}</a>{" "}
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => {
-                            setDirty(true);
-                            setUploads(uploads.filter((x) => x.id !== u.id));
-                            setReviewed(false);
-                            setPreview(undefined);
-                          }}
-                        >
-                          Remove from survey
-                        </button>
-                      </p>
-                    ))}
                     {uploads.length > 0 && (
                       <>
                         <label className="source-label">

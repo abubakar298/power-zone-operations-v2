@@ -12,3 +12,13 @@ test('explicit code amendment preserves issued finances and source, and rejects 
  correction.role='Coordinator';await assert.rejects(()=>ipoSiteIdentity(pool,row));correction.role='Admin';correction.snapshot.originalFingerprint='stale';await assert.rejects(()=>ipoSiteIdentity(pool,row));
  assert.deepEqual(await ipoSiteIdentity({query:async()=>({rows:[]})} as any,row),{});
 });
+
+test('explicit site-name correction preserves branch code, finances and immutable original',async()=>{
+ const row={id:'ipo',snapshot:{siteName:'CENTRAL OFFICE',siteCode:'0999',allocation:{total:'900000'},peachtree:{total:'762711.86'}}};
+ const original=JSON.stringify(row);
+ const correction={id:'name-correction',role:'Management',snapshot:{previousSiteName:'CENTRAL OFFICE',siteName:'UBL Ameen Sardheri, Charsadda',previousSiteCode:'0999',siteCode:'0999',originalFingerprint:createHash('sha256').update(JSON.stringify(row.snapshot)).digest('hex')}};
+ const pool:any={query:async()=>({rows:[correction]})};
+ const result=await ipoSiteIdentity(pool,row);
+ assert.equal(result.snapshot.siteName,'UBL Ameen Sardheri, Charsadda');assert.equal(result.snapshot.siteCode,'0999');assert.deepEqual(result.snapshot.allocation,row.snapshot.allocation);assert.equal(JSON.stringify(row),original);
+ correction.snapshot.previousSiteName='Wrong source';await assert.rejects(()=>ipoSiteIdentity(pool,row));
+});

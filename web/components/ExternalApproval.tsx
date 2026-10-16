@@ -1,3 +1,4 @@
+import {FileUpload} from '../ui/FileUpload.js';
 import {Field} from "../ui/Field.js";
 import { Button } from "../ui/Button.js";
 import { useState } from "react";
@@ -99,9 +100,8 @@ export function ExternalApproval({
       <Field id="quotation-approver" label="Approved by" hint="Management approver's name."><input id="quotation-approver" required maxLength={100} value={approver} onChange={e=>setApprover(e.target.value)}/></Field>
       <Field id="quotation-approval-date" label="Approval date / time" hint="Optional. Recording time is saved automatically."><input id="quotation-approval-date" type="datetime-local" value={decisionAt} onChange={e=>setDecisionAt(e.target.value)}/></Field>
       <div className="pz-field-wide"><Field id="quotation-approval-remarks" label="Approval remarks" hint="Confirm which quotation and terms were approved."><textarea id="quotation-approval-remarks" required rows={3} maxLength={2000} value={comments} onChange={e=>setComments(e.target.value)}/></Field></div>
-      <div className="pz-field-wide"><Field id="quotation-approval-evidence" label="Attach approval evidence" hint="WhatsApp screenshot · PNG or JPEG · up to 10 files, 8 MB each."><input id="quotation-approval-evidence" type="file" accept="image/png,image/jpeg" disabled={busy||uploads.length>=10} onChange={e=>{void upload(e.target.files?.[0]);e.target.value="";}}/></Field></div>
+      <div className="pz-field-wide"><Field id="quotation-approval-evidence" label="Attach approval evidence" hint="WhatsApp screenshot · PNG or JPEG · up to 10 files, 8 MB each."><FileUpload attachments={uploads} onRemoveAttachment={file=>setUploads(old=>old.filter(u=>u.id!==file.id))} id="quotation-approval-evidence" type="file" accept="image/png,image/jpeg" disabled={busy||uploads.length>=10} onChange={e=>{void upload(e.target.files?.[0]);e.target.value="";}}/></Field></div>
     </div>
-    {uploads.length>0&&<ul className="pz-stack">{uploads.map(u=><li key={u.id} className="pz-action-row"><span>{u.filename}</span><Button variant="neutral" disabled={busy} onClick={()=>setUploads(old=>old.filter(v=>v.id!==u.id))}>Remove</Button></li>)}</ul>}
     <label className="pz-review-check"><input type="checkbox" required checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I confirm this evidence approves this exact quotation without changes.</label>
     <div>{error&&<p className="form-error" role="alert">{error}</p>}<div className="pz-action-row"><Button variant="success" type="submit" loading={busy} disabled={!confirmed||!uploads.length||!approver.trim()||!comments.trim()}>Submit Approval — Ready to Send</Button></div></div>
   </form>;
@@ -168,7 +168,7 @@ export function ExternalApproval({
         </label>
         <label>
           Approval screenshot
-          <input
+          <FileUpload attachments={uploads} onRemoveAttachment={file=>setUploads(old=>old.filter(u=>u.id!==file.id))}
             type="file"
             accept="image/png,image/jpeg"
             disabled={busy}
@@ -178,22 +178,6 @@ export function ExternalApproval({
             }}
           />
         </label>
-        <ul>
-          {uploads.map((u) => (
-            <li key={u.id}>
-              {u.filename}{" "}
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  setUploads((old) => old.filter((v) => v.id !== u.id))
-                }
-              >
-                Remove screenshot
-              </button>
-            </li>
-          ))}
-        </ul>
         <label>
           <input
             type="checkbox"

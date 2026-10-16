@@ -1,3 +1,4 @@
+import {UpsManagementPortfolio} from "../components/UpsManagementPortfolio.js";
 import {SidebarBuckets} from "../components/SidebarBuckets.js";
 import {
   bucketLabel,
@@ -72,6 +73,8 @@ export function Dashboard({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [directPoEnabled,setDirectPoEnabled]=useState(false);
+  useEffect(()=>{if(session.user.role==='Coordinator')void api<any>('/project-workflow/references').then(r=>setDirectPoEnabled(r.features?.directPoUps===true)).catch(()=>setDirectPoEnabled(false));},[session.user.id]);
   const [workspaceVisit, setWorkspaceVisit] = useState(0);
   const [departmentPage, setDepartmentPage] = useState("Workspace");
   useLayoutEffect(() => {
@@ -635,6 +638,7 @@ export function Dashboard({
           </span>
           {session.user.role === "Coordinator" && <nav className="coordinator-shortcuts" aria-label="Atif shortcuts">
             <Button variant="neutral" aria-current={view === "newboq" ? "page" : undefined} onClick={() => { if (navigate("newboq")) setRevisionDraftId(undefined); }}>Create Quotation</Button>
+            {directPoEnabled&&<Button variant="neutral" aria-current={view==='dashboard'&&departmentPage==='Direct PO'?'page':undefined} onClick={()=>{if(navigate('dashboard')){sessionStorage.setItem('pz:department-page','Direct PO');window.dispatchEvent(new CustomEvent('pz:department-page',{detail:'Direct PO'}));}}}>Direct PO</Button>}
             <Button variant="neutral" aria-current={view === "dashboard" && departmentPage === "Customer & Site Search" ? "page" : undefined} onClick={() => { if (navigate("dashboard")) { sessionStorage.setItem("pz:department-page", "Customer & Site Search"); window.dispatchEvent(new CustomEvent("pz:department-page", {detail: "Customer & Site Search"})); } }}>Customer & Site Search</Button>
             <Button variant="neutral" aria-current={view === "dashboard" && departmentPage === "Performance" ? "page" : undefined} onClick={() => { if (navigate("dashboard")) { sessionStorage.setItem("pz:department-page", "Performance"); window.dispatchEvent(new CustomEvent("pz:department-page", {detail: "Performance"})); } }}>My Performance</Button>
           </nav>}
@@ -1046,7 +1050,8 @@ export function Dashboard({
                     onBack={() => navigate("customers")}
                   />
                 )}
-              {["ubl-ups", "mbl-ups", "bafl-solar"].includes(view) &&
+              {["mbl-ups","ubl-ups"].includes(view) && ["Admin", "Management"].includes(session.user.role) && <UpsManagementPortfolio customer={view === "mbl-ups" ? "MBL" : "UBL"}/>}
+              {view === "bafl-solar" &&
                 ["Admin", "Management"].includes(session.user.role) && (
                   <section className="detail-panel" aria-label="Workspace setup">
                     <p>This workspace is ready for you to define its layout and contents.</p>
