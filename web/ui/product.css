@@ -13,6 +13,19 @@
 .pz-ups-ageing-legend .pz-button{justify-content:flex-start;font-weight:400;font-size:var(--pz-text-xs);padding:4px 8px}
 .pz-ups-ageing-legend .pz-button[aria-pressed=true]{background:var(--pz-selected-bg);border-color:var(--pz-selected-border)}
 .pz-ups-ageing-legend strong{margin-left:auto;font-variant-numeric:tabular-nums}
+.pz-ups-ageing-legend .pz-button>span:not(.pz-ups-ageing-swatch){white-space:nowrap}
+.pz-ups-receivables{grid-column:1/-1;min-width:0}
+.pz-ups-receivables-legend{display:flex;flex-wrap:wrap;gap:16px;font-size:var(--pz-text-xs)}
+.pz-ups-receivables-legend>span{display:inline-flex;align-items:center;gap:8px}
+.pz-ups-receivables-label{display:flex;align-items:start;justify-content:space-between;gap:16px;font-size:var(--pz-text-sm)}
+.pz-ups-receivables-label small{display:block;color:var(--pz-muted);font-weight:400}
+.pz-ups-receivables-label>strong{white-space:nowrap;font-variant-numeric:tabular-nums}
+.pz-ups-receivables-track{position:relative;display:flex;align-items:center;margin-top:8px;border-radius:8px;background:var(--pz-canvas);min-height:44px}
+.pz-ups-receivables-track>.pz-caption{padding:8px 12px}
+.pz-ups-receivables-segment{height:44px;min-width:0;padding:0;border:1px solid var(--pz-surface);cursor:pointer;flex:none}
+.pz-ups-receivables-segment:first-child{border-radius:8px 0 0 8px}
+.pz-ups-receivables-segment:last-child{border-radius:0 8px 8px 0}
+.pz-ups-receivables-segment[aria-pressed=true]{outline:2px solid var(--pz-focus);outline-offset:2px;z-index:1}
 .pz-ups-ageing-swatch{width:14px;height:14px;border-radius:4px;flex:none;border:1px solid var(--pz-border)}
 .pz-ups-ageing-tooltip{position:absolute;top:100%;left:0;z-index:12;width:min(100%,320px);box-sizing:border-box;margin-top:8px;padding:12px;border:1px solid var(--pz-border);border-radius:var(--pz-radius-control);background:var(--pz-surface);color:var(--pz-text);box-shadow:0 4px 16px #24252b18;font-size:var(--pz-text-xs);pointer-events:none}
 .pz-ups-ageing-tooltip>div{display:flex;align-items:start;justify-content:space-between;gap:12px;padding-top:8px}

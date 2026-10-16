@@ -1,4 +1,5 @@
 import {Decimal} from 'decimal.js';
+import {upsReceivablesAgeing} from './ups-receivables.js';
 /** Reporting only: absence of recovery evidence never means not delivered or unpaid. */
 export function upsBatchProgress(register:any,now=new Date()){
  const calendar=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'});
@@ -37,5 +38,5 @@ export function upsBatchProgress(register:any,now=new Date()){
  }
  result.remainingToComplete=result.listedSites-result.completed;
  result.extraCableBalance=new Decimal(result.extraCablePayable).sub(result.extraCablePaid).toFixed(2);
- return {...result,deliveryAgeing,awaitingDeliveryAgeing,deliveryAgeingAsOf};
+ return {...result,deliveryAgeing,awaitingDeliveryAgeing,deliveryAgeingAsOf,receivablesAgeing:upsReceivablesAgeing(register,now)};
 }
