@@ -54,7 +54,7 @@ async function masterRegisterBudget(pool:Pool,register:any,issued:any[],framewor
   const framework=frameworks.find(f=>f.payload.configuration===c.configuration);
   if(!framework)throw new HttpError(422,'Approved UPS pricing is unavailable for an active configuration.');
   const basis=await frameworkBasis(pool,pool,{customer_id:framework.customer_id,site_name:'Management portfolio budget',site_code:'PORTFOLIO',route:'direct-framework'},framework.id);
-  options.push({configuration:c.configuration,frameworkId:framework.id,frameworkVersion:framework.version,unitSellingExGst:basis.order.allocation.subtotal,unitCost:basis.boq.total});
+  options.push({configuration:c.configuration,frameworkId:framework.id,frameworkVersion:framework.version,unitSellingExGst:basis.order.allocation.subtotal,unitPayable:basis.order.allocation.total,unitCost:basis.boq.total});
  }
  let selling=new Decimal(0),cost=new Decimal(0);
  for(const r of register.rows){

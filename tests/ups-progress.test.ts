@@ -10,3 +10,6 @@ test('batch totals partition every listed site without treating missing evidence
 test('closure alone does not establish payment and existing alerts keep conflicting evidence under review',()=>{
  const s=upsBatchProgress({totalSites:3,sites:[{orderNumber:'1/3'},{orderNumber:'2/3',recoveryStatus:{deliveryStatus:'Delivered',installationStatus:'Pending',paymentStatus:'Received'}},{orderNumber:'3/3'}],completionApprovals:{'1/3':{}},installationAlerts:{'2/3':{status:'Review needed by Accounts'}}});assert.equal(s.completedPaymentUnknown,1);assert.equal(s.reviewRequired,1);assert.equal(s.unverified,1);assert.equal(s.completedReceived,0);assert.equal(s.deliveredReceived,0);
 });
+test('cable receipts never settle system balances and the advance remains separate',()=>{
+ const s=upsBatchProgress({totalSites:1,progressEvidenceSource:{advancePercent:50},sites:[{orderNumber:'1/1',recoveryStatus:{systemPaymentStatus:'Unverified',paymentStatus:'Received',systemInvoices:[],extraCableInvoices:[{amount:'12000.00',paymentReceived:true},{amount:'3000.00',paymentReceived:false}]}}],completionApprovals:{'1/1':{}}});assert.equal(s.completedPaymentUnknown,1);assert.equal(s.systemReceivedAfterAdvance,'0.00');assert.equal(s.extraCableInvoices,2);assert.equal(s.extraCablePaid,'12000.00');assert.equal(s.extraCableBalance,'3000.00');assert.equal(s.advancePercent,50);
+});

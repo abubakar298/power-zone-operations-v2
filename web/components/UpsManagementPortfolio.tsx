@@ -15,7 +15,7 @@ export function UpsManagementPortfolio({customer}:{customer:'MBL'|'UBL'}){
  const current=data?.rows.find((r:any)=>r.id===selected);
  const hasMasterImport=Boolean(data?.register?.programs.length),budgetedSites=hasMasterImport?data.register.activeSites:data?.totals.orders??0;
  return <section className="pz-panel pz-stack" aria-label={`${customer} UPS confirmed orders`}>
-  {data?.register&&<UpsActiveSites key={customer} register={data.register} onPreview={setSelected}>
+  {data?.register&&<UpsActiveSites key={customer} register={data.register} onPreview={setSelected} prices={data.budgeted?.options}>
   {data&&<section className="ubl-performance" aria-labelledby="ups-performance-heading">
    <h3 id="ups-performance-heading">Portfolio Performance</h3>
    <p className="pz-caption pz-ups-note">{hasMasterImport?`${budgetedSites} active sites · imported orders included`:data.program?`${data.program.totalSites} sites ordered · ${data.totals.orders} IPO received · ${Math.max(0,data.program.totalSites-data.totals.orders)} pending`: `${data.totals.orders} ${data.totals.orders===1?'IPO':'IPOs'} received`} · {data.actual.sites} jobs completed<br/>PKR · Financial values exclude GST</p>
