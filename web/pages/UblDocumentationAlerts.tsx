@@ -1,7 +1,7 @@
 import {ublSiteName} from './ubl-site-name.js';
 import {useEffect,useRef,useState} from 'react';
 import {api} from '../api.js';
-import {money} from '../numbers.js';
+import {wholeMoney as money} from '../numbers.js';
 import {Button} from '../ui/Button.js';
 import {StatusBadge} from '../ui/StatusBadge.js';
 

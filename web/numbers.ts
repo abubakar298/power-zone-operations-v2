@@ -21,3 +21,7 @@ export function decimalDisplay(
 
 export const money = (value: string | number | null | undefined) =>
   decimalDisplay(value, 2);
+
+/** Whole-rupee presentation for Management portfolios; stored values remain exact. */
+export const wholeMoney = (value: string | number | null | undefined) =>
+  decimalDisplay(value, 0);

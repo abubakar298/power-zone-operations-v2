@@ -2,8 +2,9 @@ import {useEffect,useState,useRef} from 'react';
 import {api,type Session} from '../api.js';
 import {Button} from '../ui/Button.js';
 import {Field} from '../ui/Field.js';
-import {money} from '../numbers.js';
+import {money as preciseMoney,wholeMoney} from '../numbers.js';
 export function ProjectCheckpoints({session,mode='Operations',ublOnly=false,estimatedOnly=false}:{session:Session;mode?:'Operations'|'Accounts';ublOnly?:boolean;estimatedOnly?:boolean}){
+ const money=ublOnly?wholeMoney:preciseMoney;
  const detail=useRef<HTMLElement>(null);
  const [loaded,setLoaded]=useState(false);
  const [jobs,setJobs]=useState<any[]>([]),[search,setSearch]=useState(''),[filter,setFilter]=useState('All'),[selected,setSelected]=useState(''),[form,setForm]=useState<any>(),[error,setError]=useState(''),[actionError,setActionError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
