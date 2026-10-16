@@ -597,6 +597,10 @@ export class ProjectWorkflowRepository {
     ).rows;
     const records = [];
     for (const r of rows) records.push(await this.decorate(r, u));
+    const surveyPackageIds=[...new Set(records.map((r:any)=>r.data.ublSurveyPackageId).filter((id:any)=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
+    const surveyBatches=surveyPackageIds.length?(await this.pool.query('SELECT package_id,sequence FROM survey_submission_groups WHERE package_id=ANY($1::uuid[])',[surveyPackageIds])).rows:[];
+    const surveyBatchNumbers=new Map(surveyBatches.map((g:any)=>[g.package_id,'SSG-'+String(g.sequence).padStart(5,'0')]));
+    for(const record of records)Object.assign(record,{surveyBatchNumber:surveyBatchNumbers.get(record.data.ublSurveyPackageId)??null});
     const documentMetadata=await loadDocumentListMetadata(this.pool,[...records.flatMap((r:any)=>[r.data.ipoId,r.quotation?.id,r.task?.id]),...rows.flatMap((r:any)=>[r.data?.latestQuotationId,r.data?.quotationId])].filter(Boolean));
     for(const record of records){
       const source=rows.find(r=>r.id===record.id),basis=source?.data?.basis;

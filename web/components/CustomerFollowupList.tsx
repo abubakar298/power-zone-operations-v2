@@ -127,10 +127,7 @@ export function CustomerFollowupList({
               <span>
                 {group.customer}
                 <span className="pz-followup-secondary">
-                  Survey {group.id.slice(0, 8)} · Branch codes:{" "}
-                  {group.sites
-                    .map((site: any) => site.siteCode || "Not entered")
-                    .join(", ")}
+                  {group.sites[0]?.surveyBatchNumber || "Batch reference not available"}
                 </span>
               </span>
               <DocumentListDetails record={{solutionType:'Solar Hybrid',documentAmount:group.sites.every((site:any)=>site.documentAmount!=null)?group.sites.reduce((sum:Decimal,site:any)=>sum.add(site.documentAmount),new Decimal(0)).toFixed(2):null}}/>

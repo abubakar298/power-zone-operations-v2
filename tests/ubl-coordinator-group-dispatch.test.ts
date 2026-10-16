@@ -38,5 +38,7 @@ test('responsible Coordinator dispatches only an approved complete group with ev
  const saved=(await db.pool.query('SELECT stage,data FROM project_workflow_records WHERE id=ANY($1::uuid[])',[ids])).rows;
  assert.ok(saved.every(r=>r.stage==='customer_tracking'&&r.data.customerSendingEvidenceIds.length===1&&!r.data.headsupId&&!r.data.poId));
  assert.equal((await readyPackages(repo,atif)).some((g:any)=>g.packageId===packageId),false);
+ const listed=await repo.list(atif,'coordination','mine');
+ for(const id of ids)assert.equal((listed.records.find((r:any)=>r.id===id) as any)?.surveyBatchNumber,'SSG-'+String(group.sequence).padStart(5,'0'));
  }finally{await db.close();}
 });
