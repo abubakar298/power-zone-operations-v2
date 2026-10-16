@@ -1,3 +1,4 @@
+import {ManagementApprovals} from "../components/ManagementApprovals.js";
 import {UpsManagementPortfolio} from "../components/UpsManagementPortfolio.js";
 import {DepartmentViewSwitcher} from "../components/DepartmentViewSwitcher.js";
 import {canViewDepartments,managementDepartment,managementDepartments,type ManagementDepartment} from "../workspaces/management-departments.js";
@@ -29,9 +30,6 @@ const Departments = lazy(() =>
   import("./Departments.js").then((module) => ({
     default: module.Departments,
   })),
-);
-const Director = lazy(() =>
-  import("./Director.js").then((module) => ({ default: module.Director })),
 );
 const Coordinator = lazy(() =>
   import("./Coordinator.js").then((module) => ({
@@ -335,9 +333,7 @@ export function Dashboard({
       alive = false;
     };
   }, [bucketTask, isCoordinator]);
-  const Home = ["Admin", "Management"].includes(session.user.role)
-    ? Director
-    : Coordinator;
+  const managementHome = view === "dashboard" && canViewDepartments(session.user.role);
   return (
     <div className={`workspace fixed-header-layout ${session.user.role === "Coordinator" ? "coordinator-layout" : ""}`}>
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
@@ -735,7 +731,7 @@ export function Dashboard({
             )}
           </div>
         </header>
-        <main className="dashboard">
+        <main className="dashboard" aria-label={managementHome ? "Management landing page" : undefined}>
           <WorkspaceBoundary key={workspaceVisit}>
             <Suspense
               fallback={
@@ -828,7 +824,7 @@ export function Dashboard({
                                 : ["Admin", "Management"].includes(
                                       session.user.role,
                                     )
-                                  ? "Review approvals and track customer/site budgets."
+                                  ? "Review documents awaiting your approval."
                                   : "Select a bucket or review all pending tasks."
                         : view === "design"
                           ? "Design workspace"
@@ -945,12 +941,15 @@ export function Dashboard({
               {view === "dashboard" && session.user.role === "Operations" && (
                 <Operations session={session} portal />
               )}
-              {(view === "dashboard" || isCoordinator) &&
-                ["Admin", "Management", "Coordinator"].includes(
-                  session.user.role,
-                ) && (
+              {managementHome && <ManagementApprovals session={session} onOpen={(task)=>{
+                setRevisionDraftId(task.draft_id);
+                setPricingRevisionId(task.boq_revision_id);
+                setPricingRequestId(task.request_id);
+                navigate(task.target,task);
+              }}/>}
+              {isCoordinator && (
                   <div hidden={view !== "dashboard"}>
-                    <Home
+                    <Coordinator
                       session={session}
                       onOpen={(task) => {
                         if (task.draft_id) setRevisionDraftId(task.draft_id);
