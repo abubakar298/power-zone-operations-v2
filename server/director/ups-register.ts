@@ -4,6 +4,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {z} from 'zod';
 import {HttpError} from '../http/errors.js';
 import {transaction} from '../db/transaction.js';
+import {upsBatchProgress} from './ups-progress.js';
 
 const manifest=z.object({filename:z.string().min(1).max(200),sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 const nameEvidence=z.object({name:z.string().max(1000),row:z.number().int().positive(),description:z.string().max(5000),filename:z.string().max(200).optional()}).strict();
@@ -60,6 +61,6 @@ export function upsActiveRegister(programRows:any[],issued:any[],availableConfig
  }
  for(const r of issued){if(matched.has(r.id))continue;rows.push({id:r.id,source:'Confirmed sale',status:'Active',projectReference:r.number,number:r.number,configuration:r.configuration,orderNumber:r.orderNumber,site:r.site,siteCode:r.siteCode,invoiceReference:'',invoiceDate:'',invoiceStatus:'Not entered',ipoId:r.id});}
  const configurations=[...new Set([...availableConfigurations,...programs.map(p=>p.configuration),...issued.map(r=>r.configuration)])].sort((a,b)=>Number(a.split('-')[1])-Number(b.split('-')[1])).map(configuration=>({configuration,activeSites:rows.filter(r=>r.configuration===configuration).length}));
- const orders=programs.map(p=>{const active=rows.filter(r=>r.projectReference===p.projectReference&&r.configuration===p.configuration).length;return{programKey:p.programKey,projectReference:p.projectReference,configuration:p.configuration,totalSites:p.totalSites,listedSites:p.sites.length,activeSites:active,remainingSites:Math.max(0,p.totalSites-active),invoicedSites:p.sites.filter((s:any)=>s.invoiceStatus==='Invoiced').length};});
+ const orders=programs.map(p=>{const active=rows.filter(r=>r.projectReference===p.projectReference&&r.configuration===p.configuration).length;return{programKey:p.programKey,projectReference:p.projectReference,configuration:p.configuration,totalSites:p.totalSites,listedSites:p.sites.length,activeSites:active,remainingSites:Math.max(0,p.totalSites-active),invoicedSites:p.sites.filter((s:any)=>s.invoiceStatus==='Invoiced').length,progressSummary:upsBatchProgress(p)};});
  return{rows,programs:orders,configurations,activeSites:rows.length,importedSites:rows.filter(r=>!r.ipoId).length,totalOrdered:orders.reduce((n,p)=>n+p.totalSites,0),remainingSites:orders.reduce((n,p)=>n+p.remainingSites,0)};
 }
