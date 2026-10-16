@@ -363,6 +363,7 @@ export function CniProposals({
     {current&&<>
       <section className="pz-panel"><h2>Quotation Summary</h2><div className="pz-form-grid"><div><strong>{current.number}</strong><p>{current.snapshot.customer.name} · {current.snapshot.siteName}</p></div><div><p>{action??'Approval requested'} · Version {current.version}</p><p>{displayDate(current.created_at)}</p></div></div>
       <details><summary>Quotation History</summary><div className="pz-table-scroll"><table><thead><tr><th>Document</th><th>Date</th></tr></thead><tbody>{detail.versions.map((v:any)=><tr key={v.id}><td>{v.number}</td><td>{displayDate(v.created_at)}</td></tr>)}</tbody></table></div>{detail.actions.map((a:any)=><p key={a.id}>{a.action} · {displayDate(a.created_at)}{a.remarks?` · ${a.remarks}`:''}</p>)}</details></section>
+      {management&&<CniFinancialReview id={detail.id} versionId={current.id} session={session} pending={action==='Approval requested'} onChanged={async()=>{await load();setDetail(await api(`/cni/${detail.id}`));}}/>}
       <section className="pz-panel"><DocumentPreview title={action==='Approved'?'Approved Quotation Preview':'Submitted Quotation Preview'} url={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`}/>
       <div className="pz-action-row">{!followupPreview&&action==='Approval requested'&&<Button variant="success" onClick={()=>setRecordingApproval(v=>!v)} aria-expanded={recordingApproval}>Record Approval</Button>}<a className="button" href={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`} download>Download PDF for Sharing</a>{!followupPreview&&<button disabled={busy} aria-expanded={editingReview} onClick={()=>{              setEditingReview(true);
               const s = current.snapshot;
@@ -384,7 +385,6 @@ export function CniProposals({
                 "Original values loaded above. Saving creates a new immutable version.",
               );
 }}>Revise Quotation</button>}</div></section>
-      {management&&<CniFinancialReview id={detail.id} versionId={current.id} session={session} pending={action==='Approval requested'} onChanged={async()=>{await load();setDetail(await api(`/cni/${detail.id}`));}}/>}
       {!followupPreview&&recordingApproval&&action==='Approval requested'&&<QuotationApproval session={session} cniId={detail.id} onApproved={async()=>{window.dispatchEvent(new CustomEvent('pz:workflow-completed',{detail:{message:'Approval recorded — moved to Ready to Send.'}}));onBack();}}/>}
       {!followupPreview&&editingReview&&<section className="pz-panel"><h2>Revision Settings</h2>{notice&&<p role="status">{notice}</p>}{revisionForm}</section>}
     </>}
