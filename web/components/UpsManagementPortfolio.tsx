@@ -1,6 +1,6 @@
 import {UpsActiveSites} from './UpsActiveSites.js';
 import {UpsDataRequired} from './UpsDataRequired.js';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {api} from '../api.js';
 import {wholeMoney as money,decimalDisplay} from '../numbers.js';
 import {Decimal} from 'decimal.js';
@@ -9,9 +9,10 @@ import {Icon} from './Icon.js';
 import {DocumentPreview} from './DocumentPreview.js';
 
 export function UpsManagementPortfolio({customer}:{customer:'MBL'|'UBL'}){
+ const requestGeneration=useRef(0);
  const [data,setData]=useState<any>(),[error,setError]=useState(''),[search,setSearch]=useState(''),[selected,setSelected]=useState<string>(),[loading,setLoading]=useState(false);
- async function load(){setLoading(true);try{setData(await api(`/director/ups?customer=${customer}`));setError('');}catch(e){setError((e as Error).message);}finally{setLoading(false);}}
- useEffect(()=>{setData(undefined);setSelected(undefined);void load();const refresh=()=>void load();window.addEventListener('focus',refresh);const timer=setInterval(refresh,30000);return()=>{window.removeEventListener('focus',refresh);clearInterval(timer);};},[customer]);
+ async function load(){const generation=++requestGeneration.current;setLoading(true);try{const result=await api(`/director/ups?customer=${customer}`);if(generation!==requestGeneration.current)return;setData(result);setError('');}catch(e){if(generation===requestGeneration.current)setError((e as Error).message);}finally{if(generation===requestGeneration.current)setLoading(false);}}
+ useEffect(()=>{setData(undefined);setSelected(undefined);void load();const refresh=()=>void load();window.addEventListener('focus',refresh);const timer=setInterval(refresh,30000);return()=>{requestGeneration.current++;window.removeEventListener('focus',refresh);clearInterval(timer);};},[customer]);
  const rows=(data?.rows??[]).filter((r:any)=>[r.number,r.site,r.siteCode,r.configuration,r.orderNumber,r.payable].join(' ').toLowerCase().includes(search.toLowerCase()));
  const current=data?.rows.find((r:any)=>r.id===selected);
  const hasMasterImport=Boolean(data?.register?.programs.length),budgetedSites=hasMasterImport?data.register.activeSites:data?.totals.orders??0;

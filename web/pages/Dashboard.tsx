@@ -1108,7 +1108,7 @@ export function Dashboard({
                     onBack={() => navigate("customers")}
                   />
                 )}
-              {["mbl-ups","ubl-ups"].includes(view) && ["Admin", "Management"].includes(session.user.role) && <UpsManagementPortfolio customer={view === "mbl-ups" ? "MBL" : "UBL"}/>}
+              {["mbl-ups","ubl-ups"].includes(view) && ["Admin", "Management"].includes(session.user.role) && <UpsManagementPortfolio key={view} customer={view === "mbl-ups" ? "MBL" : "UBL"}/>}
               {view === "bafl-solar" &&
                 ["Admin", "Management"].includes(session.user.role) && (
                   <section className="detail-panel" aria-label="Workspace setup">

@@ -13,8 +13,9 @@ export function upsBatchProgress(register:any,now=new Date()){
   const days=difference!==null&&difference>=0?Math.floor(difference):null;
   const band=days===null?'unknown':days<=7?'0-7':days<=14?'8-14':days<=30?'15-30':'31+';
   const explicitOwner=status?.dataReview?.values?.delayOwner??status?.delayOwner??alert?.delayOwner;
-  const delayOwner=['UBL','MBL','PZ'].includes(explicitOwner)?explicitOwner:(register.customer==='UBL'&&['25/250','74/250'].includes(site.orderNumber)?'UBL':'Unclassified');
-  const delayReason=status?.delayReason??alert?.reason??alert?.status??'Reason not recorded';
+  const knownSiteNotReady=register.customer==='UBL'&&register.projectReference==='CHP-163'&&['25/250','74/250'].includes(site.orderNumber);
+  const delayOwner=['UBL','MBL','PZ'].includes(explicitOwner)?explicitOwner:(knownSiteNotReady?'UBL':'Unclassified');
+  const delayReason=status?.delayReason??(knownSiteNotReady?'Branch under construction / site not ready':null)??alert?.reason??alert?.status??'Reason not recorded';
   return {delayOwner,delayReason,orderNumber:site.orderNumber,site:site.siteName||alert?.evidenceSiteName||status?.recoveryEvidence?.find((e:any)=>e.name)?.name||'',[field]:valid?start:null,days,band};
  };
  let completedInvoicesSubmitted=0;
