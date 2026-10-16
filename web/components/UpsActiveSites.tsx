@@ -7,6 +7,7 @@ export function UpsActiveSites({register,prices,children}:{register:any,onPrevie
  const [configuration,setConfiguration]=useState(register.configurations.find((c:any)=>c.activeSites>0)?.configuration??register.configurations[0]?.configuration??'');
  const programs=register.programs.filter((p:any)=>p.configuration===configuration),scoped=register.configurations.find((c:any)=>c.configuration===configuration),price=prices?.find(p=>p.configuration===configuration)?.unitPayable;
  const total=(key:string)=>programs.reduce((n:number,p:any)=>n+(p.progressSummary?.[key]??0),0);
+ const agreedSites=programs.reduce((n:number,p:any)=>n+p.totalSites,0);
  const payable=(count:number)=>price==null?'Not available':`PKR ${wholeMoney(new Decimal(price).mul(count).toString())}`;
  const amount=(key:string)=>programs.reduce((n:Decimal,p:any)=>n.add(p.progressSummary?.[key]??0),new Decimal(0));
  const advanceConfirmed=programs.length>0&&programs.every((p:any)=>p.progressSummary?.advancePercent===50);
@@ -15,9 +16,8 @@ export function UpsActiveSites({register,prices,children}:{register:any,onPrevie
  const completedBalance=completedValue&&completedReceived?completedValue.sub(completedReceived):null;
  const money=(n:Decimal|null)=>n===null?'Needs reconciliation':`PKR ${wholeMoney(n.toString())}`;
  const cards=[
-  {label:'Total agreed order',count:programs.reduce((n:number,p:any)=>n+p.totalSites,0),detail:'Sites in the agreed batch orders'},
-  {label:'Active POs',count:scoped?.activeSites??0,detail:`${payable(scoped?.activeSites??0)} payable incl. GST`},
-  {label:'Completed sites',count:total('completed'),detail:`${payable(total('completed'))} payable incl. GST`,notes:[`Received${total('completedPaymentUnknown')?' (at least)':''}: ${money(completedReceived)}`,`Balance${total('completedPaymentUnknown')?' to reconcile':''}: ${money(completedBalance)}`,...(total('completedPaymentUnknown')?[`${total('completedPaymentUnknown')} main-order receipts unverified`]:[])]},
+  {label:'Active Sites',count:`${scoped?.activeSites??0}/${agreedSites}`,detail:`${payable(scoped?.activeSites??0)} / ${payable(agreedSites)}`,notes:['System order value incl. GST · excludes extra work / cables']},
+  {label:'Completed',count:`${total('completed')}/${scoped?.activeSites??0}`,detail:`${money(completedReceived)} received${total('completedPaymentUnknown')?' (at least)':''} / ${payable(total('completed'))} payable`,notes:[`Balance${total('completedPaymentUnknown')?' to reconcile':''}: ${money(completedBalance)}`,...(total('completedPaymentUnknown')?[`${total('completedPaymentUnknown')} main-order receipts unverified`]:[])]},
   {label:'Delivered, not completed',count:total('installationPending'),detail:`${total('deliveredReceived')} with payment receipt recorded`},
   {label:'Payment awaiting completion',count:total('deliveredPending'),detail:'Delivered · remaining payment pending under revised terms'},
   {label:'Delivery / completion unverified',count:total('unverified'),detail:'Among registered sites; delivery is not assumed pending'},
