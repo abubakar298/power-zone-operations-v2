@@ -11,7 +11,7 @@ const bands=[
 ];
 const displayDate=(date:string)=>new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(date+'T00:00:00Z'));
 
-export function UpsDeliveryAgeing({rows,asOf,awaitingDelivery=false}:{rows:Delivery[],asOf?:string,awaitingDelivery?:boolean}){
+export function UpsDeliveryAgeing({rows,awaitingDelivery=false}:{rows:Delivery[],asOf?:string,awaitingDelivery?:boolean}){
  const title=awaitingDelivery?'Awaiting delivery':'Delivered sites awaiting installation';
  const clock=awaitingDelivery?'IPO shared':'Delivered';
  const [selected,setSelected]=useState<string|null>(null);
@@ -28,7 +28,7 @@ export function UpsDeliveryAgeing({rows,asOf,awaitingDelivery=false}:{rows:Deliv
  const hoverSites=rows.filter(r=>r.band===hovered).sort((a,b)=>(b.days??-1)-(a.days??-1));
  const hoverGroup=groups.find(b=>b.key===hovered);
  return <section className="pz-panel pz-stack" aria-label={`${title} ageing`} onKeyDown={e=>{if(e.key==='Escape')setHovered(null);}}>
-  <div><h3>{awaitingDelivery?'Delivery ageing · awaiting delivery':'Delivery Done Installation Pending'}</h3><p className="pz-caption">Days since {awaitingDelivery?'IPO shared':'delivery'}{asOf?` · as of ${displayDate(asOf)}`:''}</p></div>
+  <div><h3>{awaitingDelivery?'Delivery ageing · awaiting delivery':'Delivery Done Installation Pending'}</h3><p className="pz-caption">Days since {awaitingDelivery?'IPO shared':'delivery'}</p></div>
   {!rows.length?<p>{awaitingDelivery?'No active sites are currently confirmed as awaiting delivery.':'No delivered sites are currently awaiting installation.'}</p>:<>
    <div className="pz-ups-ageing">
     <div className="pz-ups-ageing-chart" onMouseLeave={()=>setHovered(null)}>

@@ -2,14 +2,14 @@
 .pz-ups-ageing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:var(--pz-space-4);align-items:start}
 .pz-ups-ageing-grid>.pz-panel{min-width:0}
 .pz-ups-ageing{position:relative;display:flex;align-items:center;gap:var(--pz-space-4);flex-wrap:wrap}
-.pz-ups-ageing-chart{position:relative;width:160px;height:160px;flex:none;border-radius:50%;display:grid;place-items:center}
+.pz-ups-ageing-chart{position:relative;width:220px;max-width:calc(100% - 186px);aspect-ratio:1;flex:none;border-radius:50%;display:grid;place-items:center}
 .pz-ups-ageing-chart svg{width:100%;height:100%;overflow:visible}
 .pz-ups-ageing-chart svg [role=button]{cursor:pointer;stroke:var(--pz-surface);stroke-width:1}
 .pz-ups-ageing-chart svg [role=button]:focus-visible{outline:none;stroke:var(--pz-focus);stroke-width:3}
-.pz-ups-ageing-center{position:absolute;width:108px;height:108px;border-radius:50%;background:var(--pz-surface);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px;box-sizing:border-box;pointer-events:none}
+.pz-ups-ageing-center{position:absolute;width:68%;height:68%;border-radius:50%;background:var(--pz-surface);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px;box-sizing:border-box;pointer-events:none}
 .pz-ups-ageing-chart strong{font-size:26px;font-variant-numeric:tabular-nums;line-height:1.2}
 .pz-ups-ageing-chart span{font-size:var(--pz-text-xs);color:var(--pz-muted);max-width:90px}
-.pz-ups-ageing-legend{display:grid;gap:var(--pz-space-1);width:min(100%,170px)}
+.pz-ups-ageing-legend{display:grid;gap:var(--pz-space-1);width:min(100%,170px);margin-left:auto}
 .pz-ups-ageing-legend .pz-button{justify-content:flex-start;font-weight:400;font-size:var(--pz-text-xs);padding:4px 8px}
 .pz-ups-ageing-legend .pz-button[aria-pressed=true]{background:var(--pz-selected-bg);border-color:var(--pz-selected-border)}
 .pz-ups-ageing-legend strong{margin-left:auto;font-variant-numeric:tabular-nums}
@@ -18,6 +18,7 @@
 .pz-ups-ageing-tooltip>div{display:flex;align-items:start;justify-content:space-between;gap:12px;padding-top:8px}
 .pz-ups-ageing-tooltip span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pz-ups-ageing-tooltip small{white-space:nowrap;color:var(--pz-muted)}
+@media(max-width:700px){.pz-ups-ageing-chart{max-width:100%}}
 :root{font-family:var(--pz-font)}
 button,input,select,textarea{font:inherit}
 button:disabled{cursor:not-allowed}
