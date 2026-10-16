@@ -611,7 +611,7 @@ export function DepartmentWorkspace({
         onBack={() => setSelectedDispatch(undefined)}
       />
     );
-  if(showUblSummary && department==='design') return <UblTechnicalReviewSummary session={session} records={rows} onBack={()=>setShowUblSummary(false)} onOpen={id=>{setShowUblSummary(false);void open(id).catch(e=>setError(e.message));}}/>;
+  if(showUblSummary && department==='design') return <UblTechnicalReviewSummary session={session} records={rows} onBatchSaved={load} onBack={()=>setShowUblSummary(false)} onOpen={id=>{setShowUblSummary(false);void open(id).catch(e=>setError(e.message));}}/>;
   if (detail)
     return (
       <RecordEditor
@@ -864,6 +864,7 @@ export function DepartmentWorkspace({
             value={filters}
             onChange={setFilters}
             compact
+            toolbarActions={department==='design'&&[designBuckets[2],designBuckets[3]].includes(page)?<Button variant="primary" onClick={()=>setShowUblSummary(true)}>UBL Technical Review Summary</Button>:undefined}
             showTaskModes={page === "Workspace"}
             searchLabel={
               page === iposSharedBucket
@@ -981,7 +982,7 @@ export function DepartmentWorkspace({
                       <th>Responsibility</th>
                       <th>Age</th>
                       <th>Blocker</th>
-                      <th>{department==='design'&&[designBuckets[2],designBuckets[3]].includes(page)&&<div className="pz-stack"><Button variant="primary" onClick={()=>setShowUblSummary(true)}>UBL Technical Review Summary</Button></div>}Next action</th>
+                      <th>Next action</th>
                     </tr>
                   </thead>
                   <tbody>

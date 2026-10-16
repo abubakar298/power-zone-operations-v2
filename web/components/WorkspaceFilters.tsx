@@ -39,6 +39,7 @@ export function WorkspaceFilters({
   showTaskModes = true,
   compact = false,
   extraFilters,
+  toolbarActions,
 }: {
   rows: any[];
   value: WorkspaceFilterValues;
@@ -47,6 +48,7 @@ export function WorkspaceFilters({
   showTaskModes?: boolean;
   compact?: boolean;
   extraFilters?:ReactNode;
+  toolbarActions?:ReactNode;
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const change = (key: keyof WorkspaceFilterValues, v: string) =>
@@ -64,6 +66,7 @@ export function WorkspaceFilters({
       <Button variant="neutral" aria-expanded={filtersOpen} aria-controls="task-extra-filters" onClick={() => setFiltersOpen(!filtersOpen)}>
         Filters{activeFilters ? ` (${activeFilters})` : ""}
       </Button>
+      {toolbarActions}
       {(activeFilters > 0 || value.search) && <Button variant="neutral" onClick={() => onChange({...emptyWorkspaceFilters})}>Clear</Button>}
     </div>
     {filtersOpen && <div id="task-extra-filters" className="pz-filter-options">

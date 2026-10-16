@@ -3,41 +3,45 @@ import {api,type Session} from '../api.js';
 import {Button} from '../ui/Button.js';
 import {Field} from '../ui/Field.js';
 import {decimalDisplay} from '../numbers.js';
-
-/** Submitted documents only; pending surveys must never appear as verified. */
-export function submittedUblReviews(records:any[]) {
- return records.filter(r=>r.customerCode?.toUpperCase()==='UBL'&&r.route==='survey-framework'&&r.data?.designHandoffAt&&r.data?.reviewDocumentId)
-  .sort((a,b)=>Number(!!b.data.ublStandardsReview?.needsReview)-Number(!!a.data.ublStandardsReview?.needsReview)||String(a.siteCode).localeCompare(String(b.siteCode),undefined,{numeric:true})||a.id.localeCompare(b.id));
-}
-export function UblTechnicalReviewSummary({session,records,onBack,onOpen}:{session:Session;records:any[];onBack:()=>void;onOpen:(id:string)=>void}) {
- const submitted=useMemo(()=>submittedUblReviews(records),[records]);
- const [search,setSearch]=useState(''),[results,setResults]=useState<Record<string,any>>({}),[attempt,setAttempt]=useState(0);
- useEffect(()=>{
-  let active=true,cursor=0;setResults({});
-  // Bound read-only document requests; do not issue one simultaneous request per site.
-  const worker=async()=>{while(active&&cursor<submitted.length){const record=submitted[cursor++];try{
-   const summary=await api<any>(`/project-workflow/${record.id}/preview`,{csrf:session.csrfToken,body:{kind:'technical-summary'}});
-   if(active)setResults(old=>({...old,[record.id]:summary.reviewNumber?summary:{error:'The submitted technical review document is unavailable.'}}));
-  }catch(error){if(active)setResults(old=>({...old,[record.id]:{error:error instanceof Error?error.message:'Unable to load this saved review.'}}));}}};
-  void Promise.all(Array.from({length:Math.min(3,submitted.length)},worker));return()=>{active=false;};
- },[submitted,session.user.id,session.csrfToken,attempt]);
- const rows=submitted.map((record,index)=>({record,sr:index+1,summary:results[record.id]})).filter(({record,summary})=>[record.siteCode,record.site,summary?.reviewNumber,summary?.survey?.bessId,summary?.remarks].join(' ').toLowerCase().includes(search.toLowerCase()));
+import {useUnsavedChanges,confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
+export const readyUblReview=(r:any)=>r.customerCode?.toUpperCase()==='UBL'&&r.route==='survey-framework'&&['report_received','technical_review','technical_revision'].includes(r.stage)&&!!r.data?.surveyInputs;
+export function submittedUblReviews(records:any[]) {return records.filter(r=>r.customerCode?.toUpperCase()==='UBL'&&r.route==='survey-framework'&&r.data?.designHandoffAt&&r.data?.reviewDocumentId).sort((a,b)=>Number(!!b.data.ublStandardsReview?.needsReview)-Number(!!a.data.ublStandardsReview?.needsReview)||String(a.siteCode).localeCompare(String(b.siteCode),undefined,{numeric:true})||a.id.localeCompare(b.id));}
+export function UblTechnicalReviewSummary({session,records,onBack,onOpen,onBatchSaved}:{session:Session;records:any[];onBack:()=>void;onOpen:(id:string)=>void;onBatchSaved?:()=>Promise<void>}) {
+ const [history,setHistory]=useState(false),[search,setSearch]=useState(''),[results,setResults]=useState<Record<string,any>>({}),[attempt,setAttempt]=useState(0),[notes,setNotes]=useState<Record<string,string>>({}),[selected,setSelected]=useState<Set<string>>(()=>new Set(records.filter(readyUblReview).map(r=>r.id))),[confirm,setConfirm]=useState(false),[busy,setBusy]=useState(false),[outcomes,setOutcomes]=useState<Record<string,string>>({});
+ const ready=useMemo(()=>records.filter(readyUblReview).sort((a,b)=>String(a.siteCode).localeCompare(String(b.siteCode),undefined,{numeric:true})||a.id.localeCompare(b.id)),[records]);
+ const submitted=useMemo(()=>submittedUblReviews(records),[records]);const source=history?submitted:ready;
+ useUnsavedChanges(Object.keys(notes).length>0||busy);
+ useEffect(()=>{let active=true,cursor=0;setResults({});const worker=async()=>{while(active&&cursor<source.length){const r=source[cursor++];try{
+  let summary:any;if(history)summary=await api<any>(`/project-workflow/${r.id}/preview`,{csrf:session.csrfToken,body:{kind:'technical-summary'}});
+  else {const detail=await api<any>(`/project-workflow/${r.id}`);if(detail.record.version!==r.version)throw Error('Record changed. Refresh this summary before sending.');const p=await api<any>(`/project-workflow/${r.id}/preview`,{csrf:session.csrfToken,body:{kind:'framework',frameworkId:r.frameworkId}});const survey=detail.record.data.surveyInputs;
+   summary={survey,remarks:detail.review?.notes??'',status:'Awaiting technical review submission',panels:(p.surveyComparison?.rows??[]).filter((c:any)=>c.field==='PV capacity (W)'),cableRows:(p.surveyComparison?.rows??[]).filter((c:any)=>c.field.endsWith('(m)')),configurationRows:(p.surveyComparison?.rows??[]).filter((c:any)=>!c.field.endsWith('(m)')),standardsReview:p.surveyComparison?.standardsReview,version:detail.record.version,frameworkId:r.frameworkId};
+  }if(active)setResults(old=>({...old,[r.id]:summary}));
+ }catch(e){if(active)setResults(old=>({...old,[r.id]:{error:e instanceof Error?e.message:'Unable to load review.'}}));}}};void Promise.all(Array.from({length:Math.min(3,source.length)},worker));return()=>{active=false;};},[source,history,session.user.id,session.csrfToken,attempt]);
+ const targets=ready.filter(r=>selected.has(r.id)&&outcomes[r.id]!=='Sent to Atif');const sendable=targets.length>0&&targets.every(r=>results[r.id]&&!results[r.id].error);
+ async function send(){setBusy(true);setConfirm(false);let sent=0;const succeeded=new Set<string>();try{
+  // Preflight every selected version before the first handoff. Existing action endpoints
+  // retain per-site transactions, evidence checks, audit and idempotency.
+  for(const r of targets){const latest=await api<any>(`/project-workflow/${r.id}`);if(latest.record.version!==results[r.id].version||!readyUblReview(latest.record))throw Error(`${r.siteCode}: record changed. Refresh before sending any sites.`);}
+  for(const r of targets){try{await api(`/project-workflow/${r.id}/actions`,{csrf:session.csrfToken,body:{action:'submit-technical-review',version:results[r.id].version,requestKey:crypto.randomUUID(),input:{frameworkId:results[r.id].frameworkId,profileKey:'standard-installation',profileVersion:1,itemSelections:{},markups:{},notes:notes[r.id]??results[r.id].remarks??''}}});setOutcomes(old=>({...old,[r.id]:'Sent to Atif'}));succeeded.add(r.id);sent++;}catch(e){setOutcomes(old=>({...old,[r.id]:`Not sent: ${e instanceof Error?e.message:'Submission failed'}`}));}}
+  setNotes(old=>Object.fromEntries(Object.entries(old).filter(([id])=>!succeeded.has(id))));if(sent)await onBatchSaved?.();
+ }catch(e){setOutcomes(old=>({...old,batch:e instanceof Error?e.message:'Batch was not sent.'}));}finally{setBusy(false);}}
+ const rows=source.map((r,i)=>({r,sr:i+1,s:results[r.id]})).filter(({r,s})=>[r.siteCode,r.site,s?.reviewNumber,s?.survey?.bessId,s?.remarks].join(' ').toLowerCase().includes(search.toLowerCase()));
+ const switchHistory=(value:boolean)=>{if(!busy&&confirmLeaveWorkspace()){setNotes({});setConfirm(false);setHistory(value);}};
  return <section className="pz-stack" aria-label="UBL Technical Review Summary">
-  <div className="pz-action-row"><Button variant="neutral" onClick={onBack}>Back to surveys</Button><Button variant="secondary" onClick={()=>setAttempt(a=>a+1)} disabled={!submitted.length}>Refresh summary</Button></div>
-  <h2>UBL Technical Review Summary</h2>
-  <p>Submitted reviews remain in Design’s Sent to Coordination history and continue in Atif’s Design Review bucket. This page reads the saved technical review; it does not approve or send anything.</p>
-  <Field id="ubl-technical-summary-search" label="Search branch code, site, BESS ID, review reference or remarks"><input id="ubl-technical-summary-search" type="search" value={search} onChange={e=>setSearch(e.target.value)}/></Field>
-  <p role="status">Showing {rows.length} of {submitted.length} submitted UBL sites. {records.filter(r=>r.customerCode?.toUpperCase()==='UBL'&&r.route==='survey-framework'&&!r.data?.designHandoffAt).length} UBL surveys have not yet been handed off.</p>
-  {!submitted.length?<p>No submitted UBL technical reviews yet. Submit a completed Technical Review to include it here.</p>:<div className="pz-table-scroll"><table className="pz-table"><thead><tr><th>Sr. No.</th><th>Branch code / site</th><th>Saved review</th><th>Recommended BESS</th><th>Panels</th><th>Cable differences</th><th>Technical remarks</th><th>Next action</th></tr></thead><tbody>{rows.map(({record:r,sr,summary:s})=><tr key={r.id}>
-   <td>{sr}</td><td><strong>{r.siteCode}</strong><br/>{r.site}</td>
-   {!s?<td colSpan={5} role="status">Loading saved technical review…</td>:s.error?<td colSpan={5} role="alert">{s.error}</td>:<>
-    <td>{s.reviewNumber}<br/>{s.reviewedAt?new Date(s.reviewedAt).toLocaleDateString('en-GB',{timeZone:'Asia/Karachi'}):'Date not recorded'}<br/>{s.status}</td>
-    <td>{s.survey?.bessId??'Not entered'}<br/>{s.survey?.inverter??'Not entered'} · {decimalDisplay(s.survey?.batteryKwh,0)} kWh</td>
-    <td>{decimalDisplay(s.survey?.panelQty,0)} × {decimalDisplay(s.survey?.panelWattage,0)} W<br/>{decimalDisplay(s.survey?.totalWattage,0)} W{(s.panels??[]).map((p:any)=><p className="pz-caption" key={p.field}>Agreed {decimalDisplay(p.approved,0)} W → entered {decimalDisplay(p.entered,0)} W</p>)}</td>
-    <td>{(s.cableRows??[]).filter((c:any)=>c.different).length?<details><summary>{s.cableRows.filter((c:any)=>c.different).length} cable differences</summary>{s.cableRows.filter((c:any)=>c.different).map((c:any)=><p className="pz-caption" key={c.field}>{c.field}: {decimalDisplay(c.approved)} → {decimalDisplay(c.entered)} m</p>)}</details>:'No cable differences'}</td>
-    <td>{r.data.ublStandardsReview?.needsReview&&<strong>Flagged for UBL discussion<br/></strong>}{s.remarks||'No remarks recorded'}</td>
-   </>}
-   <td><Button variant="secondary" onClick={()=>onOpen(r.id)}>Open review</Button></td>
-  </tr>)}</tbody></table>{!rows.length&&<p>No submitted reviews match this search.</p>}</div>}
+ <div className="pz-action-row"><Button disabled={busy} onClick={()=>{if(confirmLeaveWorkspace())onBack();}}>Back to surveys</Button><Button disabled={busy} aria-pressed={!history} onClick={()=>switchHistory(false)}>Awaiting submission ({ready.length})</Button><Button disabled={busy} aria-pressed={history} onClick={()=>switchHistory(true)}>Sent to Atif ({submitted.length})</Button><Button disabled={busy} variant="secondary" onClick={async()=>{if(confirmLeaveWorkspace()){setNotes({});await onBatchSaved?.();setAttempt(a=>a+1);}}}>Refresh summary</Button></div>
+ <h2>UBL Technical Review Summary</h2><p>{history?'Saved submitted technical reviews.':'Review all ready UBL surveys, their current saved inputs and technical remarks, then send the selected batch to Atif.'}</p>
+ <Field id="ubl-technical-summary-search" label="Search branch code, site, BESS ID or remarks"><input id="ubl-technical-summary-search" type="search" value={search} onChange={e=>setSearch(e.target.value)}/></Field>
+ <p role="status">Showing {rows.length} of {source.length} {history?'submitted':'awaiting submission'} UBL sites.</p>
+ {outcomes.batch&&<p role="alert">{outcomes.batch}</p>}
+ {!history&&<div className="pz-action-row"><Button disabled={busy} onClick={()=>setSelected(new Set(ready.map(r=>r.id)))}>Select all</Button><Button disabled={busy} onClick={()=>setSelected(new Set())}>Clear selection</Button><Button variant="primary" disabled={busy||!sendable} onClick={()=>setConfirm(true)}>Send Batch to Atif ({targets.length})</Button></div>}
+ {confirm&&<section className="pz-panel pz-stack" role="region" aria-label="Confirm batch handoff"><h3>Confirm batch handoff to Atif</h3><p>This saves the displayed remarks and technically approves each selected saved survey, then hands it to Atif. Successfully sent sites move to Sent to Coordination. Any failed site stays unsent and is reported individually.</p><ul>{targets.map(r=><li key={r.id}>{r.siteCode} · {r.site} · v{results[r.id]?.version}</li>)}</ul><div className="pz-action-row"><Button onClick={()=>setConfirm(false)}>Cancel</Button><Button variant="primary" disabled={!sendable||busy} onClick={()=>void send()}>Confirm Send Batch to Atif</Button></div></section>}
+ {!source.length?<p>{history?'No submitted UBL technical reviews yet.':'No UBL surveys are awaiting technical review submission.'}</p>:<div className="pz-table-scroll"><table className="pz-table"><thead><tr>{!history&&<th>Select</th>}<th>Sr. No.</th><th>Branch code / site</th><th>BESS / configuration</th><th>Panels</th><th>Cable differences</th><th>Technical remarks</th><th>Next action</th></tr></thead><tbody>{rows.map(({r,sr,s})=><tr key={r.id}>
+ {!history&&<td><input type="checkbox" aria-label={`Select ${r.siteCode} ${r.site}`} checked={selected.has(r.id)} disabled={busy||outcomes[r.id]==='Sent to Atif'} onChange={e=>setSelected(old=>{const next=new Set(old);e.target.checked?next.add(r.id):next.delete(r.id);return next;})}/></td>}<td>{sr}</td><td><strong>{r.siteCode}</strong><br/>{r.site}<p>{outcomes[r.id]??s?.status}</p></td>
+ {!s?<td colSpan={4} role="status">Loading survey comparison…</td>:s.error?<td colSpan={4} role="alert">{s.error}</td>:<><td>{s.survey?.bessId??'Not entered'}<br/>{s.survey?.inverter??'Not entered'} · {decimalDisplay(s.survey?.batteryKwh,0)} kWh{(s.configurationRows??[]).some((c:any)=>c.different)&&<details><summary>Configuration differences</summary>{s.configurationRows.filter((c:any)=>c.different).map((c:any)=><p key={c.field}>{c.field}: {c.approved} → {c.entered}</p>)}</details>}</td>
+ <td>{decimalDisplay(s.survey?.panelQty,0)} × {decimalDisplay(s.survey?.panelWattage,0)} W{(s.panels??[]).map((p:any)=><p key={p.field}>Agreed {decimalDisplay(p.approved,0)} W → entered {decimalDisplay(p.entered,0)} W</p>)}</td>
+ <td>{(s.cableRows??[]).filter((c:any)=>c.different).length?<details><summary>{s.cableRows.filter((c:any)=>c.different).length} cable differences</summary>{s.cableRows.filter((c:any)=>c.different).map((c:any)=><p key={c.field}>{c.field}: {decimalDisplay(c.approved)} → {decimalDisplay(c.entered)} m</p>)}</details>:'No cable differences'}</td>
+ <td>{s.standardsReview?.needsReview&&<p><strong>{s.standardsReview.message}</strong></p>}{history?s.remarks||'No remarks recorded':<div className="pz-field"><textarea aria-label={`Technical remarks ${r.siteCode}`} value={notes[r.id]??s.remarks??''} disabled={busy} onChange={e=>setNotes(old=>({...old,[r.id]:e.target.value}))}/></div>}</td></>}
+ <td><Button disabled={busy} variant="secondary" onClick={()=>{if(confirmLeaveWorkspace())onOpen(r.id);}}>Open review</Button></td></tr>)}</tbody></table>{!rows.length&&<p>No reviews match this search.</p>}</div>}
+ {busy&&<p role="status">Sending reviewed sites to Atif. Keep this page open.</p>}
  </section>;
 }
