@@ -1,3 +1,4 @@
+import {approveUpsRegisterCompletions} from '../server/director/ups-completions.js';
 import {Decimal} from 'decimal.js';
 import {frameworkBasis} from '../server/project-workflow/basis.js';
 import {test} from 'node:test';
@@ -47,5 +48,16 @@ test('Management register is additive, idempotent, source-linked and independent
   const register=upsActiveRegister(latest.filter(p=>p.snapshot.managementRegister.customer==='MBL'),issued);
   assert.equal(register.activeSites,7);assert.equal(register.rows.filter(r=>r.ipoId==='real-ipo').length,1);assert.equal(register.rows.find(r=>r.ipoId==='real-ipo').site,'Real branch');
   assert.equal(register.programs.find(p=>p.projectReference==='CHP-338')!.activeSites,3);assert.equal(register.rows.filter(r=>r.ipoId==='existing20').length,1);
+  const completion={programKey:'UPS:UBL:CHP-163',expectedVersion:1,source:{fileId:'recovery-test',filename:'Recovery.xlsx',sha256:'b'.repeat(64),sheet:'UBL Chint',url:'https://docs.google.com/spreadsheets/d/recovery-test'},notes:'Management approves historical completion; actual costs later.',sites:[{orderNumber:'1/250',completionDate:'2026-10-14',overridePendingInstallation:false,evidence:[{row:4,invoice:'INV-1/250',siteName:'Evidence branch',installationText:'2026-10-14',section:'Submitted'}]}]};
+  await assert.rejects(approveUpsRegisterCompletions(db.pool,atif,completion),/Management approval/);
+  await assert.rejects(approveUpsRegisterCompletions(db.pool,actor,{...completion,sites:[{...completion.sites[0],orderNumber:'99/250'}]}),/existing order/);
+  await assert.rejects(approveUpsRegisterCompletions(db.pool,actor,{...completion,sites:[{...completion.sites[0],evidence:[{...completion.sites[0].evidence[0],installationText:'installation pending'}]}]}),/explicit Management override/);
+  assert.equal((await approveUpsRegisterCompletions(db.pool,actor,completion)).approved,1);
+  assert.equal((await approveUpsRegisterCompletions(db.pool,actor,completion)).unchanged,1);
+  const completed=await upsPortfolio(db.pool,actor,'UBL');
+  assert.equal(completed.register.activeSites,2);assert.equal(completed.register.rows.filter(r=>r.status==='Approved closed').length,1);
+  assert.equal(completed.actual.sites,1);assert.equal(completed.actual.sellingExGst,'762711.86');assert.equal(completed.actual.cost,null);assert.equal(completed.actual.markup,null);assert.equal(completed.actual.markupPercent,null);assert.equal(completed.actual.costPending,true);
+  assert.deepEqual(completed.budgeted,ubl.budgeted);assert.deepEqual(await fingerprint(),before,'Historical approvals do not invent IPOs, Accounts reports or actual expenses');
+
  }finally{await db.close();}
 });
