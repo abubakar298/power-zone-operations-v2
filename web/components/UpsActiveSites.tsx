@@ -5,20 +5,26 @@ import {UpsDeliveryAgeing} from './UpsDeliveryAgeing.js';
 export function UpsActiveSites({register,children}:{register:any,onPreview:(id:string)=>void,children?:ReactNode,prices?:any[]}){
  const [configuration,setConfiguration]=useState(register.configurations.find((c:any)=>c.activeSites>0)?.configuration??register.configurations[0]?.configuration??'');
  const programs=register.programs.filter((p:any)=>p.configuration===configuration),scoped=register.configurations.find((c:any)=>c.configuration===configuration);
+ const isUbl=register.programs.some((p:any)=>p.programKey.startsWith('UPS:UBL:'));
  const total=(key:string)=>programs.reduce((n:number,p:any)=>n+(p.progressSummary?.[key]??0),0);
  const agreedSites=programs.reduce((n:number,p:any)=>n+p.totalSites,0);
  const cards=[
   {label:'Active Sites',count:`${scoped?.activeSites??0}/${agreedSites}`,detail:''},
   {label:'Completed',count:`${total('completed')}/${scoped?.activeSites??0}`,detail:`Incomplete Sites: ${total('remainingToComplete')}`},
   {label:'Delivered',count:`${total('delivered')}/${total('remainingToComplete')}`,detail:'Installation pending'},
-  ...(total('reviewRequired')?[{label:'Accounts review required',count:total('reviewRequired'),detail:'Installation evidence needs reconciliation'}]:[])
+  ...(isUbl?[{label:'Installation Pending',count:`${total('installationPending')}/${total('delivered')}`,detail:''}]:total('reviewRequired')?[{label:'Accounts review required',count:total('reviewRequired'),detail:'Installation evidence needs reconciliation'}]:[])
  ];
- return <section className="workspace-buckets pz-stack" aria-label="Active UPS sites">
-  <h3>{configuration==='6-5'?'6 kW + 5 kWh':'6 kW + 10 kWh'}</h3>
+ return <section className="pz-stack" aria-label="Active UPS sites">
+  <section className={isUbl?'workspace-buckets pz-panel pz-stack':'workspace-buckets pz-stack'} aria-label={isUbl?'Project Summary':'UPS site summary'}>
+  <h3>{isUbl?'Project Summary':configuration==='6-5'?'6 kW + 5 kWh':'6 kW + 10 kWh'}</h3>
+  {isUbl&&<p className="pz-caption">{configuration==='6-5'?'6 kW + 5 kWh':'6 kW + 10 kWh'}</p>}
   {register.configurations.length>1&&<div className="pz-action-row">{register.configurations.map((c:any)=><Button key={c.configuration} variant={configuration===c.configuration?'secondary':'neutral'} aria-pressed={configuration===c.configuration} onClick={()=>setConfiguration(c.configuration)}>{c.configuration==='6-5'?'6 kW + 5 kWh':'6 kW + 10 kWh'}</Button>)}</div>}
   <div className="stage-grid">{cards.map(c=><article className="stage-card" key={c.label}><span style={['Active Sites','Completed','Delivered'].includes(c.label)?{fontSize:'var(--pz-text-lg)'}:undefined}>{c.label}</span><strong>{c.count}</strong>{c.detail&&<small>{c.detail}</small>}</article>)}</div>
-  {programs.some((p:any)=>p.programKey.startsWith('UPS:UBL:'))&&<UpsDeliveryAgeing key={configuration} rows={programs.flatMap((p:any)=>(p.progressSummary?.deliveryAgeing??[]).map((r:any)=>({...r,id:`${p.programKey}:${r.orderNumber}`})))} asOf={programs[0]?.progressSummary?.deliveryAgeingAsOf}/>}
-  {programs.some((p:any)=>p.programKey.startsWith('UPS:UBL:'))&&<UpsDeliveryAgeing key={`${configuration}-awaiting-delivery`} awaitingDelivery rows={programs.flatMap((p:any)=>(p.progressSummary?.awaitingDeliveryAgeing??[]).map((r:any)=>({...r,id:`${p.programKey}:${r.orderNumber}`})))} asOf={programs[0]?.progressSummary?.deliveryAgeingAsOf}/>}
+  </section>
+  {isUbl&&<section className="pz-panel pz-stack" aria-label="Delivery ageing charts"><div className="pz-ups-ageing-grid">
+  <UpsDeliveryAgeing key={configuration} rows={programs.flatMap((p:any)=>(p.progressSummary?.deliveryAgeing??[]).map((r:any)=>({...r,id:`${p.programKey}:${r.orderNumber}`})))} asOf={programs[0]?.progressSummary?.deliveryAgeingAsOf}/>
+  <UpsDeliveryAgeing key={`${configuration}-awaiting-delivery`} awaitingDelivery rows={programs.flatMap((p:any)=>(p.progressSummary?.awaitingDeliveryAgeing??[]).map((r:any)=>({...r,id:`${p.programKey}:${r.orderNumber}`})))} asOf={programs[0]?.progressSummary?.deliveryAgeingAsOf}/>
+  </div></section>}
   {children}
   {register.programs.some((p:any)=>p.configuration===configuration)&&<div className="pz-table-scroll"><table className="master-table"><thead><tr><th>Batch order</th><th className="numeric">Sites ordered</th><th className="numeric">Active sites</th><th className="numeric">Remaining</th></tr></thead><tbody>{register.programs.filter((p:any)=>p.configuration===configuration).map((p:any)=><tr key={p.programKey}><th>{p.projectReference}</th><td className="numeric">{p.totalSites}</td><td className="numeric">{p.activeSites}</td><td className="numeric">{p.remainingSites}</td></tr>)}</tbody></table></div>}
   {register.programs.filter((p:any)=>p.configuration===configuration).map((p:any)=>{const s=p.progressSummary;if(!s)return null;const entries=[
