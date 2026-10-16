@@ -1,3 +1,4 @@
+import {departmentFetch} from '../department-view.js';
 import { useEffect, useState } from "react";
 import{filenameFromDisposition}from'../../shared/download-name.js';
 export function SharePdf({ url, filename }: { url: string; filename: string }) {
@@ -12,7 +13,7 @@ export function SharePdf({ url, filename }: { url: string; filename: string }) {
     setBusy(true);
     setMessage("");
     try {
-      const r = await fetch(url, { credentials: "same-origin" });
+      const r = await departmentFetch(url, { credentials: "same-origin" });
       if (!r.ok) throw new Error("Unable to prepare PDF.");
       const blob = await r.blob();
       if (!blob.type.includes("application/pdf"))

@@ -1,9 +1,9 @@
 export const managementDepartments = [
-  {view:'coordination',label:'Project Coordination'},
-  {view:'design',label:'Design'},
-  {view:'finance',label:'Accounts'},
-  {view:'operations',label:'Operations'},
-  {view:'inventory',label:'Inventory / Store'},
+  {view:'coordination',label:'Project Coordination',role:'Coordinator'},
+  {view:'design',label:'Design',role:'Design'},
+  {view:'finance',label:'Accounts',role:'Accounts'},
+  {view:'operations',label:'Operations',role:'Operations'},
+  {view:'inventory',label:'Inventory / Store',role:'Inventory'},
 ] as const;
 export type ManagementDepartment = typeof managementDepartments[number]['view'];
 export const canViewDepartments=(role:string)=>role==='Admin'||role==='Management';

@@ -1,3 +1,4 @@
+import {departmentFetch} from '../department-view.js';
 import {FileUpload} from '../ui/FileUpload.js';
 import { displayUnit } from "../../server/boq/unit.js";
 import{downloadName,filenameFromDisposition}from'../../shared/download-name.js';
@@ -617,7 +618,7 @@ export function Orders({
                     : review
                       ? `/api/orders/submissions/${review.id}/preview.pdf`
                       : "/api/orders/preview.pdf";
-                  const r = await fetch(
+                  const r = await departmentFetch(
                     url,
                     saved || review
                       ? { credentials: "same-origin" }

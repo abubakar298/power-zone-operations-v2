@@ -1,3 +1,4 @@
+import {departmentFetch} from '../department-view.js';
 import {useEffect,useState} from 'react';
 import {Button} from '../ui/Button.js';
 import {DocumentPreview} from './DocumentPreview.js';
@@ -17,7 +18,7 @@ export function LibraryDocumentPreview({document:record,stage,onBack}:{document:
  let blob:Blob;
  if(record.pdfUrl){
   if(record.type==='Quotation'){const saved=await api<any>(`/commercial/quotations/${record.id}`);if(alive&&saved.workflow_status)setStatus(stage.toLowerCase()===saved.workflow_status.toLowerCase()?stage:`${stage} · ${saved.workflow_status}`);}
-  const response=await fetch(record.pdfUrl,{credentials:'same-origin',cache:'no-store',signal:controller.signal});
+  const response=await departmentFetch(record.pdfUrl,{credentials:'same-origin',cache:'no-store',signal:controller.signal});
   if(!response.ok){let message='Unable to load this document.';try{message=(await response.json()).message??message}catch{}throw new Error(message);}
   blob=await response.blob();if(!blob.type.includes('application/pdf'))throw new Error('The document export is not a PDF.');
   if(alive)setFilename(filenameFromDisposition(response.headers.get('Content-Disposition'))??'');

@@ -1,3 +1,4 @@
+import {departmentFetch} from '../department-view.js';
 import { useEffect, useState, type FormEvent } from "react";
 import { api, type Session } from "../api.js";
 import { readBackupResponse } from "../backup-response.js";
@@ -64,7 +65,7 @@ export function Backups({ session }: { session: Session }) {
       return;
     setBusy(true);
     try {
-      const response = await fetch("/api/backups/download", {
+      const response = await departmentFetch("/api/backups/download", {
         method: "POST",
         credentials: "same-origin",
         cache: "no-store",

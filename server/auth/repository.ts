@@ -32,6 +32,25 @@ export interface Session {
 export class AuthRepository {
   constructor(private pool: Pool) {}
 
+  private requireManagement(user: User) {
+    if (!['Admin','Management'].includes(user.role)) throw new HttpError(403,'Only Management can open another department account.');
+  }
+  async departmentUsers(principal: User) {
+    this.requireManagement(principal);
+    return (await this.pool.query<User>(`SELECT id,email,display_name,role,EXISTS(SELECT 1 FROM restricted_cost_access a WHERE a.user_id=users.id) AS "restrictedCostAccess" FROM users WHERE active AND role IN ('Coordinator','Design','Accounts','Operations','Inventory') ORDER BY display_name,id`)).rows;
+  }
+  async departmentUser(principal: User, id: string) {
+    this.requireManagement(principal);
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new HttpError(400,'Select an active department user.');
+    const user=(await this.departmentUsers(principal)).find(u=>u.id===id);
+    if(!user)throw new HttpError(403,'This department user is inactive or unavailable.');
+    return user;
+  }
+  async departmentAudit(principal: User, target: User|null, details: Record<string,unknown>) {
+    this.requireManagement(principal);
+    await this.pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[principal.id,'management.department-view:'+JSON.stringify({actingUserId:target?.id??null,actingRole:target?.role??null,...details})]);
+  }
+
   async setupRequired() {
     const r = await this.pool.query(
       "SELECT completed_at FROM admin_bootstrap WHERE singleton = true",

@@ -1,3 +1,4 @@
+import {departmentFetch} from '../department-view.js';
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/Button.js";
 import {downloadName,filenameFromDisposition} from '../../shared/download-name.js';
@@ -33,7 +34,7 @@ export function DocumentPreview({
       try {
         let blob = data;
         if (!blob) {
-          const response = await fetch(url, {
+          const response = await departmentFetch(url, {
             credentials: "same-origin",
             cache: "no-store",
             signal: controller.signal,
@@ -156,7 +157,7 @@ export function DocumentDownload({
       let blob = data;
       let filename=downloadFilename;
       if (!blob) {
-        const response = await fetch(url, {
+        const response = await departmentFetch(url, {
           credentials: "same-origin",
           cache: "no-store",
         });

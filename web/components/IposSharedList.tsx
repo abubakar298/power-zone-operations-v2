@@ -1,3 +1,4 @@
+import {departmentFetch} from '../department-view.js';
 import {DocumentListDetails} from './DocumentListDetails.js';
 import { useState } from "react";
 import{downloadName,filenameFromDisposition}from'../../shared/download-name.js';
@@ -11,7 +12,7 @@ function DownloadIpo({ record }: { record: any }) {
     setError("");
     setLoading(true);
     try {
-      const response = await fetch(`/api/orders/${record.data.ipoId}/ipo.pdf`, { credentials: "same-origin" });
+      const response = await departmentFetch(`/api/orders/${record.data.ipoId}/ipo.pdf`, { credentials: "same-origin" });
       if (!response.ok) throw new Error("Unable to download IPO and PT breakup. Please try again.");
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);

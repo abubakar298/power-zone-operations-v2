@@ -1,4 +1,5 @@
 import {workflowFeedback} from './workflow-feedback.js';
+import {departmentViewHeaders} from './department-view.js';
 export interface User {
   id: string;
   email: string;
@@ -40,12 +41,12 @@ export async function api<T>(
       signal: controller.signal,
       credentials: "same-origin",
       cache: "no-store",
-      headers: options
+      headers: {...departmentViewHeaders(path),...(options
         ? {
             "Content-Type": "application/json",
             ...(options.csrf ? { "X-CSRF-Token": options.csrf } : {}),
           }
-        : {},
+        : {})},
       ...(options ? { body: JSON.stringify(options.body) } : {}),
     });
   } catch {

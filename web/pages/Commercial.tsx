@@ -1,3 +1,4 @@
+import {departmentFetch} from '../department-view.js';
 import {prepareReviewedQuotationInput,saveReviewedQuotation} from '../save-reviewed-quotation.js';
 import {RevisionPricingSummary} from '../components/RevisionPricingSummary.js';
 import {RevisionReasonFields} from '../components/RevisionReasonFields.js';
@@ -100,7 +101,7 @@ export function QuotationView({
     async function render() {
       setPdfError("");
       try {
-        const response = await fetch(
+        const response = await departmentFetch(
           pdfUrl ?? "/api/commercial/quotations/preview.pdf",
           {
             method: pdfUrl ? "GET" : "POST",

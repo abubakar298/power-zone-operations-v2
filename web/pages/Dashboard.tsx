@@ -1,6 +1,7 @@
 import {UpsManagementPortfolio} from "../components/UpsManagementPortfolio.js";
 import {DepartmentViewSwitcher} from "../components/DepartmentViewSwitcher.js";
-import {canViewDepartments,managementDepartment,type ManagementDepartment} from "../workspaces/management-departments.js";
+import {canViewDepartments,managementDepartment,managementDepartments,type ManagementDepartment} from "../workspaces/management-departments.js";
+import {savedDepartmentUser,saveDepartmentUser,clearDepartmentUser} from '../department-view.js';
 import {SidebarBuckets} from "../components/SidebarBuckets.js";
 import {
   bucketLabel,
@@ -67,18 +68,21 @@ const Masters = lazy(() =>
 );
 
 export function Dashboard({
-  session,
+  session: principalSession,
   onLogout,
 }: {
   session: Session;
   onLogout: () => void;
 }) {
+  const [departmentUser,setDepartmentUser]=useState<User|undefined>(()=>savedDepartmentUser(principalSession.user));
+  const session=departmentUser?{...principalSession,user:departmentUser}:principalSession;
+  const [switchingDepartment,setSwitchingDepartment]=useState(false),[departmentError,setDepartmentError]=useState('');
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [directPoEnabled,setDirectPoEnabled]=useState(false);
   useEffect(()=>{if(session.user.role==='Coordinator')void api<any>('/project-workflow/references').then(r=>setDirectPoEnabled(r.features?.directPoUps===true)).catch(()=>setDirectPoEnabled(false));},[session.user.id]);
   const [workspaceVisit, setWorkspaceVisit] = useState(0);
-  const [departmentView,setDepartmentView]=useState<ManagementDepartment>();
+  const [departmentView,setDepartmentView]=useState<ManagementDepartment|undefined>(()=>managementDepartments.find(d=>d.role===departmentUser?.role)?.view);
   const [departmentPage, setDepartmentPage] = useState("Workspace");
   useLayoutEffect(() => {
     const active = (event: Event) => setDepartmentPage((event as CustomEvent<string>).detail);
@@ -210,7 +214,7 @@ export function Dashboard({
   ) {
     if (!confirmLeaveWorkspace()) return false;
     const department=asDepartment&&canViewDepartments(session.user.role)?managementDepartment(next)?.view:undefined;
-    setDepartmentView(department);
+    if(!departmentUser)setDepartmentView(department);
     if(department){sessionStorage.removeItem('pz:department-page');sessionStorage.removeItem('pz:workflow-open');setDepartmentPage('Workspace');setWorkspaceVisit(visit=>visit+1);}
     if (["dashboard", "projects", "documents"].includes(view)) setOrigin(view);
     if (next === "dashboard" && resetWorkspace) {
@@ -225,10 +229,33 @@ export function Dashboard({
       sessionStorage.setItem("pz:workflow-open", task.workflow_id);
     setView(next);
     if(session.user.role==='Coordinator'&&(next==='boqs'||next==='newboq'))setDepartmentPage('Create Quotation');
-    window.history.replaceState(null, "", `/dashboard#workspace=${next}${department?'&viewAs=department':''}`);
+    window.history.replaceState(null, "", `/dashboard#workspace=${next}${departmentUser?'&viewAs='+departmentUser.role:department?'&viewAs=department':''}`);
     setMobileOpen(false);
     setMenuOpen(false);
     return true;
+  }
+  async function selectDepartment(destination:ManagementDepartment|'dashboard'){
+    if(switchingDepartment||!confirmLeaveWorkspace())return false;
+    setSwitchingDepartment(true);setDepartmentError('');
+    try{
+      let selected:User|undefined;
+      if(destination!=='dashboard'){
+        const role=managementDepartment(destination)!.role;
+        const {users}=await api<{users:User[]}>('/auth/department-views');
+        const candidates=users.filter(u=>u.role===role);
+        const preferred=role==='Coordinator'?'Atif Hameed':role==='Design'?'Sajid Kasrana':'';
+        const target=candidates.find(u=>u.displayName.toLowerCase()===preferred.toLowerCase())??candidates[0];
+        if(!target)throw Error(`No active ${managementDepartment(destination)!.label} account is available.`);
+        selected=(await api<{user:User}>('/auth/department-view',{csrf:principalSession.csrfToken,body:{userId:target.id}})).user;
+        saveDepartmentUser(principalSession.user,selected);
+      }else{await api('/auth/department-view',{csrf:principalSession.csrfToken,body:{userId:null}});clearDepartmentUser();}
+      setDepartmentUser(selected);setDepartmentView(destination==='dashboard'?undefined:destination);
+      sessionStorage.removeItem('pz:department-page');sessionStorage.removeItem('pz:workflow-open');
+      setBucketTask(undefined);setDepartmentPage('Workspace');setView('dashboard');setMenuOpen(false);setMobileOpen(false);
+      setWorkspaceVisit(visit=>visit+1);
+      window.history.replaceState(null,'',`/dashboard#workspace=dashboard${selected?'&viewAs='+selected.role:''}`);
+      return true;
+    }catch(e){setDepartmentError(e instanceof Error?e.message:'Unable to open department.');return false;}finally{setSwitchingDepartment(false);}
   }
   const isCoordinator = session.user.role === "Coordinator";
   const canUseLibrary = ["Coordinator", "Admin", "Management"].includes(
@@ -243,7 +270,7 @@ export function Dashboard({
         setDepartmentView(params.get('viewAs')==='department'?destination as ManagementDepartment:undefined);
         return;
       }
-      setDepartmentView(undefined);
+      if(!departmentUser)setDepartmentView(undefined);
       if (
         destination === "masters" && ["Admin", "Management", "Coordinator"].includes(session.user.role)
       ) { setView("masters"); return; }
@@ -667,7 +694,7 @@ export function Dashboard({
               setOperationsIpoId(task.ipo_id ?? undefined);
             }}
           />
-          <DepartmentViewSwitcher role={session.user.role} value={departmentView} onSelect={destination=>navigate(destination,undefined,true,destination!=='dashboard')}/>
+          <DepartmentViewSwitcher role={principalSession.user.role} value={departmentView} busy={switchingDepartment} error={departmentError} onSelect={selectDepartment}/>
           <div className="account">
             <button
               className="account-trigger"
@@ -686,6 +713,7 @@ export function Dashboard({
             </button>
             {menuOpen && (
               <div className="account-menu" id="account-menu">
+                {departmentUser?<button onClick={()=>void selectDepartment('dashboard')}>Return to Management</button>:<>
                 <button onClick={() => navigate("account")}>
                   <Icon name="account" />
                   My account
@@ -698,6 +726,7 @@ export function Dashboard({
                 >
                   Change Password
                 </button>
+                </>}
                 <button onClick={logout} disabled={busy}>
                   <Icon name="logout" />
                   {busy ? "Signing out…" : "Sign out"}

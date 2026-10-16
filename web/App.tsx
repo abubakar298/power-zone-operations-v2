@@ -5,6 +5,7 @@ import { AccountLink } from "./pages/AccountLink.js";
 import { Login } from "./pages/Login.js";
 import { Setup } from "./pages/Setup.js";
 import { Dashboard } from "./pages/Dashboard.js";
+import {clearDepartmentUser} from './department-view.js';
 
 type State =
   | { kind: "loading" }
@@ -32,6 +33,7 @@ export function App() {
     [notificationLink,pricingCarryLink],
   );
   const signedOut = useCallback(() => {
+    clearDepartmentUser();
     setState({ kind: "login" });
     go("/login");
   }, [go]);

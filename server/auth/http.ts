@@ -15,6 +15,7 @@ declare global {
   namespace Express {
     interface Request {
       authSession?: Session;
+      departmentViewApplied?: boolean;
     }
   }
 }
@@ -39,6 +40,7 @@ export function authHttp(service: AuthService, config: Config) {
     res: Response,
     next: NextFunction,
   ) {
+    if(req.departmentViewApplied&&req.authSession){next();return;}
     const hash = tokenHash(req);
     req.authSession = hash
       ? await service.repository.getSession(hash)
@@ -46,6 +48,20 @@ export function authHttp(service: AuthService, config: Config) {
     if (!req.authSession) {
       res.clearCookie(cookieName, options);
       throw new HttpError(401, "Your session has ended. Please sign in again.");
+    }
+    const actingUserId=req.get('X-PZ-Department-User');
+    // The real cookie/session remains Management. Department scope is per request,
+    // so switching this tab never signs out other tabs or shares staff credentials.
+    if(actingUserId && req.baseUrl!=='/api/auth'){
+      const principal=req.authSession.user;
+      if(req.get('X-PZ-Management-User')!==principal.id)throw new HttpError(403,'The Management account changed. Refresh before continuing.');
+      const target=await service.repository.departmentUser(principal,actingUserId);
+      if(!['GET','HEAD','OPTIONS'].includes(req.method)){
+        if(!equalSecrets(req.get('X-CSRF-Token')??'',req.authSession.csrfToken))throw new HttpError(403,'Refresh and try again.');
+        await service.repository.departmentAudit(principal,target,{kind:'request-attempt',method:req.method,path:req.originalUrl.split('?')[0],requestKey:typeof req.body?.requestKey==='string'?req.body.requestKey.slice(0,100):null});
+      }
+      req.authSession={...req.authSession,user:target};
+      req.departmentViewApplied=true;
     }
     next();
   }
@@ -74,6 +90,16 @@ export function authHttp(service: AuthService, config: Config) {
       csrfToken: s.csrfToken,
       expiresAt: s.expiresAt,
     });
+  });
+  router.get('/department-views',requireSession,async(req,res)=>{
+    res.json({users:(await service.repository.departmentUsers(req.authSession!.user)).map(publicUser)});
+  });
+  router.post('/department-view',requireSession,async(req,res)=>{
+    const s=req.authSession!;
+    if(!equalSecrets(req.get('X-CSRF-Token')??'',s.csrfToken))throw new HttpError(403,'Refresh and try again.');
+    const target=req.body?.userId===null?null:await service.repository.departmentUser(s.user,String(req.body?.userId??''));
+    await service.repository.departmentAudit(s.user,target,{kind:target?'enter':'exit'});
+    res.json({user:target?publicUser(target):publicUser(s.user)});
   });
   router.post("/change-password", requireSession, async (req, res) => {
     const s = req.authSession!;
