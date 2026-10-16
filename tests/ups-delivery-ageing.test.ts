@@ -27,3 +27,11 @@ test('awaiting delivery ages from IPO sharing, never PO or invoice dates; review
  const s=upsBatchProgress({totalSites:250,sites,installationAlerts:{'3/250':{status:'Review needed by Accounts'}}},now);
  assert.equal(s.awaitingDeliveryAgeing.length,2);assert.equal(s.awaitingDeliveryAgeing[0].days,7);assert.equal(s.awaitingDeliveryAgeing[0].ipoSharedDate,'2026-10-10');assert.equal(s.awaitingDeliveryAgeing[1].band,'unknown');assert.equal(s.notDelivered,2);assert.equal(s.reviewRequired,1);assert.equal(s.unverified,1);
 });
+
+test('delay responsibility uses explicit evidence and never guesses PZ from payment or ageing',()=>{
+ const first=site(25,'2026-04-28'),second=site(74,'2026-07-11'),third=site(90,'2026-07-29');
+ const s=upsBatchProgress({customer:'UBL',totalSites:250,sites:[first,second,third],installationAlerts:{'25/250':{reason:'Branch under construction'}}},now);
+ assert.deepEqual(s.deliveryAgeing.map(r=>r.delayOwner),['UBL','UBL','Unclassified']);assert.equal(s.deliveryAgeing[0].delayReason,'Branch under construction');
+ const explicit=upsBatchProgress({customer:'MBL',totalSites:250,sites:[{...third,recoveryStatus:{...third.recoveryStatus,delayOwner:'PZ',delayReason:'Awaiting installation team'}}]},now);
+ assert.equal(explicit.deliveryAgeing[0].delayOwner,'PZ');assert.equal(explicit.deliveryAgeing[0].delayReason,'Awaiting installation team');
+});

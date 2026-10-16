@@ -12,12 +12,15 @@ export function upsBatchProgress(register:any,now=new Date()){
   const difference=valid?(Date.parse(deliveryAgeingAsOf+'T00:00:00Z')-date.getTime())/86400000:null;
   const days=difference!==null&&difference>=0?Math.floor(difference):null;
   const band=days===null?'unknown':days<=7?'0-7':days<=14?'8-14':days<=30?'15-30':'31+';
-  return {orderNumber:site.orderNumber,site:site.siteName||alert?.evidenceSiteName||status?.recoveryEvidence?.find((e:any)=>e.name)?.name||'',[field]:valid?start:null,days,band};
+  const explicitOwner=status?.dataReview?.values?.delayOwner??status?.delayOwner??alert?.delayOwner;
+  const delayOwner=['UBL','MBL','PZ'].includes(explicitOwner)?explicitOwner:(register.customer==='UBL'&&['25/250','74/250'].includes(site.orderNumber)?'UBL':'Unclassified');
+  const delayReason=status?.delayReason??alert?.reason??alert?.status??'Reason not recorded';
+  return {delayOwner,delayReason,orderNumber:site.orderNumber,site:site.siteName||alert?.evidenceSiteName||status?.recoveryEvidence?.find((e:any)=>e.name)?.name||'',[field]:valid?start:null,days,band};
  };
  let completedInvoicesSubmitted=0;
  const result={listedSites:register.sites.length,completedReceived:0,completedPending:0,completedPaymentUnknown:0,deliveredReceived:0,deliveredPending:0,deliveredPaymentUnknown:0,reviewRequired:0,notDelivered:0,unverified:0,completed:0,delivered:0,dataRequired:0,installationPending:0,remainingToComplete:0,notListed:Math.max(0,register.totalSites-register.sites.length),advancePercent:register.progressEvidenceSource?.advancePercent??null,systemReceivedAfterAdvance:'0.00',completedSystemReceivedAfterAdvance:'0.00',extraCableInvoices:0,extraCablePayable:'0.00',extraCablePaid:'0.00',extraCableBalance:'0.00'};
  for(const site of register.sites){
-  const order=site.orderNumber,status=site.recoveryStatus,completion=register.completionApprovals?.[order]??register.completionConfirmations?.[order],alert=register.installationAlerts?.[order];
+  const order=site.orderNumber,status=site.recoveryStatus,completion=register.completionApprovals?.[order]??register.completionConfirmations?.[order],savedAlert=register.installationAlerts?.[order],alert=savedAlert?.resolvedAt?undefined:savedAlert;
   if(status?.dataRequired)result.dataRequired++;
   const recordedPayment=status?.systemPaymentStatus??status?.paymentStatus;
   const payment=recordedPayment==='Received'?'Received':recordedPayment==='Pending'?'Pending':'PaymentUnknown';
@@ -28,7 +31,7 @@ export function upsBatchProgress(register:any,now=new Date()){
   else if(status?.deliveryStatus==='Delivered'&&status?.installationStatus==='Pending'){
    result.delivered++;result.installationPending++;result[`delivered${payment}`]++;
    const dates=[...new Set<string>((status.recoveryEvidence??[]).map((e:any)=>e.delivery?.slice(0,10)).filter(Boolean))];
-   const deliveryDate=alert?.deliveryDate??status.deliveryDate??(dates.length===1?dates[0]:null);
+   const deliveryDate=status.dataReview?.values?status.dataReview.values.deliveryDate:alert?.deliveryDate??status.deliveryDate??(dates.length===1?dates[0]:null);
    deliveryAgeing.push(ageEntry(site,status,alert,deliveryDate,'deliveryDate'));
   }
   else if(status?.deliveryStatus==='Not delivered'){

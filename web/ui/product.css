@@ -1,6 +1,18 @@
 /* Shared standards; legacy module layouts remain in styles.css. */
-.pz-ups-ageing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:var(--pz-space-4);align-items:stretch}
-.pz-ups-ageing-grid>.pz-panel{min-width:0}
+.pz-ups-ageing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--pz-space-4);align-items:stretch}
+.pz-ups-ageing-grid>.pz-panel{min-width:0;box-sizing:border-box}
+.pz-ups-ageing-panel{align-content:start;grid-template-rows:72px auto 36px;min-height:410px}
+.pz-ups-ageing-panel>div:first-child h3{margin-top:0}
+.pz-ups-ageing-note{margin:0}
+.pz-ups-delay-legend{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:var(--pz-text-xs);padding:8px 0}
+.pz-delay-bank{color:var(--pz-success)!important}
+.pz-delay-pz{color:var(--pz-danger)!important}
+.pz-delay-unknown{color:var(--pz-muted)!important}
+.pz-ups-delay-counts{flex-wrap:wrap;justify-content:flex-start!important;font-weight:600}
+.pz-ups-ageing-tooltip em{display:block;font-style:normal;white-space:normal;font-size:var(--pz-text-xs);font-weight:400}
+.pz-ups-extra-cables{display:flex;gap:32px;flex-wrap:wrap;margin:0}
+.pz-ups-extra-cables dd{margin:4px 0 0;font-weight:600;font-variant-numeric:tabular-nums}
+@media(max-width:1000px){.pz-ups-ageing-grid{grid-template-columns:1fr}}
 .pz-ups-ageing{position:relative;display:flex;align-items:center;gap:var(--pz-space-4);flex-wrap:wrap}
 .pz-ups-ageing-chart{position:relative;width:220px;max-width:calc(100% - 186px);aspect-ratio:1;flex:none;border-radius:50%;display:grid;place-items:center}
 .pz-ups-ageing-chart svg{width:100%;height:100%;overflow:visible}

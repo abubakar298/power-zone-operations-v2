@@ -1,4 +1,5 @@
 import {UpsActiveSites} from './UpsActiveSites.js';
+import {UpsDataRequired} from './UpsDataRequired.js';
 import {useEffect,useState} from 'react';
 import {api} from '../api.js';
 import {wholeMoney as money,decimalDisplay} from '../numbers.js';
@@ -15,7 +16,7 @@ export function UpsManagementPortfolio({customer}:{customer:'MBL'|'UBL'}){
  const current=data?.rows.find((r:any)=>r.id===selected);
  const hasMasterImport=Boolean(data?.register?.programs.length),budgetedSites=hasMasterImport?data.register.activeSites:data?.totals.orders??0;
  return <section className="pz-stack" aria-label={`${customer} UPS confirmed orders`}>
-  {data?.register&&<UpsActiveSites key={customer} register={data.register} onPreview={setSelected} prices={data.budgeted?.options}>
+  {data?.register&&<UpsActiveSites customer={customer} key={customer} register={data.register} onPreview={setSelected} prices={data.budgeted?.options}>
   {data&&<section className="ubl-performance" aria-labelledby="ups-performance-heading">
    <h3 id="ups-performance-heading">Portfolio Performance</h3>
    <p className="pz-caption pz-ups-note">{hasMasterImport?`${budgetedSites} active sites · imported orders included`:data.program?`${data.program.totalSites} sites ordered · ${data.totals.orders} IPO received · ${Math.max(0,data.program.totalSites-data.totals.orders)} pending`: `${data.totals.orders} ${data.totals.orders===1?'IPO':'IPOs'} received`} · {data.actual.sites} financial closures recorded<br/>PKR · Financial values exclude GST</p>
@@ -28,6 +29,7 @@ export function UpsManagementPortfolio({customer}:{customer:'MBL'|'UBL'}){
    <p className="pz-caption pz-ups-note">{hasMasterImport?'Budgeted figures include imported active sites at approved configuration prices and current budgets; existing issued budgets are retained.':'Budgeted figures include received IPO sites only.'} Actual results include only Management-approved job closures; pending jobs and closure drafts are excluded.</p>
   </section>}
   </UpsActiveSites>}
+  <UpsDataRequired key={customer} customer={customer} onSaved={load}/>
   <div className="pz-ups-toolbar"><label className="pz-field">Search confirmed UPS orders<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="IPO, branch, code, configuration or order number"/></label><Button variant="neutral" loading={loading} loadingLabel="Refreshing…" onClick={()=>void load()}>Refresh</Button></div>
   {error&&<p className="form-error" role="alert">{error}</p>}
   {!data&&loading&&<p role="status">Loading confirmed UPS orders…</p>}

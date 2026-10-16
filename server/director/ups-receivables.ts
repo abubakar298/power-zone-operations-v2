@@ -16,7 +16,7 @@ export function upsReceivablesAgeing(register:any,now=new Date()){
   if(payment==='Received')continue;
   if(payment!=='Pending'){unverifiedPaymentSites++;continue;}
   const completion=register.completionApprovals?.[order]??register.completionConfirmations?.[order],alert=register.installationAlerts?.[order];
-  const reviewed=alert?.status==='Review needed by Accounts'||status?.installationStatus==='Review needed';
+  const reviewed=(!alert?.resolvedAt&&alert?.status==='Review needed by Accounts')||status?.installationStatus==='Review needed';
   const stage=reviewed?'review':completion?status.invoiceStatus==='Submitted'?'submitted':['Not submitted','Unsubmitted','Not invoiced'].includes(status.invoiceStatus)?'unsubmitted':'review':status.deliveryStatus==='Delivered'&&status.installationStatus==='Pending'?'awaiting-completion':'review';
   const invoices=new Map<string,any>();
   for(const invoice of status.systemInvoices??[]){
@@ -34,7 +34,8 @@ export function upsReceivablesAgeing(register:any,now=new Date()){
    usable=true;
    const evidence=(status.recoveryEvidence??[]).filter((e:any)=>e.invoice===invoice.invoice);
    const allEvidence=status.recoveryEvidence??[];
-   const startDate=stage==='submitted'?dateOnly(status.invoiceSubmittedDate)??uniqueDate(evidence,'submit'):stage==='unsubmitted'?dateOnly(completion?.completionDate)??uniqueDate(allEvidence,'install'):stage==='awaiting-completion'?dateOnly(alert?.deliveryDate??status.deliveryDate)??uniqueDate(allEvidence,'delivery'):null;
+   const reviewedValues=status.dataReview?.values;
+   const startDate=reviewedValues?(stage==='submitted'?reviewedValues.invoiceSubmittedDate:stage==='unsubmitted'?reviewedValues.installationDate:stage==='awaiting-completion'?reviewedValues.deliveryDate:null):stage==='submitted'?dateOnly(status.invoiceSubmittedDate)??uniqueDate(evidence,'submit'):stage==='unsubmitted'?dateOnly(completion?.completionDate)??uniqueDate(allEvidence,'install'):stage==='awaiting-completion'?dateOnly(alert?.deliveryDate??status.deliveryDate)??uniqueDate(allEvidence,'delivery'):null;
    const elapsed=startDate?(Date.parse(today+'T00:00:00Z')-Date.parse(startDate+'T00:00:00Z'))/86400000:null;
    const days=elapsed!==null&&elapsed>=0?Math.floor(elapsed):null;
    rows.push({orderNumber:order,site:site.siteName||alert?.evidenceSiteName||allEvidence.find((e:any)=>e.name)?.name||'',invoice:invoice.invoice,amount:amount.toFixed(2),stage,startDate,days,band:days===null?'unknown':days<=7?'0-7':days<=14?'8-14':days<=30?'15-30':'31+'});
