@@ -1,3 +1,4 @@
+import {UblTechnicalReviewSummary} from '../components/UblTechnicalReviewSummary.js';
 import {FileUpload} from '../ui/FileUpload.js';
 import {DocumentListDetails} from '../components/DocumentListDetails.js';
 import {roundedSurveyCableMetres} from "../../shared/survey-cables.js";
@@ -239,6 +240,7 @@ export function DepartmentWorkspace({
   const [selectedSite, setSelectedSite] = useState<any>();
   const [selectedDispatch, setSelectedDispatch] = useState<string>();
   const [dispatchPlanning, setDispatchPlanning] = useState(false);
+  const [showUblSummary,setShowUblSummary]=useState(false);
   const [submissionGroups, setSubmissionGroups] = useState<any[]>([]);
   const [groupActionError, setGroupActionError] = useState<{
     id: string;
@@ -379,6 +381,7 @@ export function DepartmentWorkspace({
     const handle = (e: any) => {
       if (!confirmLeaveWorkspace()) return;
       sessionStorage.removeItem("pz:department-page");
+      setShowUblSummary(false);
       setDetail(undefined);
       setRevisionRecord(undefined);
       setQuotationReview(undefined);
@@ -608,6 +611,7 @@ export function DepartmentWorkspace({
         onBack={() => setSelectedDispatch(undefined)}
       />
     );
+  if(showUblSummary && department==='design') return <UblTechnicalReviewSummary session={session} records={rows} onBack={()=>setShowUblSummary(false)} onOpen={id=>{setShowUblSummary(false);void open(id).catch(e=>setError(e.message));}}/>;
   if (detail)
     return (
       <RecordEditor
@@ -977,7 +981,7 @@ export function DepartmentWorkspace({
                       <th>Responsibility</th>
                       <th>Age</th>
                       <th>Blocker</th>
-                      <th>Next action</th>
+                      <th>{department==='design'&&[designBuckets[2],designBuckets[3]].includes(page)&&<div className="pz-stack"><Button variant="primary" onClick={()=>setShowUblSummary(true)}>UBL Technical Review Summary</Button></div>}Next action</th>
                     </tr>
                   </thead>
                   <tbody>
