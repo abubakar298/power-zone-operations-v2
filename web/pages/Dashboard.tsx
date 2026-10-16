@@ -1,4 +1,6 @@
 import {UpsManagementPortfolio} from "../components/UpsManagementPortfolio.js";
+import {DepartmentViewSwitcher} from "../components/DepartmentViewSwitcher.js";
+import {canViewDepartments,managementDepartment,type ManagementDepartment} from "../workspaces/management-departments.js";
 import {SidebarBuckets} from "../components/SidebarBuckets.js";
 import {
   bucketLabel,
@@ -76,6 +78,7 @@ export function Dashboard({
   const [directPoEnabled,setDirectPoEnabled]=useState(false);
   useEffect(()=>{if(session.user.role==='Coordinator')void api<any>('/project-workflow/references').then(r=>setDirectPoEnabled(r.features?.directPoUps===true)).catch(()=>setDirectPoEnabled(false));},[session.user.id]);
   const [workspaceVisit, setWorkspaceVisit] = useState(0);
+  const [departmentView,setDepartmentView]=useState<ManagementDepartment>();
   const [departmentPage, setDepartmentPage] = useState("Workspace");
   useLayoutEffect(() => {
     const active = (event: Event) => setDepartmentPage((event as CustomEvent<string>).detail);
@@ -203,8 +206,12 @@ export function Dashboard({
       | "orders",
     task?: any,
     resetWorkspace = false,
+    asDepartment = false,
   ) {
     if (!confirmLeaveWorkspace()) return false;
+    const department=asDepartment&&canViewDepartments(session.user.role)?managementDepartment(next)?.view:undefined;
+    setDepartmentView(department);
+    if(department){sessionStorage.removeItem('pz:department-page');sessionStorage.removeItem('pz:workflow-open');setDepartmentPage('Workspace');setWorkspaceVisit(visit=>visit+1);}
     if (["dashboard", "projects", "documents"].includes(view)) setOrigin(view);
     if (next === "dashboard" && resetWorkspace) {
       sessionStorage.removeItem("pz:department-page");
@@ -218,7 +225,7 @@ export function Dashboard({
       sessionStorage.setItem("pz:workflow-open", task.workflow_id);
     setView(next);
     if(session.user.role==='Coordinator'&&(next==='boqs'||next==='newboq'))setDepartmentPage('Create Quotation');
-    window.history.replaceState(null, "", `/dashboard#workspace=${next}`);
+    window.history.replaceState(null, "", `/dashboard#workspace=${next}${department?'&viewAs=department':''}`);
     setMobileOpen(false);
     setMenuOpen(false);
     return true;
@@ -231,6 +238,12 @@ export function Dashboard({
     function followHash() {
       const params = new URLSearchParams(window.location.hash.slice(1)),
         destination = params.get("workspace");
+      if(canViewDepartments(session.user.role)&&managementDepartment(destination)){
+        setView(destination as ManagementDepartment);
+        setDepartmentView(params.get('viewAs')==='department'?destination as ManagementDepartment:undefined);
+        return;
+      }
+      setDepartmentView(undefined);
       if (
         destination === "masters" && ["Admin", "Management", "Coordinator"].includes(session.user.role)
       ) { setView("masters"); return; }
@@ -609,6 +622,8 @@ export function Dashboard({
                       "ubl-workflow": "UBL Site Workflow",
                     } as Record<string, string>
                   )[view]
+                : view === "coordination"
+                  ? "Project Coordination workspace"
                 : view === "dashboard"
                   ? ["Coordinator", "Design"].includes(session.user.role)
                     ? bucketLabel(departmentPage)
@@ -652,6 +667,7 @@ export function Dashboard({
               setOperationsIpoId(task.ipo_id ?? undefined);
             }}
           />
+          <DepartmentViewSwitcher role={session.user.role} value={departmentView} onSelect={destination=>navigate(destination,undefined,true,destination!=='dashboard')}/>
           <div className="account">
             <button
               className="account-trigger"
@@ -729,6 +745,8 @@ export function Dashboard({
                             "ubl-workflow": "UBL Site Workflow",
                           } as Record<string, string>
                         )[view]
+                      : view === "coordination"
+                        ? "Project Coordination workspace"
                       : view === "dashboard"
                         ? ["Coordinator", "Design"].includes(session.user.role)
                           ? bucketLabel(departmentPage)
@@ -1012,7 +1030,7 @@ export function Dashboard({
                 />
               )}
               {view === "operations" && (
-                <Operations session={session} initialIpoId={operationsIpoId} />
+                <Operations session={session} initialIpoId={operationsIpoId} portal={departmentView==='operations'} />
               )}
               {view === "team" && (
                 <>

@@ -401,3 +401,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pz-ups-download:focus-visible{outline:2px solid var(--pz-focus);outline-offset:2px}
 @media(max-width:1000px){.pz-ups-totals{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.pz-ups-toolbar{align-items:stretch;flex-direction:column}.pz-ups-totals{grid-template-columns:1fr}}
+.pz-department-switcher { position:relative; flex-shrink:0; }
+.pz-department-switcher > .pz-button { gap:8px; }
+.pz-department-switcher > .pz-button svg { width:16px; height:16px; }
+.pz-department-switcher-menu { position:absolute; top:calc(100% + 8px); right:0; min-width:220px; max-width:calc(100vw - 32px); padding:8px; display:grid; gap:4px; background:var(--pz-surface); border:1px solid var(--pz-border); border-radius:var(--pz-radius-control,8px); box-shadow:0 10px 35px rgb(0 0 0 / 8%); z-index:110; }
+.pz-department-switcher-menu > .pz-button { width:100%; justify-content:flex-start; text-align:left; white-space:nowrap; }
