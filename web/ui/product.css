@@ -1,4 +1,14 @@
 /* Shared standards; legacy module layouts remain in styles.css. */
+.pz-ups-ageing{display:flex;align-items:center;gap:var(--pz-space-6);flex-wrap:wrap}
+.pz-ups-ageing-chart{width:220px;height:220px;flex:none;border-radius:50%;display:grid;place-items:center}
+.pz-ups-ageing-chart>div{width:152px;height:152px;border-radius:50%;background:var(--pz-surface);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:12px;box-sizing:border-box}
+.pz-ups-ageing-chart strong{font-size:32px;font-variant-numeric:tabular-nums;line-height:1.2}
+.pz-ups-ageing-chart span{font-size:var(--pz-text-sm);color:var(--pz-muted);max-width:100px}
+.pz-ups-ageing-legend{display:grid;gap:var(--pz-space-2);width:min(100%,320px)}
+.pz-ups-ageing-legend .pz-button{justify-content:flex-start;font-weight:400}
+.pz-ups-ageing-legend .pz-button[aria-pressed=true]{background:var(--pz-selected-bg);border-color:var(--pz-selected-border)}
+.pz-ups-ageing-legend strong{margin-left:auto;font-variant-numeric:tabular-nums}
+.pz-ups-ageing-swatch{width:14px;height:14px;border-radius:4px;flex:none;border:1px solid var(--pz-border)}
 :root{font-family:var(--pz-font)}
 button,input,select,textarea{font:inherit}
 button:disabled{cursor:not-allowed}

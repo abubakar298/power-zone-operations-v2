@@ -1,5 +1,7 @@
 /* Product tokens: PRODUCT_DESIGN_STANDARDS.md. Business policies never belong here. */
 :root {
+  /* Management delivery-age chart: Director-approved sequential age palette. */
+  --pz-age-recent:#c4b5fd; --pz-age-followup:#7861dc; --pz-age-attention:#e5a33d; --pz-age-overdue:#d66b73; --pz-age-unknown:#e6e3f0;
   --pz-brand-primary:#6658e8; --pz-primary:#5547d0; --pz-primary-hover:#4435b5;
   --pz-surface:#fff; --pz-canvas:#f4f5fa; --pz-text:#24252b; --pz-muted:#676372; --pz-border:#dcd9e9;
   --pz-secondary-bg:#f0edff; --pz-secondary-text:#514474;
