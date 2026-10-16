@@ -98,7 +98,7 @@ assert.ok(!portfolio.rows.some(r=>r.configuration!== '6-5' && r.configuration!==
   }
   const program={totalSites:60,configurationKeys:['MBL-UPS-6-5']};
   await db.pool.query('INSERT INTO ups_management_program_versions(id,program_key,version,customer_code,snapshot,notes,created_by)VALUES($1,$2,1,$3,$4,$5,$6)',[randomUUID(),'MBL-60','MBL',program,'Test 60-unit order',director]);
-  const programPortfolio=await upsPortfolio(db.pool,director,'MBL');assert.equal(programPortfolio.program.totalSites,60);assert.equal(programPortfolio.rows.length,1,'Only received IPOs of this60-unit agreement count');assert.equal(programPortfolio.actual.sites,0);assert.equal(programPortfolio.actual.cost,null);
+  const programPortfolio=await upsPortfolio(db.pool,director,'MBL');assert.ok(programPortfolio.program);assert.equal(programPortfolio.program.totalSites,60);assert.equal(programPortfolio.rows.length,1,'Only received IPOs of this60-unit agreement count');assert.equal(programPortfolio.actual.sites,0);assert.equal(programPortfolio.actual.cost,null);
   const ipoId=programPortfolio.rows[0].id,reportId=randomUUID(),reportVersion=randomUUID(),job='ipo:'+ipoId;
   await db.pool.query('INSERT INTO inventory_reports(id,job_key,created_by)VALUES($1,$2,$3)',[reportId,job,director]);
   await db.pool.query('INSERT INTO inventory_report_versions(id,report_id,version,stage,snapshot,request_key,created_by)VALUES($1,$2,1,$3,$4,$5,$6)',[reportVersion,reportId,'Sent to Accounts',{},randomUUID(),director]);

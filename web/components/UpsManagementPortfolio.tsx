@@ -1,3 +1,4 @@
+import {UpsActiveSites} from './UpsActiveSites.js';
 import {useEffect,useState} from 'react';
 import {api} from '../api.js';
 import {money,decimalDisplay} from '../numbers.js';
@@ -13,9 +14,10 @@ export function UpsManagementPortfolio({customer}:{customer:'MBL'|'UBL'}){
  const rows=(data?.rows??[]).filter((r:any)=>[r.number,r.site,r.siteCode,r.configuration,r.orderNumber,r.payable].join(' ').toLowerCase().includes(search.toLowerCase()));
  const current=data?.rows.find((r:any)=>r.id===selected);
  return <section className="pz-panel pz-stack" aria-label={`${customer} UPS confirmed orders`}>
+  {data?.register&&<UpsActiveSites key={customer} register={data.register} onPreview={setSelected}/>}
   {data&&<section className="ubl-performance" aria-labelledby="ups-performance-heading">
    <h3 id="ups-performance-heading">Portfolio Performance</h3>
-   <p className="pz-caption pz-ups-note">{data.program?`${data.program.totalSites} sites ordered · ${data.totals.orders} IPO received · ${Math.max(0,data.program.totalSites-data.totals.orders)} pending`: `${data.totals.orders} ${data.totals.orders===1?'IPO':'IPOs'} received`} · {data.actual.sites} jobs completed<br/>PKR · Financial values exclude GST</p>
+   <p className="pz-caption pz-ups-note">{data.program&&!data.register?.programs.length?`${data.program.totalSites} sites ordered · ${data.totals.orders} IPO received · ${Math.max(0,data.program.totalSites-data.totals.orders)} pending`: `${data.totals.orders} ${data.totals.orders===1?'IPO':'IPOs'} received`} · {data.actual.sites} jobs completed<br/>PKR · Financial values exclude GST</p>
    <div className="ubl-performance-columns">{['Budgeted','Actual'].map((title,column)=>{
     const cost=new Decimal(data.totals.budgetedCost),profit=new Decimal(data.totals.budgetedProfit);
     const values=column?[String(data.actual.sites),data.actual.sellingExGst?money(data.actual.sellingExGst):'—',data.actual.cost?money(data.actual.cost):'—',data.actual.markup?money(data.actual.markup):'—',data.actual.markupPercent===null?'—':`${decimalDisplay(data.actual.markupPercent,2)}%`]:[String(data.totals.orders),money(data.totals.sellingExGst),money(data.totals.budgetedCost),money(data.totals.budgetedProfit),cost.gt(0)?`${decimalDisplay(profit.div(cost).mul(100).toString(),2)}%`:'—'];

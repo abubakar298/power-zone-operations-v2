@@ -1,3 +1,4 @@
+import {upsActiveRegister} from './ups-register.js';
 import {ipoSiteIdentity} from '../orders/site-identity.js';
 import type {Pool} from 'pg';
 import {Decimal} from 'decimal.js';
@@ -22,17 +23,20 @@ export async function upsPortfolio(pool:Pool,actor:string,customer:'MBL'|'UBL'){
  AND r.data->>'localPreviewArchived' IS DISTINCT FROM 'true'
  ORDER BY i.created_at DESC,i.id`,[customer,`${customer}-UPS-6-5`,`${customer}-UPS-6-10`])).rows;
  for(const row of issued){const identity=await ipoSiteIdentity(pool,row);if(identity.snapshot)row.snapshot=identity.snapshot;}
- const program=(await pool.query("SELECT snapshot FROM ups_management_program_versions WHERE customer_code=$1 ORDER BY version DESC,created_at DESC LIMIT 1",[customer])).rows[0]?.snapshot??null;
- const scoped=program?issued.filter(r=>program.configurationKeys.includes(r.basis.source.key)&&String(r.snapshot.input.orderNumber??'').split('/')[1]===String(program.totalSites)):issued;
+ const programRows=(await pool.query(`SELECT DISTINCT ON(program_key) program_key,version,CASE WHEN snapshot#>'{managementRegister,unreviewedCosting}' IS NOT NULL THEN jsonb_set(snapshot,'{managementRegister,unreviewedCosting}',jsonb_build_object('status','Unreviewed')) ELSE snapshot END AS snapshot FROM ups_management_program_versions WHERE customer_code=$1 ORDER BY program_key,version DESC`,[customer])).rows;
+ const hasRegister=programRows.some(p=>p.snapshot.managementRegister);
+ const program=(await pool.query("SELECT jsonb_build_object('totalSites',snapshot->'totalSites','configurationKeys',snapshot->'configurationKeys') AS snapshot FROM ups_management_program_versions WHERE customer_code=$1 ORDER BY version DESC,created_at DESC LIMIT 1",[customer])).rows[0]?.snapshot??null;
+ const scoped=program&&!hasRegister?issued.filter(r=>program.configurationKeys.includes(r.basis.source.key)&&String(r.snapshot.input.orderNumber??'').split('/')[1]===String(program.totalSites)):issued;
  const rows=scoped.map(r=>{
   const s=r.snapshot,net=new Decimal(s.allocation.subtotal),cost=new Decimal(r.management_budget?.total??r.basis.boq.total),profit=net.minus(cost);
   return {budgetVersion:r.budget_version??null,id:r.ipo_id,recordId:r.record_id,number:r.number,customer:r.customer,site:s.siteName,siteCode:s.siteCode,configuration:r.basis.source.key.replace(`${customer}-UPS-`,''),orderNumber:s.input.orderNumber??'',approvalDate:s.input.orderDate,confirmationType:s.input.evidenceType,issuedAt:r.created_at,
    sellingExGst:net.toFixed(2),gst:new Decimal(s.allocation.tax).toFixed(2),payable:new Decimal(s.allocation.total).toFixed(2),budgetedCost:cost.toFixed(2),budgetedProfit:profit.toFixed(2),markupPercent:cost.gt(0)?profit.div(cost).mul(100).toFixed(2):null};
  });
+ const configurations=(await pool.query("SELECT f.configuration_key FROM project_framework_current f JOIN customers c ON c.id=f.customer_id WHERE upper(c.short_code)=$1 AND f.payload->>'type'='bank-ups'",[customer])).rows.map(r=>r.configuration_key.replace(`${customer}-UPS-`,''));
  const sum=(key:string)=>rows.reduce((n,r)=>n.add((r as any)[key]),new Decimal(0)).toFixed(2);
  const closures=(await pool.query(`SELECT j.snapshot FROM (SELECT DISTINCT ON(job_key) job_key,stage,snapshot FROM accounts_active_job_closures WHERE job_key=ANY($1::text[]) ORDER BY job_key,version DESC)j WHERE j.stage='Closed'`,[rows.map(r=>'ipo:'+r.id)])).rows;
  const actualSelling=closures.reduce((n,r)=>n.add(r.snapshot.summary.selling),new Decimal(0)),actualCost=closures.reduce((n,r)=>n.add(r.snapshot.summary.actual),new Decimal(0)),actualProfit=actualSelling.sub(actualCost);
- return {customer,program,rows,actual:{sites:closures.length,sellingExGst:closures.length?actualSelling.toFixed(2):null,cost:closures.length?actualCost.toFixed(2):null,markup:closures.length?actualProfit.toFixed(2):null,markupPercent:actualCost.gt(0)?actualProfit.div(actualCost).mul(100).toFixed(2):null},totals:{orders:rows.length,payable:sum('payable'),sellingExGst:sum('sellingExGst'),gst:sum('gst'),budgetedCost:sum('budgetedCost'),budgetedProfit:sum('budgetedProfit')}};
+ return {customer,program:program?{totalSites:program.totalSites,configurationKeys:program.configurationKeys}:null,register:upsActiveRegister(programRows,rows,configurations),rows,actual:{sites:closures.length,sellingExGst:closures.length?actualSelling.toFixed(2):null,cost:closures.length?actualCost.toFixed(2):null,markup:closures.length?actualProfit.toFixed(2):null,markupPercent:actualCost.gt(0)?actualProfit.div(actualCost).mul(100).toFixed(2):null},totals:{orders:rows.length,payable:sum('payable'),sellingExGst:sum('sellingExGst'),gst:sum('gst'),budgetedCost:sum('budgetedCost'),budgetedProfit:sum('budgetedProfit')}};
 }
 
 /** Append a separate Management baseline; never update original costing or issued PDFs. */
