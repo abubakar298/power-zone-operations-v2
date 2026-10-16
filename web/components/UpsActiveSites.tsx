@@ -1,13 +1,14 @@
-import {useState} from 'react';
+import {useState,type ReactNode} from 'react';
 import {Button} from '../ui/Button.js';
 import {StatusBadge} from '../ui/StatusBadge.js';
 
-export function UpsActiveSites({register,onPreview}:{register:any,onPreview:(id:string)=>void}){
+export function UpsActiveSites({register,onPreview,children}:{register:any,onPreview:(id:string)=>void,children?:ReactNode}){
  const [configuration,setConfiguration]=useState(register.configurations.find((c:any)=>c.activeSites>0)?.configuration??register.configurations[0]?.configuration??''),[search,setSearch]=useState(''),[project,setProject]=useState(''),[page,setPage]=useState(0),[selected,setSelected]=useState<string>();
  const rows=register.rows.filter((r:any)=>(!configuration||r.configuration===configuration)&&(!project||r.projectReference===project)&&[r.site,r.siteCode,r.number,r.legacyJobId,r.projectReference,r.orderNumber].join(' ').toLowerCase().includes(search.toLowerCase()));
  const currentPage=Math.min(page,Math.max(0,Math.ceil(rows.length/25)-1)),detail=register.rows.find((r:any)=>r.id===selected);
  return <section className="workspace-buckets pz-stack" aria-label="Active UPS sites">
   <h3>Active Sites</h3><div className="stage-grid">{register.configurations.map((c:any)=><button key={c.configuration} type="button" className={`stage-card${configuration===c.configuration?' selected':''}`} aria-pressed={configuration===c.configuration} onClick={()=>{setConfiguration(c.configuration);setProject('');setPage(0);setSelected(undefined);}}><span>{c.configuration==='6-5'?'6 kW + 5 kWh':'6 kW + 10 kWh'}</span><strong>{c.activeSites}</strong><small>Active sites · Open list →</small></button>)}</div>
+  {children}
   {register.programs.some((p:any)=>p.configuration===configuration)&&<div className="pz-table-scroll"><table className="master-table"><thead><tr><th>Batch order</th><th className="numeric">Sites ordered</th><th className="numeric">Active sites</th><th className="numeric">Remaining</th></tr></thead><tbody>{register.programs.filter((p:any)=>p.configuration===configuration).map((p:any)=><tr key={p.programKey}><th>{p.projectReference}</th><td className="numeric">{p.totalSites}</td><td className="numeric">{p.activeSites}</td><td className="numeric">{p.remainingSites}</td></tr>)}</tbody></table></div>}
   <div className="pz-form-grid"><label className="pz-field">Search active sites<input type="search" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}} placeholder="Site, branch code, IPO, job or order number"/></label><label className="pz-field">Batch order<select value={project} onChange={e=>{setProject(e.target.value);setPage(0);}}><option value="">All batch orders</option>{Array.from(new Set<string>(register.rows.filter((r:any)=>r.configuration===configuration).map((r:any)=>r.projectReference))).map(p=><option key={p}>{p}</option>)}</select></label></div>
   <p className="pz-caption" role="status">{rows.length} active sites shown. Missing or conflicting names remain flagged. Shared IPO numbers identify separate site records.</p>

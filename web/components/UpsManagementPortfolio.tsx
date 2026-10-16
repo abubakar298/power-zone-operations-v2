@@ -14,7 +14,7 @@ export function UpsManagementPortfolio({customer}:{customer:'MBL'|'UBL'}){
  const rows=(data?.rows??[]).filter((r:any)=>[r.number,r.site,r.siteCode,r.configuration,r.orderNumber,r.payable].join(' ').toLowerCase().includes(search.toLowerCase()));
  const current=data?.rows.find((r:any)=>r.id===selected);
  return <section className="pz-panel pz-stack" aria-label={`${customer} UPS confirmed orders`}>
-  {data?.register&&<UpsActiveSites key={customer} register={data.register} onPreview={setSelected}/>}
+  {data?.register&&<UpsActiveSites key={customer} register={data.register} onPreview={setSelected}>
   {data&&<section className="ubl-performance" aria-labelledby="ups-performance-heading">
    <h3 id="ups-performance-heading">Portfolio Performance</h3>
    <p className="pz-caption pz-ups-note">{data.program&&!data.register?.programs.length?`${data.program.totalSites} sites ordered · ${data.totals.orders} IPO received · ${Math.max(0,data.program.totalSites-data.totals.orders)} pending`: `${data.totals.orders} ${data.totals.orders===1?'IPO':'IPOs'} received`} · {data.actual.sites} jobs completed<br/>PKR · Financial values exclude GST</p>
@@ -25,6 +25,7 @@ export function UpsManagementPortfolio({customer}:{customer:'MBL'|'UBL'}){
    })}</div>
    <p className="pz-caption pz-ups-note">Budgeted figures include received IPO sites only. Actual results include only Management-approved job closures; pending jobs and closure drafts are excluded.</p>
   </section>}
+  </UpsActiveSites>}
   <div className="pz-ups-toolbar"><label className="pz-field">Search confirmed UPS orders<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="IPO, branch, code, configuration or order number"/></label><Button variant="neutral" loading={loading} loadingLabel="Refreshing…" onClick={()=>void load()}>Refresh</Button></div>
   {error&&<p className="form-error" role="alert">{error}</p>}
   {!data&&loading&&<p role="status">Loading confirmed UPS orders…</p>}
