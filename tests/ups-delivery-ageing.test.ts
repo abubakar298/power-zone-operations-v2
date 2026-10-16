@@ -22,3 +22,8 @@ test('missing, conflicting, invalid and future dates remain unknown; confirmed a
  const s=upsBatchProgress({totalSites:250,sites,installationAlerts:{'5/250':{deliveryDate:'2026-10-10'}}},now);
  assert.deepEqual(s.deliveryAgeing.map(r=>r.band),['unknown','unknown','unknown','unknown','0-7']);assert.equal(s.deliveryAgeing[4].days,7);
 });
+test('awaiting delivery ages from IPO sharing, never PO or invoice dates; review stays separate',()=>{
+ const sites=[{orderNumber:'1/250',ipoSharedAt:'2026-10-09T20:00:00Z',recoveryStatus:{deliveryStatus:'Not delivered'}},{orderNumber:'2/250',invoiceDate:'2026-01-01',recoveryStatus:{deliveryStatus:'Not delivered'}},{orderNumber:'3/250',recoveryStatus:{deliveryStatus:'Not delivered'}},site(4,'2026-10-01'),{orderNumber:'5/250'}];
+ const s=upsBatchProgress({totalSites:250,sites,installationAlerts:{'3/250':{status:'Review needed by Accounts'}}},now);
+ assert.equal(s.awaitingDeliveryAgeing.length,2);assert.equal(s.awaitingDeliveryAgeing[0].days,7);assert.equal(s.awaitingDeliveryAgeing[0].ipoSharedDate,'2026-10-10');assert.equal(s.awaitingDeliveryAgeing[1].band,'unknown');assert.equal(s.notDelivered,2);assert.equal(s.reviewRequired,1);assert.equal(s.unverified,1);
+});
