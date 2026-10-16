@@ -1,3 +1,5 @@
+import {Decimal} from 'decimal.js';
+import {frameworkBasis} from '../server/project-workflow/basis.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -33,6 +35,12 @@ test('Management register is additive, idempotent, source-linked and independent
   assert.equal(ubl.register.activeSites,2);assert.equal(ubl.register.totalOrdered,250);assert.equal(ubl.register.remainingSites,248);
   assert.equal(mbl.register.activeSites,6);assert.equal(mbl.register.totalOrdered,150);
   assert.equal(ubl.rows.length,0);assert.equal(ubl.actual.sites,0);assert.equal(ubl.totals.budgetedCost,'0.00');
+  assert.equal(ubl.budgeted?.sites,2);assert.equal(ubl.budgeted?.sellingExGst,'1525423.72');assert.equal(mbl.budgeted?.sites,6);assert.equal(mbl.budgeted?.sellingExGst,'3355932.18');
+  const approved=(await db.pool.query("SELECT * FROM project_framework_current WHERE configuration_key='UBL-UPS-6-10'")).rows[0];
+  const unit=await frameworkBasis(db.pool,db.pool,{customer_id:approved.customer_id,site_name:'Disposable budget check',site_code:'PORTFOLIO',route:'direct-framework'},approved.id);
+  assert.equal(ubl.budgeted?.cost,new Decimal(unit.boq.total).mul(2).toFixed(2));assert.equal(ubl.budgeted?.profit,new Decimal(ubl.budgeted!.sellingExGst).sub(ubl.budgeted!.cost).toFixed(2));
+  assert.equal(ubl.budgeted?.markupPercent,new Decimal(ubl.budgeted!.profit).div(ubl.budgeted!.cost).mul(100).toFixed(2));
+  assert.equal(mbl.actual.sites,0);
   assert.deepEqual(await fingerprint(),before,'All existing master, workflow, document, budget, closure and counter data remain untouched');
   const latest=(await db.pool.query('SELECT program_key,version,snapshot FROM ups_management_program_versions')).rows;
   const issued=[{id:'real-ipo',number:'CHP-338',orderNumber:'1/60',configuration:'6-5',site:'Real branch',siteCode:'0208'},{id:'existing20',number:'CHP-338',orderNumber:'20/60',configuration:'6-5',site:'Consumer Hub Lahore',siteCode:'code'}];

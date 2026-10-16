@@ -1,3 +1,4 @@
+import {frameworkBasis} from '../project-workflow/basis.js';
 import {upsActiveRegister} from './ups-register.js';
 import {ipoSiteIdentity} from '../orders/site-identity.js';
 import type {Pool} from 'pg';
@@ -32,11 +33,36 @@ export async function upsPortfolio(pool:Pool,actor:string,customer:'MBL'|'UBL'){
   return {budgetVersion:r.budget_version??null,id:r.ipo_id,recordId:r.record_id,number:r.number,customer:r.customer,site:s.siteName,siteCode:s.siteCode,configuration:r.basis.source.key.replace(`${customer}-UPS-`,''),orderNumber:s.input.orderNumber??'',approvalDate:s.input.orderDate,confirmationType:s.input.evidenceType,issuedAt:r.created_at,
    sellingExGst:net.toFixed(2),gst:new Decimal(s.allocation.tax).toFixed(2),payable:new Decimal(s.allocation.total).toFixed(2),budgetedCost:cost.toFixed(2),budgetedProfit:profit.toFixed(2),markupPercent:cost.gt(0)?profit.div(cost).mul(100).toFixed(2):null};
  });
- const configurations=(await pool.query("SELECT f.configuration_key FROM project_framework_current f JOIN customers c ON c.id=f.customer_id WHERE upper(c.short_code)=$1 AND f.payload->>'type'='bank-ups'",[customer])).rows.map(r=>r.configuration_key.replace(`${customer}-UPS-`,''));
+ const frameworks=(await pool.query("SELECT f.* FROM project_framework_current f JOIN customers c ON c.id=f.customer_id WHERE upper(c.short_code)=$1 AND f.payload->>'type'='bank-ups'",[customer])).rows;
+ const configurations=frameworks.map(r=>r.configuration_key.replace(`${customer}-UPS-`,''));
+ const register=upsActiveRegister(programRows,rows,configurations);
+ const budgeted=hasRegister?await masterRegisterBudget(pool,register,rows,frameworks):null;
  const sum=(key:string)=>rows.reduce((n,r)=>n.add((r as any)[key]),new Decimal(0)).toFixed(2);
  const closures=(await pool.query(`SELECT j.snapshot FROM (SELECT DISTINCT ON(job_key) job_key,stage,snapshot FROM accounts_active_job_closures WHERE job_key=ANY($1::text[]) ORDER BY job_key,version DESC)j WHERE j.stage='Closed'`,[rows.map(r=>'ipo:'+r.id)])).rows;
  const actualSelling=closures.reduce((n,r)=>n.add(r.snapshot.summary.selling),new Decimal(0)),actualCost=closures.reduce((n,r)=>n.add(r.snapshot.summary.actual),new Decimal(0)),actualProfit=actualSelling.sub(actualCost);
- return {customer,program:program?{totalSites:program.totalSites,configurationKeys:program.configurationKeys}:null,register:upsActiveRegister(programRows,rows,configurations),rows,actual:{sites:closures.length,sellingExGst:closures.length?actualSelling.toFixed(2):null,cost:closures.length?actualCost.toFixed(2):null,markup:closures.length?actualProfit.toFixed(2):null,markupPercent:actualCost.gt(0)?actualProfit.div(actualCost).mul(100).toFixed(2):null},totals:{orders:rows.length,payable:sum('payable'),sellingExGst:sum('sellingExGst'),gst:sum('gst'),budgetedCost:sum('budgetedCost'),budgetedProfit:sum('budgetedProfit')}};
+ return {customer,program:program?{totalSites:program.totalSites,configurationKeys:program.configurationKeys}:null,register,budgeted,rows,actual:{sites:closures.length,sellingExGst:closures.length?actualSelling.toFixed(2):null,cost:closures.length?actualCost.toFixed(2):null,markup:closures.length?actualProfit.toFixed(2):null,markupPercent:actualCost.gt(0)?actualProfit.div(actualCost).mul(100).toFixed(2):null},totals:{orders:rows.length,payable:sum('payable'),sellingExGst:sum('sellingExGst'),gst:sum('gst'),budgetedCost:sum('budgetedCost'),budgetedProfit:sum('budgetedProfit')}};
+}
+
+
+/** Current approved option budgets for historical imported active sites; issued budgets stay frozen. */
+async function masterRegisterBudget(pool:Pool,register:any,issued:any[],frameworks:any[]){
+ const options=[];
+ for(const c of register.configurations){
+  if(!c.activeSites)continue;
+  const framework=frameworks.find(f=>f.payload.configuration===c.configuration);
+  if(!framework)throw new HttpError(422,'Approved UPS pricing is unavailable for an active configuration.');
+  const basis=await frameworkBasis(pool,pool,{customer_id:framework.customer_id,site_name:'Management portfolio budget',site_code:'PORTFOLIO',route:'direct-framework'},framework.id);
+  options.push({configuration:c.configuration,frameworkId:framework.id,frameworkVersion:framework.version,unitSellingExGst:basis.order.allocation.subtotal,unitCost:basis.boq.total});
+ }
+ let selling=new Decimal(0),cost=new Decimal(0);
+ for(const r of register.rows){
+  const frozen=r.ipoId?issued.find(i=>i.id===r.ipoId):undefined;
+  const option=options.find(o=>o.configuration===r.configuration)!;
+  selling=selling.add(frozen?.sellingExGst??option.unitSellingExGst);
+  cost=cost.add(frozen?.budgetedCost??option.unitCost);
+ }
+ const profit=selling.sub(cost);
+ return{sites:register.activeSites,sellingExGst:selling.toFixed(2),cost:cost.toFixed(2),profit:profit.toFixed(2),markupPercent:cost.gt(0)?profit.div(cost).mul(100).toFixed(2):null,options};
 }
 
 /** Append a separate Management baseline; never update original costing or issued PDFs. */
