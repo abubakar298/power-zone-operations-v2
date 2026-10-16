@@ -11,7 +11,7 @@ export function UpsActiveSites({register,children}:{register:any,onPreview:(id:s
  const agreedSites=programs.reduce((n:number,p:any)=>n+p.totalSites,0);
  const cards=[
   {label:'Active Sites',count:`${scoped?.activeSites??0}/${agreedSites}`,detail:isBank?`Pending: ${Math.max(0,agreedSites-(scoped?.activeSites??0))} POs`:''},
-  {label:'Completed',count:`${total('completed')}/${scoped?.activeSites??0}`,detail:isBank?`Completed ${total('completed')} Sites`:`Incomplete Sites: ${total('remainingToComplete')}`},
+  {label:'Completed',count:`${total('completed')}/${scoped?.activeSites??0}`,detail:isBank?`Pending: ${Math.max(0,(scoped?.activeSites??0)-total('completed'))} Sites`:`Incomplete Sites: ${total('remainingToComplete')}`},
   {label:'Delivered',count:`${total('delivered')}/${total('remainingToComplete')}`,detail:isBank?`Pending: ${Math.max(0,total('remainingToComplete')-total('delivered'))} Sites`:'Installation pending'},
   ...(isBank?[{label:'Installation Pending',count:`${total('installationPending')}/${total('delivered')}`,detail:`Pending: ${total('installationPending')} Sites`}]:total('reviewRequired')?[{label:'Accounts review required',count:total('reviewRequired'),detail:'Installation evidence needs reconciliation'}]:[])
  ];
