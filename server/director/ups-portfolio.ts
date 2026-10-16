@@ -40,8 +40,8 @@ export async function upsPortfolio(pool:Pool,actor:string,customer:'MBL'|'UBL'){
  const sum=(key:string)=>rows.reduce((n,r)=>n.add((r as any)[key]),new Decimal(0)).toFixed(2);
  const closures=(await pool.query(`SELECT j.job_key,j.snapshot FROM (SELECT DISTINCT ON(job_key) job_key,stage,snapshot FROM accounts_active_job_closures WHERE job_key=ANY($1::text[]) ORDER BY job_key,version DESC)j WHERE j.stage='Closed'`,[rows.map(r=>'ipo:'+r.id)])).rows;
  const historicalClosed=register.rows.filter(r=>r.completion&&!closures.some(c=>r.ipoId&&c.job_key==='ipo:'+r.ipoId));
- const actualSites=closures.length+historicalClosed.length,costPending=historicalClosed.some(r=>r.completion.actualCost===null);
- const actualSelling=closures.reduce((n,r)=>n.add(r.snapshot.summary.selling),new Decimal(0)).add(historicalClosed.reduce((n,r)=>n.add(r.completion.sellingExGst),new Decimal(0))),actualCost=closures.reduce((n,r)=>n.add(r.snapshot.summary.actual),new Decimal(0)),actualProfit=actualSelling.sub(actualCost);
+ const actualSites=closures.length+historicalClosed.length,costPending=historicalClosed.some(r=>r.completion.actualCost==null);
+ const actualSelling=closures.reduce((n,r)=>n.add(r.snapshot.summary.selling),new Decimal(0)).add(historicalClosed.reduce((n,r)=>n.add(r.completion.sellingExGst),new Decimal(0))),actualCost=closures.reduce((n,r)=>n.add(r.snapshot.summary.actual),new Decimal(0)).add(historicalClosed.reduce((n,r)=>n.add(r.completion.actualCost??0),new Decimal(0))),actualProfit=actualSelling.sub(actualCost);
  return {customer,program:program?{totalSites:program.totalSites,configurationKeys:program.configurationKeys}:null,register,budgeted,rows,actual:{sites:actualSites,costPending,sellingExGst:actualSites?actualSelling.toFixed(2):null,cost:actualSites&&!costPending?actualCost.toFixed(2):null,markup:actualSites&&!costPending?actualProfit.toFixed(2):null,markupPercent:!costPending&&actualCost.gt(0)?actualProfit.div(actualCost).mul(100).toFixed(2):null},totals:{orders:rows.length,payable:sum('payable'),sellingExGst:sum('sellingExGst'),gst:sum('gst'),budgetedCost:sum('budgetedCost'),budgetedProfit:sum('budgetedProfit')}};
 }
 

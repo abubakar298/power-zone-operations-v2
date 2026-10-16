@@ -110,3 +110,31 @@ test('Delivery age uses Karachi calendar days and leaves unknown dates blank',()
  assert.equal(daysSinceDelivery('2026-10-17',new Date('2026-10-16T20:00:00Z')),0);
  assert.equal(daysSinceDelivery(null),null);assert.equal(daysSinceDelivery('2099-01-01'),null);
 });
+
+test('Historical actuals use the exact saved site cost, sum without duplication and preserve budgets and source rows',async()=>{
+ const db=await testDatabase();try{
+  const actor=randomUUID(),atif=randomUUID();
+  for(const [id,role]of [[actor,'Management'],[atif,'Coordinator']])await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash)VALUES($1,$2,'Cost import test',$3,'isolated-only')",[id,id+'@test.invalid',role]);
+  const sourceRows=[{sourceRow:13,values:[1,'INV-1/250',null,null,null,null,null,null,null,null,null,100.005]},{sourceRow:14,values:[2,'',null,null,null,null,null,null,null,null,null,200.115]}];
+  const register={...input(),unreviewedCosting:{status:'Unreviewed',analysisRows:sourceRows,ledgerTransactions:[],sourceFiles:[],notes:'Original imported costing'}};
+  await importUpsManagementRegister(db.pool,actor,register);
+  const before=await upsPortfolio(db.pool,actor,'UBL');
+  const evidence={programKey:'UPS:UBL:CHP-163',expectedVersion:1,source:{fileId:'recovery',filename:'Recovery.xlsx',sha256:'b'.repeat(64),sheet:'UBL Chint',url:'https://docs.google.com/spreadsheets/d/recovery'},notes:'Director requests completed site actuals',sites:[{orderNumber:'1/250',completionDate:'2026-10-14',overridePendingInstallation:false,evidence:[{row:4,invoice:'INV-1/250',siteName:'Branch',installationText:'2026-10-14',section:'Submitted'}]}]};
+  await approveUpsRegisterCompletions(db.pool,actor,evidence);
+  const costSource={...register.source,sheet:register.sourceSheet,column:'L'};
+  const withCost={...evidence,expectedVersion:2,costSource,sites:[{...evidence.sites[0],actualCost:{amount:'100.01',sourceRow:13}}]};
+  await assert.rejects(approveUpsRegisterCompletions(db.pool,atif,withCost),/Management approval/);
+  await assert.rejects(approveUpsRegisterCompletions(db.pool,actor,{...withCost,costSource:{...costSource,sha256:'c'.repeat(64)}}),/source does not match/);
+  await assert.rejects(approveUpsRegisterCompletions(db.pool,actor,{...withCost,sites:[{...withCost.sites[0],actualCost:{amount:'100.00',sourceRow:13}}]}),/differs from the saved/);
+  await assert.rejects(approveUpsRegisterCompletions(db.pool,actor,{...withCost,sites:[{...withCost.sites[0],actualCost:{amount:'200.12',sourceRow:14}}]}),/must match the site row/);
+  await assert.rejects(approveUpsRegisterCompletions(db.pool,actor,{...withCost,sites:evidence.sites}),/Each actual cost needs/);
+  await approveUpsRegisterCompletions(db.pool,actor,withCost);
+  let actual=await upsPortfolio(db.pool,actor,'UBL');assert.equal(actual.actual.sites,1);assert.equal(actual.actual.cost,'100.01');assert.equal(actual.actual.costPending,false);assert.deepEqual(actual.budgeted,before.budgeted);
+  const both={...withCost,expectedVersion:3,sites:[withCost.sites[0],{...evidence.sites[0],orderNumber:'2/250',actualCost:{amount:'200.12',sourceRow:14},evidence:[{...evidence.sites[0].evidence[0],invoice:'INV-2/250'}]}]};
+  assert.equal((await approveUpsRegisterCompletions(db.pool,actor,both)).approved,1);assert.equal((await approveUpsRegisterCompletions(db.pool,actor,both)).unchanged,2);
+  actual=await upsPortfolio(db.pool,actor,'UBL');assert.equal(actual.actual.sites,2);assert.equal(actual.actual.cost,'300.13');assert.equal(actual.actual.costPending,false);assert.equal(actual.actual.markup,new Decimal(actual.actual.sellingExGst!).sub('300.13').toFixed(2));assert.equal(actual.actual.markupPercent,new Decimal(actual.actual.markup!).div('300.13').mul(100).toFixed(2));assert.deepEqual(actual.budgeted,before.budgeted);
+  const latest=(await db.pool.query('SELECT snapshot FROM ups_management_program_versions ORDER BY version DESC LIMIT 1')).rows[0].snapshot.managementRegister;
+  assert.deepEqual(latest.unreviewedCosting.analysisRows,sourceRows);assert.equal(latest.completionApprovals['1/250'].actualCostEvidence.cell,'L13');assert.equal(latest.completionApprovals['1/250'].actualCostEvidence.rawValue,'100.005');
+  assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM internal_purchase_orders')).rows[0].n,0);assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM accounts_job_closures')).rows[0].n,0);
+ }finally{await db.close();}
+});
