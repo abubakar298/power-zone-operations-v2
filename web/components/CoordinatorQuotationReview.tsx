@@ -1,3 +1,4 @@
+import {ManagementQuotationCosting} from './ManagementQuotationCosting.js';
 import {QuotationApproval} from "./QuotationApproval.js";
 import {useEffect,useState} from 'react';
 import {api,type Session} from '../api.js';
@@ -22,6 +23,7 @@ export function CoordinatorQuotationReview({session,record,onBack,onOpen,onAppro
    </section>
    <section className="pz-panel"><h2>{quote.workflow_status==='Approved'?'Approved Quotation Preview':'Submitted Quotation Preview'}</h2><QuotationView showActions={false} snapshot={quote.snapshot} number={quote.number} pdfUrl={`/api/commercial/quotations/${quote.id}/quotation.pdf`}/>
    <div className="pz-action-row">{!followup&&quote.workflow_status==='Submitted'&&<Button variant="success" onClick={()=>setApproving(v=>!v)} aria-expanded={approving}>Record Approval</Button>}<a className="button" href={`/api/commercial/quotations/${quote.id}/quotation.pdf`} download>Download PDF for Sharing</a>{!followup&&["Admin","Management"].includes(session.user.role)&&quote.workflow_status==='Submitted'&&<Button variant="warning" onClick={()=>setRevising(v=>v==="return"?false:"return")} aria-expanded={revising==="return"}>Return to Atif for Revision</Button>}{!followup&&<Button variant="secondary" onClick={()=>setRevising(v=>v==="edit"?false:"edit")} aria-expanded={revising==="edit"}>Revise Quotation</Button>}</div></section>
+   {["Admin","Management"].includes(session.user.role)&&quote.boq_revision_id&&<ManagementQuotationCosting revisionId={quote.boq_revision_id}/>}
    {!followup&&approving&&quote.workflow_status==='Submitted'&&<QuotationApproval session={session} quotationId={quote.id} onApproved={async()=>{if(onApproved)await onApproved();else onBack();}}/>}
    {!followup&&revising&&<RevisionEntry key={revising} intent={revising} embedded session={session} record={{...record,sourceQuotationId:quote.id}} onBack={()=>revising==='return'?onBack():setRevising(false)} onOpen={onOpen}/>}
   </>}
