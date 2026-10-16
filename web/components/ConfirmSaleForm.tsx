@@ -176,10 +176,9 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
 
   ];
   function renderField([field, label]: any) {
-    if (
-      ["poNumber", "customerNtn", "customerStrn"].includes(field) &&
-      (!po || (["customerNtn", "customerStrn"].includes(field) && !document))
-    )
+    if (field === 'ipoNumber' || (
+      ["customerNtn", "customerStrn"].includes(field) && (!po || !document)
+    ))
       return null;
     return (
       <label key={field}>
@@ -220,6 +219,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
               ].includes(field) ||
               (field === "poNumber" && po)
             }
+            placeholder={field === "poNumber" ? "N/A if no formal PO was issued" : undefined}
             value={input[field] ?? ""}
             readOnly={field==="salesPerson"&&preAgreedBank}
             maxLength={
@@ -302,8 +302,8 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
     salePreview?.key === previewKey ? salePreview : undefined;
   function receiptPayload() {
     return {
-      ...(directUps&&input.ipoNumber?.trim()?{ipoNumber:input.ipoNumber.trim()}:{}),
-      reference: po ? input.poNumber : `${input.evidenceType==="Email approval"?"EMAIL":"WA"}-${r.siteCode}-${input.orderDate}`,
+      ...(input.ipoNumber?.trim()?{ipoNumber:input.ipoNumber.trim()}:{}),
+      reference: po && input.poNumber.trim() && !/^n\/?a$/i.test(input.poNumber.trim()) ? input.poNumber.trim() : `${input.evidenceType==="Email approval"?"EMAIL":"WA"}-${r.siteCode}-${input.orderDate}-${r.id.slice(0,8)}`,
       date: input.orderDate,
       evidenceId: document.id,
       basisType: framework ? "framework" : "quotation",
@@ -473,7 +473,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
           <h3>PO details, please verify</h3>
           <fieldset disabled={busy} className="order-fields">
             {directUps&&<label>Order number (unit / total)<input value={input.orderNumber??''} placeholder="For example 20/60" onChange={e=>change('orderNumber',e.target.value)}/><small>Unit sequence within the customer's order; separate from its PO reference.</small></label>}
-            {directUps&&<label>IPO number (optional)
+            {<label>IPO Number (optional)
               <input value={input.ipoNumber??''} maxLength={100} placeholder="Automatic numbering if blank" onChange={e=>{change('ipoNumber',e.target.value);setIpoError('');setIpoCheck('');}} onBlur={async()=>{const number=input.ipoNumber?.trim();if(!number)return;setIpoCheck('Checking IPO number…');try{const result=await api<{available:boolean}>(`/project-workflow/ipo-number-availability?number=${encodeURIComponent(number)}`);setIpoCheck(result.available?'IPO number is available.':'');setIpoError(result.available?'':'This IPO number is already in use. Enter a different number or leave blank for automatic numbering.');}catch(e){setIpoCheck('');setIpoError(e instanceof Error?e.message:'Unable to check IPO number.');}}}/>
               <small>The number is assigned only after sale confirmation. Duplicate numbers are blocked.</small>
               {ipoCheck&&<span role="status">{ipoCheck}</span>}{ipoError&&<span className="form-error" role="alert">{ipoError}</span>}

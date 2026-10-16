@@ -1,6 +1,6 @@
 import {loadDocumentListMetadata,snapshotListMetadata} from '../documents/list-metadata.js';
 import {directPoFields,directPoSiteMatches,directPoChanges,validOrderPosition,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
-import {manualIpoAvailable,requireDirectUps} from "../documents/manual-ipo.js";
+import {manualIpoAvailable,requireDirectUps,requireEditableIpoRoute} from "../documents/manual-ipo.js";
 import {approvedMaterialView} from './advance-material-view.js';
 import {ptDetail} from '../orders/pt-detail.js';
 import {ipoReference} from '../documents/historical-ipo.js';
@@ -116,10 +116,7 @@ function saleInput(basis: any, received: any) {
       Object.entries(sale).filter(([key]) => saleFields.includes(key)),
     ),
     orderNumber: sale.orderNumber??basis.order.input.orderNumber??"",
-    poNumber:
-      received.confirmationType !== "Customer PO"
-        ? ""
-        : received.reference,
+    poNumber: received.saleDetails?.poNumber ?? (received.confirmationType === "Customer PO" ? received.reference : ""),
     ...(basis.order.allocation?.policy==="fixed-bank-ups"?{salesPerson:"Waqas ul Haq"}:{}),
     approvalReference: received.reference,
     orderDate: received.date,
@@ -2741,7 +2738,7 @@ export class ProjectWorkflowRepository {
       } else if (v.action === "link-quote") {
         this.requireRole(u, ["Coordinator"]);
         const q = uuid(input.quotationId),
-          basis = await quotationBasis(this.pool, c, actor, r, q);
+          basis = await quotationBasis(this.pool, c, actor, r, q, {}, true);
         const own = (
           await c.query(
             `SELECT 1 FROM quotation_versions q WHERE q.id=$1 AND ${ownedCondition("quotation", "q.id", "$2")}`,
@@ -2762,7 +2759,7 @@ export class ProjectWorkflowRepository {
             "The PO already has issued documents. Open its issuance history.",
           );
         const received = receiptSchema.parse(input);
-        if(received.ipoNumber){requireDirectUps(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id))throw new HttpError(409,'This IPO number is already in use. Enter a different number or select automatic numbering.');}
+        if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id))throw new HttpError(409,'This IPO number is already in use. Enter a different number or select automatic numbering.');}
         await this.requireFile(c, r, received.evidenceId, "PO / confirmation");
         let basis: any;
         if (received.basisType === "quotation") {
@@ -3524,7 +3521,7 @@ export class ProjectWorkflowRepository {
     const { u, r } = await this.record(actor, id);
     this.requireRole(u, ["Coordinator"]);
     await this.requireReceivingDepartment(u, r);
-    if(received.ipoNumber){requireDirectUps(r);if(!await manualIpoAvailable(this.pool,received.ipoNumber,r.id))throw new HttpError(409,'This IPO number is already in use. Enter a different number or select automatic numbering.');}
+    if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(this.pool,received.ipoNumber,r.id))throw new HttpError(409,'This IPO number is already in use. Enter a different number or select automatic numbering.');}
     const current = await this.decorate(r, u);
     if (r.stage !== "customer_tracking" && current.coordinationBucket !== "Customer Decision & Order Tracking" && !(r.stage === "po_receipt" && r.route === "direct-framework" && !r.data.originalOrderPreserved))
       throw new HttpError(
@@ -3539,6 +3536,8 @@ export class ProjectWorkflowRepository {
             actor,
             r,
             uuid(received.quotationId),
+            {},
+            true,
           )
         : r.data.basis &&
             String(received.frameworkId ?? r.framework_id) ===

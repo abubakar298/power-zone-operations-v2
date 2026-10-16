@@ -1,3 +1,4 @@
+import {allocateEditableIpo,manualIpoAvailable} from '../documents/manual-ipo.js';
 import { ipoSiteIdentity } from "./site-identity.js";
 import {archivedDocumentIds} from '../maintenance/archived-documents.js';
 import {cashDeal, sellingFactor} from "../commercial/deal.js";
@@ -107,6 +108,7 @@ export class OrdersRepository {
       )
     ).rows[0]?.input;
     if(cashDeal(p.snapshot.input) && input.invoiceCompany !== "Energy Solutions") throw new HttpError(422,"Cash deals must use Energy Solutions as the invoicing company.");
+    if(!reportingOnly&&input.ipoNumber&&!await manualIpoAvailable(c,input.ipoNumber))throw new HttpError(409,'This IPO number is already in use. Enter a different number or select automatic numbering.');
     const source = q.snapshot;
     const detailed = quote(
       {
@@ -421,7 +423,7 @@ export class OrdersRepository {
         )
       ).rows[0].customer_id;
       if (
-        input.poNumber &&
+        input.evidenceType === "Customer PO" && input.poNumber && !/^n\/?a$/i.test(input.poNumber) &&
         (
           await c.query(
             "SELECT 1 FROM customer_purchase_orders WHERE customer_id=$1 AND po_number=$2",
@@ -442,14 +444,14 @@ export class OrdersRepository {
           input.quotationId,
           preview.snapshot.boqRevisionId,
           customerId,
-          input.poNumber,
+          input.evidenceType === "Customer PO" && !/^n\/?a$/i.test(input.poNumber) ? input.poNumber : "",
           input.documentId ?? null,
           input,
           actor,
         ],
       );
       const identity=await boqIdentity(c,preview.snapshot.boqRevisionId);
-      const number=await allocateReference(c,"IPO",id,identity.customer_id,identity.site_code);
+      const number=input.ipoNumber?await allocateEditableIpo(c,id,input.ipoNumber):await allocateReference(c,"IPO",id,identity.customer_id,identity.site_code);
       const row = (
         await c.query(
           "INSERT INTO internal_purchase_orders(id,customer_po_id,submission_id,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",

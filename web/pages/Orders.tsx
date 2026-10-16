@@ -17,7 +17,8 @@ import { extractText } from "../ocr.js";
 import { poSuggestions } from "../../server/orders/po-extraction.js";
 
 export const saleConfirmationFields: [keyof OrderInput, string][] = [
-  ["poNumber", "Customer PO reference"],
+  ["ipoNumber", "IPO Number (optional)"],
+  ["poNumber", "PO Reference Number"],
   ["orderDate", "Order date"],
   ["invoiceCompany", "Power Zone legal entity issuing invoice"],
   ["salesPerson", "Sales person"],
@@ -160,11 +161,6 @@ export function Orders({
     "billingAddress",
   ];
   function renderField([field, label]: [keyof OrderInput, string]) {
-    if (
-      field === "poNumber" &&
-      input.evidenceType !== "Customer PO"
-    )
-      return null;
     return (
       <label key={field}>
         {label}
@@ -228,7 +224,7 @@ export function Orders({
                       ? 200
                       : 300
             }
-            placeholder={field === "email" ? "N/A" : undefined}
+            placeholder={field === "ipoNumber" ? "Automatic numbering if blank" : field === "poNumber" ? "N/A if no formal PO was issued" : field === "email" ? "N/A" : undefined}
             value={String(input[field] ?? "")}
             onChange={(e) => change(field, e.target.value)}
           />

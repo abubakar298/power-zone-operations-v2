@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {manualIpoSchema} from "../documents/manual-ipo.js";
 const optional = z.string().trim().max(300).default("");
 export const orderBasisInputSchema = z
   .object({
@@ -13,6 +14,7 @@ export const orderBasisInputSchema = z
     ]),
     evidenceNotes: z.string().trim().min(1).max(2000),
     orderNumber: z.string().trim().max(100).default(""),
+    ipoNumber: z.union([z.literal(""),manualIpoSchema]).optional(),
     poNumber: z.string().trim().max(100).default(""),
     orderDate: z.iso.date(),
     deliveryDate: optional,
