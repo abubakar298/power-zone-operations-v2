@@ -1,3 +1,4 @@
+import {workflowBoundary} from '../server/http/permissions.js';
 import {flagUpsInstallations,upsInstallationAlerts} from '../server/director/ups-alerts.js';
 import {approveUpsRegisterCompletions} from '../server/director/ups-completions.js';
 import {Decimal} from 'decimal.js';
@@ -78,4 +79,12 @@ test('Management register is additive, idempotent, source-linked and independent
   assert.deepEqual(completed.budgeted,ubl.budgeted);assert.deepEqual(await fingerprint(),before,'Historical approvals do not invent IPOs, Accounts reports or actual expenses');
 
  }finally{await db.close();}
+});
+
+
+test('Operations boundary permits only the shared read-only alert list',async()=>{
+ const boundary=workflowBoundary({} as any);
+ async function check(role:string,method:string,url:string){let passed=false;await boundary({authSession:{user:{role}},method,originalUrl:url} as any,{} as any,()=>{passed=true;});return passed;}
+ assert.equal(await check('Operations','GET','/api/director/ups-alerts'),true);
+ for(const [role,method,url]of [['Operations','POST','/api/director/ups-alerts'],['Operations','GET','/api/director/ups?customer=UBL'],['Accounts','GET','/api/director/ups-alerts'],['Inventory','GET','/api/director/ups-alerts'],['Design','GET','/api/director/ups-alerts']])await assert.rejects(check(role,method,url),/does not have access/);
 });
