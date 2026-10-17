@@ -11,10 +11,12 @@ export function UpsActiveSites({register,children,customer='UBL'}:{customer?:'UB
  const chartPrograms=configuration?programs.filter((p:any)=>p.configuration===configuration):programs;
  const activeSites=register.activeSites??register.configurations.reduce((n:number,c:any)=>n+c.activeSites,0);
  const total=(key:string)=>programs.reduce((n:number,p:any)=>n+(p.progressSummary?.[key]??0),0);
- const agreedSites=programs.reduce((n:number,p:any)=>n+p.totalSites,0);
+ // Management confirmed Meezan orders: 80 + 60 sites for 6–5, and 20 sites for 6–10.
+ const agreedByConfiguration:Record<string,number>=customer==='MBL'?{'6-5':140,'6-10':20}:Object.fromEntries(register.configurations.map((c:any)=>[c.configuration,programs.filter((p:any)=>p.configuration===c.configuration).reduce((n:number,p:any)=>n+p.totalSites,0)]));
+ const agreedSites=Object.values(agreedByConfiguration).reduce((n,v)=>n+v,0);
  const cards=[
-  ...(customer==='MBL'?['6-5','6-10'].map(option=>({label:`${option} Active Sites`,count:register.configurations.find((c:any)=>c.configuration===option)?.activeSites??0,detail:''})):[]),
-  {label:customer==='MBL'?'Total Active Sites':'Active Sites',count:`${activeSites}/${agreedSites}`,detail:isBank?`Pending: ${Math.max(0,agreedSites-(activeSites))} POs`:''},
+  {label:customer==='MBL'?'Total Active Sites':'Active Sites',count:`${activeSites}/${agreedSites}`,detail:isBank?`Pending: ${Math.max(0,agreedSites-activeSites)} POs`:''},
+  ...(customer==='MBL'?['6-5','6-10'].map(option=>{const active=register.configurations.find((c:any)=>c.configuration===option)?.activeSites??0,agreed=agreedByConfiguration[option];return{label:`${option} Active Sites`,count:`${active}/${agreed}`,detail:`Pending: ${Math.max(0,agreed-active)} POs`};}):[]),
   {label:'Completed',count:`${total('completed')}/${activeSites}`,detail:isBank?`Pending: ${Math.max(0,(activeSites)-total('completed'))} Sites`:`Incomplete Sites: ${total('remainingToComplete')}`},
   ...(isBank?[{label:'Invoices Submitted',count:`${total('completedInvoicesSubmitted')}/${total('completed')}`,detail:`Pending: ${Math.max(0,total('completed')-total('completedInvoicesSubmitted'))} Sites`}]:[]),
   {label:'Delivered',count:`${total('delivered')}/${total('remainingToComplete')}`,detail:isBank?`Pending: ${Math.max(0,total('remainingToComplete')-total('delivered'))} Sites`:'Installation pending'},
