@@ -48,7 +48,10 @@ export function Operations({
     portal || session.user.role === "Operations" ? "received" : "handoff",
   );
   const [portalData, setPortalData] = useState<any>();
-  const [bucket, setBucket] = useState("Received BOQs");
+  const [headsupCount,setHeadsupCount]=useState<number>();
+  const [headsupError,setHeadsupError]=useState('');
+  useEffect(()=>{let active=true;if(session.user.role!=='Operations')return;void api<any>('/project-workflow/advance-inbox').then(r=>{if(active)setHeadsupCount(r.requests.length);}).catch(e=>{if(active)setHeadsupError(e.message);});return()=>{active=false;};},[session.user.id]);
+  const [bucket, setBucket] = useState("Received Projects");
   const storeKey = useRef<string | undefined>(undefined);
   const [plan, setPlan] = useState<any>();
   const [details, setDetails] = useState<DeliveryDetails>({
@@ -256,7 +259,6 @@ export function Operations({
   if(advanceReservation)return <AdvanceStockReview group={advanceReservation} onBack={()=>setAdvanceReservation(undefined)}/>;
   return (
     <section className="detail-panel operations-panel">
-      {session.user.role === "Operations"&&<AdvanceBoqInbox initialReference={lastAdvanceReference} onReserve={group=>{setLastAdvanceReference(group.number);setAdvanceReservation(group);}}/>}
       <Button variant="secondary" onClick={()=>setCheckpoints(!checkpoints)} aria-expanded={checkpoints}>Installation checkpoints</Button>
       {checkpoints&&<ProjectCheckpoints session={session}/>}
       {["Admin","Management","Operations"].includes(session.user.role)&&<><Button variant="secondary" onClick={()=>setIrrUpload(!irrUpload)}>Upload installation report to Inventory</Button>{irrUpload&&<InventoryWorkspace session={session} receiveOnly/>}</>}
@@ -269,7 +271,8 @@ export function Operations({
           <div className="stage-grid">
             {[
               "Issued IPOs",
-              "Received BOQs",
+              "Received Projects",
+              ...(session.user.role==='Operations'?["Received Heads-ups"]:[]),
               "Delivery planning",
               "Ready for Store",
               "Sent to Store",
@@ -287,7 +290,9 @@ export function Operations({
               >
                 <strong>{name}</strong>
                 <span>
-                  {name === "Issued IPOs"
+                  {name === "Received Heads-ups"
+                    ? (headsupCount ?? (headsupError ? "Unavailable" : "…"))
+                    : name === "Issued IPOs"
                     ? (portalData?.ipos.length ?? 0)
                     : name === "Stock demand"
                       ? (portalData?.demand.length ?? 0)
@@ -392,6 +397,7 @@ export function Operations({
           )}
         </section>
       )}
+      {bucket === "Received Heads-ups" ? <AdvanceBoqInbox heading="Received Heads-ups" initialReference={lastAdvanceReference} onReserve={group=>{setLastAdvanceReference(group.number);setAdvanceReservation(group);}}/> : <>
       <div
         className="master-tabs"
         role="tablist"
@@ -421,13 +427,13 @@ export function Operations({
             setSelected(undefined);
           }}
         >
-          Operations · Received BOQs
+          Operations · Received Projects
         </button>
       </div>
       <h2>
         {workspace === "handoff"
           ? "BOQ issuance to Operations"
-          : "Operations · Received BOQs"}
+          : "Operations · Received Projects"}
       </h2>
       <p>
         Send the approved site requirements after IPO creation. Operations will
@@ -746,6 +752,7 @@ export function Operations({
           </div>
         </section>
       )}
+      </>}
     </section>
   );
 }
