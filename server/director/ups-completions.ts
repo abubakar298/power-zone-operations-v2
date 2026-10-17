@@ -30,13 +30,13 @@ export async function approveUpsRegisterCompletions(pool:Pool,actor:string,raw:u
    if(Boolean(s.actualCost)!==Boolean(input.costSource))throw new HttpError(422,'Each actual cost needs the matching saved workbook source.');
    if(s.actualCost){
     const site=register.sites.find((r:any)=>r.orderNumber===s.orderNumber),row=register.unreviewedCosting?.analysisRows?.find((r:any)=>r.sourceRow===s.actualCost!.sourceRow),raw=row?.values?.[11];
-    if(site.sourceRow!==s.actualCost.sourceRow||!row||String(row.values[0])!==s.orderNumber.split('/')[0]||row.values[1]!==site.invoiceReference||typeof raw!=='number'||!Number.isFinite(raw)||raw<0)throw new HttpError(422,'Actual cost must match the site row in the saved costing sheet.');
+    if(site.sourceRow!==s.actualCost.sourceRow||!row||String(row.values[0])!==s.orderNumber.split('/')[0]||(row.values[1]!==site.invoiceReference&&!(site.invoiceReferenceCorrection?.from===row.values[1]&&site.invoiceReferenceCorrection?.to===site.invoiceReference))||typeof raw!=='number'||!Number.isFinite(raw)||raw<0)throw new HttpError(422,'Actual cost must match the site row in the saved costing sheet.');
     const amount=new Decimal(raw).toDecimalPlaces(2,Decimal.ROUND_HALF_UP).toFixed(2);
     if(amount!==s.actualCost.amount)throw new HttpError(422,'Actual cost differs from the saved total cost per site.');
     costs.set(s.orderNumber,{amount,sourceRow:row.sourceRow,cell:'L'+row.sourceRow,rawValue:String(raw),source:input.costSource});
    }
 
-   if(register.installationAlerts?.[s.orderNumber])throw new HttpError(409,'This site has an unresolved installation alert; installation must be completed before closure.');
+   if(register.installationAlerts?.[s.orderNumber]&&!register.installationAlerts[s.orderNumber].resolvedAt&&register.installationAlerts[s.orderNumber].status!=='Completed — details verification required')throw new HttpError(409,'This site has an unresolved installation alert; installation must be completed before closure.');
    if(!s.overridePendingInstallation&&(!s.completionDate||s.evidence.some(e=>/pend/i.test(e.installationText))))throw new HttpError(422,'Pending installation needs explicit Management override.');
    if(s.evidence.some(e=>!e.invoice.replace(/\s/g,'').endsWith(s.orderNumber)))throw new HttpError(422,'Invoice order number does not match the site.');
   }

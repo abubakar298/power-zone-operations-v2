@@ -144,3 +144,15 @@ test('issued order outside the historical import remains in progress totals with
  const r=upsActiveRegister([{program_key:'UPS:MBL:CHP-338',version:1,snapshot:{managementRegister:p}}],[{id:'real-issued',number:'CHP-338',orderNumber:'20/60',configuration:'6-5',site:'Consumer Hub',issuedAt:'2026-10-17T00:00:00Z'}],['6-5','6-10']);
  assert.equal(r.activeSites,2);assert.equal(r.programs[0].progressSummary.listedSites,2);assert.equal(r.programs[0].progressSummary.unverified,2);assert.equal(r.programs[0].progressSummary.awaitingDeliveryAgeing.length,0);assert.equal(r.programs[0].progressSummary.completed,0);assert.equal(r.programs[0].remainingSites,58);
 });
+
+test('Meezan recovery and completed-detail alerts remain visible separately from UBL',async()=>{
+ const db=await testDatabase();try{
+  const actor=randomUUID();await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash)VALUES($1,$2,'Alert test','Management','isolated-only')",[actor,actor+'@test.invalid']);
+  await importUpsManagementRegister(db.pool,actor,input('MBL','CHP-220',80));
+  const row=(await db.pool.query("SELECT snapshot FROM ups_management_program_versions WHERE program_key='UPS:MBL:CHP-220'")).rows[0];
+  row.snapshot.managementRegister.installationAlerts={'1/80':{orderNumber:'1/80',status:'Completed — details verification required',responsibleDepartment:'Accounts',reason:'Verify site identity',nextAction:'Confirm branch'},'2/80':{orderNumber:'2/80',status:'Recovery data missing',responsibleDepartment:'Accounts',reason:'Enter recovery',nextAction:'Add details'}};
+  row.snapshot.managementRegister.completionApprovals={'1/80':{status:'Approved closed'}};
+  await db.pool.query("INSERT INTO ups_management_program_versions(id,program_key,version,customer_code,snapshot,notes,created_by)VALUES($1,'UPS:MBL:CHP-220',2,'MBL',$2,'Alert fixture',$3)",[randomUUID(),row.snapshot,actor]);
+  const result=await upsInstallationAlerts(db.pool,actor);assert.equal(result.total,2);assert.ok(result.rows.every(r=>r.customer==='MBL'));assert.equal(result.rows[0].status,'Completed — details verification required');
+ }finally{await db.close();}
+});
