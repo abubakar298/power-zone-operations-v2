@@ -2,6 +2,7 @@ import {UpsAlerts} from '../components/UpsAlerts.js';
 import {ManagementApprovals} from "../components/ManagementApprovals.js";
 import {UpsManagementPortfolio} from "../components/UpsManagementPortfolio.js";
 import {DepartmentViewSwitcher} from "../components/DepartmentViewSwitcher.js";
+import {OperationsAreaSwitcher,ProcurementWorkspace,type OperationsArea} from "../components/OperationsAreaSwitcher.js";
 import {canViewDepartments,managementDepartment,managementDepartments,type ManagementDepartment} from "../workspaces/management-departments.js";
 import {savedDepartmentUser,saveDepartmentUser,clearDepartmentUser} from '../department-view.js';
 import {SidebarBuckets} from "../components/SidebarBuckets.js";
@@ -75,6 +76,12 @@ export function Dashboard({
 }) {
   const [departmentUser,setDepartmentUser]=useState<User|undefined>(()=>savedDepartmentUser(principalSession.user));
   const session=departmentUser?{...principalSession,user:departmentUser}:principalSession;
+  const [operationsArea,setOperationsArea]=useState<OperationsArea>(()=>new URLSearchParams(window.location.hash.slice(1)).get('operationsArea')==='procurement'?'procurement':'operations');
+  useEffect(()=>{
+    const sync=()=>setOperationsArea(new URLSearchParams(window.location.hash.slice(1)).get('operationsArea')==='procurement'?'procurement':'operations');
+    sync();window.addEventListener('hashchange',sync);
+    return()=>window.removeEventListener('hashchange',sync);
+  },[session.user.id]);
   const [switchingDepartment,setSwitchingDepartment]=useState(false),[departmentError,setDepartmentError]=useState('');
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -235,6 +242,13 @@ export function Dashboard({
     setMenuOpen(false);
     return true;
   }
+  function selectOperationsArea(area:OperationsArea){
+    if(!navigate('dashboard'))return;
+    setOperationsArea(area);setOperationsIpoId(undefined);
+    const params=new URLSearchParams(window.location.hash.slice(1));
+    params.set('operationsArea',area);
+    window.history.replaceState(null,'',`/dashboard#${params}`);
+  }
   async function selectDepartment(destination:ManagementDepartment|'dashboard'){
     if(switchingDepartment||!confirmLeaveWorkspace())return false;
     setSwitchingDepartment(true);setDepartmentError('');
@@ -339,7 +353,7 @@ export function Dashboard({
   }, [bucketTask, isCoordinator]);
   const managementHome = view === "dashboard" && canViewDepartments(session.user.role);
   return (
-    <div className={`workspace fixed-header-layout ${session.user.role === "Coordinator" ? "coordinator-layout" : ""}`}>
+    <div className={`workspace fixed-header-layout ${session.user.role === "Coordinator" ? "coordinator-layout" : session.user.role === "Operations" ? "operations-layout" : ""}`}>
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="sidebar-brand">
           <Brand compact />
@@ -699,6 +713,7 @@ export function Dashboard({
             }}
           />
           <DepartmentViewSwitcher role={principalSession.user.role} value={departmentView} busy={switchingDepartment} error={departmentError} onSelect={selectDepartment}/>
+          {session.user.role==='Operations'&&<OperationsAreaSwitcher value={operationsArea} onSelect={selectOperationsArea}/>}
           <div className="account">
             <button
               className="account-trigger"
@@ -831,7 +846,7 @@ export function Dashboard({
                             : session.user.role === "Accounts"
                               ? "Review IPOs and collect supporting documents for accounting."
                               : session.user.role === "Operations"
-                                ? "Plan delivery and issue received BOQs to Store."
+                                ? operationsArea==='procurement'?'Review procurement work.':"Plan delivery and issue received BOQs to Store."
                                 : ["Admin", "Management"].includes(
                                       session.user.role,
                                     )
@@ -950,7 +965,7 @@ export function Dashboard({
                 </section>
               )}
               {view === "dashboard" && session.user.role === "Operations" && (
-                <Operations session={session} portal />
+                operationsArea==='procurement'?<ProcurementWorkspace/>:<Operations session={session} portal />
               )}
               {managementHome && <ManagementApprovals session={session} onOpen={(task)=>{
                 setRevisionDraftId(task.draft_id);
