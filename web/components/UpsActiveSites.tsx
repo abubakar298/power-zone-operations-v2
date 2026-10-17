@@ -20,7 +20,7 @@ export function UpsActiveSites({register,children,customer='UBL'}:{customer?:'UB
   {label:'Completed',count:`${total('completed')}/${activeSites}`,detail:isBank?`Pending: ${Math.max(0,(activeSites)-total('completed'))} Sites`:`Incomplete Sites: ${total('remainingToComplete')}`},
   ...(isBank?[{label:'Invoices Submitted',count:`${total('completedInvoicesSubmitted')}/${total('completed')}`,detail:`Pending: ${Math.max(0,total('completed')-total('completedInvoicesSubmitted'))} Sites`}]:[]),
   {label:'Delivered',count:`${total('delivered')}/${total('remainingToComplete')}`,detail:isBank?`Pending: ${Math.max(0,total('remainingToComplete')-total('delivered'))} Sites`:'Installation pending'},
-  ...(isBank?[{label:'Installed',count:`${total('completed')}/${total('completed')+total('delivered')}`,detail:`Pending: ${total('installationPending')} Sites`}]:total('reviewRequired')?[{label:'Accounts review required',count:total('reviewRequired'),detail:'Installation evidence needs reconciliation'}]:[])
+  ...(isBank?[{label:'Installed',count:`${total('completed')}/${activeSites}`,detail:`Pending: ${Math.max(0,activeSites-total('completed'))} Sites`}]:total('reviewRequired')?[{label:'Accounts review required',count:total('reviewRequired'),detail:'Installation evidence needs reconciliation'}]:[])
  ];
  return <section className="pz-stack" aria-label="Active UPS sites">
   <section className={isBank?'workspace-buckets pz-panel pz-stack':'workspace-buckets pz-stack'} aria-label={isBank?'Project Summary':'UPS site summary'}>
