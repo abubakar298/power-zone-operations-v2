@@ -67,6 +67,12 @@ const Masters = lazy(() =>
   import("./Masters.js").then((module) => ({ default: module.Masters })),
 );
 
+function currentOperationsArea(user:User):OperationsArea {
+  const area=new URLSearchParams(window.location.hash.slice(1)).get('operationsArea');
+  if(area==='procurement'||area==='operations')return area;
+  return user.role==='Operations'&&user.displayName.toLowerCase()==='hamza mir'?'procurement':'operations';
+}
+
 export function Dashboard({
   session: principalSession,
   onLogout,
@@ -76,9 +82,9 @@ export function Dashboard({
 }) {
   const [departmentUser,setDepartmentUser]=useState<User|undefined>(()=>savedDepartmentUser(principalSession.user));
   const session=departmentUser?{...principalSession,user:departmentUser}:principalSession;
-  const [operationsArea,setOperationsArea]=useState<OperationsArea>(()=>new URLSearchParams(window.location.hash.slice(1)).get('operationsArea')==='procurement'?'procurement':'operations');
+  const [operationsArea,setOperationsArea]=useState<OperationsArea>(()=>currentOperationsArea(session.user));
   useEffect(()=>{
-    const sync=()=>setOperationsArea(new URLSearchParams(window.location.hash.slice(1)).get('operationsArea')==='procurement'?'procurement':'operations');
+    const sync=()=>setOperationsArea(currentOperationsArea(session.user));
     sync();window.addEventListener('hashchange',sync);
     return()=>window.removeEventListener('hashchange',sync);
   },[session.user.id]);
@@ -243,13 +249,17 @@ export function Dashboard({
     return true;
   }
   function selectOperationsArea(area:OperationsArea){
+    if(canViewDepartments(principalSession.user.role)){
+      void selectDepartment('operations',area);
+      return;
+    }
     if(!navigate('dashboard'))return;
     setOperationsArea(area);setOperationsIpoId(undefined);
     const params=new URLSearchParams(window.location.hash.slice(1));
     params.set('operationsArea',area);
     window.history.replaceState(null,'',`/dashboard#${params}`);
   }
-  async function selectDepartment(destination:ManagementDepartment|'dashboard'){
+  async function selectDepartment(destination:ManagementDepartment|'dashboard',area:OperationsArea='operations'){
     if(switchingDepartment||!confirmLeaveWorkspace())return false;
     setSwitchingDepartment(true);setDepartmentError('');
     try{
@@ -258,17 +268,20 @@ export function Dashboard({
         const role=managementDepartment(destination)!.role;
         const {users}=await api<{users:User[]}>('/auth/department-views');
         const candidates=users.filter(u=>u.role===role);
-        const preferred=role==='Coordinator'?'Atif Hameed':role==='Design'?'Sajid Kasrana':'';
-        const target=candidates.find(u=>u.displayName.toLowerCase()===preferred.toLowerCase())??candidates[0];
+        const preferred=role==='Coordinator'?'Atif Hameed':role==='Design'?'Sajid Kasrana':role==='Operations'?(area==='procurement'?'Hamza Mir':'Moaz Ahsan'):'';
+        const preferredTarget=candidates.find(u=>u.displayName.toLowerCase()===preferred.toLowerCase());
+        const target=preferredTarget??(role==='Operations'?undefined:candidates[0]);
+        if(role==='Operations'&&!target)throw Error(`The ${area==='procurement'?'Procurement':'Operations'} workspace needs the active ${preferred} account.`);
         if(!target)throw Error(`No active ${managementDepartment(destination)!.label} account is available.`);
         selected=(await api<{user:User}>('/auth/department-view',{csrf:principalSession.csrfToken,body:{userId:target.id}})).user;
         saveDepartmentUser(principalSession.user,selected);
       }else{await api('/auth/department-view',{csrf:principalSession.csrfToken,body:{userId:null}});clearDepartmentUser();}
       setDepartmentUser(selected);setDepartmentView(destination==='dashboard'?undefined:destination);
+      setOperationsArea(destination==='operations'?area:'operations');
       sessionStorage.removeItem('pz:department-page');sessionStorage.removeItem('pz:workflow-open');
       setBucketTask(undefined);setDepartmentPage('Workspace');setView('dashboard');setMenuOpen(false);setMobileOpen(false);
       setWorkspaceVisit(visit=>visit+1);
-      window.history.replaceState(null,'',`/dashboard#workspace=dashboard${selected?'&viewAs='+selected.role:''}`);
+      window.history.replaceState(null,'',`/dashboard#workspace=dashboard${selected?'&viewAs='+selected.role:''}${destination==='operations'?'&operationsArea='+area:''}`);
       return true;
     }catch(e){setDepartmentError(e instanceof Error?e.message:'Unable to open department.');return false;}finally{setSwitchingDepartment(false);}
   }
@@ -712,8 +725,8 @@ export function Dashboard({
               setOperationsIpoId(task.ipo_id ?? undefined);
             }}
           />
-          <DepartmentViewSwitcher role={principalSession.user.role} value={departmentView} busy={switchingDepartment} error={departmentError} onSelect={selectDepartment}/>
-          {session.user.role==='Operations'&&<OperationsAreaSwitcher value={operationsArea} onSelect={selectOperationsArea}/>}
+          <DepartmentViewSwitcher role={principalSession.user.role} value={departmentView} operationsArea={operationsArea} onProcurement={()=>selectDepartment('operations','procurement')} busy={switchingDepartment} error={departmentError} onSelect={selectDepartment}/>
+          {session.user.role==='Operations'&&<OperationsAreaSwitcher value={operationsArea} busy={switchingDepartment} onSelect={selectOperationsArea}/>}
           <div className="account">
             <button
               className="account-trigger"

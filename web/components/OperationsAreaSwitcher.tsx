@@ -2,10 +2,10 @@ import {Button} from '../ui/Button.js';
 
 export type OperationsArea = 'procurement' | 'operations';
 
-export function OperationsAreaSwitcher({value,onSelect}:{value:OperationsArea;onSelect:(area:OperationsArea)=>void}) {
+export function OperationsAreaSwitcher({value,onSelect,busy=false}:{value:OperationsArea;onSelect:(area:OperationsArea)=>void;busy?:boolean}) {
   return <nav className="coordinator-shortcuts operations-area-shortcuts" aria-label="Operations workspace areas">
-    <Button variant={value==='procurement'?'secondary':'neutral'} aria-pressed={value==='procurement'} onClick={()=>onSelect('procurement')}>Procurement</Button>
-    <Button variant={value==='operations'?'secondary':'neutral'} aria-pressed={value==='operations'} onClick={()=>onSelect('operations')}>Operations</Button>
+    <Button disabled={busy} variant={value==='procurement'?'secondary':'neutral'} aria-pressed={value==='procurement'} onClick={()=>onSelect('procurement')}>Procurement</Button>
+    <Button disabled={busy} variant={value==='operations'?'secondary':'neutral'} aria-pressed={value==='operations'} onClick={()=>onSelect('operations')}>Operations</Button>
   </nav>;
 }
 
