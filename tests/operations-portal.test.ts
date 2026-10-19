@@ -165,9 +165,20 @@ test("Operations portal records demand once, separates delivery planning, freeze
       .expect(200);
     const cookie = login.headers["set-cookie"][0].split(";")[0],
       csrf = login.body.csrfToken;
+    // The Operations login no longer uses the delivery portal (Moaz, 19 Oct 2026); Admin and Coordinator still do.
     await request(app)
       .get("/api/operations/portal")
       .set("Cookie", cookie)
+      .expect(403);
+    const adminLogin = await request(app)
+      .post("/api/auth/login")
+      .set("Origin", origin)
+      .send({ email: `${admin}@example.test`, password })
+      .expect(200);
+    const adminCookie = adminLogin.headers["set-cookie"][0].split(";")[0];
+    await request(app)
+      .get("/api/operations/portal")
+      .set("Cookie", adminCookie)
       .expect(200);
     for (const path of [
       "/api/boqs/preview",
@@ -187,9 +198,13 @@ test("Operations portal records demand once, separates delivery planning, freeze
       .set("Cookie", cookie)
       .send({ deliveryPlanId: plan.id, requestKey: randomUUID() })
       .expect(403);
-    const report = await request(app)
+    await request(app)
       .get(`/api/operations/store/${one.id}/report.pdf`)
       .set("Cookie", cookie)
+      .expect(403);
+    const report = await request(app)
+      .get(`/api/operations/store/${one.id}/report.pdf`)
+      .set("Cookie", adminCookie)
       .expect(200);
     assert.match(report.headers["content-type"], /application\/pdf/);
   } finally {

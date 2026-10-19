@@ -20,7 +20,7 @@ test("Operations login reaches only its own workspace APIs; other roles are unaf
     const login = async (id: string) => {
       const r = await request(app).post("/api/auth/login").set("Origin", "http://127.0.0.1:3000").send({ email: `${id}@example.test`, password });
       assert.equal(r.status, 200, r.text);
-      return r.headers["set-cookie"];
+      return r.headers["set-cookie"] as unknown as string[];
     };
     const ops = await login(users.operations), acc = await login(users.accounts), adm = await login(users.admin);
     const get = (cookie: string[], path: string) => request(app).get(path).set("Cookie", cookie);
