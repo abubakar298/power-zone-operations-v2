@@ -19,6 +19,7 @@ import { Button } from "../ui/Button.js";
 import { CoordinatorLibrary } from "./CoordinatorLibrary.js";
 import { NotificationAdmin } from "../components/NotificationAdmin.js";
 import { NotificationCenter } from "../components/NotificationCenter.js";
+import { GlobalSearch } from "../components/GlobalSearch.js";
 import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react";
 import { WorkspaceBoundary } from "../components/WorkspaceBoundary.js";
 import { api, ApiError, type Session, type User } from "../api.js";
@@ -112,7 +113,11 @@ export function Dashboard({
   }, []);
   const [operationsIpoId, setOperationsIpoId] = useState<string>();
   const [siteToOpen, setSiteToOpen] = useState<string>();
+  const [siteOpenNonce, setSiteOpenNonce] = useState(0);
   const [stageToOpen, setStageToOpen] = useState<string>();
+  const [advanceToOpen, setAdvanceToOpen] = useState<string>();
+  const [advanceOpenNonce, setAdvanceOpenNonce] = useState(0);
+  const openSiteFromAnywhere = (id: string) => { setSiteToOpen(id); setSiteOpenNonce((n) => n + 1); setStageToOpen(undefined); navigate("sites"); };
   const [pricingRevisionId, setPricingRevisionId] = useState<string>();
   const [revisionDraftId, setRevisionDraftId] = useState<string>();
   const [pricingRequestId, setPricingRequestId] = useState<string>();
@@ -799,6 +804,10 @@ export function Dashboard({
                                       : "My account"}
             </strong>
           </span>
+          {["Operations", "Admin", "Management"].includes(session.user.role) && (
+            <GlobalSearch session={session} onOpenSite={openSiteFromAnywhere}
+              onOpenHeadsUp={(reference) => { setAdvanceToOpen(reference); setAdvanceOpenNonce((n) => n + 1); setOperationsIpoId(undefined); navigate("operations"); }} />
+          )}
           {session.user.role === "Coordinator" && <nav className="coordinator-shortcuts" aria-label="Atif shortcuts">
             <Button variant="neutral" aria-current={view === "newboq" ? "page" : undefined} onClick={() => { if (navigate("newboq")) setRevisionDraftId(undefined); }}>Create Quotation</Button>
             {directPoEnabled&&<Button variant="neutral" aria-current={view==='dashboard'&&departmentPage==='Direct PO'?'page':undefined} onClick={()=>{if(navigate('dashboard')){sessionStorage.setItem('pz:department-page','Direct PO');window.dispatchEvent(new CustomEvent('pz:department-page',{detail:'Direct PO'}));}}}>Direct PO</Button>}
@@ -996,7 +1005,7 @@ export function Dashboard({
                                       : view === "sites"
                                       ? "Every site after its IPO: IPO received, planning, delivery, installation, commissioning, handover, doc dispatch, closed."
                                       : view === "operations"
-                                      ? "Advance BOQs received from Coordination. Search by customer, site, region, stage and date."
+                                      ? "Advance BOQs received from Coordination. Filter by stage, customer, site, region and date; search from the top bar."
                                       : view === "orders"
                                         ? "Turn an accepted quotation and customer PO into an internal purchase order."
                                         : view === "inventory"
@@ -1096,7 +1105,7 @@ export function Dashboard({
                 </section>
               )}
               {view === "dashboard" && session.user.role === "Operations" && (
-                <OperationsHome session={session} onGo={(target) => { if (target === "operations") setOperationsIpoId(undefined); navigate(target); }} onOpenSite={(id) => { setSiteToOpen(id); setStageToOpen(undefined); navigate("sites"); }} onOpenStage={(stage) => { setStageToOpen(stage); setSiteToOpen(undefined); navigate("sites"); }} />
+                <OperationsHome session={session} onGo={(target) => { if (target === "operations") setOperationsIpoId(undefined); navigate(target); }} onOpenSite={openSiteFromAnywhere} onOpenStage={(stage) => { setStageToOpen(stage); setSiteToOpen(undefined); navigate("sites"); }} />
               )}
               {managementHome && <ManagementApprovals session={session} onOpen={(task)=>{
                 setRevisionDraftId(task.draft_id);
@@ -1214,7 +1223,7 @@ export function Dashboard({
                   }}
                 />
               )}
-              {view === "sites" && <SiteBoard session={session} mode="all" initialSiteId={siteToOpen} initialStage={stageToOpen} />}
+              {view === "sites" && <SiteBoard session={session} mode="all" initialSiteId={siteToOpen} initialSiteNonce={siteOpenNonce} initialStage={stageToOpen} />}
               {view === "sites-new" && <SiteBoard session={session} mode="new" />}
               {view === "sites-ongoing" && <SiteBoard session={session} mode="ongoing" />}
               {view === "heads-up" && <Operations session={session} headsUp />}
@@ -1222,7 +1231,7 @@ export function Dashboard({
               {view === "sites-docs" && <SiteBoard session={session} mode="docs" />}
               {view === "reports" && <SiteReport session={session} />}
               {view === "operations" && (
-                <Operations session={session} initialIpoId={operationsIpoId} portal={departmentView==='operations'} />
+                <Operations session={session} initialIpoId={operationsIpoId} portal={departmentView==='operations'} initialAdvanceReference={advanceToOpen} advanceNonce={advanceOpenNonce} />
               )}
               {view === "team" && (
                 <>

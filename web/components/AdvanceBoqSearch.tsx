@@ -31,7 +31,6 @@ export function AdvanceBoqSearch({ onOpen, scope = "all" }: { onOpen: (reference
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
   const [customer, setCustomer] = useState("");
   const [site, setSite] = useState("");
   const [region, setRegion] = useState("");
@@ -79,19 +78,17 @@ export function AdvanceBoqSearch({ onOpen, scope = "all" }: { onOpen: (reference
   }, [pool]);
 
   const visible = useMemo(() => {
-    const text = q.trim().toLowerCase();
     return pool.filter((r) =>
       (!customer || r.customer === customer) &&
       (!site || r.site === site) &&
       (!region || r.region === region) &&
       (!stage || r.stageKey === stage) &&
       (!from || day(r.received) >= from) &&
-      (!to || day(r.received) <= to) &&
-      (!text || [r.reference, r.customer, r.site, r.siteCode, r.region, r.stage].some((v) => v.toLowerCase().includes(text))));
-  }, [pool, q, customer, site, region, stage, from, to]);
+      (!to || day(r.received) <= to));
+  }, [pool, customer, site, region, stage, from, to]);
   const stageCounts = useMemo(() => { const m = new Map<string, number>(); for (const r of pool) m.set(r.stageKey, (m.get(r.stageKey) ?? 0) + 1); return m; }, [pool]);
-  const clear = () => { setQ(""); setCustomer(""); setSite(""); setRegion(""); setStage(""); setFrom(""); setTo(""); };
-  const filtered = Boolean(q || customer || site || region || stage || from || to);
+  const clear = () => { setCustomer(""); setSite(""); setRegion(""); setStage(""); setFrom(""); setTo(""); };
+  const filtered = Boolean(customer || site || region || stage || from || to);
 
   return (
     <section className="pz-panel pz-stack" aria-label="Advance BOQ search">
@@ -101,10 +98,6 @@ export function AdvanceBoqSearch({ onOpen, scope = "all" }: { onOpen: (reference
           <p className="pz-caption">Heads-up material forecasts received from Coordination.</p>
         </div>
       )}
-      <label className="abq-search">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-        <input type="search" aria-label="Search advance BOQs" placeholder="Search heads-ups: reference, customer, site, code, region…" value={q} onChange={(e) => setQ(e.target.value)} />
-      </label>
       <div className="abq-tabs" role="tablist" aria-label="Stage">
         <button type="button" role="tab" className="abq-tab" aria-selected={!stage} onClick={() => setStage("")}>All <span className="abq-count">{pool.length}</span></button>
         {stages.map(([key, label]) => (

@@ -29,14 +29,20 @@ export function Operations({
   initialIpoId,
   portal = false,
   headsUp = false,
+  initialAdvanceReference,
+  advanceNonce = 0,
 }: {
   session: Session;
   initialIpoId?: string;
   portal?: boolean;
   /** "Heads up on new sites": only advance BOQs for sites whose IPO has not been issued yet. */
   headsUp?: boolean;
+  /** A heads-up chosen in the top-bar search opens here; the nonce lets the same one open twice. */
+  initialAdvanceReference?: string;
+  advanceNonce?: number;
 }) {
-  const [advanceReservation,setAdvanceReservation]=useState<any>(),[lastAdvanceReference,setLastAdvanceReference]=useState('');
+  const [advanceReservation,setAdvanceReservation]=useState<any>(),[lastAdvanceReference,setLastAdvanceReference]=useState(initialAdvanceReference??'');
+  useEffect(()=>{if(initialAdvanceReference){setLastAdvanceReference(initialAdvanceReference);setAdvanceReservation(undefined);}},[initialAdvanceReference,advanceNonce]);
   const [irrUpload,setIrrUpload]=useState(false);
   const [checkpoints,setCheckpoints]=useState(false);
   const [orders, setOrders] = useState<any[]>([]),

@@ -10,13 +10,12 @@ import {
 interface Overview extends Reference { sites: SiteRow[]; lateAfterDays: number }
 
 /** The sites board: one list, filtered by `mode`, opening a site page in place. */
-export function SiteBoard({ session, mode = "all", initialSiteId, initialStage }: { session: Session; mode?: BoardMode; initialSiteId?: string; initialStage?: string }) {
+export function SiteBoard({ session, mode = "all", initialSiteId, initialSiteNonce = 0, initialStage }: { session: Session; mode?: BoardMode; initialSiteId?: string; initialSiteNonce?: number; initialStage?: string }) {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<string | undefined>();
-  const [opened, setOpened] = useState<string | undefined>();
+  const [openedNonce, setOpenedNonce] = useState<number | undefined>();
   const [applied, setApplied] = useState<string | undefined>();
-  const [q, setQ] = useState("");
   const [region, setRegion] = useState("");
   const [stage, setStage] = useState("");
 
@@ -26,18 +25,13 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialStage }
   }, []);
   useEffect(() => { void load(); }, [load]);
   // A site or stage handed over from the dashboard applies once; afterwards the page behaves normally.
-  useEffect(() => { if (initialSiteId && initialSiteId !== opened) { setOpened(initialSiteId); setSelected(initialSiteId); } }, [initialSiteId, opened]);
+  useEffect(() => { if (initialSiteId && initialSiteNonce !== openedNonce) { setOpenedNonce(initialSiteNonce); setSelected(initialSiteId); } }, [initialSiteId, initialSiteNonce, openedNonce]);
   useEffect(() => { if (initialStage && initialStage !== applied) { setApplied(initialStage); setStage(initialStage); } }, [initialStage, applied]);
 
   const scoped = useMemo(() => (data ? data.sites.filter((s) => inMode(s, mode)) : []), [data, mode]);
   const byStage = useMemo(() => { const m = new Map<string, number>(); for (const s of scoped) m.set(s.stage, (m.get(s.stage) ?? 0) + 1); return m; }, [scoped]);
   const regions = useMemo(() => [...new Set(scoped.map((s) => s.region).filter(Boolean) as string[])].sort(), [scoped]);
-  const visible = useMemo(() => {
-    const text = q.trim().toLowerCase();
-    return scoped.filter((s) =>
-      (!region || s.region === region) && (!stage || s.stage === stage) &&
-      (!text || [s.siteName, s.siteCode, s.customer, s.ipoNumber, s.boqNumber].some((v) => (v ?? "").toLowerCase().includes(text))));
-  }, [scoped, q, region, stage]);
+  const visible = useMemo(() => scoped.filter((s) => (!region || s.region === region) && (!stage || s.stage === stage)), [scoped, region, stage]);
 
   if (selected && data) return <SiteDetail session={session} id={selected} reference={data} onBack={() => { setSelected(undefined); void load(); }} />;
   const text = MODE_TEXT[mode];
@@ -57,7 +51,6 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialStage }
           </div>
         )}
         <div className="pz-form-grid">
-          <Field id="sw-q" label="Search"><input id="sw-q" placeholder="Site, customer, IPO or BOQ number" value={q} onChange={(e) => setQ(e.target.value)} /></Field>
           <Field id="sw-region" label="Region">
             <select id="sw-region" value={region} onChange={(e) => setRegion(e.target.value)}><option value="">All regions</option>{regions.map((r) => <option key={r} value={r}>{r}</option>)}</select>
           </Field>

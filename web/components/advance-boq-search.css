@@ -1,9 +1,4 @@
 /* Advance BOQ search: pill search bar, stage tabs with counts, compact filter row. Colours from design-tokens.css. */
-.abq-search{display:flex;align-items:center;gap:10px;border:1px solid var(--pz-border);border-radius:999px;background:var(--pz-surface);padding:0 16px;height:var(--pz-control-height);color:var(--pz-muted)}
-.abq-search:focus-within{border-color:var(--pz-focus);box-shadow:0 0 0 3px var(--pz-selected-bg)}
-.abq-search svg{flex:none}
-.abq-search input{flex:1;min-width:0;height:100%;border:0;background:none;outline:none;font:inherit;font-size:var(--pz-text-md);color:var(--pz-text)}
-.abq-search input::placeholder{color:var(--pz-muted)}
 .abq-tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--pz-border);padding-bottom:10px}
 .abq-tab{display:inline-flex;align-items:center;gap:6px;border:0;background:none;border-radius:999px;padding:7px 12px;font:inherit;font-size:var(--pz-text-sm);font-weight:600;color:var(--pz-muted);cursor:pointer}
 .abq-tab:hover{color:var(--pz-text)}
