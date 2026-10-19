@@ -44,6 +44,9 @@ const Operations = lazy(() =>
 const SiteExecution = lazy(() =>
   import("./SiteExecution.js").then((module) => ({ default: module.SiteExecution })),
 );
+const OperationsDashboard = lazy(() =>
+  import("./OperationsDashboard.js").then((module) => ({ default: module.OperationsDashboard })),
+);
 const StockProcurement = lazy(() =>
   import("./StockProcurement.js").then((module) => ({ default: module.StockProcurement })),
 );
@@ -111,6 +114,7 @@ export function Dashboard({
     return () => window.removeEventListener("pz:department-active", active);
   }, []);
   const [operationsIpoId, setOperationsIpoId] = useState<string>();
+  const [siteToOpen, setSiteToOpen] = useState<string>();
   const [pricingRevisionId, setPricingRevisionId] = useState<string>();
   const [revisionDraftId, setRevisionDraftId] = useState<string>();
   const [pricingRequestId, setPricingRequestId] = useState<string>();
@@ -138,6 +142,7 @@ export function Dashboard({
     | "quotes"
     | "operations"
     | "sites"
+    | "sites-ongoing"
     | "sites-completed"
     | "sites-docs"
     | "reserved"
@@ -233,6 +238,7 @@ export function Dashboard({
       | "quotes"
       | "operations"
       | "sites"
+      | "sites-ongoing"
       | "sites-completed"
       | "sites-docs"
       | "reserved"
@@ -617,10 +623,13 @@ export function Dashboard({
                 )}
                 {session.user.role === "Operations" && (
                   <>
+                    <button className={view === "dashboard" ? "nav-active" : ""} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard", undefined, true)}>
+                      <Icon name="dashboard" />Dashboard
+                    </button>
                     <button className={view === "operations" ? "nav-active" : ""} aria-current={view === "operations" ? "page" : undefined} onClick={() => { setOperationsIpoId(undefined); navigate("operations"); }}>
                       <Icon name="file" />BOQ to Operations
                     </button>
-                    <button className={view === "dashboard" ? "nav-active" : ""} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard", undefined, true)}>
+                    <button className={view === "sites-ongoing" ? "nav-active" : ""} aria-current={view === "sites-ongoing" ? "page" : undefined} onClick={() => navigate("sites-ongoing")}>
                       <Icon name="file" />Ongoing sites
                     </button>
                     <button className={view === "sites-completed" ? "nav-active" : ""} aria-current={view === "sites-completed" ? "page" : undefined} onClick={() => navigate("sites-completed")}>
@@ -787,6 +796,8 @@ export function Dashboard({
                                 ? "Site reports"
                                 : view === "stock"
                                 ? "Stock & procurement"
+                                : view === "sites-ongoing"
+                                ? "Ongoing sites"
                                 : view === "sites-completed"
                                 ? "Sites completed (last 30 days)"
                                 : view === "sites-docs"
@@ -927,6 +938,8 @@ export function Dashboard({
                                       ? "Site reports"
                                       : view === "stock"
                                       ? "Stock & procurement"
+                                      : view === "sites-ongoing"
+                                      ? "Ongoing sites"
                                       : view === "sites-completed"
                                       ? "Sites completed (last 30 days)"
                                       : view === "sites-docs"
@@ -968,7 +981,7 @@ export function Dashboard({
                             : session.user.role === "Accounts"
                               ? "Review IPOs and collect supporting documents for accounting."
                               : session.user.role === "Operations"
-                                ? "Every site after its IPO, with stock shortage and reserved stock."
+                                ? "Where every site, problem and stock item stands today."
                                 : ["Admin", "Management"].includes(
                                       session.user.role,
                                     )
@@ -990,6 +1003,8 @@ export function Dashboard({
                                       ? "Site stages, cable variance and items used outside quotations. Downloadable."
                                       : view === "stock"
                                       ? "Items required, Store counts, reserved stock, shortages, vendors and requests for quotation."
+                                      : view === "sites-ongoing"
+                                      ? "Sites not yet closed, from IPO received to Documents."
                                       : view === "sites-completed"
                                       ? "Sites whose end date falls in the last 30 days."
                                       : view === "sites-docs"
@@ -1099,7 +1114,7 @@ export function Dashboard({
                 </section>
               )}
               {view === "dashboard" && session.user.role === "Operations" && (
-                <SiteExecution session={session} home mode="ongoing" onOpenStock={() => navigate("stock")} />
+                <OperationsDashboard session={session} onGo={(target) => { if (target === "operations") setOperationsIpoId(undefined); navigate(target); }} onOpenSite={(id) => { setSiteToOpen(id); navigate("sites"); }} />
               )}
               {managementHome && <ManagementApprovals session={session} onOpen={(task)=>{
                 setRevisionDraftId(task.draft_id);
@@ -1217,7 +1232,8 @@ export function Dashboard({
                   }}
                 />
               )}
-              {view === "sites" && <SiteExecution session={session} mode="all" />}
+              {view === "sites" && <SiteExecution session={session} mode="all" initialSiteId={siteToOpen} />}
+              {view === "sites-ongoing" && <SiteExecution session={session} mode="ongoing" />}
               {view === "sites-completed" && <SiteExecution session={session} mode="completed" />}
               {view === "sites-docs" && <SiteExecution session={session} mode="documentation" />}
               {view === "reserved" && <StockProcurement session={session} tabs={["reserved"]} />}

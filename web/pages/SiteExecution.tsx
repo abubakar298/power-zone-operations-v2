@@ -103,8 +103,9 @@ const inMode = (s: SiteRow, mode: SiteBoardMode) =>
   Boolean(s.endDate) && missingDocuments(s).length > 0;
 
 /** `home` adds the stock shortage and reserved-stock tiles above the board (the Operations landing page). */
-export function SiteExecution({ session, home = false, onOpenStock, mode = "all" }: { session: Session; home?: boolean; onOpenStock?: () => void; mode?: SiteBoardMode }) {
+export function SiteExecution({ session, home = false, onOpenStock, mode = "all", initialSiteId }: { session: Session; home?: boolean; onOpenStock?: () => void; mode?: SiteBoardMode; initialSiteId?: string }) {
   const canEdit = ["Admin", "Management", "Operations"].includes(session.user.role);
+  const [openedInitial, setOpenedInitial] = useState<string | undefined>(undefined);
   const [stockSummary, setStockSummary] = useState<StockSummary | null>(null);
   useEffect(() => {
     if (!home) return;
@@ -192,6 +193,11 @@ export function SiteExecution({ session, home = false, onOpenStock, mode = "all"
     catch (e) { setError(e instanceof ApiError ? e.message : "Unable to load sites."); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  // A site handed over from the dashboard opens once, then the page behaves normally.
+  useEffect(() => {
+    if (initialSiteId && initialSiteId !== openedInitial) { setOpenedInitial(initialSiteId); void open(initialSiteId); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSiteId]);
 
   const open = useCallback(async (id: string) => {
     try {
