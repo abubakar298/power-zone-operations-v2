@@ -24,11 +24,13 @@ const num = (v: string | null) => (v == null ? "—" : v);
 const emptyVendor = (): Omit<Vendor, "id"> & { id?: string } => ({ name: "", category: "Structure", regions: [], contactPerson: "", phone: "", email: "", notes: "", status: "Active" });
 const emptyRequest = () => ({ executionId: "", itemKey: "", serviceCategory: "", description: "", quantity: "", unit: "", vendorId: "", expectedDate: "", amount: "", notes: "" });
 
-export function StockProcurement({ session }: { session: Session }) {
+type StockTab = "shortage" | "reserved" | "vendors" | "procurement";
+/** `tabs` limits the page to some tabs; a single tab renders as its own page without the tile row. */
+export function StockProcurement({ session, tabs = ["shortage", "reserved", "vendors", "procurement"] }: { session: Session; tabs?: StockTab[] }) {
   const role = session.user.role;
   const canEdit = ["Admin", "Management", "Operations"].includes(role);
   const canCount = canEdit || role === "Inventory";
-  const [tab, setTab] = useState<"shortage" | "reserved" | "vendors" | "procurement">("shortage");
+  const [tab, setTab] = useState<StockTab>(tabs[0] ?? "shortage");
   const [items, setItems] = useState<StockItem[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -80,25 +82,33 @@ export function StockProcurement({ session }: { session: Session }) {
     open: requests.filter((r) => !["Received", "Cancelled"].includes(r.status)).length,
   }), [items, reservations, requests]);
 
-  const tabs: { key: typeof tab; label: string; count: number }[] = [
+  const allTiles: { key: StockTab; label: string; count: number }[] = [
     { key: "shortage", label: "Stock shortage", count: totals.short },
     { key: "reserved", label: "Reserved stock", count: totals.reserved },
     { key: "vendors", label: "Vendors", count: vendors.filter((v) => v.status === "Active").length },
     { key: "procurement", label: "Procurement", count: totals.open },
   ];
+  const tiles = allTiles.filter((t) => tabs.includes(t.key));
 
   return (
     <div className="pz-stack">
-      <section className="pz-panel">
-        <div className="stage-grid">
-          {tabs.map((t) => (
-            <button type="button" key={t.key} className={`stage-card${tab === t.key ? " active" : ""}`} onClick={() => setTab(t.key)}>
-              <strong>{t.count}</strong><span>{t.label}</span>
-            </button>
-          ))}
-        </div>
-        <p><small>Required comes from issued BOQs still in planning plus heads-up BOQs. Existing stock is the count Store last entered. Shortage = required − existing. Available = existing − reserved.</small></p>
-      </section>
+      {tiles.length > 1 ? (
+        <section className="pz-panel">
+          <div className="stage-grid">
+            {tiles.map((t) => (
+              <button type="button" key={t.key} className={`stage-card${tab === t.key ? " active" : ""}`} onClick={() => setTab(t.key)}>
+                <strong>{t.count}</strong><span>{t.label}</span>
+              </button>
+            ))}
+          </div>
+          <p><small>Required comes from issued BOQs still in planning plus heads-up BOQs. Existing stock is the count Store last entered. Shortage = required − existing. Available = existing − reserved.</small></p>
+        </section>
+      ) : tiles[0] && (
+        <section className="pz-panel">
+          <h2>{tiles[0].label}</h2>
+          <p><small>{tiles[0].count} {tiles[0].key === "reserved" ? `reservation${tiles[0].count === 1 ? "" : "s"} held for sites` : "entries"}.</small></p>
+        </section>
+      )}
       {error && <p className="pz-feedback pz-feedback--danger" role="alert">{error}</p>}
       {notice && <p className="pz-feedback pz-feedback--success" role="status">{notice}</p>}
 

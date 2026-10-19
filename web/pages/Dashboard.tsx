@@ -138,6 +138,9 @@ export function Dashboard({
     | "quotes"
     | "operations"
     | "sites"
+    | "sites-completed"
+    | "sites-docs"
+    | "reserved"
     | "stock"
     | "reports"
     | "inventory"
@@ -230,6 +233,9 @@ export function Dashboard({
       | "quotes"
       | "operations"
       | "sites"
+      | "sites-completed"
+      | "sites-docs"
+      | "reserved"
       | "stock"
       | "reports"
       | "inventory"
@@ -481,14 +487,16 @@ export function Dashboard({
             <>
               <div className="nav-label">WORKSPACE</div>
               <nav aria-label="Main navigation">
-                <button
-                  className={view === "dashboard" ? "nav-active" : ""}
-                  aria-current={view === "dashboard" ? "page" : undefined}
-                  onClick={() => navigate("dashboard", undefined, true)}
-                >
-                  <Icon name="dashboard" />
-                  Dashboard
-                </button>
+                {session.user.role !== "Operations" && (
+                  <button
+                    className={view === "dashboard" ? "nav-active" : ""}
+                    aria-current={view === "dashboard" ? "page" : undefined}
+                    onClick={() => navigate("dashboard", undefined, true)}
+                  >
+                    <Icon name="dashboard" />
+                    Dashboard
+                  </button>
+                )}
                 {["Accounts"].includes(session.user.role) && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
 
                 {["Admin", "Management", "Coordinator"].includes(
@@ -607,7 +615,35 @@ export function Dashboard({
                     Design workspace
                   </button>
                 )}
-                {["Admin", "Management", "Coordinator", "Operations"].includes(
+                {session.user.role === "Operations" && (
+                  <>
+                    <button className={view === "operations" ? "nav-active" : ""} aria-current={view === "operations" ? "page" : undefined} onClick={() => { setOperationsIpoId(undefined); navigate("operations"); }}>
+                      <Icon name="file" />BOQ to Operations
+                    </button>
+                    <button className={view === "dashboard" ? "nav-active" : ""} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard", undefined, true)}>
+                      <Icon name="file" />Ongoing sites
+                    </button>
+                    <button className={view === "sites-completed" ? "nav-active" : ""} aria-current={view === "sites-completed" ? "page" : undefined} onClick={() => navigate("sites-completed")}>
+                      <Icon name="file" />Sites completed (last 30 days)
+                    </button>
+                    <button className={view === "sites-docs" ? "nav-active" : ""} aria-current={view === "sites-docs" ? "page" : undefined} onClick={() => navigate("sites-docs")}>
+                      <Icon name="file" />Documentation issues
+                    </button>
+                    <button className={view === "sites" ? "nav-active" : ""} aria-current={view === "sites" ? "page" : undefined} onClick={() => navigate("sites")}>
+                      <Icon name="file" />All sites
+                    </button>
+                    <button className={view === "reserved" ? "nav-active" : ""} aria-current={view === "reserved" ? "page" : undefined} onClick={() => navigate("reserved")}>
+                      <Icon name="file" />Reserved stock
+                    </button>
+                    <button className={view === "stock" ? "nav-active" : ""} aria-current={view === "stock" ? "page" : undefined} onClick={() => navigate("stock")}>
+                      <Icon name="file" />Stock & procurement
+                    </button>
+                    <button className={view === "reports" ? "nav-active" : ""} aria-current={view === "reports" ? "page" : undefined} onClick={() => navigate("reports")}>
+                      <Icon name="file" />Site report
+                    </button>
+                  </>
+                )}
+                {["Admin", "Management", "Coordinator"].includes(
                   session.user.role,
                 ) && (
                   <>
@@ -623,7 +659,7 @@ export function Dashboard({
                     </button>
                   </>
                 )}
-                {["Admin", "Management", "Coordinator", "Operations", "Inventory", "Accounts"].includes(
+                {["Admin", "Management", "Coordinator", "Inventory", "Accounts"].includes(
                   session.user.role,
                 ) && (
                   <button
@@ -634,7 +670,7 @@ export function Dashboard({
                     Sites
                   </button>
                 )}
-                {["Admin", "Management", "Operations", "Inventory", "Accounts"].includes(
+                {["Admin", "Management", "Inventory", "Accounts"].includes(
                   session.user.role,
                 ) && (
                   <button
@@ -645,7 +681,7 @@ export function Dashboard({
                     Stock & procurement
                   </button>
                 )}
-                {["Admin", "Management", "Operations", "Inventory", "Accounts"].includes(
+                {["Admin", "Management", "Inventory", "Accounts"].includes(
                   session.user.role,
                 ) && (
                   <button
@@ -751,6 +787,12 @@ export function Dashboard({
                                 ? "Site reports"
                                 : view === "stock"
                                 ? "Stock & procurement"
+                                : view === "sites-completed"
+                                ? "Sites completed (last 30 days)"
+                                : view === "sites-docs"
+                                ? "Documentation issues"
+                                : view === "reserved"
+                                ? "Reserved stock"
                                 : view === "sites"
                                 ? "Sites"
                                 : view === "operations"
@@ -885,6 +927,12 @@ export function Dashboard({
                                       ? "Site reports"
                                       : view === "stock"
                                       ? "Stock & procurement"
+                                      : view === "sites-completed"
+                                      ? "Sites completed (last 30 days)"
+                                      : view === "sites-docs"
+                                      ? "Documentation issues"
+                                      : view === "reserved"
+                                      ? "Reserved stock"
                                       : view === "sites"
                                       ? "Sites"
                                       : view === "operations"
@@ -942,6 +990,12 @@ export function Dashboard({
                                       ? "Site stages, cable variance and items used outside quotations. Downloadable."
                                       : view === "stock"
                                       ? "Items required, Store counts, reserved stock, shortages, vendors and requests for quotation."
+                                      : view === "sites-completed"
+                                      ? "Sites whose end date falls in the last 30 days."
+                                      : view === "sites-docs"
+                                      ? "Work finished but DO, acknowledgement, submission to the customer or customer sign-off still missing."
+                                      : view === "reserved"
+                                      ? "Stock held for sites, by item and site."
                                       : view === "sites"
                                       ? "Every site after its IPO: stage, dates, daily picture checks, problems and documents."
                                       : view === "operations"
@@ -1045,7 +1099,7 @@ export function Dashboard({
                 </section>
               )}
               {view === "dashboard" && session.user.role === "Operations" && (
-                <SiteExecution session={session} home onOpenStock={() => navigate("stock")} />
+                <SiteExecution session={session} home mode="ongoing" onOpenStock={() => navigate("stock")} />
               )}
               {managementHome && <ManagementApprovals session={session} onOpen={(task)=>{
                 setRevisionDraftId(task.draft_id);
@@ -1163,8 +1217,11 @@ export function Dashboard({
                   }}
                 />
               )}
-              {view === "sites" && <SiteExecution session={session} />}
-              {view === "stock" && <StockProcurement session={session} />}
+              {view === "sites" && <SiteExecution session={session} mode="all" />}
+              {view === "sites-completed" && <SiteExecution session={session} mode="completed" />}
+              {view === "sites-docs" && <SiteExecution session={session} mode="documentation" />}
+              {view === "reserved" && <StockProcurement session={session} tabs={["reserved"]} />}
+              {view === "stock" && <StockProcurement session={session} tabs={["shortage", "vendors", "procurement"]} />}
               {view === "reports" && <SiteReports session={session} />}
               {view === "operations" && (
                 <Operations session={session} initialIpoId={operationsIpoId} portal={departmentView==='operations'} />

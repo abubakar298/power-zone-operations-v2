@@ -80,9 +80,30 @@ const stageTone = (s: SiteRow): "pending" | "success" | "warning" | "danger" =>
   s.stage === "closed" ? "success" : s.late ? "danger" : "pending";
 
 interface StockSummary { short: number; uncounted: number; reserved: number; reservedSites: number }
+export type SiteBoardMode = "all" | "ongoing" | "completed" | "documentation";
+const MODE_TEXT: Record<SiteBoardMode, { title: string; note: string }> = {
+  all: { title: "All sites", note: "Every site after its IPO, whatever its stage." },
+  ongoing: { title: "Ongoing sites", note: "Sites not yet closed, from IPO received to Documents." },
+  completed: { title: "Sites completed (last 30 days)", note: "Sites whose end date falls in the last 30 days." },
+  documentation: { title: "Documentation issues", note: "Work finished (end date entered) but DO, acknowledgement, submission to the customer or customer sign-off still missing." },
+};
+const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); };
+const missingDocuments = (s: SiteRow) => {
+  const missing: string[] = [];
+  if (!s.doDate) missing.push("DO date");
+  if (!s.acknowledgementDate) missing.push("acknowledgement");
+  if (!s.submittedToCustomerDate) missing.push("submitted to customer");
+  if (s.customerSignoff !== true) missing.push("customer sign-off");
+  return missing;
+};
+const inMode = (s: SiteRow, mode: SiteBoardMode) =>
+  mode === "all" ? true :
+  mode === "ongoing" ? s.stage !== "closed" :
+  mode === "completed" ? Boolean(s.endDate && s.endDate >= daysAgo(30) && s.endDate <= today()) :
+  Boolean(s.endDate) && missingDocuments(s).length > 0;
 
 /** `home` adds the stock shortage and reserved-stock tiles above the board (the Operations landing page). */
-export function SiteExecution({ session, home = false, onOpenStock }: { session: Session; home?: boolean; onOpenStock?: () => void }) {
+export function SiteExecution({ session, home = false, onOpenStock, mode = "all" }: { session: Session; home?: boolean; onOpenStock?: () => void; mode?: SiteBoardMode }) {
   const canEdit = ["Admin", "Management", "Operations"].includes(session.user.role);
   const [stockSummary, setStockSummary] = useState<StockSummary | null>(null);
   useEffect(() => {
@@ -210,19 +231,21 @@ export function SiteExecution({ session, home = false, onOpenStock }: { session:
     finally { setBusy(false); }
   }, [apply, session.csrfToken]);
 
+  const scoped = useMemo(() => (data ? data.sites.filter((s) => inMode(s, mode)) : []), [data, mode]);
   const rows = useMemo(() => {
     if (!data) return [];
     const q = search.trim().toLowerCase();
-    return data.sites.filter((s) =>
+    return scoped.filter((s) =>
       (!stageFilter || s.stage === stageFilter) &&
       (!regionFilter || (s.region ?? "") === regionFilter) &&
       (!q || [s.siteName, s.siteCode, s.customer, s.ipoNumber, s.boqNumber].some((v) => (v ?? "").toLowerCase().includes(q))));
-  }, [data, stageFilter, regionFilter, search]);
+  }, [data, scoped, stageFilter, regionFilter, search]);
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const s of data?.sites ?? []) c[s.stage] = (c[s.stage] ?? 0) + 1;
+    for (const s of scoped) c[s.stage] = (c[s.stage] ?? 0) + 1;
     return c;
-  }, [data]);
+  }, [scoped]);
+  const stageTiles = useMemo(() => (data ? data.stages.filter((s) => mode !== "ongoing" || s.key !== "closed") : []), [data, mode]);
 
   if (!data) return <section className="pz-panel"><p>{error || "Loading sites…"}</p></section>;
 
@@ -638,17 +661,21 @@ export function SiteExecution({ session, home = false, onOpenStock }: { session:
           <p><small>Open Stock &amp; procurement for the full shortage list, counts, vendors and requests for quotation.</small></p>
         </section>
       )}
-      <section className="pz-panel">
-        <div className="stage-grid">
-          <button type="button" className={`stage-card${stageFilter === "" ? " active" : ""}`} onClick={() => setStageFilter("")}>
-            <strong>{data.sites.length}</strong><span>All sites</span>
-          </button>
-          {data.stages.map((s) => (
-            <button type="button" key={s.key} className={`stage-card${stageFilter === s.key ? " active" : ""}`} onClick={() => setStageFilter(s.key)}>
-              <strong>{counts[s.key] ?? 0}</strong><span>{s.label}</span>
+      <section className="pz-panel pz-stack">
+        <h2>{MODE_TEXT[mode].title}</h2>
+        <p><small>{MODE_TEXT[mode].note}</small></p>
+        {(mode === "all" || mode === "ongoing") && (
+          <div className="stage-grid">
+            <button type="button" className={`stage-card${stageFilter === "" ? " active" : ""}`} onClick={() => setStageFilter("")}>
+              <strong>{scoped.length}</strong><span>{MODE_TEXT[mode].title}</span>
             </button>
-          ))}
-        </div>
+            {stageTiles.map((s) => (
+              <button type="button" key={s.key} className={`stage-card${stageFilter === s.key ? " active" : ""}`} onClick={() => setStageFilter(s.key)}>
+                <strong>{counts[s.key] ?? 0}</strong><span>{s.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </section>
       <section className="pz-panel pz-stack">
         <div className="pz-form-grid">
@@ -668,11 +695,12 @@ export function SiteExecution({ session, home = false, onOpenStock }: { session:
               <tr>
                 <th>Site</th><th>Customer</th><th>Region</th><th>Type</th><th>Stage</th><th>Days</th>
                 <th>PO date</th><th>Delivery</th><th>Start</th><th>End</th><th>Problems</th><th>Missing pictures</th>
+                {mode === "documentation" && <th>Missing documents</th>}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={12}>No sites match.</td></tr>
+                <tr><td colSpan={mode === "documentation" ? 13 : 12}>{mode === "documentation" ? "No documentation issues." : mode === "completed" ? "No sites completed in the last 30 days." : "No sites match."}</td></tr>
               ) : rows.map((s) => (
                 <tr key={s.id} style={{ cursor: "pointer" }} onClick={() => void open(s.id)}>
                   <td><strong>{s.siteName ?? "—"}</strong>{s.siteCode ? ` (${s.siteCode})` : ""}<br /><small>IPO {s.ipoNumber}</small></td>
@@ -687,6 +715,7 @@ export function SiteExecution({ session, home = false, onOpenStock }: { session:
                   <td>{fmt(s.endDate)}</td>
                   <td>{s.openProblems || "—"}</td>
                   <td>{s.missingPictureDays || "—"}</td>
+                  {mode === "documentation" && <td>{missingDocuments(s).map((m) => <StatusBadge key={m} tone="warning">{m}</StatusBadge>)}</td>}
                 </tr>
               ))}
             </tbody>
