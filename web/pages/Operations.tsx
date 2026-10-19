@@ -30,6 +30,7 @@ export function Operations({
   portal = false,
   initialAdvanceReference,
   advanceNonce = 0,
+  regionScope = "",
 }: {
   session: Session;
   initialIpoId?: string;
@@ -37,6 +38,8 @@ export function Operations({
   /** A heads-up chosen in the top-bar search opens here; the nonce lets the same one open twice. */
   initialAdvanceReference?: string;
   advanceNonce?: number;
+  /** Region chosen in the Operations shell sidebar; filters the advance BOQ list. */
+  regionScope?: string;
 }) {
   const [advanceReservation,setAdvanceReservation]=useState<any>(),[lastAdvanceReference,setLastAdvanceReference]=useState(initialAdvanceReference??'');
   useEffect(()=>{if(initialAdvanceReference){setLastAdvanceReference(initialAdvanceReference);setAdvanceReservation(undefined);}},[initialAdvanceReference,advanceNonce]);
@@ -270,7 +273,7 @@ export function Operations({
   if (["Admin","Management","Operations"].includes(session.user.role)) return (
     // No outer frame: the panels inside carry their own border (Moaz, 19 Oct 2026: "remove the margin lines").
     <div className="pz-stack">
-      <AdvanceBoqSearch onOpen={reference=>setLastAdvanceReference(reference)}/>
+      <AdvanceBoqSearch regionScope={regionScope} onOpen={reference=>setLastAdvanceReference(reference)}/>
       {/* Operations reads the heads-up only; the Reserve Stock step left its workspace on 19 Oct 2026 (Moaz). */}
       {lastAdvanceReference&&<AdvanceBoqInbox key={lastAdvanceReference} initialReference={lastAdvanceReference} detailOnly onReserve={session.user.role==='Operations'?undefined:group=>{setLastAdvanceReference(group.number);setAdvanceReservation(group);}}/>}
     </div>

@@ -25,7 +25,7 @@ const fmtDay = (v: string | null | undefined) => (v ? new Intl.DateTimeFormat("e
 /**
  * Every advance (heads-up) BOQ received, with stage tabs and filters by customer, site, region and received date.
  */
-export function AdvanceBoqSearch({ onOpen }: { onOpen: (reference: string) => void }) {
+export function AdvanceBoqSearch({ onOpen, regionScope = "" }: { onOpen: (reference: string) => void; regionScope?: string }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -63,7 +63,7 @@ export function AdvanceBoqSearch({ onOpen }: { onOpen: (reference: string) => vo
     return () => { active = false; };
   }, []);
 
-  const pool = rows;
+  const pool = useMemo(() => (regionScope ? rows.filter((r) => r.region === regionScope) : rows), [rows, regionScope]);
   const unique = (pick: (r: Row) => string) => [...new Set(pool.map(pick).filter((v) => v && v !== "—"))].sort((a, b) => a.localeCompare(b));
   const customers = useMemo(() => unique((r) => r.customer), [pool]);
   const sites = useMemo(() => unique((r) => r.site), [pool]);
@@ -89,7 +89,7 @@ export function AdvanceBoqSearch({ onOpen }: { onOpen: (reference: string) => vo
 
   return (
     <section className="pz-panel pz-stack" aria-label="Advance BOQ search">
-      <div>
+      <div className="abq-head">
         <h2>Advance BOQs</h2>
         <p className="pz-caption">Heads-up material forecasts received from Coordination, before and after the IPO.</p>
       </div>
@@ -108,9 +108,9 @@ export function AdvanceBoqSearch({ onOpen }: { onOpen: (reference: string) => vo
         <select aria-label="Site" value={site} onChange={(e) => setSite(e.target.value)}>
           <option value="">All sites</option>{sites.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <select aria-label="Region" value={region} onChange={(e) => setRegion(e.target.value)}>
+        {!regionScope && <select aria-label="Region" value={region} onChange={(e) => setRegion(e.target.value)}>
           <option value="">All regions</option>{regions.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
+        </select>}
         <span className="abq-date">
           <span>Received</span>
           <input type="date" aria-label="Received from" value={from} onChange={(e) => setFrom(e.target.value)} />

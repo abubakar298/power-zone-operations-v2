@@ -20,10 +20,11 @@ function download(name: string, header: string[], rows: unknown[][]) {
 const label = (s: SiteRef | SiteRow) => `${s.siteName ?? "Site"}${s.siteCode ? ` (${s.siteCode})` : ""}`;
 
 /** Site report: every site's stage and dates, cable variance against BOQ, and items used outside the quotation. */
-export function SiteReport({ session }: { session: Session }) {
+export function SiteReport({ session, regionScope = "" }: { session: Session; regionScope?: string }) {
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
-  const [region, setRegion] = useState("");
+  const [region, setRegion] = useState(regionScope);
+  useEffect(() => { setRegion(regionScope); }, [regionScope]);
   const [onlyFlagged, setOnlyFlagged] = useState(true);
   useEffect(() => {
     let active = true;
@@ -41,9 +42,9 @@ export function SiteReport({ session }: { session: Session }) {
       {error && <p className="pz-feedback pz-feedback--danger" role="alert">{error}</p>}
       <section className="pz-panel pz-stack">
         <div className="sw-head"><h2>Site report</h2><small>{session.user.role === "Accounts" ? "Cable variance and additional items are what Accounts invoices or refunds." : "Downloads are CSV files that open in Excel."}</small></div>
-        <div className="pz-form-grid">
+        {!regionScope && <div className="pz-form-grid">
           <Field id="sr-region" label="Region"><select id="sr-region" value={region} onChange={(e) => setRegion(e.target.value)}><option value="">All regions</option>{regions.map((r) => <option key={r} value={r}>{r}</option>)}</select></Field>
-        </div>
+        </div>}
       </section>
 
       <section className="pz-panel pz-stack">
