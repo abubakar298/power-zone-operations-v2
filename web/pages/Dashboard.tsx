@@ -494,16 +494,14 @@ export function Dashboard({
             <>
               <div className="nav-label">WORKSPACE</div>
               <nav aria-label="Main navigation">
-                {session.user.role !== "Operations" && (
-                  <button
-                    className={view === "dashboard" ? "nav-active" : ""}
-                    aria-current={view === "dashboard" ? "page" : undefined}
-                    onClick={() => navigate("dashboard", undefined, true)}
-                  >
-                    <Icon name="dashboard" />
-                    Dashboard
-                  </button>
-                )}
+                <button
+                  className={view === "dashboard" ? "nav-active" : ""}
+                  aria-current={view === "dashboard" ? "page" : undefined}
+                  onClick={() => navigate("dashboard", undefined, true)}
+                >
+                  <Icon name="dashboard" />
+                  Dashboard
+                </button>
                 {["Accounts"].includes(session.user.role) && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
 
                 {["Admin", "Management", "Coordinator"].includes(
@@ -624,9 +622,6 @@ export function Dashboard({
                 )}
                 {session.user.role === "Operations" && (
                   <>
-                    <button className={view === "dashboard" ? "nav-active" : ""} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard", undefined, true)}>
-                      <Icon name="dashboard" />Dashboard
-                    </button>
                     <button className={view === "operations" ? "nav-active" : ""} aria-current={view === "operations" ? "page" : undefined} onClick={() => { setOperationsIpoId(undefined); navigate("operations"); }}>
                       <Icon name="file" />BOQ to Operations
                     </button>
