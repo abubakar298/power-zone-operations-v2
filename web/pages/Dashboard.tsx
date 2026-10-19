@@ -41,17 +41,14 @@ const Coordinator = lazy(() =>
 const Operations = lazy(() =>
   import("./Operations.js").then((module) => ({ default: module.Operations })),
 );
-const SiteExecution = lazy(() =>
-  import("./SiteExecution.js").then((module) => ({ default: module.SiteExecution })),
+const SiteBoard = lazy(() =>
+  import("./site-workflow/SiteBoard.js").then((module) => ({ default: module.SiteBoard })),
 );
-const OperationsDashboard = lazy(() =>
-  import("./OperationsDashboard.js").then((module) => ({ default: module.OperationsDashboard })),
+const OperationsHome = lazy(() =>
+  import("./site-workflow/OperationsHome.js").then((module) => ({ default: module.OperationsHome })),
 );
-const StockProcurement = lazy(() =>
-  import("./StockProcurement.js").then((module) => ({ default: module.StockProcurement })),
-);
-const SiteReports = lazy(() =>
-  import("./SiteReports.js").then((module) => ({ default: module.SiteReports })),
+const SiteReport = lazy(() =>
+  import("./site-workflow/SiteReport.js").then((module) => ({ default: module.SiteReport })),
 );
 const CniProposals = lazy(() =>
   import("./CniProposals.js").then((module) => ({
@@ -148,8 +145,6 @@ export function Dashboard({
     | "sites-ongoing"
     | "sites-completed"
     | "sites-docs"
-    | "reserved"
-    | "stock"
     | "reports"
     | "inventory"
     | "finance"
@@ -246,8 +241,6 @@ export function Dashboard({
       | "sites-ongoing"
       | "sites-completed"
       | "sites-docs"
-      | "reserved"
-      | "stock"
       | "reports"
       | "inventory"
       | "finance"
@@ -683,17 +676,6 @@ export function Dashboard({
                   session.user.role,
                 ) && (
                   <button
-                    className={view === "stock" ? "nav-active" : ""}
-                    onClick={() => navigate("stock")}
-                  >
-                    <Icon name="file" />
-                    Stock & procurement
-                  </button>
-                )}
-                {["Admin", "Management", "Inventory", "Accounts"].includes(
-                  session.user.role,
-                ) && (
-                  <button
                     className={view === "reports" ? "nav-active" : ""}
                     onClick={() => navigate("reports")}
                   >
@@ -793,9 +775,7 @@ export function Dashboard({
                             : view === "quotes"
                               ? "Quotations"
                               : view === "reports"
-                                ? "Site reports"
-                                : view === "stock"
-                                ? "Stock & procurement"
+                                ? "Site report"
                                 : view === "heads-up"
                                 ? "Heads up on new sites"
                                 : view === "sites-new"
@@ -806,8 +786,6 @@ export function Dashboard({
                                 ? "Sites completed (last 30 days)"
                                 : view === "sites-docs"
                                 ? "Documentation issues"
-                                : view === "reserved"
-                                ? "Reserved stock"
                                 : view === "sites"
                                 ? "Sites"
                                 : view === "operations"
@@ -939,9 +917,7 @@ export function Dashboard({
                                   : view === "quotes"
                                     ? "Quotations"
                                     : view === "reports"
-                                      ? "Site reports"
-                                      : view === "stock"
-                                      ? "Stock & procurement"
+                                      ? "Site report"
                                       : view === "heads-up"
                                       ? "Heads up on new sites"
                                       : view === "sites-new"
@@ -952,8 +928,6 @@ export function Dashboard({
                                       ? "Sites completed (last 30 days)"
                                       : view === "sites-docs"
                                       ? "Documentation issues"
-                                      : view === "reserved"
-                                      ? "Reserved stock"
                                       : view === "sites"
                                       ? "Sites"
                                       : view === "operations"
@@ -1008,23 +982,19 @@ export function Dashboard({
                                   : view === "team"
                                     ? "Invite and manage authorised team members."
                                     : view === "reports"
-                                      ? "Site stages, cable variance and items used outside quotations. Downloadable."
-                                      : view === "stock"
-                                      ? "Items required, Store counts, reserved stock, shortages, vendors and requests for quotation."
+                                      ? "Every site's stage and dates, cable variance against BOQ, and items used outside the quotation. Downloadable."
                                       : view === "heads-up"
                                       ? "Advance BOQs for sites whose IPO has not been issued yet."
                                       : view === "sites-new"
-                                      ? "Sites whose IPO has arrived and nothing has been started yet."
+                                      ? "IPO received, planning not started."
                                       : view === "sites-ongoing"
-                                      ? "Sites not yet closed, from IPO received to Documents."
+                                      ? "Every site that is not closed, from IPO received to Doc dispatch."
                                       : view === "sites-completed"
-                                      ? "Sites whose end date falls in the last 30 days."
+                                      ? "Sites closed in the last 30 days."
                                       : view === "sites-docs"
-                                      ? "Work finished but DO, acknowledgement, submission to the customer or customer sign-off still missing."
-                                      : view === "reserved"
-                                      ? "Stock held for sites, by item and site."
+                                      ? "Sites at Doc dispatch, or closed, still missing the DO date, acknowledgement, submission to the customer or customer sign-off."
                                       : view === "sites"
-                                      ? "Every site after its IPO: stage, dates, daily picture checks, problems and documents."
+                                      ? "Every site after its IPO: IPO received, planning, delivery, installation, commissioning, handover, doc dispatch, closed."
                                       : view === "operations"
                                       ? "Advance BOQs received from Coordination. Search by customer, site, region, stage and date."
                                       : view === "orders"
@@ -1126,7 +1096,7 @@ export function Dashboard({
                 </section>
               )}
               {view === "dashboard" && session.user.role === "Operations" && (
-                <OperationsDashboard session={session} onGo={(target) => { if (target === "operations") setOperationsIpoId(undefined); navigate(target); }} onOpenSite={(id) => { setSiteToOpen(id); setStageToOpen(undefined); navigate("sites"); }} onOpenStage={(stage) => { setStageToOpen(stage); setSiteToOpen(undefined); navigate("sites"); }} />
+                <OperationsHome session={session} onGo={(target) => { if (target === "operations") setOperationsIpoId(undefined); navigate(target); }} onOpenSite={(id) => { setSiteToOpen(id); setStageToOpen(undefined); navigate("sites"); }} onOpenStage={(stage) => { setStageToOpen(stage); setSiteToOpen(undefined); navigate("sites"); }} />
               )}
               {managementHome && <ManagementApprovals session={session} onOpen={(task)=>{
                 setRevisionDraftId(task.draft_id);
@@ -1244,15 +1214,13 @@ export function Dashboard({
                   }}
                 />
               )}
-              {view === "sites" && <SiteExecution session={session} mode="all" initialSiteId={siteToOpen} initialStageFilter={stageToOpen} />}
-              {view === "sites-new" && <SiteExecution session={session} mode="new" />}
-              {view === "sites-ongoing" && <SiteExecution session={session} mode="ongoing" />}
+              {view === "sites" && <SiteBoard session={session} mode="all" initialSiteId={siteToOpen} initialStage={stageToOpen} />}
+              {view === "sites-new" && <SiteBoard session={session} mode="new" />}
+              {view === "sites-ongoing" && <SiteBoard session={session} mode="ongoing" />}
               {view === "heads-up" && <Operations session={session} headsUp />}
-              {view === "sites-completed" && <SiteExecution session={session} mode="completed" />}
-              {view === "sites-docs" && <SiteExecution session={session} mode="documentation" />}
-              {view === "reserved" && <StockProcurement session={session} tabs={["reserved"]} />}
-              {view === "stock" && <StockProcurement session={session} tabs={["shortage", "vendors", "procurement"]} />}
-              {view === "reports" && <SiteReports session={session} />}
+              {view === "sites-completed" && <SiteBoard session={session} mode="completed" />}
+              {view === "sites-docs" && <SiteBoard session={session} mode="docs" />}
+              {view === "reports" && <SiteReport session={session} />}
               {view === "operations" && (
                 <Operations session={session} initialIpoId={operationsIpoId} portal={departmentView==='operations'} />
               )}

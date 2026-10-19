@@ -27,13 +27,9 @@ import { directorHttp } from "./director/http.js";
 import { CoordinatorRepository } from "./coordinator/repository.js";
 import { coordinatorHttp } from "./coordinator/http.js";
 import { OperationsRepository } from "./operations/repository.js";
-import { SiteExecutionRepository } from "./site-execution/repository.js";
-import { siteExecutionHttp } from "./site-execution/http.js";
+import { SiteWorkflowRepository } from "./site-workflow/repository.js";
+import { siteWorkflowHttp } from "./site-workflow/http.js";
 import { operationsAccess } from "./http/operations-access.js";
-import { StockRepository } from "./site-execution/stock.js";
-import { VendorsRepository } from "./site-execution/vendors.js";
-import { ProcurementRepository } from "./site-execution/procurement.js";
-import { ClosureRepository } from "./site-execution/closure.js";
 import { operationsHttp } from "./operations/http.js";
 import { CommercialRepository } from "./commercial/repository.js";
 import { commercialHttp } from "./commercial/http.js";
@@ -118,7 +114,7 @@ export function createApp(
       "/api/coordinator",
       "/api/director",
       "/api/operations",
-      "/api/site-execution",
+      "/api/site-workflow",
       "/api/departments",
       "/api/masters",
     ],
@@ -234,20 +230,7 @@ export function createApp(
     coordinatorRecords(pool),
     operationsHttp(new OperationsRepository(pool), sessionForWorkspace),
   );
-  app.use(
-    "/api/site-execution",
-    sessionForWorkspace,
-    siteExecutionHttp(
-      {
-        sites: new SiteExecutionRepository(pool),
-        stock: new StockRepository(pool),
-        vendors: new VendorsRepository(pool),
-        procurement: new ProcurementRepository(pool),
-        closure: new ClosureRepository(pool),
-      },
-      sessionForWorkspace,
-    ),
-  );
+  app.use("/api/site-workflow", sessionForWorkspace, siteWorkflowHttp(new SiteWorkflowRepository(pool), sessionForWorkspace));
   app.use(
     "/api/coordinator",
     sessionForWorkspace,

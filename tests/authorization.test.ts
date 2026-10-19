@@ -276,7 +276,7 @@ test("owned documents remain usable; other coordinators and unhanded departments
       `/api/operations/${received.id}/report.pdf`,
       `/api/operations/${received.id}/delivery-plan`,
     ]) {
-      // The Operations login no longer uses the delivery portal (Moaz, 19 Oct 2026): its workspace is /api/site-execution.
+      // The Operations login no longer uses the delivery portal (Moaz, 19 Oct 2026): its workspace is /api/site-workflow.
       await request(app).get(path).set("Cookie", operations.cookie).expect(403);
       await request(app).get(path).set("Cookie", stranger.cookie).expect(404);
       await request(app).get(path).set("Cookie", inventory.cookie).expect(403);

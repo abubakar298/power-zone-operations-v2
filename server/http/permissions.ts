@@ -27,12 +27,10 @@ export function workflowBoundary(pool: Pool): RequestHandler {
       )
         return next();
     }
-    if (path.startsWith("/api/site-execution")) {
-      // Site operations after IPO issue: Operations works the record, Store and Accounts read it.
+    if (path.startsWith("/api/site-workflow")) {
+      // The site workflow after IPO issue: Operations works the site, Store and Accounts read it.
       if (role === "Operations") return next();
       if ((role === "Inventory" || role === "Accounts") && req.method === "GET") return next();
-      // Store enters the stock counts.
-      if (role === "Inventory" && path === "/api/site-execution/stock/counts") return next();
     }
     if (
       role === "Inventory" &&
