@@ -1,3 +1,5 @@
+import {directProductTaxBasis} from '../boq/direct-products.js';
+import {isSolarPanelProduct} from '../boq/solar-product.js';
 import {
   cashDeal,
   retainedGst,
@@ -65,6 +67,7 @@ export function price(
   input: PricingInput,
   policy?: CommercialPolicy,
 ) {
+  boq=directProductTaxBasis(boq);
   const frameworkPricing=(boq as any).frameworkPricing;
   if(frameworkPricing){policy=undefined;if(input.saleType!=='Tax Deal'||input.taxMode!=='Show Sales Tax Separately'||new Decimal(input.discountPercent??0).gt(0)||input.roundedTotal!==undefined||boq.survey.additionalItem)throw new HttpError(422,'UBL pre-agreed prices and tax treatment are fixed; revise the approved Solution ID instead.');}
   if (
@@ -1096,7 +1099,7 @@ function directQuotationLines(boq: BoqSnapshot): QuoteLine[] {
         group:
           source.phase === "BESS"
             ? ("bess" as const)
-            : source.phase === "Solar Panels"
+            : isSolarPanelProduct(source)
               ? ("solar" as const)
               : ("balance" as const),
       };

@@ -1,3 +1,4 @@
+import {isSolarPanelProduct} from './solar-product.js';
 import {identifyLines} from '../masters/catalogue.js';
 import {productBrandCategory} from './product-brand-category.js';
 import {Decimal} from 'decimal.js';
@@ -42,9 +43,16 @@ export function calculateDirectProducts(s:Survey,m:Masters):BoqSnapshot {
     if(existing){if(stock&&existing.itemId&&existing.itemId!==stock.item_id)throw new HttpError(400,'Different stock variants must be reviewed separately.');if(existing.brand!==(brand?.name??''))throw new HttpError(400,'The same product cannot use different brands in one BOQ.');existing.qty=new Decimal(existing.qty).add(quantity).toString();existing.total=new Decimal(existing.qty).mul(existing.rate).toString();continue;}
     if(item.status!=='Approved'||!item.approved_specification)warnings.push(`${component.key}: approved specification requires review.`);
     if(rate.status==='Needs Rate')warnings.push(`${component.key}: rate marked Needs Rate; current numeric rate used.`);
-    lines.push({itemId:stock?.item_id,itemVersion:stock?.version,stockBrand:stock?.payload.brandCategory,costingCategory:stock?.payload.category,key:component.key,description:component.key,brand:brand?.name??'',brandAlternatives:[],specification:s.specifications?.[component.key]??(item.status==='Approved'?item.approved_specification:null),specVersion:s.specifications?.[component.key]?null:item.version,qty:quantity.toString(),unit:rate.unit,rate:new Decimal(rate.rate!).toString(),rateVersion:rate.version,rateStatus:rate.status,total:quantity.mul(rate.rate!).toString(),phase:bess?'BESS':component.key==='Solar PV Modules'?'Solar Panels':'EPC',epc:''});
+    lines.push({itemId:stock?.item_id,itemVersion:stock?.version,stockBrand:stock?.payload.brandCategory,costingCategory:stock?.payload.category,key:component.key,description:component.key,brand:brand?.name??'',brandAlternatives:[],specification:s.specifications?.[component.key]??(item.status==='Approved'?item.approved_specification:null),specVersion:s.specifications?.[component.key]?null:item.version,qty:quantity.toString(),unit:rate.unit,rate:new Decimal(rate.rate!).toString(),rateVersion:rate.version,rateStatus:rate.status,total:quantity.mul(rate.rate!).toString(),phase:bess?'BESS':isSolarPanelProduct({key:component.key,item_group:stock?.payload.itemGroup,costingCategory:stock?.payload.category})?'Solar Panels':'EPC',epc:''});
   }
   identifyLines(m,lines,s,warnings);
   const total=lines.reduce((v,l)=>v.add(l.total),new Decimal(0));
   return {customer:{id:customer.id,name:customer.name,shortCode:customer.short_code},survey:s,selectedBrands:{},engineering:{pvWatts:'0',pvKwp:'0',strings:0,batteryModules:'0',bms:'0',bmsRuleVersion:'direct-product-equipment-v1',bmsPerInverter:'0',batteryPerInverter:'0',bessId:'PRODUCTS',solutionId:'DIRECT-PRODUCT'},lines,summary:['Solar Panels','BESS','EPC'].map(name=>({name,cost:lines.filter(l=>l.phase===name).reduce((v,l)=>v.add(l.total),new Decimal(0)).toString(),perWatt:'0.00'})),epc:[],total:total.toString(),perWatt:'0.00',warnings,rules:[],inverterConfig:{configuration:'Direct Product Sale',total_kw:'0',sku:'',quantity:1},classifications:m.classifications,directProductGroups:groups,engineVersion:1};
+}
+
+/** Reprice saved direct-product BOQs without altering their immutable saved snapshot. */
+export function directProductTaxBasis(boq:BoqSnapshot):BoqSnapshot {
+ if(boq.survey.family!=='direct-product')return boq;
+ const lines=boq.lines.map(line=>isSolarPanelProduct(line)?{...line,phase:'Solar Panels'}:line);
+ return {...boq,lines,summary:['Solar Panels','BESS','EPC'].map(name=>({name,cost:lines.filter(l=>l.phase===name).reduce((sum,l)=>sum.add(l.total),new Decimal(0)).toString(),perWatt:'0.00'}))};
 }
