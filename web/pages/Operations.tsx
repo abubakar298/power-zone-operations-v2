@@ -146,6 +146,8 @@ export function Operations({
     undefined,
   );
   async function load() {
+    // Operations, Admin and Management see only the advance BOQ search on this page; the legacy portal data is not needed.
+    if (["Admin", "Management", "Operations"].includes(session.user.role)) return;
     const [o, r] = await Promise.all([
       session.user.role === "Operations" ? Promise.resolve({orders:[]}) : api<any>("/orders"),
       api<any>("/operations/portal"),

@@ -29,6 +29,7 @@ import { coordinatorHttp } from "./coordinator/http.js";
 import { OperationsRepository } from "./operations/repository.js";
 import { SiteExecutionRepository } from "./site-execution/repository.js";
 import { siteExecutionHttp } from "./site-execution/http.js";
+import { operationsAccess } from "./http/operations-access.js";
 import { StockRepository } from "./site-execution/stock.js";
 import { VendorsRepository } from "./site-execution/vendors.js";
 import { ProcurementRepository } from "./site-execution/procurement.js";
@@ -45,6 +46,7 @@ import { AccountsService } from "./onboarding/service.js";
 import { accountsHttp } from "./onboarding/http.js";
 import { ResendDelivery, type EmailDelivery } from "./email/delivery.js";
 import express, { type ErrorRequestHandler } from "express";
+import type { RequestHandler } from "express";
 import { randomUUID } from "node:crypto";
 import helmet from "helmet";
 import type { Pool } from "pg";
@@ -104,6 +106,9 @@ export function createApp(
     new AuthService(new AuthRepository(pool), config),
     config,
   );
+  // Every signed-in request passes the Operations allow-list after the session check.
+  const sessionForWorkspace: RequestHandler = (req, res, next) =>
+    auth.requireSession(req, res, (error?: unknown) => (error ? next(error) : operationsAccess(req, res, next)));
   app.use(
     [
       "/api/boqs",
@@ -117,86 +122,86 @@ export function createApp(
       "/api/departments",
       "/api/masters",
     ],
-    auth.requireSession,
+    sessionForWorkspace,
     workflowBoundary(pool),
   );
   app.use(
     "/api/cni",
     express.json({ limit: "32kb" }),
-    cniHttp(pool, auth.requireSession),
+    cniHttp(pool, sessionForWorkspace),
   );
   app.use(
     "/api/project-checkpoints",
     express.json({ limit: "32kb" }),
     projectCheckpointsHttp(
       new ProjectCheckpointsRepository(pool),
-      auth.requireSession,
+      sessionForWorkspace,
     ),
   );
   app.use(
     "/api/ubl",
     express.json({ limit: "16kb" }),
-    ublHttp(new UblRepository(pool), auth.requireSession),
+    ublHttp(new UblRepository(pool), sessionForWorkspace),
   );
   app.use(
     "/api/ubl-workflow",
     express.json({ limit: "12mb" }),
-    ublWorkflowHttp(new UblWorkflowRepository(pool), auth.requireSession),
+    ublWorkflowHttp(new UblWorkflowRepository(pool), sessionForWorkspace),
   );
   app.use(
     "/api/project-workflow",
     express.json({ limit: "12mb" }),
     projectWorkflowHttp(
       new ProjectWorkflowRepository(pool),
-      auth.requireSession,
+      sessionForWorkspace,
     ),
   );
   const boqs = new BoqRepository(pool);
   app.use(
     "/api/survey-uploads",
-    auth.requireSession,
+    sessionForWorkspace,
     workflowBoundary(pool),
     express.json({ limit: "12mb" }),
     coordinatorRecords(pool),
-    uploadHttp(boqs, auth.requireSession),
+    uploadHttp(boqs, sessionForWorkspace),
   );
   app.use(
     "/api/boqs",
     express.json({ limit: "128kb" }),
     coordinatorRecords(pool),
-    boqHttp(boqs, auth.requireSession),
+    boqHttp(boqs, sessionForWorkspace),
   );
   app.use(
     "/api/commercial",
     express.json({ limit: "128kb" }),
     coordinatorRecords(pool),
-    commercialHttp(new CommercialRepository(pool), auth.requireSession),
+    commercialHttp(new CommercialRepository(pool), sessionForWorkspace),
   );
   app.use(
     "/api/orders",
-    auth.requireSession,
+    sessionForWorkspace,
     express.json({ limit: "12mb" }),
     coordinatorRecords(pool),
-    ordersHttp(new OrdersRepository(pool), auth.requireSession),
+    ordersHttp(new OrdersRepository(pool), sessionForWorkspace),
   );
   app.use(
     "/api/design",
     express.json({ limit: "128kb" }),
-    designHttp(new DesignRepository(pool), auth.requireSession),
+    designHttp(new DesignRepository(pool), sessionForWorkspace),
   );
   // Customer imports are larger than ordinary forms; keep the general limit small.
   app.use("/api/masters/customer-import", express.json({ limit: "2mb" }));
   app.use(
     "/api/inventory-reconciliation",
     express.json({ limit: "12mb" }),
-    inventoryHttp(new InventoryRepository(pool), auth.requireSession),
+    inventoryHttp(new InventoryRepository(pool), sessionForWorkspace),
   );
   app.use(
     "/api/accounts-workspace",
     express.json({ limit: "12mb" }),
     accountsWorkspaceHttp(
       new AccountsWorkspaceRepository(pool),
-      auth.requireSession,
+      sessionForWorkspace,
     ),
   );
   app.use(express.json({ limit: "8kb" }));
@@ -209,8 +214,8 @@ export function createApp(
     }
   });
   app.use("/api/auth", auth.router);
-  app.use("/api/backups", backupDevicesHttp(pool, auth.requireSession));
-  app.use("/api/backups", backupsHttp(pool, auth.requireSession));
+  app.use("/api/backups", backupDevicesHttp(pool, sessionForWorkspace));
+  app.use("/api/backups", backupsHttp(pool, sessionForWorkspace));
   app.use(
     "/api/accounts",
     accountsHttp(
@@ -220,18 +225,18 @@ export function createApp(
         config,
         delivery,
       ),
-      auth.requireSession,
+      sessionForWorkspace,
     ),
   );
   app.use(
     "/api/operations",
-    auth.requireSession,
+    sessionForWorkspace,
     coordinatorRecords(pool),
-    operationsHttp(new OperationsRepository(pool), auth.requireSession),
+    operationsHttp(new OperationsRepository(pool), sessionForWorkspace),
   );
   app.use(
     "/api/site-execution",
-    auth.requireSession,
+    sessionForWorkspace,
     siteExecutionHttp(
       {
         sites: new SiteExecutionRepository(pool),
@@ -240,34 +245,34 @@ export function createApp(
         procurement: new ProcurementRepository(pool),
         closure: new ClosureRepository(pool),
       },
-      auth.requireSession,
+      sessionForWorkspace,
     ),
   );
   app.use(
     "/api/coordinator",
-    auth.requireSession,
+    sessionForWorkspace,
     coordinatorRecords(pool),
-    coordinatorHttp(new CoordinatorRepository(pool), auth.requireSession),
+    coordinatorHttp(new CoordinatorRepository(pool), sessionForWorkspace),
   );
   app.use(
     "/api/director",
-    directorHttp(new DirectorRepository(pool), auth.requireSession),
+    directorHttp(new DirectorRepository(pool), sessionForWorkspace),
   );
   app.use(
     "/api/departments",
-    departmentsHttp(new DepartmentRepository(pool), auth.requireSession),
+    departmentsHttp(new DepartmentRepository(pool), sessionForWorkspace),
   );
   app.use(
     "/api/notifications",
-    notificationsHttp(new NotificationsRepository(pool), auth.requireSession, {
+    notificationsHttp(new NotificationsRepository(pool), sessionForWorkspace, {
       emailConfigured: delivery.configured,
       webhookConfigured: !!config.emailWebhookSecret,
     }),
   );
-  app.use("/api/dashboard", dashboardRoutes(auth.requireSession));
+  app.use("/api/dashboard", dashboardRoutes(sessionForWorkspace));
   app.use(
     "/api/masters",
-    mastersHttp(new MastersRepository(pool), auth.requireSession),
+    mastersHttp(new MastersRepository(pool), sessionForWorkspace),
   );
   app.use("/api", (_req, res) => {
     res.status(404).json({ message: "Endpoint not found." });

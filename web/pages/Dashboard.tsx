@@ -314,7 +314,7 @@ export function Dashboard({
         return;
       }
       if(!departmentUser)setDepartmentView(undefined);
-      if(destination === "alerts" && ["Admin","Management","Operations","Accounts"].includes(session.user.role)){setView("alerts");return;}
+      if(destination === "alerts" && ["Admin","Management","Accounts"].includes(session.user.role)){setView("alerts");return;}
       if (
         destination === "masters" && ["Admin", "Management", "Coordinator"].includes(session.user.role)
       ) { setView("masters"); return; }
@@ -489,7 +489,7 @@ export function Dashboard({
                   <Icon name="dashboard" />
                   Dashboard
                 </button>
-                {["Operations","Accounts"].includes(session.user.role) && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
+                {["Accounts"].includes(session.user.role) && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
 
                 {["Admin", "Management", "Coordinator"].includes(
                   session.user.role,
@@ -524,7 +524,6 @@ export function Dashboard({
                 "Management",
                 "Coordinator",
                 "Design",
-                "Operations",
                 "Accounts",
               ].includes(session.user.role) && (
                 <button
@@ -549,14 +548,16 @@ export function Dashboard({
                     <span>UBL Solar</span>
                   </button>
                 )}
-                <button
-                  className={view === "customers" ? "nav-active" : ""}
-                  aria-current={view === "customers" ? "page" : undefined}
-                  onClick={() => navigate("customers")}
-                >
-                  <Icon name="users" />
-                  <span>Customers & Sites</span>
-                </button>
+                {["Admin", "Management", "Coordinator"].includes(session.user.role) && (
+                  <button
+                    className={view === "customers" ? "nav-active" : ""}
+                    aria-current={view === "customers" ? "page" : undefined}
+                    onClick={() => navigate("customers")}
+                  >
+                    <Icon name="users" />
+                    <span>Customers & Sites</span>
+                  </button>
+                )}
                 {["Admin", "Management", "Coordinator"].includes(
                   session.user.role,
                 ) && (
@@ -780,7 +781,7 @@ export function Dashboard({
             }}
           />
           <DepartmentViewSwitcher role={principalSession.user.role} value={departmentView} operationsArea={operationsArea} onProcurement={()=>selectDepartment('operations','procurement')} busy={switchingDepartment} error={departmentError} onSelect={selectDepartment}/>
-          {session.user.role==='Operations'&&<OperationsAreaSwitcher value={operationsArea} busy={switchingDepartment} onSelect={selectOperationsArea}/>}
+          {false&&session.user.role==='Operations'&&<OperationsAreaSwitcher value={operationsArea} busy={switchingDepartment} onSelect={selectOperationsArea}/>}
           <div className="account">
             <button
               className="account-trigger"
@@ -1196,7 +1197,7 @@ export function Dashboard({
                   }
                 />
               )}
-              {view === "alerts" && ["Admin","Management","Operations","Accounts"].includes(session.user.role) && <UpsAlerts/>}
+              {view === "alerts" && ["Admin","Management","Accounts"].includes(session.user.role) && <UpsAlerts/>}
               {view === "ubl-workflow" && <UblWorkflow session={session} />}
               {view === "ubl" &&
                 ["Admin", "Management"].includes(session.user.role) && (
