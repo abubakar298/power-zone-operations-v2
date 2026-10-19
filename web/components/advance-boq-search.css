@@ -13,3 +13,7 @@
 .abq-summary{margin-left:auto;color:var(--pz-muted);font-size:var(--pz-text-sm);white-space:nowrap}
 .abq-clear{border:0;background:none;color:var(--pz-primary);font:inherit;font-size:var(--pz-text-sm);font-weight:600;cursor:pointer;padding:0}
 .abq-clear:hover{text-decoration:underline}
+.abq-table th,.abq-table td{padding:10px 8px}
+.abq-table tr[data-clickable]{cursor:pointer}
+.abq-table tr[data-clickable]:hover td,.abq-table tr[data-clickable]:focus-visible td{background:var(--pz-selected-bg)}
+.abq-nowrap{white-space:nowrap}

@@ -4,7 +4,7 @@ import { Field } from "../../ui/Field.js";
 import { SiteDetail, type Reference } from "./SiteDetail.js";
 import "./site-workflow.css";
 import {
-  STAGE_COLOURS, STAGE_LABELS, stageInk, fmtDay, inMode, missingDocs, MODE_TEXT, OVERDUE_TEXT, type BoardMode, type SiteRow, type StageKey,
+  STAGE_COLOURS, STAGE_LABELS, stageInk, fmtDay, fmtShort, inMode, missingDocs, MODE_TEXT, OVERDUE_TEXT, type BoardMode, type SiteRow, type StageKey,
 } from "./stages.js";
 
 interface Overview extends Reference { sites: SiteRow[]; lateAfterDays: number }
@@ -63,25 +63,22 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialSiteNon
         <div className="pz-table-scroll">
           <table className="pz-table sw-table">
             <thead>
-              <tr><th>Site</th><th>Customer</th><th>Region</th><th>Stage</th><th>Scope</th><th>Expected delivery</th><th>Delivered</th><th>Started</th><th>Handed over</th><th>{mode === "docs" ? "Missing documents" : "Flags"}</th></tr>
+              <tr><th>Site</th><th>Region</th><th>Stage</th><th>Scope</th><th>Delivery</th><th>Installation</th><th>{mode === "docs" ? "Missing documents" : "Flags"}</th></tr>
             </thead>
             <tbody>
-              {!data ? <tr><td colSpan={10}>Loading…</td></tr>
-              : visible.length === 0 ? <tr><td colSpan={10}>{scoped.length === 0 ? text.empty : "No sites match these filters."}</td></tr>
+              {!data ? <tr><td colSpan={7}>Loading…</td></tr>
+              : visible.length === 0 ? <tr><td colSpan={7}>{scoped.length === 0 ? text.empty : "No sites match these filters."}</td></tr>
               : visible.map((s) => (
                 <tr key={s.id} data-clickable onClick={() => setSelected(s.id)}>
-                  <td><strong>{s.siteName ?? "Site"}</strong>{s.siteCode ? ` (${s.siteCode})` : ""}<br /><small>IPO {s.ipoNumber}</small></td>
-                  <td>{s.customer ?? "—"}</td>
+                  <td><strong>{s.siteName ?? "Site"}</strong>{s.siteCode ? ` (${s.siteCode})` : ""}<br /><small>{s.customer ?? "—"}</small></td>
                   <td>{s.region ?? "—"}</td>
                   <td>
                     <span className="sw-stage-tag" style={{ background: STAGE_COLOURS[s.stage as StageKey], color: stageInk(s.stage as StageKey) }}>{STAGE_LABELS[s.stage as StageKey]}</span>
                     <br /><small>{s.stage === "closed" ? `closed ${fmtDay(s.closedAt?.slice(0, 10))}` : `${s.daysInStage} day${s.daysInStage === 1 ? "" : "s"}`}</small>
                   </td>
                   <td>{s.scope === "delivery_only" ? "Delivery only" : s.scope === "installation" ? "Install & commission" : "—"}</td>
-                  <td>{fmtDay(s.expectedDelivery)}</td>
-                  <td>{fmtDay(s.deliveredOn)}</td>
-                  <td>{fmtDay(s.startedOn)}</td>
-                  <td>{fmtDay(s.handedOverOn)}</td>
+                  <td className="sw-nowrap">{s.expectedDelivery ? `expected ${fmtShort(s.expectedDelivery)}` : "—"}<br /><small>{s.deliveredOn ? `delivered ${fmtShort(s.deliveredOn)}` : "not delivered"}</small></td>
+                  <td className="sw-nowrap">{s.scope === "delivery_only" ? "—" : s.startedOn ? `started ${fmtShort(s.startedOn)}` : "not started"}<br /><small>{s.scope === "delivery_only" ? "delivery only" : s.handedOverOn ? `handed over ${fmtShort(s.handedOverOn)}` : "—"}</small></td>
                   <td>
                     <div className="sw-chips">
                       {mode === "docs" ? missingDocs(s).map((m) => <span key={m} className="sw-chip sw-chip--warning">{m}</span>) : (

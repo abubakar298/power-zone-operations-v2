@@ -75,5 +75,9 @@
 .sw-row:last-child{border-bottom:0}
 .sw-row small{color:var(--pz-muted);white-space:nowrap}
 .sw-stage-tag{display:inline-flex;align-items:center;gap:6px;font-size:var(--pz-text-xs);font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.sw-table th,.sw-table td{padding:10px 8px}
+.sw-nowrap{white-space:nowrap}
+.sw-table--compact{font-size:var(--pz-text-xs)}
+.sw-table--compact th,.sw-table--compact td{padding:8px 6px;white-space:nowrap}
 .sw-table tr[data-clickable]{cursor:pointer}
 .sw-table tr[data-clickable]:hover td{background:var(--pz-selected-bg)}

@@ -51,7 +51,7 @@ export function SiteReport({ session }: { session: Session }) {
           ["Site", "Code", "Customer", "Region", "Type", "Stage", "Days in stage", "Scope", "PO date", "Expected start", "Expected delivery", "Expected completion", "Delivered", "Started", "Installation completed", "Commissioned", "Handed over", "Sign-off", "DO date", "Acknowledgement", "Submitted to customer", "Advance claimed", "Final claimed", "Open problems", "Days without pictures", "Closed"],
           sites.map((s) => [s.siteName, s.siteCode, s.customer, s.region, s.siteType, s.stageLabel, s.daysInStage, s.scopeLabel, s.poDate, s.expectedStart, s.expectedDelivery, s.expectedCompletion, s.deliveredOn, s.startedOn, s.installationCompletedOn, s.commissionedOn, s.handedOverOn, s.customerSignoff === true ? "Yes" : s.customerSignoff === false ? "No" : "", s.doDate, s.acknowledgementDate, s.submittedToCustomerDate, s.advanceClaimed ? "Yes" : "No", s.finalClaimed ? "Yes" : "No", s.openProblems, s.missingPictureDays, s.closedAt?.slice(0, 10) ?? ""]))}>Download CSV</Button></div>
         <div className="pz-table-scroll">
-          <table className="pz-table">
+          <table className="pz-table sw-table sw-table--compact">
             <thead><tr><th>Site</th><th>Customer</th><th>Region</th><th>Stage</th><th>Scope</th><th>Expected delivery</th><th>Delivered</th><th>Started</th><th>Commissioned</th><th>Handed over</th><th>Submitted</th><th>Closed</th></tr></thead>
             <tbody>
               {!report ? <tr><td colSpan={12}>Loading…</td></tr> : sites.length === 0 ? <tr><td colSpan={12}>No sites.</td></tr> : sites.map((s) => (
@@ -75,7 +75,7 @@ export function SiteReport({ session }: { session: Session }) {
         </div></div>
         <p className="sw-muted">Extra cable used is invoiced to the customer; cable charged but not used is refunded.</p>
         <div className="pz-table-scroll">
-          <table className="pz-table">
+          <table className="pz-table sw-table sw-table--compact">
             <thead><tr><th>Site</th><th>Cable</th><th>BOQ</th><th>Used</th><th>Returned</th><th>Variance</th><th>Note</th></tr></thead>
             <tbody>
               {!report ? <tr><td colSpan={7}>Loading…</td></tr> : cables.length === 0 ? <tr><td colSpan={7}>{onlyFlagged ? "No cable variance flagged." : "No cable usage entered yet."}</td></tr> : cables.map((c) => (
@@ -95,7 +95,7 @@ export function SiteReport({ session }: { session: Session }) {
         <div className="sw-head"><h3>Items used outside the quotation</h3><Button variant="secondary" disabled={!report} onClick={() => download(`additional-items-${stamp}.csv`, ["Site", "Code", "Customer", "Region", "Stage", "Item", "Quantity", "Unit", "Reason", "Added by", "Added on"],
           items.map((i) => [i.siteName, i.siteCode, i.customer, i.region, i.stage ? STAGE_LABELS[i.stage] : "", i.description, i.quantity, i.unit, i.reason, i.addedBy, i.addedAt.slice(0, 10)]))}>Download CSV</Button></div>
         <div className="pz-table-scroll">
-          <table className="pz-table">
+          <table className="pz-table sw-table sw-table--compact">
             <thead><tr><th>Site</th><th>Item</th><th>Quantity</th><th>Reason</th><th>Added</th></tr></thead>
             <tbody>
               {!report ? <tr><td colSpan={5}>Loading…</td></tr> : items.length === 0 ? <tr><td colSpan={5}>No additional items recorded.</td></tr> : items.map((i) => (

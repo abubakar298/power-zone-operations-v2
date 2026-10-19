@@ -28,15 +28,12 @@ export function Operations({
   session,
   initialIpoId,
   portal = false,
-  headsUp = false,
   initialAdvanceReference,
   advanceNonce = 0,
 }: {
   session: Session;
   initialIpoId?: string;
   portal?: boolean;
-  /** "Heads up on new sites": only advance BOQs for sites whose IPO has not been issued yet. */
-  headsUp?: boolean;
   /** A heads-up chosen in the top-bar search opens here; the nonce lets the same one open twice. */
   initialAdvanceReference?: string;
   advanceNonce?: number;
@@ -273,7 +270,7 @@ export function Operations({
   if (["Admin","Management","Operations"].includes(session.user.role)) return (
     // No outer frame: the panels inside carry their own border (Moaz, 19 Oct 2026: "remove the margin lines").
     <div className="pz-stack">
-      <AdvanceBoqSearch scope={headsUp?'upcoming':'all'} onOpen={reference=>setLastAdvanceReference(reference)}/>
+      <AdvanceBoqSearch onOpen={reference=>setLastAdvanceReference(reference)}/>
       {/* Operations reads the heads-up only; the Reserve Stock step left its workspace on 19 Oct 2026 (Moaz). */}
       {lastAdvanceReference&&<AdvanceBoqInbox key={lastAdvanceReference} initialReference={lastAdvanceReference} detailOnly onReserve={session.user.role==='Operations'?undefined:group=>{setLastAdvanceReference(group.number);setAdvanceReservation(group);}}/>}
     </div>

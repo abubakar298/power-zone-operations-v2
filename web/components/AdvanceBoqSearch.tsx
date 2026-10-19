@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../api.js";
-import { Button } from "../ui/Button.js";
 import { StatusBadge } from "../ui/StatusBadge.js";
 import "./advance-boq-search.css";
 
@@ -24,10 +23,9 @@ const day = (v: string | null | undefined) => (v ? String(v).slice(0, 10) : "");
 const fmtDay = (v: string | null | undefined) => (v ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(v.length === 10 ? `${v}T00:00:00` : v)) : "—");
 
 /**
- * Search over received advance (heads-up) BOQs: customer, site, region, stage and date range.
- * `scope="upcoming"` keeps only heads-ups for sites whose IPO has not been issued yet (the "Heads up on new sites" page).
+ * Every advance (heads-up) BOQ received, with stage tabs and filters by customer, site, region and received date.
  */
-export function AdvanceBoqSearch({ onOpen, scope = "all" }: { onOpen: (reference: string) => void; scope?: "all" | "upcoming" }) {
+export function AdvanceBoqSearch({ onOpen }: { onOpen: (reference: string) => void }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -65,8 +63,7 @@ export function AdvanceBoqSearch({ onOpen, scope = "all" }: { onOpen: (reference
     return () => { active = false; };
   }, []);
 
-  // Upcoming = no final BOQ received and no operations record yet: the site is still ahead of its IPO.
-  const pool = useMemo(() => (scope === "upcoming" ? rows.filter((r) => !r.final && !r.stageKey.startsWith("ops:")) : rows), [rows, scope]);
+  const pool = rows;
   const unique = (pick: (r: Row) => string) => [...new Set(pool.map(pick).filter((v) => v && v !== "—"))].sort((a, b) => a.localeCompare(b));
   const customers = useMemo(() => unique((r) => r.customer), [pool]);
   const sites = useMemo(() => unique((r) => r.site), [pool]);
@@ -92,12 +89,10 @@ export function AdvanceBoqSearch({ onOpen, scope = "all" }: { onOpen: (reference
 
   return (
     <section className="pz-panel pz-stack" aria-label="Advance BOQ search">
-      {scope !== "upcoming" && (
-        <div>
-          <h2>Find an advance BOQ</h2>
-          <p className="pz-caption">Heads-up material forecasts received from Coordination.</p>
-        </div>
-      )}
+      <div>
+        <h2>Advance BOQs</h2>
+        <p className="pz-caption">Heads-up material forecasts received from Coordination, before and after the IPO.</p>
+      </div>
       <div className="abq-tabs" role="tablist" aria-label="Stage">
         <button type="button" role="tab" className="abq-tab" aria-selected={!stage} onClick={() => setStage("")}>All <span className="abq-count">{pool.length}</span></button>
         {stages.map(([key, label]) => (
@@ -128,27 +123,25 @@ export function AdvanceBoqSearch({ onOpen, scope = "all" }: { onOpen: (reference
       {error && <p className="form-error" role="alert">{error}</p>}
       {!loading && !error && (
         <div className="pz-table-scroll">
-          <table className="pz-table">
-            <thead><tr><th>Reference</th><th>Customer</th><th>Site</th><th>Region</th><th>Stage</th><th>Received</th><th>Expected</th><th>Items</th><th>Status</th><th></th></tr></thead>
+          <table className="pz-table abq-table">
+            <thead><tr><th>Site</th><th>Customer</th><th>Region</th><th>Stage</th><th>Received · PO expected</th><th>Items</th><th>Status</th></tr></thead>
             <tbody>
               {visible.length === 0 ? (
-                <tr><td colSpan={10}>{pool.length === 0 ? (scope === "upcoming" ? "No heads-up BOQs for new sites right now." : "No advance BOQs received yet.") : "No advance BOQs match these filters."}</td></tr>
+                <tr><td colSpan={7}>{pool.length === 0 ? "No advance BOQs received yet." : "No advance BOQs match these filters."}</td></tr>
               ) : visible.map((r) => (
-                <tr key={`${r.reference}-${r.recordId}`}>
-                  <td><strong>{r.reference}</strong></td>
+                <tr key={`${r.reference}-${r.recordId}`} data-clickable tabIndex={0} onClick={() => onOpen(r.reference)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(r.reference); }}>
+                  <td><strong>{r.site}</strong>{r.siteCode ? ` (${r.siteCode})` : ""}<br /><small>{r.reference}</small></td>
                   <td>{r.customer}</td>
-                  <td>{r.site}{r.siteCode ? <><br /><small>{r.siteCode}</small></> : null}</td>
                   <td>{r.region}</td>
                   <td>{r.stage}</td>
-                  <td>{fmtDay(r.received)}</td>
-                  <td>{fmtDay(r.expected)}</td>
+                  <td className="abq-nowrap">{fmtDay(r.received)}<br /><small>PO {fmtDay(r.expected)}</small></td>
                   <td>{r.items}</td>
                   <td><StatusBadge tone={r.final ? "success" : "pending"}>{r.final ? "Final received" : r.status}</StatusBadge></td>
-                  <td><Button variant="secondary" onClick={() => onOpen(r.reference)}>Open</Button></td>
                 </tr>
               ))}
             </tbody>
           </table>
+          <p className="pz-caption">Click a row to open its heads-up.</p>
         </div>
       )}
     </section>

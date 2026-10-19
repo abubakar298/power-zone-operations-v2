@@ -4,7 +4,7 @@ import "./site-workflow.css";
 import { STAGE_COLOURS, stageInk, fmtShort, hasDocIssue, missingDocs, relDay, shiftDays, today, OVERDUE_TEXT, type SiteRow, type StageKey } from "./stages.js";
 
 interface Advance { record_id: string; number: string; confirmed_issuance_id: string | null; updated_at: string; customer_name?: string; site_name?: string; site_code?: string; snapshot?: { expectedDate?: string } }
-export type HomeTarget = "operations" | "heads-up" | "sites-new" | "sites-ongoing" | "sites-completed" | "sites-docs" | "sites" | "reports";
+export type HomeTarget = "operations" | "sites-new" | "sites-ongoing" | "sites-completed" | "sites-docs" | "sites" | "reports";
 
 /** Operations home: where every site stands in the workflow, what needs attention and what is due this week. */
 export function OperationsHome({ session, onGo, onOpenSite, onOpenStage }: {
@@ -138,7 +138,7 @@ export function OperationsHome({ session, onGo, onOpenSite, onOpenStage }: {
           <h3 style={{ margin: 0 }}>Customer POs expected</h3>
           {m.posSoon.length === 0 ? <p className="sw-muted">{n(m.awaiting.length)} heads-up BOQ{m.awaiting.length === 1 ? "" : "s"} awaiting a PO, none expected this week.</p> : (
             <div className="sw-rows">
-              {m.posSoon.map((a) => <button type="button" key={a.record_id} className="sw-row" onClick={() => onGo("heads-up")}><span>{a.site_name ?? a.number}{a.site_code ? ` (${a.site_code})` : ""}</span><small>{relDay(a.snapshot!.expectedDate!)}</small></button>)}
+              {m.posSoon.map((a) => <button type="button" key={a.record_id} className="sw-row" onClick={() => onGo("operations")}><span>{a.site_name ?? a.number}{a.site_code ? ` (${a.site_code})` : ""}</span><small>{relDay(a.snapshot!.expectedDate!)}</small></button>)}
             </div>
           )}
         </section>
@@ -167,11 +167,11 @@ export function OperationsHome({ session, onGo, onOpenSite, onOpenStage }: {
           )}
         </section>
         <section className="pz-panel pz-stack">
-          <div className="sw-head"><h2>Latest heads-ups</h2><button type="button" className="sw-link" onClick={() => onGo("heads-up")}>All</button></div>
+          <div className="sw-head"><h2>Latest heads-ups</h2><button type="button" className="sw-link" onClick={() => onGo("operations")}>All</button></div>
           {m.latestAdvance.length === 0 ? <p className="sw-muted">No advance BOQs received.</p> : (
             <div className="sw-rows">
               {m.latestAdvance.map((a) => (
-                <button type="button" key={a.record_id} className="sw-row" onClick={() => onGo(a.confirmed_issuance_id ? "operations" : "heads-up")}>
+                <button type="button" key={a.record_id} className="sw-row" onClick={() => onGo("operations")}>
                   <span>{a.site_name ?? a.number}{a.site_code ? ` (${a.site_code})` : ""}<br /><small>{a.customer_name ?? ""}{a.confirmed_issuance_id ? " · final received" : " · awaiting PO"}</small></span>
                   <small>{a.snapshot?.expectedDate ? `PO ${fmtShort(a.snapshot.expectedDate)}` : fmtShort(a.updated_at.slice(0, 10))}</small>
                 </button>

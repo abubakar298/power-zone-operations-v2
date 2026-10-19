@@ -144,7 +144,6 @@ export function Dashboard({
     | "pricing"
     | "quotes"
     | "operations"
-    | "heads-up"
     | "sites"
     | "sites-new"
     | "sites-ongoing"
@@ -240,7 +239,6 @@ export function Dashboard({
       | "pricing"
       | "quotes"
       | "operations"
-      | "heads-up"
       | "sites"
       | "sites-new"
       | "sites-ongoing"
@@ -627,9 +625,6 @@ export function Dashboard({
                     <button className={view === "operations" ? "nav-active" : ""} aria-current={view === "operations" ? "page" : undefined} onClick={() => { setOperationsIpoId(undefined); navigate("operations"); }}>
                       <Icon name="file" />BOQ to Operations
                     </button>
-                    <button className={view === "heads-up" ? "nav-active" : ""} aria-current={view === "heads-up" ? "page" : undefined} onClick={() => navigate("heads-up")}>
-                      <Icon name="file" />Heads up on new sites
-                    </button>
                     <button className={view === "sites-new" ? "nav-active" : ""} aria-current={view === "sites-new" ? "page" : undefined} onClick={() => navigate("sites-new")}>
                       <Icon name="file" />New sites
                     </button>
@@ -781,8 +776,6 @@ export function Dashboard({
                               ? "Quotations"
                               : view === "reports"
                                 ? "Site report"
-                                : view === "heads-up"
-                                ? "Heads up on new sites"
                                 : view === "sites-new"
                                 ? "New sites"
                                 : view === "sites-ongoing"
@@ -927,8 +920,6 @@ export function Dashboard({
                                     ? "Quotations"
                                     : view === "reports"
                                       ? "Site report"
-                                      : view === "heads-up"
-                                      ? "Heads up on new sites"
                                       : view === "sites-new"
                                       ? "New sites"
                                       : view === "sites-ongoing"
@@ -992,8 +983,6 @@ export function Dashboard({
                                     ? "Invite and manage authorised team members."
                                     : view === "reports"
                                       ? "Every site's stage and dates, cable variance against BOQ, and items used outside the quotation. Downloadable."
-                                      : view === "heads-up"
-                                      ? "Advance BOQs for sites whose IPO has not been issued yet."
                                       : view === "sites-new"
                                       ? "IPO received, planning not started."
                                       : view === "sites-ongoing"
@@ -1226,7 +1215,6 @@ export function Dashboard({
               {view === "sites" && <SiteBoard session={session} mode="all" initialSiteId={siteToOpen} initialSiteNonce={siteOpenNonce} initialStage={stageToOpen} />}
               {view === "sites-new" && <SiteBoard session={session} mode="new" />}
               {view === "sites-ongoing" && <SiteBoard session={session} mode="ongoing" />}
-              {view === "heads-up" && <Operations session={session} headsUp />}
               {view === "sites-completed" && <SiteBoard session={session} mode="completed" />}
               {view === "sites-docs" && <SiteBoard session={session} mode="docs" />}
               {view === "reports" && <SiteReport session={session} />}
