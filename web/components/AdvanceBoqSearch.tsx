@@ -97,10 +97,11 @@ export function AdvanceBoqSearch({ onOpen, scope = "all" }: { onOpen: (reference
       <h2>{scope === "upcoming" ? "Heads up on new sites" : "Find an advance BOQ"}</h2>
       <p className="pz-caption">
         {scope === "upcoming"
-          ? "Advance BOQs for sites whose IPO has not been issued yet. Plan stock from these before the IPO arrives."
+          ? "Advance BOQs for sites whose IPO has not been issued yet. Open one to see what is coming."
           : "Heads-up material forecasts received from Coordination. Filter by customer, site, region, stage or the date they were received."}
       </p>
-      <div className="pz-form-grid">
+      {/* The heads-up page is a plain list; the search and filters live on BOQ to Operations (Moaz, 19 Oct 2026). */}
+      {scope !== "upcoming" && <div className="pz-form-grid">
         <Field id="abq-q" label="Search"><input id="abq-q" placeholder="Reference, customer or site" value={q} onChange={(e) => setQ(e.target.value)} /></Field>
         <Field id="abq-customer" label="Customer">
           <select id="abq-customer" value={customer} onChange={(e) => setCustomer(e.target.value)}>
@@ -124,9 +125,9 @@ export function AdvanceBoqSearch({ onOpen, scope = "all" }: { onOpen: (reference
         </Field>
         <Field id="abq-from" label="Received from"><input id="abq-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
         <Field id="abq-to" label="Received to"><input id="abq-to" type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} /></Field>
-      </div>
+      </div>}
       <div className="pz-action-row">
-        <span>{loading ? "Loading…" : `${visible.length} of ${pool.length} advance BOQ${pool.length === 1 ? "" : "s"}`}</span>
+        <span>{loading ? "Loading…" : scope === "upcoming" ? `${pool.length} advance BOQ${pool.length === 1 ? "" : "s"}` : `${visible.length} of ${pool.length} advance BOQ${pool.length === 1 ? "" : "s"}`}</span>
         {filtered && <Button variant="neutral" onClick={clear}>Clear filters</Button>}
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
