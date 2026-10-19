@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../api.js";
 import { Button } from "../ui/Button.js";
-import { Field } from "../ui/Field.js";
 import { StatusBadge } from "../ui/StatusBadge.js";
+import "./advance-boq-search.css";
 
 interface Row {
   reference: string; recordId: string; customer: string; site: string; siteCode: string; region: string;
@@ -87,48 +87,50 @@ export function AdvanceBoqSearch({ onOpen, scope = "all" }: { onOpen: (reference
       (!stage || r.stageKey === stage) &&
       (!from || day(r.received) >= from) &&
       (!to || day(r.received) <= to) &&
-      (!text || [r.reference, r.customer, r.site, r.siteCode].some((v) => v.toLowerCase().includes(text))));
+      (!text || [r.reference, r.customer, r.site, r.siteCode, r.region, r.stage].some((v) => v.toLowerCase().includes(text))));
   }, [pool, q, customer, site, region, stage, from, to]);
+  const stageCounts = useMemo(() => { const m = new Map<string, number>(); for (const r of pool) m.set(r.stageKey, (m.get(r.stageKey) ?? 0) + 1); return m; }, [pool]);
   const clear = () => { setQ(""); setCustomer(""); setSite(""); setRegion(""); setStage(""); setFrom(""); setTo(""); };
   const filtered = Boolean(q || customer || site || region || stage || from || to);
 
   return (
     <section className="pz-panel pz-stack" aria-label="Advance BOQ search">
-      <h2>{scope === "upcoming" ? "Heads up on new sites" : "Find an advance BOQ"}</h2>
-      <p className="pz-caption">
-        {scope === "upcoming"
-          ? "Advance BOQs for sites whose IPO has not been issued yet. Open one to see what is coming."
-          : "Heads-up material forecasts received from Coordination. Filter by customer, site, region, stage or the date they were received."}
-      </p>
-      {/* The heads-up page is a plain list; the search and filters live on BOQ to Operations (Moaz, 19 Oct 2026). */}
-      {scope !== "upcoming" && <div className="pz-form-grid">
-        <Field id="abq-q" label="Search"><input id="abq-q" placeholder="Reference, customer or site" value={q} onChange={(e) => setQ(e.target.value)} /></Field>
-        <Field id="abq-customer" label="Customer">
-          <select id="abq-customer" value={customer} onChange={(e) => setCustomer(e.target.value)}>
-            <option value="">All customers</option>{customers.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </Field>
-        <Field id="abq-site" label="Site">
-          <select id="abq-site" value={site} onChange={(e) => setSite(e.target.value)}>
-            <option value="">All sites</option>{sites.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </Field>
-        <Field id="abq-region" label="Region">
-          <select id="abq-region" value={region} onChange={(e) => setRegion(e.target.value)}>
-            <option value="">All regions</option>{regions.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </Field>
-        <Field id="abq-stage" label="Stage">
-          <select id="abq-stage" value={stage} onChange={(e) => setStage(e.target.value)}>
-            <option value="">All stages</option>{stages.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </select>
-        </Field>
-        <Field id="abq-from" label="Received from"><input id="abq-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
-        <Field id="abq-to" label="Received to"><input id="abq-to" type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} /></Field>
-      </div>}
-      <div className="pz-action-row">
-        <span>{loading ? "Loading…" : scope === "upcoming" ? `${pool.length} advance BOQ${pool.length === 1 ? "" : "s"}` : `${visible.length} of ${pool.length} advance BOQ${pool.length === 1 ? "" : "s"}`}</span>
-        {filtered && <Button variant="neutral" onClick={clear}>Clear filters</Button>}
+      {scope !== "upcoming" && (
+        <div>
+          <h2>Find an advance BOQ</h2>
+          <p className="pz-caption">Heads-up material forecasts received from Coordination.</p>
+        </div>
+      )}
+      <label className="abq-search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <input type="search" aria-label="Search advance BOQs" placeholder="Search heads-ups: reference, customer, site, code, region…" value={q} onChange={(e) => setQ(e.target.value)} />
+      </label>
+      <div className="abq-tabs" role="tablist" aria-label="Stage">
+        <button type="button" role="tab" className="abq-tab" aria-selected={!stage} onClick={() => setStage("")}>All <span className="abq-count">{pool.length}</span></button>
+        {stages.map(([key, label]) => (
+          <button type="button" role="tab" key={key} className="abq-tab" aria-selected={stage === key} onClick={() => setStage(stage === key ? "" : key)}>
+            {label} <span className="abq-count">{stageCounts.get(key) ?? 0}</span>
+          </button>
+        ))}
+      </div>
+      <div className="abq-filters">
+        <select aria-label="Customer" value={customer} onChange={(e) => setCustomer(e.target.value)}>
+          <option value="">All customers</option>{customers.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select aria-label="Site" value={site} onChange={(e) => setSite(e.target.value)}>
+          <option value="">All sites</option>{sites.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select aria-label="Region" value={region} onChange={(e) => setRegion(e.target.value)}>
+          <option value="">All regions</option>{regions.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        <span className="abq-date">
+          <span>Received</span>
+          <input type="date" aria-label="Received from" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <span aria-hidden="true">–</span>
+          <input type="date" aria-label="Received to" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+        </span>
+        <span className="abq-summary">{loading ? "Loading…" : `${visible.length} of ${pool.length} advance BOQ${pool.length === 1 ? "" : "s"}`}</span>
+        {filtered && <button type="button" className="abq-clear" onClick={clear}>Clear</button>}
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {!loading && !error && (
