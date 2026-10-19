@@ -271,11 +271,12 @@ export function Operations({
   if(advanceReservation)return <AdvanceStockReview group={advanceReservation} onBack={()=>setAdvanceReservation(undefined)}/>;
   // Operations, Admin and Management: the advance BOQ search and the opened advance BOQ only (Moaz, 15 Oct 2026).
   if (["Admin","Management","Operations"].includes(session.user.role)) return (
-    <section className="detail-panel operations-panel">
+    // No outer frame: the panels inside carry their own border (Moaz, 19 Oct 2026: "remove the margin lines").
+    <div className="pz-stack">
       <AdvanceBoqSearch scope={headsUp?'upcoming':'all'} onOpen={reference=>setLastAdvanceReference(reference)}/>
       {/* Operations reads the heads-up only; the Reserve Stock step left its workspace on 19 Oct 2026 (Moaz). */}
       {lastAdvanceReference&&<AdvanceBoqInbox key={lastAdvanceReference} initialReference={lastAdvanceReference} detailOnly onReserve={session.user.role==='Operations'?undefined:group=>{setLastAdvanceReference(group.number);setAdvanceReservation(group);}}/>}
-    </section>
+    </div>
   );
   return (
     <section className="detail-panel operations-panel">
