@@ -647,12 +647,6 @@ export function Dashboard({
                     <button className={view === "sites" ? "nav-active" : ""} aria-current={view === "sites" ? "page" : undefined} onClick={() => navigate("sites")}>
                       <Icon name="file" />All sites
                     </button>
-                    <button className={view === "reserved" ? "nav-active" : ""} aria-current={view === "reserved" ? "page" : undefined} onClick={() => navigate("reserved")}>
-                      <Icon name="file" />Reserved stock
-                    </button>
-                    <button className={view === "stock" ? "nav-active" : ""} aria-current={view === "stock" ? "page" : undefined} onClick={() => navigate("stock")}>
-                      <Icon name="file" />Stock & procurement
-                    </button>
                     <button className={view === "reports" ? "nav-active" : ""} aria-current={view === "reports" ? "page" : undefined} onClick={() => navigate("reports")}>
                       <Icon name="file" />Site report
                     </button>
@@ -995,7 +989,7 @@ export function Dashboard({
                             : session.user.role === "Accounts"
                               ? "Review IPOs and collect supporting documents for accounting."
                               : session.user.role === "Operations"
-                                ? "Where every site, problem and stock item stands today."
+                                ? "Where every site and problem stands today."
                                 : ["Admin", "Management"].includes(
                                       session.user.role,
                                     )

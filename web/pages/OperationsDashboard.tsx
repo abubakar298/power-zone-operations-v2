@@ -7,11 +7,9 @@ interface SiteRow {
   daysInStage: number; late: boolean; endDate: string | null; doDate: string | null; acknowledgementDate: string | null; submittedToCustomerDate: string | null;
   customerSignoff: boolean | null; openProblems: number; missingPictureDays: number; materialDeliveryPlanned: string | null; startDate: string | null;
 }
-interface StockItem { itemKey: string; name: string; unit: string; required: string; existing: string | null; shortage: string; counted: boolean }
-interface Reservation { executionId: string }
 interface Advance { record_id: string; number: string; mode: string; confirmed_issuance_id: string | null; updated_at: string; customer_name?: string; site_name?: string; site_code?: string; snapshot?: { headsupGroup?: string; expectedDate?: string } }
 
-export type DashboardTarget = "operations" | "sites-ongoing" | "sites-completed" | "sites-docs" | "sites" | "reserved" | "stock" | "reports";
+export type DashboardTarget = "operations" | "heads-up" | "sites-new" | "sites-ongoing" | "sites-completed" | "sites-docs" | "sites" | "reports";
 
 const isoDay = (d: Date) => {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(d);
@@ -32,26 +30,24 @@ const missingDocs = (s: SiteRow) => {
 const STAGE_COLOURS = ["#c4b5fd", "#a89af0", "#8c7fe6", "#7861dc", "#6658e8", "#5547d0", "#e5a33d", "#2f7d55", "#246443"];
 const stageInk = (i: number) => (i < 3 ? "#1d1b2e" : "#fff");
 
-/** Operations home: where every site, problem and stock item stands today. */
+/** Operations home: where every site and problem stands today. Stock left this workspace on 19 Oct 2026 (Moaz). */
 export function OperationsDashboard({ session, onGo, onOpenSite, onOpenStage }: {
   session: Session; onGo: (target: DashboardTarget) => void; onOpenSite: (siteId: string) => void; onOpenStage: (stage: string) => void;
 }) {
   const [sites, setSites] = useState<SiteRow[]>([]);
   const [stages, setStages] = useState<{ key: string; label: string }[]>([]);
   const [lateAfterDays, setLateAfterDays] = useState(2);
-  const [stock, setStock] = useState<{ items: StockItem[]; reservations: Reservation[] } | null>(null);
   const [advance, setAdvance] = useState<Advance[] | null>(null);
   const [error, setError] = useState("");
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [s, st, a] = await Promise.all([
+      const [s, a] = await Promise.all([
         api<{ sites: SiteRow[]; stages: { key: string; label: string }[]; lateAfterDays: number }>("/site-execution"),
-        api<{ items: StockItem[]; reservations: Reservation[] }>("/site-execution/stock"),
         api<{ requests: Advance[] }>("/project-workflow/advance-inbox").catch(() => ({ requests: [] as Advance[] })),
       ]);
-      setSites(s.sites); setStages(s.stages); setLateAfterDays(s.lateAfterDays); setStock(st); setAdvance(a.requests); setError(""); setLoadedAt(new Date());
+      setSites(s.sites); setStages(s.stages); setLateAfterDays(s.lateAfterDays); setAdvance(a.requests); setError(""); setLoadedAt(new Date());
     } catch (e) { setError(e instanceof ApiError ? e.message : "Unable to load the dashboard."); }
   }, []);
   useEffect(() => { void load(); const t = setInterval(() => void load(), 60_000); return () => clearInterval(t); }, [load]);
@@ -59,6 +55,7 @@ export function OperationsDashboard({ session, onGo, onOpenSite, onOpenStage }: 
   const today = isoDay(new Date());
   const m = useMemo(() => {
     const ongoing = sites.filter((s) => s.stage !== "closed");
+    const fresh = sites.filter((s) => s.stage === "ipo_received");
     const late = ongoing.filter((s) => s.late);
     const completed = sites.filter((s) => s.endDate && s.endDate >= shift(-30) && s.endDate <= today).sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? ""));
     const docs = sites.filter((s) => Boolean(s.endDate) && missingDocs(s).length > 0);
@@ -70,18 +67,11 @@ export function OperationsDashboard({ session, onGo, onOpenSite, onOpenStage }: 
       .sort((a, b) => Number(b.late) - Number(a.late) || b.openProblems - a.openProblems || b.missingPictureDays - a.missingPictureDays || b.daysInStage - a.daysInStage).slice(0, 8);
     const byStage = new Map<string, number>();
     for (const s of sites) byStage.set(s.stage, (byStage.get(s.stage) ?? 0) + 1);
-    const shortages = (stock?.items ?? []).filter((i) => Number(i.shortage) > 0).sort((a, b) => Number(b.shortage) - Number(a.shortage)).slice(0, 5);
     const awaiting = (advance ?? []).filter((a) => !a.confirmed_issuance_id);
     const posSoon = awaiting.filter((a) => a.snapshot?.expectedDate && a.snapshot.expectedDate >= today && a.snapshot.expectedDate <= shift(7));
     const latestAdvance = [...(advance ?? [])].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 5);
-    return {
-      ongoing, late, completed, docs, problems, pictures, deliveries, starts, attention, byStage, shortages, awaiting, posSoon, latestAdvance,
-      short: stock ? stock.items.filter((i) => Number(i.shortage) > 0).length : null,
-      uncounted: stock ? stock.items.filter((i) => !i.counted).length : null,
-      reservations: stock ? stock.reservations.length : null,
-      reservedSites: stock ? new Set(stock.reservations.map((r) => r.executionId)).size : 0,
-    };
-  }, [sites, stock, advance, today]);
+    return { ongoing, fresh, late, completed, docs, problems, pictures, deliveries, starts, attention, byStage, awaiting, posSoon, latestAdvance };
+  }, [sites, advance, today]);
   const pipelineTotal = sites.length;
   const ready = loadedAt !== null;
   const n = (v: number | null) => (ready && v !== null ? v : "…");
@@ -100,8 +90,8 @@ export function OperationsDashboard({ session, onGo, onOpenSite, onOpenStage }: 
         <button type="button" className={`od-kpi${m.problems ? " od-kpi--danger" : " od-kpi--ok"}`} onClick={() => onGo("sites-ongoing")}>
           <strong>{n(m.problems)}</strong><span>Open problems</span><small>{m.pictures} day{m.pictures === 1 ? "" : "s"} without pictures</small>
         </button>
-        <button type="button" className={`od-kpi${m.short ? " od-kpi--danger" : " od-kpi--ok"}`} onClick={() => onGo("stock")}>
-          <strong>{n(m.short)}</strong><span>Stock shortages</span><small>{m.uncounted ?? "…"} item{m.uncounted === 1 ? "" : "s"} not counted by Store</small>
+        <button type="button" className="od-kpi" onClick={() => onGo("sites-new")}>
+          <strong>{n(m.fresh.length)}</strong><span>New sites</span><small>{ready ? m.awaiting.length : "…"} heads-up BOQ{m.awaiting.length === 1 ? "" : "s"} awaiting a PO</small>
         </button>
       </section>
 
@@ -178,7 +168,7 @@ export function OperationsDashboard({ session, onGo, onOpenSite, onOpenStage }: 
           {m.posSoon.length === 0 ? <p className="od-empty">{m.awaiting.length} advance BOQ{m.awaiting.length === 1 ? "" : "s"} awaiting a PO, none expected this week.</p> : (
             <div className="od-rows">
               {m.posSoon.map((a) => (
-                <button type="button" key={a.record_id} className="od-row" onClick={() => onGo("operations")}>
+                <button type="button" key={a.record_id} className="od-row" onClick={() => onGo("heads-up")}>
                   <span>{a.site_name ?? a.number}{a.site_code ? ` (${a.site_code})` : ""}</span><small>{relDay(a.snapshot!.expectedDate!)}</small>
                 </button>
               ))}
@@ -186,33 +176,6 @@ export function OperationsDashboard({ session, onGo, onOpenSite, onOpenStage }: 
           )}
         </section>
       </div>
-
-      <section className="pz-panel pz-stack">
-        <div className="od-head"><h2>Stock</h2><button type="button" className="od-link" onClick={() => onGo("stock")}>Stock &amp; procurement</button></div>
-        <div className="od-stats">
-          <button type="button" className="od-stat" onClick={() => onGo("stock")}><strong>{n(m.short)}</strong><span>items with a shortage</span></button>
-          <button type="button" className="od-stat" onClick={() => onGo("reserved")}><strong>{n(m.reservations)}</strong><span>reservation{m.reservations === 1 ? "" : "s"}{m.reservedSites ? ` across ${m.reservedSites} site${m.reservedSites === 1 ? "" : "s"}` : ""}</span></button>
-          <button type="button" className="od-stat" onClick={() => onGo("stock")}><strong>{n(m.uncounted)}</strong><span>items Store has not counted</span></button>
-          <button type="button" className="od-stat" onClick={() => onGo("operations")}><strong>{ready ? m.awaiting.length : "…"}</strong><span>advance BOQ{m.awaiting.length === 1 ? "" : "s"} awaiting PO</span></button>
-        </div>
-        {m.shortages.length > 0 && (
-          <>
-            <h3>Biggest shortages</h3>
-            <div className="od-bars">
-              {m.shortages.map((i) => {
-                const required = Number(i.required) || 0, existing = Number(i.existing ?? 0);
-                const pct = required > 0 ? Math.min(100, Math.round((existing / required) * 100)) : 0;
-                return (
-                  <div className="od-bar" key={i.itemKey}>
-                    <div className="od-bar-label"><span>{i.name}</span><small>{i.counted ? `${existing} of ${required} ${i.unit}` : `${required} ${i.unit} required · no count`} · short {i.shortage}</small></div>
-                    <div className="od-bar-track" role="img" aria-label={`${i.name}: ${pct}% of required in stock`}><div className="od-bar-fill" style={{ width: `${pct}%` }} /></div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </section>
 
       <div className="od-columns">
         <section className="pz-panel pz-stack">

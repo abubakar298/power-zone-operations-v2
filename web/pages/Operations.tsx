@@ -267,7 +267,8 @@ export function Operations({
   if (["Admin","Management","Operations"].includes(session.user.role)) return (
     <section className="detail-panel operations-panel">
       <AdvanceBoqSearch scope={headsUp?'upcoming':'all'} onOpen={reference=>setLastAdvanceReference(reference)}/>
-      {lastAdvanceReference&&<AdvanceBoqInbox key={lastAdvanceReference} initialReference={lastAdvanceReference} detailOnly onReserve={group=>{setLastAdvanceReference(group.number);setAdvanceReservation(group);}}/>}
+      {/* Operations reads the heads-up only; the Reserve Stock step left its workspace on 19 Oct 2026 (Moaz). */}
+      {lastAdvanceReference&&<AdvanceBoqInbox key={lastAdvanceReference} initialReference={lastAdvanceReference} detailOnly onReserve={session.user.role==='Operations'?undefined:group=>{setLastAdvanceReference(group.number);setAdvanceReservation(group);}}/>}
     </section>
   );
   return (

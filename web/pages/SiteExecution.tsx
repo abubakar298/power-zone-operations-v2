@@ -79,7 +79,6 @@ const toForm = (d: SiteRow): FormState => ({
 const stageTone = (s: SiteRow): "pending" | "success" | "warning" | "danger" =>
   s.stage === "closed" ? "success" : s.late ? "danger" : "pending";
 
-interface StockSummary { short: number; uncounted: number; reserved: number; reservedSites: number }
 export type SiteBoardMode = "all" | "new" | "ongoing" | "completed" | "documentation";
 const MODE_TEXT: Record<SiteBoardMode, { title: string; note: string }> = {
   all: { title: "All sites", note: "Every site after its IPO, whatever its stage." },
@@ -104,32 +103,16 @@ const inMode = (s: SiteRow, mode: SiteBoardMode) =>
   mode === "completed" ? Boolean(s.endDate && s.endDate >= daysAgo(30) && s.endDate <= today()) :
   Boolean(s.endDate) && missingDocuments(s).length > 0;
 
-/** `home` adds the stock shortage and reserved-stock tiles above the board (the Operations landing page). */
-export function SiteExecution({ session, home = false, onOpenStock, mode = "all", initialSiteId, initialStageFilter }: { session: Session; home?: boolean; onOpenStock?: () => void; mode?: SiteBoardMode; initialSiteId?: string; initialStageFilter?: string }) {
+export function SiteExecution({ session, mode = "all", initialSiteId, initialStageFilter }: { session: Session; mode?: SiteBoardMode; initialSiteId?: string; initialStageFilter?: string }) {
   const canEdit = ["Admin", "Management", "Operations"].includes(session.user.role);
+  // Stock reservations left the Operations workspace on 19 Oct 2026 (Moaz); management still sees the material plan.
+  const showStock = session.user.role !== "Operations";
   const [openedInitial, setOpenedInitial] = useState<string | undefined>(undefined);
   const [appliedStage, setAppliedStage] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (initialStageFilter && initialStageFilter !== appliedStage) { setAppliedStage(initialStageFilter); setStageFilter(initialStageFilter); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialStageFilter]);
-  const [stockSummary, setStockSummary] = useState<StockSummary | null>(null);
-  useEffect(() => {
-    if (!home) return;
-    let cancelled = false;
-    api<{ items: { shortage: string; counted: boolean }[]; reservations: { executionId: string }[] }>("/site-execution/stock")
-      .then((s) => {
-        if (cancelled) return;
-        setStockSummary({
-          short: s.items.filter((i) => Number(i.shortage) > 0).length,
-          uncounted: s.items.filter((i) => !i.counted).length,
-          reserved: s.reservations.length,
-          reservedSites: new Set(s.reservations.map((r) => r.executionId)).size,
-        });
-      })
-      .catch(() => setStockSummary(null));
-    return () => { cancelled = true; };
-  }, [home]);
   const [data, setData] = useState<Overview | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
@@ -210,9 +193,9 @@ export function SiteExecution({ session, home = false, onOpenStock, mode = "all"
     try {
       const d = await api<Detail>(`/site-execution/${id}`);
       setDetail(d); setForm(toForm(d)); setNextStage(d.stage); setStageNote(""); setError(""); setNotice("");
-      setMaterials(null); setCables(null); void loadMaterials(id); void loadVendors(); void loadClosure(id);
+      setMaterials(null); setCables(null); if (showStock) void loadMaterials(id); void loadVendors(); void loadClosure(id);
     } catch (e) { setError(e instanceof ApiError ? e.message : "Unable to open the site."); }
-  }, [loadMaterials, loadVendors, loadClosure]);
+  }, [loadMaterials, loadVendors, loadClosure, showStock]);
   const reserve = useCallback(async (siteId: string, itemKey: string, quantity: string) => {
     setBusy(true);
     try {
@@ -432,7 +415,7 @@ export function SiteExecution({ session, home = false, onOpenStock, mode = "all"
                               <option value="">—</option>
                               {options.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
                             </select>
-                            {options.length === 0 && <><br /><small>No active {cat.toLowerCase()} vendor yet. Add one under Stock &amp; procurement.</small></>}
+                            {options.length === 0 && <><br /><small>No active {cat.toLowerCase()} vendor yet.{showStock ? " Add one under Stock & procurement." : " Ask management to add one."}</small></>}
                           </td>
                           <td><input aria-label={`${cat} agreed date`} type="date" value={f.agreedDate} onChange={(e) => setAssignForm({ ...assignForm, [cat]: { ...f, agreedDate: e.target.value } })} /></td>
                           <td><input aria-label={`${cat} notes`} value={f.notes} maxLength={500} onChange={(e) => setAssignForm({ ...assignForm, [cat]: { ...f, notes: e.target.value } })} /></td>
@@ -454,7 +437,7 @@ export function SiteExecution({ session, home = false, onOpenStock, mode = "all"
           </div>
         </section>
 
-        <section className="pz-panel pz-stack">
+        {showStock && <section className="pz-panel pz-stack">
           <h3>Material plan</h3>
           {!materials ? <p>Loading materials…</p> : materials.lines.length === 0 ? <p>No BOQ lines for this site.</p> : (
             <div className="pz-table-scroll">
@@ -494,7 +477,7 @@ export function SiteExecution({ session, home = false, onOpenStock, mode = "all"
             </ul>
           )}
           <p><small>Shortages across all sites and requests for quotation are under Stock &amp; procurement.</small></p>
-        </section>
+        </section>}
 
         <section className="pz-panel pz-stack">
           <h3>Pictures by day</h3>
@@ -657,23 +640,6 @@ export function SiteExecution({ session, home = false, onOpenStock, mode = "all"
   return (
     <div className="pz-stack">
       {error && <p className="pz-feedback pz-feedback--danger" role="alert">{error}</p>}
-      {home && (
-        <section className="pz-panel pz-stack">
-          <h3>Stock</h3>
-          <div className="stage-grid">
-            <button type="button" className="stage-card" onClick={onOpenStock}>
-              <strong>{stockSummary ? stockSummary.short : "…"}</strong><span>Items with a stock shortage</span>
-            </button>
-            <button type="button" className="stage-card" onClick={onOpenStock}>
-              <strong>{stockSummary ? stockSummary.reserved : "…"}</strong><span>Reservations{stockSummary?.reservedSites ? ` across ${stockSummary.reservedSites} site${stockSummary.reservedSites === 1 ? "" : "s"}` : ""}</span>
-            </button>
-            <button type="button" className="stage-card" onClick={onOpenStock}>
-              <strong>{stockSummary ? stockSummary.uncounted : "…"}</strong><span>Items Store has not counted</span>
-            </button>
-          </div>
-          <p><small>Open Stock &amp; procurement for the full shortage list, counts, vendors and requests for quotation.</small></p>
-        </section>
-      )}
       <section className="pz-panel pz-stack">
         <h2>{MODE_TEXT[mode].title}</h2>
         <p><small>{MODE_TEXT[mode].note}</small></p>
