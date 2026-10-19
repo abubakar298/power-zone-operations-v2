@@ -142,7 +142,9 @@ export function Dashboard({
     | "pricing"
     | "quotes"
     | "operations"
+    | "heads-up"
     | "sites"
+    | "sites-new"
     | "sites-ongoing"
     | "sites-completed"
     | "sites-docs"
@@ -238,7 +240,9 @@ export function Dashboard({
       | "pricing"
       | "quotes"
       | "operations"
+      | "heads-up"
       | "sites"
+      | "sites-new"
       | "sites-ongoing"
       | "sites-completed"
       | "sites-docs"
@@ -625,6 +629,12 @@ export function Dashboard({
                     <button className={view === "operations" ? "nav-active" : ""} aria-current={view === "operations" ? "page" : undefined} onClick={() => { setOperationsIpoId(undefined); navigate("operations"); }}>
                       <Icon name="file" />BOQ to Operations
                     </button>
+                    <button className={view === "heads-up" ? "nav-active" : ""} aria-current={view === "heads-up" ? "page" : undefined} onClick={() => navigate("heads-up")}>
+                      <Icon name="file" />Heads up on new sites
+                    </button>
+                    <button className={view === "sites-new" ? "nav-active" : ""} aria-current={view === "sites-new" ? "page" : undefined} onClick={() => navigate("sites-new")}>
+                      <Icon name="file" />New sites
+                    </button>
                     <button className={view === "sites-ongoing" ? "nav-active" : ""} aria-current={view === "sites-ongoing" ? "page" : undefined} onClick={() => navigate("sites-ongoing")}>
                       <Icon name="file" />Ongoing sites
                     </button>
@@ -792,6 +802,10 @@ export function Dashboard({
                                 ? "Site reports"
                                 : view === "stock"
                                 ? "Stock & procurement"
+                                : view === "heads-up"
+                                ? "Heads up on new sites"
+                                : view === "sites-new"
+                                ? "New sites"
                                 : view === "sites-ongoing"
                                 ? "Ongoing sites"
                                 : view === "sites-completed"
@@ -934,6 +948,10 @@ export function Dashboard({
                                       ? "Site reports"
                                       : view === "stock"
                                       ? "Stock & procurement"
+                                      : view === "heads-up"
+                                      ? "Heads up on new sites"
+                                      : view === "sites-new"
+                                      ? "New sites"
                                       : view === "sites-ongoing"
                                       ? "Ongoing sites"
                                       : view === "sites-completed"
@@ -999,6 +1017,10 @@ export function Dashboard({
                                       ? "Site stages, cable variance and items used outside quotations. Downloadable."
                                       : view === "stock"
                                       ? "Items required, Store counts, reserved stock, shortages, vendors and requests for quotation."
+                                      : view === "heads-up"
+                                      ? "Advance BOQs for sites whose IPO has not been issued yet."
+                                      : view === "sites-new"
+                                      ? "Sites whose IPO has arrived and nothing has been started yet."
                                       : view === "sites-ongoing"
                                       ? "Sites not yet closed, from IPO received to Documents."
                                       : view === "sites-completed"
@@ -1229,7 +1251,9 @@ export function Dashboard({
                 />
               )}
               {view === "sites" && <SiteExecution session={session} mode="all" initialSiteId={siteToOpen} initialStageFilter={stageToOpen} />}
+              {view === "sites-new" && <SiteExecution session={session} mode="new" />}
               {view === "sites-ongoing" && <SiteExecution session={session} mode="ongoing" />}
+              {view === "heads-up" && <Operations session={session} headsUp />}
               {view === "sites-completed" && <SiteExecution session={session} mode="completed" />}
               {view === "sites-docs" && <SiteExecution session={session} mode="documentation" />}
               {view === "reserved" && <StockProcurement session={session} tabs={["reserved"]} />}

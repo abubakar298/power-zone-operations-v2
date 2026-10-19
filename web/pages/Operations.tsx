@@ -28,10 +28,13 @@ export function Operations({
   session,
   initialIpoId,
   portal = false,
+  headsUp = false,
 }: {
   session: Session;
   initialIpoId?: string;
   portal?: boolean;
+  /** "Heads up on new sites": only advance BOQs for sites whose IPO has not been issued yet. */
+  headsUp?: boolean;
 }) {
   const [advanceReservation,setAdvanceReservation]=useState<any>(),[lastAdvanceReference,setLastAdvanceReference]=useState('');
   const [irrUpload,setIrrUpload]=useState(false);
@@ -263,7 +266,7 @@ export function Operations({
   // Operations, Admin and Management: the advance BOQ search and the opened advance BOQ only (Moaz, 15 Oct 2026).
   if (["Admin","Management","Operations"].includes(session.user.role)) return (
     <section className="detail-panel operations-panel">
-      <AdvanceBoqSearch onOpen={reference=>setLastAdvanceReference(reference)}/>
+      <AdvanceBoqSearch scope={headsUp?'upcoming':'all'} onOpen={reference=>setLastAdvanceReference(reference)}/>
       {lastAdvanceReference&&<AdvanceBoqInbox key={lastAdvanceReference} initialReference={lastAdvanceReference} detailOnly onReserve={group=>{setLastAdvanceReference(group.number);setAdvanceReservation(group);}}/>}
     </section>
   );

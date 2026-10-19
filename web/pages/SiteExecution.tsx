@@ -80,9 +80,10 @@ const stageTone = (s: SiteRow): "pending" | "success" | "warning" | "danger" =>
   s.stage === "closed" ? "success" : s.late ? "danger" : "pending";
 
 interface StockSummary { short: number; uncounted: number; reserved: number; reservedSites: number }
-export type SiteBoardMode = "all" | "ongoing" | "completed" | "documentation";
+export type SiteBoardMode = "all" | "new" | "ongoing" | "completed" | "documentation";
 const MODE_TEXT: Record<SiteBoardMode, { title: string; note: string }> = {
   all: { title: "All sites", note: "Every site after its IPO, whatever its stage." },
+  new: { title: "New sites", note: "Sites whose IPO has arrived and nothing has been started yet: still at IPO received." },
   ongoing: { title: "Ongoing sites", note: "Sites not yet closed, from IPO received to Documents." },
   completed: { title: "Sites completed (last 30 days)", note: "Sites whose end date falls in the last 30 days." },
   documentation: { title: "Documentation issues", note: "Work finished (end date entered) but DO, acknowledgement, submission to the customer or customer sign-off still missing." },
@@ -98,6 +99,7 @@ const missingDocuments = (s: SiteRow) => {
 };
 const inMode = (s: SiteRow, mode: SiteBoardMode) =>
   mode === "all" ? true :
+  mode === "new" ? s.stage === "ipo_received" :
   mode === "ongoing" ? s.stage !== "closed" :
   mode === "completed" ? Boolean(s.endDate && s.endDate >= daysAgo(30) && s.endDate <= today()) :
   Boolean(s.endDate) && missingDocuments(s).length > 0;
@@ -711,7 +713,7 @@ export function SiteExecution({ session, home = false, onOpenStock, mode = "all"
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={mode === "documentation" ? 13 : 12}>{mode === "documentation" ? "No documentation issues." : mode === "completed" ? "No sites completed in the last 30 days." : "No sites match."}</td></tr>
+                <tr><td colSpan={mode === "documentation" ? 13 : 12}>{mode === "documentation" ? "No documentation issues." : mode === "completed" ? "No sites completed in the last 30 days." : mode === "new" ? "No new sites: every IPO received has been started." : "No sites match."}</td></tr>
               ) : rows.map((s) => (
                 <tr key={s.id} style={{ cursor: "pointer" }} onClick={() => void open(s.id)}>
                   <td><strong>{s.siteName ?? "—"}</strong>{s.siteCode ? ` (${s.siteCode})` : ""}<br /><small>IPO {s.ipoNumber}</small></td>

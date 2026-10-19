@@ -23,8 +23,11 @@ const stageLabel = (operations: string | null, workflow: string | null) =>
 const day = (v: string | null | undefined) => (v ? String(v).slice(0, 10) : "");
 const fmtDay = (v: string | null | undefined) => (v ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(v.length === 10 ? `${v}T00:00:00` : v)) : "—");
 
-/** Search over received advance (heads-up) BOQs: customer, site, region, stage and date range. */
-export function AdvanceBoqSearch({ onOpen }: { onOpen: (reference: string) => void }) {
+/**
+ * Search over received advance (heads-up) BOQs: customer, site, region, stage and date range.
+ * `scope="upcoming"` keeps only heads-ups for sites whose IPO has not been issued yet (the "Heads up on new sites" page).
+ */
+export function AdvanceBoqSearch({ onOpen, scope = "all" }: { onOpen: (reference: string) => void; scope?: "all" | "upcoming" }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -63,19 +66,21 @@ export function AdvanceBoqSearch({ onOpen }: { onOpen: (reference: string) => vo
     return () => { active = false; };
   }, []);
 
-  const unique = (pick: (r: Row) => string) => [...new Set(rows.map(pick).filter((v) => v && v !== "—"))].sort((a, b) => a.localeCompare(b));
-  const customers = useMemo(() => unique((r) => r.customer), [rows]);
-  const sites = useMemo(() => unique((r) => r.site), [rows]);
-  const regions = useMemo(() => unique((r) => r.region), [rows]);
+  // Upcoming = no final BOQ received and no operations record yet: the site is still ahead of its IPO.
+  const pool = useMemo(() => (scope === "upcoming" ? rows.filter((r) => !r.final && !r.stageKey.startsWith("ops:")) : rows), [rows, scope]);
+  const unique = (pick: (r: Row) => string) => [...new Set(pool.map(pick).filter((v) => v && v !== "—"))].sort((a, b) => a.localeCompare(b));
+  const customers = useMemo(() => unique((r) => r.customer), [pool]);
+  const sites = useMemo(() => unique((r) => r.site), [pool]);
+  const regions = useMemo(() => unique((r) => r.region), [pool]);
   const stages = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const r of rows) seen.set(r.stageKey, r.stage);
+    for (const r of pool) seen.set(r.stageKey, r.stage);
     return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [rows]);
+  }, [pool]);
 
   const visible = useMemo(() => {
     const text = q.trim().toLowerCase();
-    return rows.filter((r) =>
+    return pool.filter((r) =>
       (!customer || r.customer === customer) &&
       (!site || r.site === site) &&
       (!region || r.region === region) &&
@@ -83,14 +88,18 @@ export function AdvanceBoqSearch({ onOpen }: { onOpen: (reference: string) => vo
       (!from || day(r.received) >= from) &&
       (!to || day(r.received) <= to) &&
       (!text || [r.reference, r.customer, r.site, r.siteCode].some((v) => v.toLowerCase().includes(text))));
-  }, [rows, q, customer, site, region, stage, from, to]);
+  }, [pool, q, customer, site, region, stage, from, to]);
   const clear = () => { setQ(""); setCustomer(""); setSite(""); setRegion(""); setStage(""); setFrom(""); setTo(""); };
   const filtered = Boolean(q || customer || site || region || stage || from || to);
 
   return (
     <section className="pz-panel pz-stack" aria-label="Advance BOQ search">
-      <h2>Find an advance BOQ</h2>
-      <p className="pz-caption">Heads-up material forecasts received from Coordination. Filter by customer, site, region, stage or the date they were received.</p>
+      <h2>{scope === "upcoming" ? "Heads up on new sites" : "Find an advance BOQ"}</h2>
+      <p className="pz-caption">
+        {scope === "upcoming"
+          ? "Advance BOQs for sites whose IPO has not been issued yet. Plan stock from these before the IPO arrives."
+          : "Heads-up material forecasts received from Coordination. Filter by customer, site, region, stage or the date they were received."}
+      </p>
       <div className="pz-form-grid">
         <Field id="abq-q" label="Search"><input id="abq-q" placeholder="Reference, customer or site" value={q} onChange={(e) => setQ(e.target.value)} /></Field>
         <Field id="abq-customer" label="Customer">
@@ -117,7 +126,7 @@ export function AdvanceBoqSearch({ onOpen }: { onOpen: (reference: string) => vo
         <Field id="abq-to" label="Received to"><input id="abq-to" type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} /></Field>
       </div>
       <div className="pz-action-row">
-        <span>{loading ? "Loading…" : `${visible.length} of ${rows.length} advance BOQ${rows.length === 1 ? "" : "s"}`}</span>
+        <span>{loading ? "Loading…" : `${visible.length} of ${pool.length} advance BOQ${pool.length === 1 ? "" : "s"}`}</span>
         {filtered && <Button variant="neutral" onClick={clear}>Clear filters</Button>}
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -127,7 +136,7 @@ export function AdvanceBoqSearch({ onOpen }: { onOpen: (reference: string) => vo
             <thead><tr><th>Reference</th><th>Customer</th><th>Site</th><th>Region</th><th>Stage</th><th>Received</th><th>Expected</th><th>Items</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {visible.length === 0 ? (
-                <tr><td colSpan={10}>{rows.length === 0 ? "No advance BOQs received yet." : "No advance BOQs match these filters."}</td></tr>
+                <tr><td colSpan={10}>{pool.length === 0 ? (scope === "upcoming" ? "No heads-up BOQs for new sites right now." : "No advance BOQs received yet.") : "No advance BOQs match these filters."}</td></tr>
               ) : visible.map((r) => (
                 <tr key={`${r.reference}-${r.recordId}`}>
                   <td><strong>{r.reference}</strong></td>
