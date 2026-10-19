@@ -115,6 +115,7 @@ export function Dashboard({
   }, []);
   const [operationsIpoId, setOperationsIpoId] = useState<string>();
   const [siteToOpen, setSiteToOpen] = useState<string>();
+  const [stageToOpen, setStageToOpen] = useState<string>();
   const [pricingRevisionId, setPricingRevisionId] = useState<string>();
   const [revisionDraftId, setRevisionDraftId] = useState<string>();
   const [pricingRequestId, setPricingRequestId] = useState<string>();
@@ -1114,7 +1115,7 @@ export function Dashboard({
                 </section>
               )}
               {view === "dashboard" && session.user.role === "Operations" && (
-                <OperationsDashboard session={session} onGo={(target) => { if (target === "operations") setOperationsIpoId(undefined); navigate(target); }} onOpenSite={(id) => { setSiteToOpen(id); navigate("sites"); }} />
+                <OperationsDashboard session={session} onGo={(target) => { if (target === "operations") setOperationsIpoId(undefined); navigate(target); }} onOpenSite={(id) => { setSiteToOpen(id); setStageToOpen(undefined); navigate("sites"); }} onOpenStage={(stage) => { setStageToOpen(stage); setSiteToOpen(undefined); navigate("sites"); }} />
               )}
               {managementHome && <ManagementApprovals session={session} onOpen={(task)=>{
                 setRevisionDraftId(task.draft_id);
@@ -1232,7 +1233,7 @@ export function Dashboard({
                   }}
                 />
               )}
-              {view === "sites" && <SiteExecution session={session} mode="all" initialSiteId={siteToOpen} />}
+              {view === "sites" && <SiteExecution session={session} mode="all" initialSiteId={siteToOpen} initialStageFilter={stageToOpen} />}
               {view === "sites-ongoing" && <SiteExecution session={session} mode="ongoing" />}
               {view === "sites-completed" && <SiteExecution session={session} mode="completed" />}
               {view === "sites-docs" && <SiteExecution session={session} mode="documentation" />}

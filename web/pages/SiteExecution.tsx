@@ -103,9 +103,14 @@ const inMode = (s: SiteRow, mode: SiteBoardMode) =>
   Boolean(s.endDate) && missingDocuments(s).length > 0;
 
 /** `home` adds the stock shortage and reserved-stock tiles above the board (the Operations landing page). */
-export function SiteExecution({ session, home = false, onOpenStock, mode = "all", initialSiteId }: { session: Session; home?: boolean; onOpenStock?: () => void; mode?: SiteBoardMode; initialSiteId?: string }) {
+export function SiteExecution({ session, home = false, onOpenStock, mode = "all", initialSiteId, initialStageFilter }: { session: Session; home?: boolean; onOpenStock?: () => void; mode?: SiteBoardMode; initialSiteId?: string; initialStageFilter?: string }) {
   const canEdit = ["Admin", "Management", "Operations"].includes(session.user.role);
   const [openedInitial, setOpenedInitial] = useState<string | undefined>(undefined);
+  const [appliedStage, setAppliedStage] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (initialStageFilter && initialStageFilter !== appliedStage) { setAppliedStage(initialStageFilter); setStageFilter(initialStageFilter); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialStageFilter]);
   const [stockSummary, setStockSummary] = useState<StockSummary | null>(null);
   useEffect(() => {
     if (!home) return;
