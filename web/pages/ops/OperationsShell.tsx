@@ -43,8 +43,16 @@ const ICON = {
  * Header with the one search, bell and account; sidebar with a region scope and the menu with counts;
  * the same pages and data as before. No other login uses this.
  */
-export function OperationsShell({ session, onLogout }: { session: Session; onLogout: () => void }) {
-  const [view, setView] = useState<View>("dashboard");
+export function OperationsShell({ session, onLogout, viewingAs, onReturn }: {
+  session: Session; onLogout: () => void;
+  /** Set when a manager opened this workspace through "View as": their own name, and the way back. */
+  viewingAs?: string; onReturn?: () => void;
+}) {
+  // The page survives a reload: the shell writes #workspace=<view> and reads it back on start.
+  const [view, setView] = useState<View>(() => {
+    const wanted = new URLSearchParams(window.location.hash.slice(1)).get("workspace");
+    return wanted && (VIEWS as string[]).includes(wanted) ? (wanted as View) : "dashboard";
+  });
   const [region, setRegion] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -122,10 +130,11 @@ export function OperationsShell({ session, onLogout }: { session: Session; onLog
             <button type="button" aria-haspopup="menu" aria-expanded={menuOpen} aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>{initials || "PZ"}</button>
             {menuOpen && (
               <div className="ops-menu" role="menu">
-                <div className="who"><strong>{session.user.displayName}</strong><small>{session.user.email} · {session.user.role}</small></div>
+                <div className="who"><strong>{session.user.displayName}</strong><small>{session.user.email} · {session.user.role}{viewingAs ? ` · viewed by ${viewingAs}` : ""}</small></div>
+                {onReturn && <button type="button" role="menuitem" onClick={onReturn}>{ICON.logout}Return to Management</button>}
                 <button type="button" role="menuitem" onClick={() => go("account")}>{ICON.account}My account</button>
                 <button type="button" role="menuitem" onClick={() => { go("account"); window.dispatchEvent(new Event("pz:change-password")); }}>{ICON.key}Change password</button>
-                <button type="button" role="menuitem" onClick={() => void logout()} disabled={busy}>{ICON.logout}{busy ? "Signing out…" : "Sign out"}</button>
+                {!onReturn && <button type="button" role="menuitem" onClick={() => void logout()} disabled={busy}>{ICON.logout}{busy ? "Signing out…" : "Sign out"}</button>}
               </div>
             )}
           </div>

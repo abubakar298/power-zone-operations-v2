@@ -255,3 +255,6 @@
   .ops-main{padding:18px 16px 36px}
 }
 @media (max-width:600px){ .ops-kgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px} .ops-kc-v{font-size:23px} }
+
+/* The shell already shows the page title above the report panel. */
+.ops .sr-head h2{display:none}

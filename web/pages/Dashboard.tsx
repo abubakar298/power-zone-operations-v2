@@ -397,7 +397,12 @@ export function Dashboard({
   }, [bucketTask, isCoordinator]);
   const managementHome = view === "dashboard" && canViewDepartments(session.user.role);
   // The Operations login has its own shell (Moaz, 19 Oct 2026); every other role keeps this one unchanged.
-  if ((session.user.role as string) === "Operations") return <Suspense fallback={null}><OperationsShell session={session} onLogout={onLogout} /></Suspense>;
+  if ((session.user.role as string) === "Operations")
+    return (
+      <Suspense fallback={null}>
+        <OperationsShell session={session} onLogout={onLogout} viewingAs={departmentUser ? principalSession.user.displayName : undefined} onReturn={departmentUser ? () => void selectDepartment("dashboard") : undefined} />
+      </Suspense>
+    );
   return (
     <div className={`workspace fixed-header-layout ${session.user.role === "Coordinator" ? "coordinator-layout" : session.user.role === "Operations" ? "operations-layout" : ""}`}>
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
