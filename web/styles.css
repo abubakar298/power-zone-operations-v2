@@ -156,3 +156,6 @@
   .survey-grid>label>input,.survey-grid>label>select,.order-fields>label>input,.order-fields>label>select {align-self:start;}
  }
 }
+
+/* Count badge on a sidebar entry (Purchase approvals). */
+.sidebar nav .nav-count{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:7px;background:#fdeeee;color:#b91c1c;font-size:10px;font-weight:700;display:grid;place-items:center}

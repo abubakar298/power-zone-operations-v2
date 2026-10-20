@@ -45,8 +45,11 @@ const Operations = lazy(() =>
 const SiteBoard = lazy(() =>
   import("./site-workflow/SiteBoard.js").then((module) => ({ default: module.SiteBoard })),
 );
-const OperationsShell = lazy(() =>
-  import("./ops/OperationsShell.js").then((module) => ({ default: module.OperationsShell })),
+const OperationsRoleGate = lazy(() =>
+  import("./procurement/OperationsRoleGate.js").then((module) => ({ default: module.OperationsRoleGate })),
+);
+const PurchaseApprovals = lazy(() =>
+  import("./procurement/PurchaseApprovals.js").then((module) => ({ default: module.PurchaseApprovals })),
 );
 const OperationsHome = lazy(() =>
   import("./site-workflow/OperationsHome.js").then((module) => ({ default: module.OperationsHome })),
@@ -152,6 +155,7 @@ export function Dashboard({
     | "sites-ongoing"
     | "sites-completed"
     | "sites-docs"
+    | "purchase-approvals"
     | "reports"
     | "inventory"
     | "finance"
@@ -247,6 +251,7 @@ export function Dashboard({
       | "sites-ongoing"
       | "sites-completed"
       | "sites-docs"
+      | "purchase-approvals"
       | "reports"
       | "inventory"
       | "finance"
@@ -396,11 +401,28 @@ export function Dashboard({
     };
   }, [bucketTask, isCoordinator]);
   const managementHome = view === "dashboard" && canViewDepartments(session.user.role);
+  // Abu Bakar approves purchase requests (Moaz, 20 Oct 2026); nobody else sees this entry.
+  const [approvals, setApprovals] = useState<{ approver: boolean; waiting: number }>({ approver: false, waiting: 0 });
+  const isManagerRole = ["Admin", "Management"].includes(session.user.role);
+  useEffect(() => {
+    if (!isManagerRole) { setApprovals({ approver: false, waiting: 0 }); return; }
+    let live = true;
+    const check = () => void api<{ approver: boolean }>("/procurement/me")
+      .then(async (m) => {
+        if (!m.approver) { if (live) setApprovals({ approver: false, waiting: 0 }); return; }
+        const r = await api<{ requests: { status: string }[] }>("/procurement/requests");
+        if (live) setApprovals({ approver: true, waiting: r.requests.filter((x) => x.status === "pending_approval").length });
+      })
+      .catch(() => { if (live) setApprovals({ approver: false, waiting: 0 }); });
+    check();
+    const t = setInterval(check, 120_000);
+    return () => { live = false; clearInterval(t); };
+  }, [session.user.id, isManagerRole]);
   // The Operations login has its own shell (Moaz, 19 Oct 2026); every other role keeps this one unchanged.
   if ((session.user.role as string) === "Operations")
     return (
       <Suspense fallback={null}>
-        <OperationsShell session={session} onLogout={onLogout} viewingAs={departmentUser ? principalSession.user.displayName : undefined} onReturn={departmentUser ? () => void selectDepartment("dashboard") : undefined} />
+        <OperationsRoleGate session={session} onLogout={onLogout} viewingAs={departmentUser ? principalSession.user.displayName : undefined} onReturn={departmentUser ? () => void selectDepartment("dashboard") : undefined} />
       </Suspense>
     );
   return (
@@ -434,6 +456,11 @@ export function Dashboard({
                   <Icon name="file" /><span>{label}</span>
                 </button>
               ))}
+              {approvals.approver && (
+                <button className={view === "purchase-approvals" ? "nav-active" : ""} aria-current={view === "purchase-approvals" ? "page" : undefined} onClick={() => navigate("purchase-approvals")}>
+                  <Icon name="shield" /><span>Purchase approvals</span>{approvals.waiting > 0 && <small className="nav-count">{approvals.waiting}</small>}
+                </button>
+              )}
             </nav>
           ) : ["Coordinator", "Design"].includes(session.user.role) ? (
             <>
@@ -792,6 +819,8 @@ export function Dashboard({
                                 ? "Ongoing sites"
                                 : view === "sites-completed"
                                 ? "Sites completed (last 30 days)"
+                                : view === "purchase-approvals"
+                                ? "Purchase approvals"
                                 : view === "sites-docs"
                                 ? "Documentation issues"
                                 : view === "sites"
@@ -936,6 +965,8 @@ export function Dashboard({
                                       ? "Ongoing sites"
                                       : view === "sites-completed"
                                       ? "Sites completed (last 30 days)"
+                                      : view === "purchase-approvals"
+                                      ? "Purchase approvals"
                                       : view === "sites-docs"
                                       ? "Documentation issues"
                                       : view === "sites"
@@ -999,6 +1030,8 @@ export function Dashboard({
                                       ? "Every site that is not closed, from IPO received to Doc dispatch."
                                       : view === "sites-completed"
                                       ? "Sites closed in the last 30 days."
+                                      : view === "purchase-approvals"
+                                      ? "Purchase requests from Procurement. Only you can approve them."
                                       : view === "sites-docs"
                                       ? "Sites at Doc dispatch, or closed, still missing the DO date, acknowledgement, submission to the customer or customer sign-off."
                                       : view === "sites"
@@ -1228,6 +1261,7 @@ export function Dashboard({
               {view === "sites-completed" && <SiteBoard session={session} mode="completed" />}
               {view === "sites-docs" && <SiteBoard session={session} mode="docs" />}
               {view === "reports" && <SiteReport session={session} />}
+              {view === "purchase-approvals" && approvals.approver && <PurchaseApprovals session={session} onChanged={() => setApprovals((a) => ({ ...a }))} />}
               {view === "operations" && (
                 <Operations session={session} initialIpoId={operationsIpoId} portal={departmentView==='operations'} initialAdvanceReference={advanceToOpen} advanceNonce={advanceOpenNonce} />
               )}

@@ -30,6 +30,8 @@ import { OperationsRepository } from "./operations/repository.js";
 import { SiteWorkflowRepository } from "./site-workflow/repository.js";
 import { siteWorkflowHttp } from "./site-workflow/http.js";
 import { operationsAccess } from "./http/operations-access.js";
+import { ProcurementRepository } from "./procurement/repository.js";
+import { procurementHttp } from "./procurement/http.js";
 import { operationsHttp } from "./operations/http.js";
 import { CommercialRepository } from "./commercial/repository.js";
 import { commercialHttp } from "./commercial/http.js";
@@ -103,8 +105,9 @@ export function createApp(
     config,
   );
   // Every signed-in request passes the Operations allow-list after the session check.
+  const workspaceAccess = operationsAccess(pool);
   const sessionForWorkspace: RequestHandler = (req, res, next) =>
-    auth.requireSession(req, res, (error?: unknown) => (error ? next(error) : operationsAccess(req, res, next)));
+    auth.requireSession(req, res, (error?: unknown) => (error ? next(error) : workspaceAccess(req, res, next)));
   app.use(
     [
       "/api/boqs",
@@ -231,6 +234,7 @@ export function createApp(
     operationsHttp(new OperationsRepository(pool), sessionForWorkspace),
   );
   app.use("/api/site-workflow", sessionForWorkspace, siteWorkflowHttp(new SiteWorkflowRepository(pool), sessionForWorkspace));
+  app.use("/api/procurement", sessionForWorkspace, procurementHttp(new ProcurementRepository(pool), sessionForWorkspace));
   app.use(
     "/api/coordinator",
     sessionForWorkspace,
