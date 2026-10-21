@@ -67,7 +67,8 @@ export class ProcurementRepository {
   async setCount(actor: string, input: { itemKey: string; quantity: string; unit: string; note: string }) {
     return transaction(this.pool, async (c) => {
       const me = await this.me(actor, c);
-      if (!me.buyer && me.role !== "Inventory") throw new HttpError(403, "Only Store or the Procurement buyer can enter stock counts.");
+      // Store keeps the counts; the Procurement buyer reads them but cannot change them (Moaz, 21 Oct 2026).
+      if (me.role !== "Inventory") throw new HttpError(403, "Only Store can enter stock counts.");
       const item = (await c.query("SELECT unit FROM item_master WHERE key=$1", [input.itemKey])).rows[0];
       if (!item) throw new HttpError(400, "That item is not in the rate master.");
       await c.query(

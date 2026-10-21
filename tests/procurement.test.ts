@@ -45,7 +45,8 @@ test("Procurement: stock against coming sites, purchase requests with quotations
     assert.equal(battery.boughtByBuyer, false, "batteries are not bought through Procurement");
     assert.ok(!o.inventory.some((i) => /^(Labour|Delivery|Structure)/.test(i.itemKey)), "service lines are not stock");
     await repo.setCount(u.store, { itemKey: cable.itemKey, quantity: "10", unit: "m", note: "Store count" });
-    await assert.rejects(repo.setCount(u.ops, { itemKey: cable.itemKey, quantity: "1", unit: "m", note: "" }), /Only Store or the Procurement buyer/);
+    await assert.rejects(repo.setCount(u.ops, { itemKey: cable.itemKey, quantity: "1", unit: "m", note: "" }), /Only Store can enter stock counts/);
+    await assert.rejects(repo.setCount(u.buyer, { itemKey: cable.itemKey, quantity: "1", unit: "m", note: "" }), /Only Store can enter stock counts/);
     o = await repo.overview(u.buyer);
     const counted = o.inventory.find((i) => i.itemKey === cable.itemKey)!;
     assert.equal(counted.inStock, "10");

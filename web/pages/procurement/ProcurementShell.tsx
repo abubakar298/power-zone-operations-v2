@@ -150,7 +150,7 @@ export function ProcurementShell({ session, onLogout, viewingAs, onReturn }: { s
               {view === "dashboard" && scoped && <Home session={session} data={scoped} region={region} onGo={go} onOpenRequest={openReq} />}
               {view === "received" && scoped && <ReceivedPage data={scoped} />}
               {view === "upcoming" && scoped && <UpcomingPage data={scoped} />}
-              {view === "stock" && scoped && <StockPage session={session} data={scoped} busy={busy} onFromToBuy={() => void fromToBuy()} onChanged={() => void load()} />}
+              {view === "stock" && scoped && <StockPage data={scoped} busy={busy} onFromToBuy={() => void fromToBuy()} />}
             </>
           )}
           {view === "requests" && <PurchaseRequests session={session} mode="buyer" openId={openRequest} onOpened={() => undefined} onChanged={() => void load()} key={openRequest ?? "list"} />}
@@ -360,11 +360,8 @@ function UpcomingPage({ data }: { data: Overview }) {
   );
 }
 
-function StockPage({ session, data, busy, onFromToBuy, onChanged }: { session: Session; data: Overview; busy: boolean; onFromToBuy: () => void; onChanged: () => void }) {
+function StockPage({ data, busy, onFromToBuy }: { data: Overview; busy: boolean; onFromToBuy: () => void }) {
   const [tab, setTab] = useState("all");
-  const [editing, setEditing] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const tabs = [
     { key: "all", label: "All items", f: () => true },
     { key: "buy", label: "To buy", f: (i: InventoryRow) => i.boughtByBuyer && Number(i.toBuy) > 0 },
@@ -374,18 +371,9 @@ function StockPage({ session, data, busy, onFromToBuy, onChanged }: { session: S
     { key: "others", label: "Not bought by Procurement", f: (i: InventoryRow) => !i.boughtByBuyer },
   ];
   const rows = data.inventory.filter(tabs.find((t) => t.key === tab)!.f);
-  const saveCount = async (i: InventoryRow) => {
-    setSaving(true);
-    try {
-      await api("/procurement/stock/counts", { body: { itemKey: i.itemKey, quantity: editing[i.itemKey].trim().replace(/,/g, ""), unit: i.unit }, csrf: session.csrfToken });
-      const next = { ...editing }; delete next[i.itemKey]; setEditing(next); setError(""); onChanged();
-    } catch (e) { setError(e instanceof ApiError ? e.message : "The count was not saved."); }
-    finally { setSaving(false); }
-  };
   return (
     <div className="pr">
-      {error && <p className="ops-feedback" role="alert">{error}</p>}
-      <div className="ops-banner">{I.info}To buy = received POs need + upcoming POs need − in stock − on order − already on a request. In stock = the latest count plus anything received after it. Batteries, BMS and inverters are shown for information; they are not bought through Procurement. Inventory covers all regions.</div>
+      <div className="ops-banner">{I.info}To buy = received POs need + upcoming POs need − in stock − on order − already on a request. In stock = Store's latest count plus anything received after it; only Store changes counts. Batteries, BMS and inverters are shown for information; they are not bought through Procurement. Inventory covers all regions.</div>
       <div className="pr-actions"><Button variant="primary" loading={busy} disabled={!data.inventory.some((i) => i.boughtByBuyer && i.inRateMaster && Number(i.toBuy) > 0)} onClick={onFromToBuy}>Make a purchase request from "To buy"</Button></div>
       <section className="ops-card">
         <div className="ops-tabs">{tabs.map((t) => <button type="button" key={t.key} aria-pressed={tab === t.key} onClick={() => setTab(t.key)}>{t.label} <span className="n">{data.inventory.filter(t.f).length}</span></button>)}</div>
@@ -398,17 +386,7 @@ function StockPage({ session, data, busy, onFromToBuy, onChanged }: { session: S
                 return (
                   <tr key={i.itemKey}>
                     <td className="site"><b>{i.name}</b><small>{i.unit}{i.lastCountAt ? ` · counted ${fmtAt(i.lastCountAt)}` : " · not counted yet"}{!i.inRateMaster ? " · not in the rate master" : ""}{i.unitMismatch ? ` · counted in ${i.stockUnit}` : ""}</small></td>
-                    <td className="num">
-                      {editing[i.itemKey] !== undefined ? (
-                        <span className="pc-count">
-                          <input aria-label={`${i.name} count`} value={editing[i.itemKey]} onChange={(e) => setEditing({ ...editing, [i.itemKey]: e.target.value })} />
-                          <Button variant="primary" loading={saving} disabled={!editing[i.itemKey].trim()} onClick={() => void saveCount(i)}>Save</Button>
-                          <button type="button" className="sw-link" onClick={() => { const n = { ...editing }; delete n[i.itemKey]; setEditing(n); }}>×</button>
-                        </span>
-                      ) : (
-                        <>{qty(i.inStock)}{i.inRateMaster && <><br /><button type="button" className="sw-link" onClick={() => setEditing({ ...editing, [i.itemKey]: i.inStock })}>Update count</button></>}</>
-                      )}
-                    </td>
+                    <td className="num">{qty(i.inStock)}</td>
                     <td className="num">{qty(i.receivedNeed)}</td><td className="num">{qty(i.upcomingNeed)}</td><td className="num">{qty(i.onOrder)}</td><td className="num">{qty(i.requested)}</td>
                     <td className="num"><b>{i.boughtByBuyer ? qty(i.toBuy) : "—"}</b></td>
                     <td><span className={st.cls}>{st.text}</span></td>
