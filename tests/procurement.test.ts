@@ -99,7 +99,20 @@ test("Procurement: stock against coming sites, purchase requests with quotations
     r = await repo.markOrdered(u.buyer, r.id, { orderReference: "Powerline SO-2210" });
     assert.equal(r.status, "ordered");
     await assert.rejects(repo.markReceived(u.accounts, r.id, { note: "" }), /Only Store or the Procurement buyer/);
-    r = await repo.markReceived(u.store, r.id, { note: "All arrived" });
+    // Store (Shaigan) sees what to receive and every item to count, but no purchase prices.
+    const store = await repo.storeView(u.store);
+    const waiting = store.toReceive.find((x) => x.id === r.id)!;
+    assert.ok(waiting && waiting.lines.length === r.lines.length, "the ordered request is waiting at Store");
+    assert.ok(!JSON.stringify(store).includes('"rate"') && !JSON.stringify(store).includes('"total"'), "Store's page carries no prices");
+    assert.ok(store.items.some((i) => i.itemKey === battery.itemKey), "Store counts batteries too");
+    await assert.rejects(repo.storeView(u.buyer), /belongs to Store/);
+    await assert.rejects(repo.listRequests(u.store), /not part of the Store workspace/);
+    await assert.rejects(repo.getRequest(u.store, r.id), /not part of the Store workspace/);
+    assert.equal((await repo.overview(u.store)).requests.length, 0, "Store's overview has no request totals");
+    const received = await repo.markReceived(u.store, r.id, { note: "All arrived" });
+    assert.equal(received.status, "received");
+    assert.ok(!("totals" in received), "receiving returns no prices to Store");
+    r = await repo.getRequest(u.buyer, r.id);
     assert.equal(r.status, "received");
     o = await repo.overview(u.buyer);
     const after = o.inventory.find((i) => i.itemKey === cable.itemKey)!;
@@ -133,6 +146,9 @@ test("Procurement: stock against coming sites, purchase requests with quotations
     assert.equal((await get(other, "/api/site-workflow")).status, 200);
     assert.equal((await get(approver, "/api/procurement/requests")).status, 200);
     assert.equal((await get(accounts, "/api/procurement/overview")).status, 403);
+    const storeLogin = await login(u.store);
+    assert.equal((await get(storeLogin, "/api/procurement/store")).status, 200);
+    assert.equal((await get(storeLogin, "/api/procurement/requests")).status, 403);
   } finally {
     await db.close();
   }

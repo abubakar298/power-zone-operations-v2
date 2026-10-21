@@ -57,3 +57,15 @@
 /* Abu Bakar's approvals page sits in the shared workspace, so the shell background is switched off there. */
 .ops.ops-embed{min-height:0;background:none}
 @media (max-width:1000px){ .pr-grid{grid-template-columns:minmax(0,1fr)} }
+/* Store's page (Shaigan): receiving and stock count. */
+.sto-receive{display:grid;gap:12px;padding:0 18px 18px}
+.sto-order{border:1px solid var(--ops-line,#e4e4e7);border-radius:12px;overflow:hidden}
+.sto-order-head{padding:12px 14px;border-bottom:1px solid var(--ops-line,#e4e4e7)}
+.sto-order-head b{display:block}
+.sto-order-head small{color:var(--ops-muted,#52525b)}
+.sto-order-foot{display:flex;gap:8px;align-items:center;padding:12px 14px;border-top:1px solid var(--ops-line,#e4e4e7);flex-wrap:wrap}
+.sto-order-foot input{flex:1 1 260px;height:38px}
+.sto-filter{height:38px;max-width:360px;flex:1 1 240px}
+.sto-count{display:inline-flex;gap:6px;align-items:center;justify-content:flex-end}
+.sto-count input{width:7rem;height:32px;text-align:right}
+.sto-count .pz-button{height:32px;font-size:12px}

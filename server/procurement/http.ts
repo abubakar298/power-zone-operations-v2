@@ -29,6 +29,7 @@ export function procurementHttp(repo: ProcurementRepository, requireSession: Req
 
   r.get("/me", async (req, res) => res.json(await repo.me(actor(req))));
   r.get("/overview", async (req, res) => res.json(await repo.overview(actor(req))));
+  r.get("/store", async (req, res) => res.json(await repo.storeView(actor(req))));
   r.get("/items", async (req, res) => res.json({ items: await repo.searchItems(actor(req), String(req.query.q ?? "")) }));
   r.post("/stock/counts", async (req, res) => { await repo.setCount(actor(req), parse(countSchema, req.body)); res.json({ ok: true }); });
 

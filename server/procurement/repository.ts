@@ -26,6 +26,12 @@ export class ProcurementRepository {
     if (!me.buyer && !me.approver && !READ_ROLES.has(me.role)) throw new HttpError(403, "Procurement is not part of your workspace.");
     return me;
   }
+  /** Purchase prices and totals: the buyer, the approver and management. Store (Shaigan) does not see them. */
+  private async priceReader(actor: string, c: Db = this.pool) {
+    const me = await this.reader(actor, c);
+    if (me.role === "Inventory" && !me.buyer && !me.approver) throw new HttpError(403, "Purchase prices are not part of the Store workspace.");
+    return me;
+  }
   private async buyer(actor: string, c: Db) {
     const me = await this.me(actor, c);
     if (!me.buyer) throw new HttpError(403, "Only the Procurement buyer can do this.");
@@ -47,11 +53,41 @@ export class ProcurementRepository {
   // ----- what is coming, what is in stock -----
   async overview(actor: string) {
     const me = await this.reader(actor);
-    return { me, ...(await computeSupply(this.pool, this.pool)), requests: await this.requestRows(this.pool) };
+    const prices = !(me.role === "Inventory" && !me.buyer && !me.approver);
+    return { me, ...(await computeSupply(this.pool, this.pool)), requests: prices ? await this.requestRows(this.pool) : [] };
+  }
+
+  /**
+   * Store's page (Shaigan, 21 Oct 2026): every item to count with its current level, and the ordered
+   * purchases waiting to be received, with quantities and vendors but no prices.
+   */
+  async storeView(actor: string) {
+    const me = await this.me(actor);
+    if (me.role !== "Inventory" && !["Admin", "Management"].includes(me.role)) throw new HttpError(403, "This page belongs to Store.");
+    const { inventory } = await computeSupply(this.pool, this.pool);
+    const ordered = (await this.pool.query(
+      `SELECT r.id, r.number, r.title, r.order_reference, r.ordered_at, r.delivery_to, r.needed_by, u.display_name AS ordered_by
+       FROM purchase_requests r LEFT JOIN users u ON u.id=r.ordered_by WHERE r.status='ordered' ORDER BY r.ordered_at`,
+    )).rows;
+    const lines = ordered.length ? (await this.pool.query(
+      `SELECT l.request_id, l.item_key, l.quantity, l.unit, q.vendor FROM purchase_request_lines l LEFT JOIN purchase_quotes q ON q.id=l.chosen_quote_id
+       WHERE l.request_id = ANY($1) ORDER BY l.item_key`,
+      [ordered.map((o) => o.id)],
+    )).rows : [];
+    const names = await rateMaster(this.pool, [...new Set(lines.map((l) => l.item_key as string))]);
+    return {
+      items: inventory.map((i) => ({ itemKey: i.itemKey, name: i.name, unit: i.unit, inRateMaster: i.inRateMaster, inStock: i.inStock, counted: i.counted, lastCountAt: i.lastCountAt, stockUnit: i.stockUnit }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      toReceive: ordered.map((o) => ({
+        id: o.id as string, number: o.number as string, title: o.title as string, orderReference: o.order_reference as string, orderedAt: o.ordered_at as string,
+        orderedBy: (o.ordered_by ?? null) as string | null, deliveryTo: o.delivery_to as string, neededBy: o.needed_by ? toDay(o.needed_by) : null,
+        lines: lines.filter((l) => l.request_id === o.id).map((l) => ({ itemKey: l.item_key as string, name: names.get(l.item_key)?.name ?? l.item_key, quantity: fixed(num(l.quantity)), unit: l.unit as string, vendor: (l.vendor ?? "") as string })),
+      })),
+    };
   }
 
   async searchItems(actor: string, q: string) {
-    await this.reader(actor);
+    const me = await this.reader(actor);
     const text = `%${q.trim().toLowerCase()}%`;
     return (await this.pool.query(
       `SELECT m.key, m.display_name, m.unit,
@@ -60,7 +96,7 @@ export class ProcurementRepository {
       [text],
     )).rows
       .map((r) => ({ itemKey: r.key as string, name: (r.display_name || r.key) as string, unit: r.unit as string, rate: r.rate == null ? null : fixed(num(r.rate)) }))
-      .filter((i) => boughtByBuyer(i.itemKey, i.name))
+      .filter((i) => !me.buyer || boughtByBuyer(i.itemKey, i.name))
       .slice(0, 25);
   }
 
@@ -95,12 +131,12 @@ export class ProcurementRepository {
     }));
   }
   async listRequests(actor: string) {
-    await this.reader(actor);
+    await this.priceReader(actor);
     return this.requestRows(this.pool);
   }
 
   async getRequest(actor: string, id: string, c: Db = this.pool) {
-    const me = await this.reader(actor, c);
+    const me = await this.priceReader(actor, c);
     const r = (await c.query(
       `SELECT r.*, cu.display_name AS created_by_name, du.display_name AS decided_by_name, ou.display_name AS ordered_by_name, ru.display_name AS received_by_name
        FROM purchase_requests r JOIN users cu ON cu.id=r.created_by LEFT JOIN users du ON du.id=r.decided_by
@@ -352,6 +388,7 @@ export class ProcurementRepository {
         );
       await c.query("UPDATE purchase_requests SET status='received', received_by=$2, received_at=now(), updated_at=now() WHERE id=$1", [id, actor]);
       await this.event(c, id, actor, "received", status, "received", input.note);
+      if (!me.buyer) return { id, status: "received" as const };
       return this.getRequest(actor, id, c);
     });
   }

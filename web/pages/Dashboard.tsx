@@ -48,6 +48,9 @@ const SiteBoard = lazy(() =>
 const OperationsRoleGate = lazy(() =>
   import("./procurement/OperationsRoleGate.js").then((module) => ({ default: module.OperationsRoleGate })),
 );
+const StoreStock = lazy(() =>
+  import("./procurement/StoreStock.js").then((module) => ({ default: module.StoreStock })),
+);
 const PurchaseApprovals = lazy(() =>
   import("./procurement/PurchaseApprovals.js").then((module) => ({ default: module.PurchaseApprovals })),
 );
@@ -156,6 +159,7 @@ export function Dashboard({
     | "sites-completed"
     | "sites-docs"
     | "purchase-approvals"
+    | "stock-count"
     | "reports"
     | "inventory"
     | "finance"
@@ -252,6 +256,7 @@ export function Dashboard({
       | "sites-completed"
       | "sites-docs"
       | "purchase-approvals"
+      | "stock-count"
       | "reports"
       | "inventory"
       | "finance"
@@ -731,6 +736,12 @@ export function Dashboard({
                     Inventory workspace
                   </button>
                 )}
+                {session.user.role === "Inventory" && (
+                  <button className={view === "stock-count" ? "nav-active" : ""} aria-current={view === "stock-count" ? "page" : undefined} onClick={() => navigate("stock-count")}>
+                    <Icon name="file" />
+                    Stock count
+                  </button>
+                )}
                 {["Admin", "Management", "Accounts"].includes(
                   session.user.role,
                 ) && (
@@ -819,6 +830,8 @@ export function Dashboard({
                                 ? "Ongoing sites"
                                 : view === "sites-completed"
                                 ? "Sites completed (last 30 days)"
+                                : view === "stock-count"
+                                ? "Stock count"
                                 : view === "purchase-approvals"
                                 ? "Purchase approvals"
                                 : view === "sites-docs"
@@ -965,6 +978,8 @@ export function Dashboard({
                                       ? "Ongoing sites"
                                       : view === "sites-completed"
                                       ? "Sites completed (last 30 days)"
+                                      : view === "stock-count"
+                                      ? "Stock count"
                                       : view === "purchase-approvals"
                                       ? "Purchase approvals"
                                       : view === "sites-docs"
@@ -1030,6 +1045,8 @@ export function Dashboard({
                                       ? "Every site that is not closed, from IPO received to Doc dispatch."
                                       : view === "sites-completed"
                                       ? "Sites closed in the last 30 days."
+                                      : view === "stock-count"
+                                      ? "Receive what Procurement ordered and keep the stock count. Procurement uses these counts to work out what to buy."
                                       : view === "purchase-approvals"
                                       ? "Purchase requests from Procurement. Only you can approve them."
                                       : view === "sites-docs"
@@ -1261,6 +1278,7 @@ export function Dashboard({
               {view === "sites-completed" && <SiteBoard session={session} mode="completed" />}
               {view === "sites-docs" && <SiteBoard session={session} mode="docs" />}
               {view === "reports" && <SiteReport session={session} />}
+              {view === "stock-count" && session.user.role === "Inventory" && <StoreStock session={session} />}
               {view === "purchase-approvals" && approvals.approver && <PurchaseApprovals session={session} onChanged={() => setApprovals((a) => ({ ...a }))} />}
               {view === "operations" && (
                 <Operations session={session} initialIpoId={operationsIpoId} portal={departmentView==='operations'} initialAdvanceReference={advanceToOpen} advanceNonce={advanceOpenNonce} />
