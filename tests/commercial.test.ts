@@ -1142,6 +1142,9 @@ test("presentation-only pricing changes preserve original margins and payable ac
         ...basis,
         presentation,
         taxMode,
+        // Exercise the quotation's discount allocation path, which used to
+        // replace standard customer line amounts with reduced selling values.
+        discountPercent: "1",
       });
       assert.equal(p.total, original.total);
       assert.deepEqual(p.rows, original.rows);
@@ -1152,6 +1155,18 @@ test("presentation-only pricing changes preserve original margins and payable ac
         proposedBy: "Atif Hameed",
         discount: "11800",
       });
+      const amountLines = q.lines.filter((line) => line.amount !== undefined);
+      if (presentation !== "No Breakup")
+        assert.equal(
+          amountLines.reduce((sum, line) => sum.add(line.amount!), new Decimal(0)).toFixed(2),
+          taxMode === "Tax Included" ? p.total : p.subtotal,
+          `${presentation} ${taxMode}: printed item amounts must remain standard selling prices`,
+        );
+      assert.equal(
+        q.footer.find((row) => row.label === (taxMode === "Tax Included" ? "Total" : "Subtotal Before Tax"))!.amount,
+        taxMode === "Tax Included" ? p.total : p.subtotal,
+      );
+      assert.equal(q.footer.find((row) => row.label === "Special Discount")!.amount, "11800.00");
       assert.equal(
         q.footer.at(-1)!.amount,
         new Decimal(original.total).minus("11800").toFixed(2),
