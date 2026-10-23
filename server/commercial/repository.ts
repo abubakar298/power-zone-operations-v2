@@ -684,14 +684,20 @@ export class CommercialRepository {
       const event=(await c.query("SELECT kind FROM coordination_events WHERE quotation_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1",[id])).rows[0];
       if(latest.id!==id||event?.kind!=="Submitted")throw new HttpError(409,"Only the latest quotation awaiting approval can be finalized.");
       const snapshot=JSON.parse(JSON.stringify(q.snapshot));
-      const net=snapshot.footer.find((r:any)=>r.label==="Net Total");
-      const old=snapshot.footer.find((r:any)=>r.label==="Special Discount");
-      net.amount=new Decimal(net.amount).add(old.amount).sub(discount).toFixed(2);old.amount=new Decimal(discount).toFixed(2);snapshot.input.discount=old.amount;
+      const embeddedDiscount=snapshot.input.includeDiscountInSellingPrice===true;
+      const currentDiscount=snapshot.input.discount??"0";
+      if(embeddedDiscount&&!new Decimal(currentDiscount).eq(discount))throw new HttpError(422,"Change the discount in the revision quotation and regenerate the preview before approval.");
+      if(!embeddedDiscount){
+        const net=snapshot.footer.find((r:any)=>r.label==="Net Total");
+        const old=snapshot.footer.find((r:any)=>r.label==="Special Discount");
+        net.amount=new Decimal(net.amount).add(old.amount).sub(discount).toFixed(2);old.amount=new Decimal(discount).toFixed(2);snapshot.input.discount=old.amount;
+      }
+      const payable=snapshot.footer.find((r:any)=>r.label==="Net Total")?.amount??snapshot.footer.find((r:any)=>r.label==="Total")?.amount;
       const comparison=snapshot.revision?.comparison;
       if(comparison){
-        comparison.proposedPayable=net.amount;
-        comparison.proposedDiscount=old.amount;
-        if(comparison.previousPayable && !new Decimal(comparison.previousPayable).eq(net.amount) && !acknowledgePriceChange)
+        comparison.proposedPayable=payable;
+        comparison.proposedDiscount=embeddedDiscount?currentDiscount:snapshot.input.discount;
+        if(comparison.previousPayable && !new Decimal(comparison.previousPayable).eq(payable) && !acknowledgePriceChange)
           throw new HttpError(409,"Review and acknowledge the change in payable before final approval.");
       }
       snapshot.managementAdjustment={sourceQuotationId:id,remarks:notes};
