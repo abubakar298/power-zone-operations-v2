@@ -3,7 +3,7 @@
 Release scope: quotation preparation, management review and six-format comparison export.
 
 - Clearing an inline discount means zero and restores the gross payable.
-- Customer quotation line amounts and subtotals always show standard selling prices. An allowed discount is listed separately and deducted once from the gross payable; it does not rewrite the printed item prices.
+- By default, customer quotation rows and subtotals retain standard selling prices, and any allowed discount is listed separately and deducted once from the gross payable. On revisions, Atif can select “Add discount to selling price” to spread the discount proportionally over eligible items, protect solar panels, structure and earthing, recalculate GST, and remove the separate discount lines.
 - Description, date and validity edits retain the preview and refresh it automatically. Older preview responses cannot authorize a newer edit for saving.
 - Save quotation version preserves an immutable version. Save and send for approval additionally submits that saved version. If submission fails, the saved version remains available for retry using Send for approval.
 - The saved quotation view exposes workflow actions appropriate to the signed-in user and latest version. The server remains authoritative for identity, ownership and transition order.
