@@ -612,21 +612,16 @@ export function quote(
   bmsDescription?: string,
   currentCableRates?: Record<string, string>,
 ) {
-  if(p.discountStrategy||p.input.discountPercent!==undefined&&(D(input.discount??p.discount).gt(0)||p.input.roundedTotal!==undefined)){
-    const review=discountedSellingReview(p,input.discount??p.discount);
-    const adjusted={...p,input:{...p.input,discountPercent:undefined},rows:review.rows.map(row=>({...row,beforeTax:row.sellingAfterDiscount,tax:row.discountedTax,afterTax:row.discountedAfterTax,profit:money(D(row.sellingAfterDiscount).sub(row.cost))})),itemPricing:p.itemPricing?.map(item=>({...item,beforeTax:review.itemAllocations?.find(line=>line.key===item.key)?.beforeTax??money(D(item.beforeTax).mul(review.factor))})),subtotal:review.subtotal,solarTax:review.solarTax,otherTax:review.otherTax,tax:review.tax,total:review.netTotal,discount:'0.00',netTotal:review.netTotal};
-    const result=quoteBase(adjusted,boq,{...input,discount:'0'},bmsDescription,currentCableRates);
+  const requestedDiscount=input.discount??p.discount;
+  // Customer-facing item amounts always remain at the standard selling price.
+  // The footer applies the discount once to the gross payable, so line amounts
+  // and the standard-price subtotal continue to reconcile.
+  const result=quoteBase(p,boq,{...input,discount:requestedDiscount},bmsDescription,currentCableRates);
+  if(p.discountStrategy){
+    const review=discountedSellingReview(p,requestedDiscount);
     if(review.allocation)Object.assign(result,{discountAllocation:{...review.allocation,lines:review.allocation.lines.map(({cost,approvedAllowance,category,...safe})=>safe)}});
-    if(p.discountAuthorization)Object.assign(result,{discountAuthorization:{...p.discountAuthorization,requestedBeforeTax:review.discount,requiresManagementApproval:D(review.discount).gt(p.discountAuthorization.preapprovedBeforeTax)}});
-    const base=result.footer.find(row=>row.label===(p.input.taxMode==='Tax Included'?'Total':'Subtotal Before Tax'));
-    if(base)base.amount=p.input.taxMode==='Tax Included'?money(D(p.subtotal).add(review.tax)):p.subtotal;
-    const discountRow=result.footer.find(row=>row.label==='Special Discount');if(discountRow)discountRow.amount=review.discount;
-    if(!D(review.roundingAdjustment).isZero())result.footer.splice(result.footer.length-1,0,{label:'Rounding Adjustment',amount:review.roundingAdjustment});
-    result.input={...result.input,discount:review.discount};
-    return result as typeof result & {discountAuthorization?: NonNullable<PricingSnapshot['discountAuthorization']>;discountAllocation?:ReturnType<typeof allocateApprovedDiscount>};
   }
-  const result=quoteBase(p,boq,input,bmsDescription,currentCableRates);
-  if(p.discountAuthorization)Object.assign(result,{discountAuthorization:{...p.discountAuthorization,requestedBeforeTax:input.discount??p.discount,requiresManagementApproval:D(input.discount??p.discount).gt(p.discountAuthorization.preapprovedBeforeTax)}});
+  if(p.discountAuthorization)Object.assign(result,{discountAuthorization:{...p.discountAuthorization,requestedBeforeTax:requestedDiscount,requiresManagementApproval:D(requestedDiscount).gt(p.discountAuthorization.preapprovedBeforeTax)}});
   return result as typeof result & {discountAuthorization?: NonNullable<PricingSnapshot['discountAuthorization']>;discountAllocation?:ReturnType<typeof allocateApprovedDiscount>};
 }
 function quoteBase(p:PricingSnapshot,boq:BoqSnapshot,input:QuotationInput,bmsDescription?:string,currentCableRates?:Record<string,string>){
