@@ -20,7 +20,7 @@ import { quote } from "../commercial/engine.js";
 import { HttpError } from "../http/errors.js";
 import { allocateDiscount,allocateBeforeTaxDiscount } from "./allocation.js";
 import {discountedSellingReview} from '../commercial/engine.js';
-import {allocateApprovedDiscount,DISCOUNT_POLICY} from '../commercial/discount-strategy.js';
+import {allocateApprovedDiscount,distributeCents,DISCOUNT_POLICY} from '../commercial/discount-strategy.js';
 import { peachtreeDivision } from "./peachtree-v5.js";
 import {ptDetail} from './pt-detail.js';
 import type { OrderInput } from "./schema.js";
@@ -173,9 +173,31 @@ export class OrdersRepository {
           ? cashDeal(p.snapshot.input)?"0":extra.taxRate
           : p.snapshot.rows.find((r: any) => r.key === l.group).taxRate,
     }));
-    const beforeTaxDiscount=p.snapshot.input.discountPercent!==undefined && (new Decimal(footer('Special Discount')??'0').gt(0)||p.snapshot.input.roundedTotal!==undefined);
+    // A discount entered on the quotation replaces the pricing snapshot's
+    // discount. Keep that quote-level amount on the ordinary payable allocation
+    // path; otherwise a v5 pricing allowance can be mistaken for the accepted
+    // discount even though the saved quotation deliberately used a custom amount.
+    const customQuoteDiscount = source.input?.discount !== undefined &&
+      !new Decimal(source.input.discount).eq(p.snapshot.discount ?? "0");
+    const beforeTaxDiscount=!customQuoteDiscount && p.snapshot.input.discountPercent!==undefined && (new Decimal(footer('Special Discount')??'0').gt(0)||p.snapshot.input.roundedTotal!==undefined);
     let allocation: ReturnType<typeof allocateDiscount>;
-    if(source.discountAllocation?.policy===DISCOUNT_POLICY&&p.snapshot.discountStrategy?.version===DISCOUNT_POLICY){
+    if(source.discountPresentation==='included-in-selling-prices'){
+      if(fingerprint(source.discountAllocation)!==fingerprint((detailed as any).discountAllocation))throw new HttpError(422,IPO_ALLOCATION_PENDING);
+      // These accepted prices already contain the discount. The IPO must not
+      // deduct it a second time when allocating revenue and applicable GST.
+      if(["bess-only","direct-product"].includes(b.snapshot.survey.family)&&p.snapshot.itemPricing){
+        for(const reduction of source.discountAllocation.lines){
+          const members=lines.filter((line:any)=>line.group===reduction.group);
+          const shares=distributeCents(new Decimal(reduction.beforeTaxReduction).mul(100),members.map((line:any)=>new Decimal(line.beforeTax)));
+          members.forEach((line:any,index:number)=>{line.beforeTax=m(new Decimal(line.beforeTax).sub(shares[index].div(100)));});
+        }
+      }
+      const amount=(label:string)=>detailed.footer.find(row=>row.label===label)?.amount??'0.00';
+      const acceptedTotal=footer('Net Total')??footer('Total');
+      if(detailed.footer.at(-1)!.amount!==acceptedTotal)throw new HttpError(422,IPO_ALLOCATION_PENDING);
+      const acceptedTax=(rate:string)=>detailed.footer.filter(row=>new RegExp(`SALES TAX.*${rate}%`).test(row.label)).reduce((sum,row)=>sum.add(row.amount),new Decimal(0)).toFixed(2);
+      allocation=allocateDiscount(lines,amount('Subtotal Before Tax'),acceptedTax('10'),acceptedTax('18'),'0.00',acceptedTotal,cashDeal(p.snapshot.input));
+    }else if(source.discountAllocation?.policy===DISCOUNT_POLICY&&p.snapshot.discountStrategy?.version===DISCOUNT_POLICY){
       const accepted=allocateApprovedDiscount(p.snapshot.discountStrategy,source.discountAllocation.discount,p.snapshot.input.roundedTotal);
       const safe={...accepted,lines:accepted.lines.map(({cost,approvedAllowance,category,...line})=>line)};
       if(fingerprint(safe)!==fingerprint(source.discountAllocation)||accepted.total!==footer('Net Total'))throw new HttpError(422,'Saved accepted discount allocation does not reconcile with this quotation.');
@@ -192,7 +214,7 @@ export class OrdersRepository {
       // Never retrofit the new two-layer policy into their immutable snapshots.
       if(p.snapshot.engineVersion!==4)throw new HttpError(422,IPO_ALLOCATION_PENDING);
       const original=quote({...p.snapshot,input:{...p.snapshot.input,presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',roundedTotal:undefined}},b.snapshot,{pricingId:p.id,...source.input,discount:'0',additionalItem:extra});
-      const accepted=discountedSellingReview(p.snapshot,footer('Special Discount')??'0');
+      const accepted=discountedSellingReview(p.snapshot,source.input?.discount??footer('Special Discount')??'0');
       if(accepted.netTotal!==footer('Net Total'))throw new HttpError(422,IPO_ALLOCATION_PENDING);
       const originalLines=['bess-only','direct-product'].includes(b.snapshot.survey.family)&&p.snapshot.itemPricing?p.snapshot.itemPricing.map((l:any)=>{const item=b.snapshot.lines.find((x:any)=>x.key===l.key);return {description:item.description,qty:item.qty,unit:item.unit,group:l.group,beforeTax:l.beforeTax,taxRate:l.taxRate};}):original.lines.map(l=>({description:l.description,qty:l.qty,unit:l.unit,group:l.group,beforeTax:l.amount!,taxRate:p.snapshot.rows.find((r:any)=>r.key===l.group).taxRate}));
       try{allocation=allocateBeforeTaxDiscount(originalLines,subtotal,tax10,tax18,accepted.discount,footer('Net Total'),accepted.solarTax,accepted.otherTax);}catch(error){if(error instanceof HttpError&&error.status===422)throw new HttpError(422,IPO_ALLOCATION_PENDING);throw error;}

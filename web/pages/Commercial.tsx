@@ -729,6 +729,11 @@ export function Commercial({
     setKey(crypto.randomUUID());
   }
   function changeQuotationDiscount(value: string) {
+    if(quoteInput?.includeDiscountInSellingPrice){
+      quoteChange({discount:value});
+      setNotice('Preview the quotation to recalculate selling prices and GST.');
+      return;
+    }
     ++previewSequence.current;
     if (!quoteInput || !quotePreview) return;
     setDirty(true);
@@ -1259,6 +1264,14 @@ export function Commercial({
                   />
                 </label>
               </div>
+              {quoteInput.revisionRequestId&&session.user.role==='Coordinator'&&<fieldset className="pz-form-section">
+                <legend>Discount presentation</legend>
+                <label>
+                  <input type="checkbox" checked={!!quoteInput.includeDiscountInSellingPrice} onChange={e=>quoteChange({includeDiscountInSellingPrice:e.target.checked})}/>
+                  Add discount to selling price
+                </label>
+                <small>When selected, the approved and special discount is spread proportionally across eligible items. Solar panels, structure and earthing keep their standard prices, GST is recalculated, and separate discount lines are removed.</small>
+              </fieldset>}
               <h3>Customer-facing descriptions</h3>
               <p>
                 These use the quotation reference wording. Detailed BOQ

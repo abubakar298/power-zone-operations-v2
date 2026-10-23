@@ -1,3 +1,4 @@
+import {openWorkspaceSection} from './navigation.js';
 import { test, expect } from "@playwright/test";
 test("Reviewed UBL batch imports once, retains survey stage and exposes evidence-aware site controls", async ({
   page,
@@ -20,9 +21,7 @@ test("Reviewed UBL batch imports once, retains survey stage and exposes evidence
     .getByLabel("Password", { exact: true })
     .fill("browser-test-passphrase-298");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page
-    .getByRole("button", { name: "UBL Site Workflow", exact: true })
-    .click();
+  await openWorkspaceSection(page,'UBL Site Workflow');
   await page
     .getByRole("button", { name: "Import reviewed 36-site batch", exact: true })
     .click();
@@ -62,7 +61,7 @@ test("Reviewed UBL batch imports once, retains survey stage and exposes evidence
   const download = page.waitForEvent("download");
   await page.getByRole("link", { name: "Survey intake · version 1" }).click();
   expect((await download).suggestedFilename()).toContain(
-    "UBL-2496-Survey-intake",
+    "UBL - Ameen Wilayatabad, Multan 2496 - Report",
   );
   await page
     .getByRole("button", { name: "Back to UBL workflow", exact: false })
@@ -77,14 +76,14 @@ test("Reviewed UBL batch imports once, retains survey stage and exposes evidence
   await page.getByRole("button", {name:"Open site",exact:true}).click();
   await page.getByRole("button", {name:"Send review-only IPO / PT sample to Accounts",exact:true}).click();
   await expect(page.getByRole("link",{name:"IPO / PT review sample · version 1"})).toBeVisible();
-  await page.getByRole("button", {name:"Accounts workspace",exact:true}).click();
+  await openWorkspaceSection(page, 'Accounts workspace');
   await page.getByRole("button", {name:"IPOs to review 1",exact:true}).click();
   await page.getByRole("button", {name:"Review IPO & PT",exact:true}).click();
   await expect(page.getByRole("img",{name:"IPO and PT · page 1"})).toBeVisible();
   await page.getByLabel("Accounts review remarks / revision reason").fill("Review sample layout accepted");
   await page.getByRole("button",{name:"Approve IPO",exact:true}).click();
   await expect(page.getByRole("status").filter({hasText:"Approved sample"})).toBeVisible();
-  await page.getByRole("button",{name:"UBL Site Workflow",exact:true}).click();
+  await openWorkspaceSection(page,'UBL Site Workflow');
   await expect(page.getByRole("button",{name:"Heads-up Received—Preparation Pending 10",exact:true})).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page
