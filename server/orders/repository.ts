@@ -173,7 +173,13 @@ export class OrdersRepository {
           ? cashDeal(p.snapshot.input)?"0":extra.taxRate
           : p.snapshot.rows.find((r: any) => r.key === l.group).taxRate,
     }));
-    const beforeTaxDiscount=p.snapshot.input.discountPercent!==undefined && (new Decimal(footer('Special Discount')??'0').gt(0)||p.snapshot.input.roundedTotal!==undefined);
+    // A discount entered on the quotation replaces the pricing snapshot's
+    // discount. Keep that quote-level amount on the ordinary payable allocation
+    // path; otherwise a v5 pricing allowance can be mistaken for the accepted
+    // discount even though the saved quotation deliberately used a custom amount.
+    const customQuoteDiscount = source.input?.discount !== undefined &&
+      !new Decimal(source.input.discount).eq(p.snapshot.discount ?? "0");
+    const beforeTaxDiscount=!customQuoteDiscount && p.snapshot.input.discountPercent!==undefined && (new Decimal(footer('Special Discount')??'0').gt(0)||p.snapshot.input.roundedTotal!==undefined);
     let allocation: ReturnType<typeof allocateDiscount>;
     if(source.discountAllocation?.policy===DISCOUNT_POLICY&&p.snapshot.discountStrategy?.version===DISCOUNT_POLICY){
       const accepted=allocateApprovedDiscount(p.snapshot.discountStrategy,source.discountAllocation.discount,p.snapshot.input.roundedTotal);
