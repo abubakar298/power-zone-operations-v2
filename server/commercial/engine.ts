@@ -614,13 +614,14 @@ export function quote(
 ) {
   const requestedDiscount=input.discount??p.discount;
   // Customer-facing item amounts always remain at the standard selling price.
-  // The footer applies the discount once to the gross payable, so line amounts
-  // and the standard-price subtotal continue to reconcile.
+  // Keep the discount separate from the standard-price line amounts and subtotal.
   const result=quoteBase(p,boq,{...input,discount:requestedDiscount},bmsDescription,currentCableRates);
-  if(p.discountStrategy){
-    const review=discountedSellingReview(p,requestedDiscount);
-    if(review.allocation)Object.assign(result,{discountAllocation:{...review.allocation,lines:review.allocation.lines.map(({cost,approvedAllowance,category,...safe})=>safe)}});
-  }
+  // Keep standard prices in the visible rows, but calculate the payable using
+  // the approved discount allocation and saved tax treatment.
+  const review=discountedSellingReview(p,requestedDiscount);
+  const netTotal=result.footer.find(row=>row.label==='Net Total');
+  if(netTotal)netTotal.amount=review.netTotal;
+  if(review.allocation)Object.assign(result,{discountAllocation:{...review.allocation,lines:review.allocation.lines.map(({cost,approvedAllowance,category,...safe})=>safe)}});
   if(p.discountAuthorization)Object.assign(result,{discountAuthorization:{...p.discountAuthorization,requestedBeforeTax:requestedDiscount,requiresManagementApproval:D(requestedDiscount).gt(p.discountAuthorization.preapprovedBeforeTax)}});
   return result as typeof result & {discountAuthorization?: NonNullable<PricingSnapshot['discountAuthorization']>;discountAllocation?:ReturnType<typeof allocateApprovedDiscount>};
 }
