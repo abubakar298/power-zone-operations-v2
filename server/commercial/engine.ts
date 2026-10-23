@@ -613,8 +613,7 @@ export function quote(
   currentCableRates?: Record<string, string>,
 ) {
   const requestedDiscount = input.discount ?? p.discount;
-  // Keep standard selling prices and subtotal on the customer-facing rows.
-  // Apply the entered discount once against the gross payable total.
+  // Customer-facing rows and subtotal always retain standard selling prices.
   const result = quoteBase(
     p,
     boq,
@@ -622,6 +621,26 @@ export function quote(
     bmsDescription,
     currentCableRates,
   );
+  // Pricing-approved discounts follow their saved tax allocation. A custom
+  // quote discount is a deduction from the gross payable in quoteBase.
+  const followsPricingAllocation =
+    Boolean(p.discountStrategy) ||
+    (p.input.discountPercent !== undefined &&
+      (D(requestedDiscount).gt(0) || p.input.roundedTotal !== undefined));
+  if (followsPricingAllocation) {
+    const review = discountedSellingReview(p, requestedDiscount);
+    const netTotal = result.footer.find((row) => row.label === "Net Total");
+    if (netTotal) netTotal.amount = review.netTotal;
+    if (review.allocation)
+      Object.assign(result, {
+        discountAllocation: {
+          ...review.allocation,
+          lines: review.allocation.lines.map(
+            ({ cost, approvedAllowance, category, ...safe }) => safe,
+          ),
+        },
+      });
+  }
   if (p.discountAuthorization)
     Object.assign(result, {
       discountAuthorization: {
