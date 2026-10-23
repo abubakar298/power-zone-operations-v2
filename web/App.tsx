@@ -17,7 +17,7 @@ export function App() {
   const [pricingCarryLink]=useState(()=>{const token=new URLSearchParams(window.location.search).get('pricingPreviewToken');return token&&/^[0-9a-f-]{36}$/i.test(token)?`?pricingPreviewToken=${token}#workspace=pricing`:'';});
   const [notificationLink] = useState(()=>{
     const hash=window.location.hash,params=new URLSearchParams(hash.slice(1));
-    return /^#notification=[0-9a-f-]{36}$/i.test(hash)||["dashboard","projects","documents","ubl","ubl-workflow"].includes(params.get("workspace")??"")?hash:"";
+    return /^#notification=[0-9a-f-]{36}$/i.test(hash)||["dashboard","projects","documents","ubl","ubl-workflow","account","team","masters","boqs","newboq","pricing","quotes","orders","reports","rates","coordination","design","operations","inventory","finance","alerts","ubl-ups","mbl-ups","bafl-solar"].includes(params.get("workspace")??"")?hash:"";
   });
   const [state, setState] = useState<State>({ kind: "loading" });
   const [linkPage, setLinkPage] = useState(

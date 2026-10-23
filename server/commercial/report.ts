@@ -27,7 +27,7 @@ function appendQuotation(
   label?: string,
 ) {
   // Promotional presentation only. The immutable net/tax basis remains unchanged for review and IPO/PT.
-  if(s.standardDiscountStrategy && s.standardDiscountStrategy.version !== 'PZ-STANDARD-DISCOUNT-2'){
+  if(s.standardDiscountStrategy && s.standardDiscountStrategy.version !== 'PZ-STANDARD-DISCOUNT-2' && (s as any).discountPresentation !== 'included-in-selling-prices'){
     const D=Decimal;
     const included=s.footer.some(r=>r.label==="Total");
     const groups=s.standardDiscountStrategy.groups.map(g=>({...g,amount:new D(g.beforeTax).mul(included?new D(g.taxRate).div(100).add(1):1).toDecimalPlaces(2,Decimal.ROUND_HALF_UP)}));
@@ -49,7 +49,8 @@ function appendQuotation(
   }
   if(s.discountAuthorization){
     const allowance=new Decimal(s.discountAuthorization.preapprovedBeforeTax),requested=new Decimal(s.discountAuthorization.requestedBeforeTax);
-    const approved=Decimal.min(allowance,requested),special=Decimal.max(0,requested.sub(allowance));
+    const displayed=(s as any).displayDiscountBreakdown;
+    const approved=displayed?new Decimal(displayed.approved):Decimal.min(allowance,requested),special=displayed?new Decimal(displayed.special):Decimal.max(0,requested.sub(allowance));
     const footer=s.footer.flatMap(row=>row.label==='Special Discount'?[{label:'Approved Discount',amount:approved.toFixed(2)},...(special.gt(0)?[{label:'Management Special Discount',amount:special.toFixed(2)}]:[])]:[row]);
     s={...s,footer};
   }

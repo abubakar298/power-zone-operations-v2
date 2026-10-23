@@ -1,8 +1,8 @@
 {
-  "version": 3,
-  "fingerprint": "5a30f475211e6640d9f06b4966bd78891e7162cca3eefacacb0c520ef9075015",
+  "version": 4,
+  "fingerprint": "d8f94764ed030b1500afa3cd514ae0969aa52bbbd389ff8071fc7b6cd50eacb3",
   "files": {
-    "server/commercial/report.ts": "62db8e4f3cccd36107cf99b834579705d0a6725d65303bf00bba47b98f3ab1c2",
+    "server/commercial/report.ts": "a473c0c0f92d4f0d3bafc6b12b1223a6e0485e447c4878b5e826f47ab94d19cd",
     "server/commercial/quotation-rows.ts": "ce0aeccd27e5775f37bdb398ff7c740d98c85ac7b2a7064b1fc6317bb527aeee",
     "server/commercial/cni-report.ts": "7e802c3cd8c4b06c0d36dabcdeba9441a41632e33e2e3ea37a7e59186379326f",
     "server/commercial/cni-approved-report.ts": "bd71f08bb76963be48a711b563f5845c97efe96e7af50d8592f56a0301bcdc7d",
@@ -18,6 +18,6 @@
     "server/reports/branding.ts": "15dc0b5aa21f55a893ca90abee7402d42dfa3f8a07e16e908cd3c24e53a7840a",
     "server/reports/brand-assets.ts": "942554f9f269c7dfea745e6a835c5f24a2402f54287323b54fb452ce4f60c7e0"
   },
-  "previousVersionManifest": "data/finalized-document-formats-v2.json",
-  "change": "Owner requested item database commercial descriptions in new quotations across families; C&I commercial labels freeze exact CH-CNI-125-261 wording. Historical snapshots fall back to previous wording; technical pages unchanged."
+  "previousVersionManifest": "data/finalized-document-formats-v3.json",
+  "change": "Owner approved standard selling-price rows and the optional revision discount-in-price presentation on 23 October 2026. Discount and GST display reconcile with the accepted payable; previous renderer and format manifest remain archived."
 }

@@ -330,6 +330,12 @@ export function Dashboard({
         return;
       }
       if(!departmentUser)setDepartmentView(undefined);
+      // Restore authorized workspace links after a reload as well as sidebar navigation.
+      const linkedRoles:Record<string,string[]>={account:['Admin','Management','Coordinator','Design','Operations','Inventory','Accounts'],team:['Admin'],boqs:['Admin','Management','Coordinator','Design'],pricing:['Admin','Management','Coordinator'],quotes:['Admin','Management','Coordinator'],orders:['Admin','Management','Coordinator','Accounts'],reports:['Admin','Management','Accounts','Inventory'],rates:['Admin','Management']};
+      if(destination&&linkedRoles[destination]?.includes(session.user.role)){
+        setView(destination as typeof view);return;
+      }
+
       if(destination === "alerts" && ["Admin","Management","Accounts"].includes(session.user.role)){setView("alerts");return;}
       if (
         destination === "masters" && ["Admin", "Management", "Coordinator"].includes(session.user.role)

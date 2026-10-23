@@ -1,4 +1,4 @@
-import {openWorkspaceSection} from "./navigation.js";
+import {chooseBrand,openBoqSection,openWorkspaceSection} from "./navigation.js";
 import { test, expect } from '@playwright/test';
 for (const quick of [false, true]) test(`Single-phase ${quick ? 'Quick BOQ' : 'survey'} costing preview and quotation preparation`, async ({page}) => {
   const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? '3180'}`;
@@ -15,20 +15,21 @@ for (const quick of [false, true]) test(`Single-phase ${quick ? 'Quick BOQ' : 's
   await page.getByLabel('New site name',{exact:true}).fill(`SP isolated ${quick?'quick':'survey'}`);
   await page.getByLabel('Site code',{exact:true}).fill(quick?'SPQ':'SPS');
   await page.getByLabel('Location',{exact:true}).fill('Isolated test');
+  await openBoqSection(page,2);
   await page.getByLabel('Panel quantity',{exact:true}).fill('20');
   await page.getByLabel('Panel wattage (W)',{exact:true}).fill('645');
   await page.getByLabel('BESS configuration',{exact:true}).selectOption('6-25');
   await expect(page.getByLabel('Inverter termination · 16 mm² 4-core (m)',{exact:true})).toHaveCount(0);
   if (!quick) await page.getByLabel('10mm² 1-core AC cable · load-panel termination (m)',{exact:true}).fill('25');
-  else await expect(page.getByText(/20 m inverter termination \+ 40 m load-panel conductors/)).toBeVisible();
+  else {await expect(page.getByLabel('AC cable · inverter termination · 10mm² 1-core (m)',{exact:true})).toHaveValue('20');await expect(page.getByLabel('10mm² 1-core AC cable · load-panel termination (m)',{exact:true})).toHaveValue('40');}
   for (const [field,label] of [['Solar Panel brand','Any of the Above'],['Inverter brand','Chint Power'],['Battery & BMS brand','Chint Power'],['Cable brand','Newage Cables'],['Switchgear brand','CHINT']])
-    await page.getByLabel(field,{exact:true}).selectOption({label});
+    await chooseBrand(page,field,label);
   const response=page.waitForResponse(r=>r.url().endsWith('/api/boqs/preview')&&r.request().method()==='POST');
   await page.getByRole('button',{name:'Calculate & review BOQ',exact:true}).click();
   const result=await response;expect(result.status()).toBe(200);
   const {snapshot}=await result.json();
   const line=(key:string)=>snapshot.lines.find((l:any)=>l.key===key);
-  expect(line('HYB-SP-006').total).toBe('230179');
+  expect(line('HYB-SP-006').total).toBeNull();expect(snapshot.costVisibility).toBeTruthy();
   expect(line('BAT-LV-05 KW WO BMS').qty).toBe('5');
   expect(line('CH-BMS-LV').qty).toBe('2');
   expect(line('10mm² 1C AC Cable').qty).toBe(quick?'60':'45');

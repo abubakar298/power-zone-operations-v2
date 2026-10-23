@@ -474,7 +474,7 @@ test("quotation discount overrides pricing without changing the saved pricing or
   );
   assert.equal(
     preview.snapshot.footer.at(-1).amount,
-    discountedSellingReview(pricing.snapshot,"1000.50").netTotal,
+    new Decimal(pricing.snapshot.total).minus("1000.50").toFixed(2),
   );
   const saved = (
     await post("/quotations", {
@@ -501,7 +501,7 @@ test("quotation discount overrides pricing without changing the saved pricing or
   await post("/quotations/preview", {
     ...input,
     discount: "999999999999",
-  }).expect(422);
+  }).expect(400);
   await post("/quotations/preview", { ...input, discount: "-1" }).expect(400);
   await post("/quotations", {
     ...input,
@@ -1126,7 +1126,7 @@ test("revision routing requires approved separate costing and preserves origin, 
   );
 });
 
-test("presentation-only pricing changes preserve original margins and payable across six variants", () => {
+test("standard selling prices and one discount reconcile across six quote variants", async () => {
   const basis = inputs();
   const original = price(boq.snapshot, boq.number, basis);
   for (const presentation of [
@@ -1152,12 +1152,97 @@ test("presentation-only pricing changes preserve original margins and payable ac
         proposedBy: "Atif Hameed",
         discount: "11800",
       });
+      const amountLines = q.lines.filter((line) => line.amount !== undefined);
+      if (presentation !== "No Breakup")
+        assert.equal(
+          amountLines.reduce((sum, line) => sum.add(line.amount!), new Decimal(0)).toFixed(2),
+          taxMode === "Tax Included" ? p.total : p.subtotal,
+          `${presentation} ${taxMode}: printed item amounts must remain standard selling prices`,
+        );
+      assert.equal(
+        q.footer.find((row) => row.label === (taxMode === "Tax Included" ? "Total" : "Subtotal Before Tax"))!.amount,
+        taxMode === "Tax Included" ? p.total : p.subtotal,
+      );
+      assert.equal(q.footer.find((row) => row.label === "Special Discount")!.amount, "11800.00");
       assert.equal(
         q.footer.at(-1)!.amount,
         new Decimal(original.total).minus("11800").toFixed(2),
       );
+
+      const embeddedQuote=quote(p,boq.snapshot,{
+        pricingId:randomUUID(),revisionRequestId:randomUUID(),quotedDate:"2026-10-06",validity:"7 Days",proposedBy:"Atif Hameed",discount:"11800",includeDiscountInSellingPrice:true,
+      });
+      await mkdir('.local/quotation-qa',{recursive:true});
+      await writeFile(`.local/quotation-qa/embedded-${presentation.replaceAll(' ','-')}-${taxMode==='Tax Included'?'included':'separate'}.pdf`,buildQuotationPdf(embeddedQuote));
+      assert.equal(embeddedQuote.footer.some(row=>/discount/i.test(row.label)),false,`${presentation} ${taxMode}: embedded discounts have no separate discount footer row`);
+      const originalLinesByGroup=new Map<string,string>();
+      for(const line of q.lines)if(line.amount!==undefined)originalLinesByGroup.set(line.group,(new Decimal(originalLinesByGroup.get(line.group)??0).add(line.amount)).toFixed(2));
+      for(const group of ["solar","structure","earthing"]){
+        const before=originalLinesByGroup.get(group),after=embeddedQuote.lines.filter(line=>line.group===group&&line.amount!==undefined).reduce((sum,line)=>sum.add(line.amount!),new Decimal(0)).toFixed(2);
+        assert.equal(after,before??"0.00",`${presentation} ${taxMode}: ${group} stays at standard price`);
+      }
+      if(taxMode==="Tax Included"){
+        assert.equal(embeddedQuote.footer.length,1);
+        assert.equal(embeddedQuote.footer[0].label,"Total");
+      }else{
+        const subtotal=embeddedQuote.footer.find(row=>row.label==="Subtotal Before Tax")!.amount;
+        const taxTotal=embeddedQuote.footer.filter(row=>/SALES TAX/.test(row.label)).reduce((sum,row)=>sum.add(row.amount),new Decimal(0));
+        assert.equal(embeddedQuote.footer.at(-1)!.label,"Net Total");
+        assert.equal(embeddedQuote.footer.at(-1)!.amount,new Decimal(subtotal).add(taxTotal).toFixed(2));
+      }
+      if(presentation!=="No Breakup"){
+        const amountLines=embeddedQuote.lines.filter(line=>line.amount!==undefined);
+        const displayedTotal=amountLines.reduce((sum,line)=>sum.add(line.amount!),new Decimal(0)).toFixed(2);
+        assert.equal(displayedTotal,taxMode==="Tax Included"?embeddedQuote.footer[0].amount:embeddedQuote.footer.find(row=>row.label==="Subtotal Before Tax")!.amount);
+      }
+
+      const percentPriced = price(boq.snapshot, boq.number, {
+        ...basis,
+        presentation,
+        taxMode,
+        discountPercent: "1",
+      });
+      const percentQuote = quote(percentPriced, boq.snapshot, {
+        pricingId: randomUUID(),
+        quotedDate: "2026-10-06",
+        validity: "7 Days",
+        proposedBy: "Atif Hameed",
+      });
+      assert.equal(
+        percentQuote.footer.find((row) => row.label === "Special Discount")!.amount,
+        new Decimal(percentQuote.footer[0].amount)
+          .add(percentQuote.footer.filter(row=>/SALES TAX/.test(row.label)).reduce((sum,row)=>sum.add(row.amount),new Decimal(0)))
+          .sub(percentPriced.netTotal).toFixed(2),
+      );
+      assert.equal(
+        percentQuote.footer.at(-1)!.amount,
+        percentPriced.netTotal,
+        `${presentation} ${taxMode}: a percentage discount is applied once`,
+      );
+
+      const roundedTarget = new Decimal(percentPriced.total)
+        .minus("100000")
+        .toFixed(2);
+      const roundedPricing = price(boq.snapshot, boq.number, {
+        ...basis,
+        presentation,
+        taxMode,
+        roundedTotal: roundedTarget,
+      });
+      const roundedQuote = quote(roundedPricing, boq.snapshot, {
+        pricingId: randomUUID(),
+        quotedDate: "2026-10-06",
+        validity: "7 Days",
+        proposedBy: "Atif Hameed",
+      });
+      assert.equal(
+        roundedQuote.footer.at(-1)!.amount,
+        roundedTarget,
+        `${presentation} ${taxMode}: rounding is included in the one discount`,
+      );
     }
 });
+
 
 test("Operations issuance requires saved IPO, freezes exact approved requirements, and is immutable and retry safe", async () => {
   const ipo = (
@@ -1906,3 +1991,29 @@ test("external chat approvals require owned screenshots and exact submitted vers
     1,
   );
 });
+
+test('saved discount-in-price revisions retain six-format PDFs and convert to IPO without a second discount', async () => {
+  const {OrdersRepository}=await import('../server/orders/repository.js');
+  const {orderSchema}=await import('../server/orders/schema.js');
+  const {CommercialRepository}=await import('../server/commercial/repository.js');
+  for(const presentation of ['No Breakup','Basic Breakup','Full Breakup'] as const){
+    for(const taxMode of ['Tax Included','Show Sales Tax Separately'] as const){
+      const pi={...inputs(),presentation,taxMode,discountMode:'Custom',discountPercent:'0'};
+      const pp=(await post('/pricing/preview',pi).expect(200)).body;
+      const ps=(await post('/pricing',{...pi,fingerprint:pp.fingerprint,requestKey:randomUUID()}).expect(201)).body;
+      const latest=(await db.pool.query('SELECT id FROM quotation_versions WHERE boq_revision_id=$1 ORDER BY version DESC LIMIT 1',[boq.id])).rows[0];
+      const qi={pricingId:ps.id,revisionRequestId:await commercialRevision(latest.id),quotedDate:'2026-10-23',validity:'7 Days',proposedBy:'Atif Hameed',discount:'11800',includeDiscountInSellingPrice:true,acknowledgePriceChange:true};
+      const qp=(await post('/quotations/preview',qi).expect(200)).body;
+      const saved=await new CommercialRepository(db.pool).quotationSave(adminId,quotationSchema.parse(qi),qp.fingerprint,randomUUID());
+      assert.equal(saved.snapshot.input.includeDiscountInSellingPrice,true);
+      const variants=await new CommercialRepository(db.pool).quotationVariants(adminId,saved.id);
+      assert.equal(variants.variants.length,6);
+      for(const variant of variants.variants)assert.equal(variant.snapshot.footer.at(-1)!.amount,saved.snapshot.footer.at(-1)!.amount);
+      const order=await new OrdersRepository(db.pool).preview(adminId,orderSchema.parse({quotationId:saved.id,evidenceType:'Written approval',evidenceNotes:'Read-only discount-in-price regression',orderDate:'2026-10-23',invoiceCompany:'PZES (PVT Ltd)',salesPerson:'Atif Hameed',customerAccepted:true}),db.pool,true);
+      assert.equal(order.snapshot.allocation.total,saved.snapshot.footer.at(-1)!.amount);
+      assert.equal(order.snapshot.allocation.originalDiscount,'0.00');
+      assert.equal(order.snapshot.peachtree.ipoPayable,saved.snapshot.footer.at(-1)!.amount);
+    }
+  }
+});
+

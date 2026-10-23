@@ -59,6 +59,7 @@ export const quotationSchema = z.object({
   revisionRequestId: z.uuid().optional(),
   pricingId: z.uuid(),
   discount: amount.optional(),
+  includeDiscountInSellingPrice: z.boolean().optional(),
   quotedDate: z.iso.date(),
   additionalItem: z
     .object({

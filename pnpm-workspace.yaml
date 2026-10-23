@@ -1,5 +1,7 @@
 packages:
   - .
+overrides:
+  dompurify: 3.4.17
 allowBuilds:
   esbuild: true
   embedded-postgres: true

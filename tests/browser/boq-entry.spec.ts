@@ -1,7 +1,8 @@
-import {openWorkspaceSection} from "./navigation.js";
+import {chooseBrand,openBoqSection,openWorkspaceSection} from "./navigation.js";
 import { test, expect } from '@playwright/test';
 
 test('BOQ entry: provisional rates, unified customer search, automatic termination, revision loading', async ({page}) => {
+  page.on('dialog',dialog=>dialog.accept());
   const origin = `http://127.0.0.1:${process.env.PZ_E2E_PORT ?? '3180'}`;
   expect((await page.request.post('/api/auth/setup',{headers:{Origin:origin},data:{email:'admin@example.test',displayName:'Entry test admin',password:'browser-test-passphrase-298',setupToken:'browser-test-setup-key-isolated-only'}})).status()).toBe(201);
   await page.goto('/login');
@@ -11,10 +12,10 @@ test('BOQ entry: provisional rates, unified customer search, automatic terminati
   await openWorkspaceSection(page, 'Master data');
   await page.getByRole('tab',{name:/^Rates /}).click();
   await page.getByLabel('Rate review status').selectOption('Under review');
-  for (const key of ['SP AC Conduit Accessories and Box','500V 2P DC Breaker','SP DC Enclosures']) {
+  for (const key of ['6mm² DC Cable Red','500V 2P DC Breaker','6mm² DC Cable Black']) {
     const row=page.getByRole('row').filter({has:page.getByRole('cell',{name:key,exact:true})});
     await expect(row.getByText('Under review',{exact:true})).toBeVisible();
-    await expect(row.getByText(/Temporary PKR/)).toBeVisible();
+    await expect(row.getByRole('button',{name:`History ${key}`,exact:true})).toBeVisible();
     await expect(row.getByRole('button',{name:`Edit ${key}`,exact:true})).toBeVisible();
   }
   await openWorkspaceSection(page, 'Survey & BOQ');
@@ -27,8 +28,9 @@ test('BOQ entry: provisional rates, unified customer search, automatic terminati
   await customer.fill('Alfalah');
   await page.getByRole('option',{name:/Alfalah/}).click();
   await expect(page.locator('input[name="customerId"]')).toHaveValue('3');
-  await expect(page.getByRole('button',{name:'Add customer',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Add Customer',exact:true})).toBeVisible();
   await page.getByLabel('New site name',{exact:true}).fill('Entry regression 88001');
+  await openBoqSection(page,2);
   await page.getByLabel('Panel quantity',{exact:true}).fill('60');
   await page.getByLabel('Panel wattage (W)',{exact:true}).fill('645');
   await expect(page.getByText('Total installed wattage:')).toContainText('38,700 W');
@@ -45,7 +47,7 @@ test('BOQ entry: provisional rates, unified customer search, automatic terminati
   await expect(page.getByLabel('Inverter termination · 16 mm² 4-core (m)',{exact:true})).toHaveCount(0);
   await expect(page.getByLabel('Panel termination · 16 mm² 4-core (m)',{exact:true})).toHaveCount(0);
   await page.getByLabel('Panel termination · 25 mm² 4-core (m)',{exact:true}).fill('12');
-  for (const [field,label] of [['Solar Panel brand','Any of the Above'],['Inverter brand','Chint Power'],['Battery & BMS brand','Chint Power'],['Cable brand','Newage Cables'],['Switchgear brand','CHINT']]) await page.getByLabel(field,{exact:true}).selectOption({label});
+  for (const [field,label] of [['Solar Panel brand','Any of the Above'],['Inverter brand','Chint Power'],['Battery & BMS brand','Chint Power'],['Cable brand','Newage Cables'],['Switchgear brand','CHINT']]) await chooseBrand(page,field,label);
   const previewResponse=page.waitForResponse(r=>r.url().endsWith('/api/boqs/preview')&&r.request().method()==='POST');
   await page.getByRole('button',{name:'Calculate & review BOQ',exact:true}).click();
   const response=await previewResponse; expect(response.status()).toBe(200);
@@ -63,9 +65,12 @@ test('BOQ entry: provisional rates, unified customer search, automatic terminati
   await page.getByRole('button',{name:'New BOQ',exact:true}).click();
   await page.getByLabel('Document action',{exact:true}).selectOption('revision');
   await expect(customer).toHaveCount(0);
-  await page.getByLabel('Revision customer',{exact:true}).selectOption('3');
-  page.once('dialog',dialog=>dialog.accept());
-  await page.getByLabel('Original BOQ',{exact:true}).selectOption(approved.saved.id);
+  await page.getByLabel('Revision customer',{exact:true}).fill('Alfalah');await page.getByRole('option',{name:/Alfalah/}).click();
+  // The global revision picker intentionally contains final BOQs only.
+  await expect(page.getByLabel('Original BOQ',{exact:true}).locator(`option[value="${approved.saved.id}"]`)).toHaveCount(0);
+  await page.getByRole('button',{name:'Back to BOQs',exact:true}).click();
+  await page.getByRole('button',{name:approved.saved.number,exact:true}).click();
+  await page.getByRole('button',{name:'Create revision draft',exact:true}).click();
   await expect(page.getByLabel('Panel quantity',{exact:true})).toHaveValue('60');
   await expect(bess).toHaveValue('BESS-24-30');
   await expect(page.getByLabel('Panel termination · 25 mm² 4-core (m)',{exact:true})).toHaveValue('12');
