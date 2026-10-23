@@ -474,7 +474,7 @@ test("quotation discount overrides pricing without changing the saved pricing or
   );
   assert.equal(
     preview.snapshot.footer.at(-1).amount,
-    discountedSellingReview(pricing.snapshot,"1000.50").netTotal,
+    new Decimal(pricing.snapshot.total).minus("1000.50").toFixed(2),
   );
   const saved = (
     await post("/quotations", {
@@ -501,7 +501,7 @@ test("quotation discount overrides pricing without changing the saved pricing or
   await post("/quotations/preview", {
     ...input,
     discount: "999999999999",
-  }).expect(422);
+  }).expect(400);
   await post("/quotations/preview", { ...input, discount: "-1" }).expect(400);
   await post("/quotations", {
     ...input,
@@ -1126,7 +1126,7 @@ test("revision routing requires approved separate costing and preserves origin, 
   );
 });
 
-test("presentation-only pricing changes preserve original margins and payable across six variants", () => {
+test("standard selling prices and one discount reconcile across six quote variants", () => {
   const basis = inputs();
   const original = price(boq.snapshot, boq.number, basis);
   for (const presentation of [
@@ -1142,9 +1142,6 @@ test("presentation-only pricing changes preserve original margins and payable ac
         ...basis,
         presentation,
         taxMode,
-        // Exercise the quotation's discount allocation path, which used to
-        // replace standard customer line amounts with reduced selling values.
-        discountPercent: "1",
       });
       assert.equal(p.total, original.total);
       assert.deepEqual(p.rows, original.rows);
@@ -1170,6 +1167,74 @@ test("presentation-only pricing changes preserve original margins and payable ac
       assert.equal(
         q.footer.at(-1)!.amount,
         new Decimal(original.total).minus("11800").toFixed(2),
+      );
+
+      const embeddedQuote=quote(p,boq.snapshot,{
+        pricingId:randomUUID(),revisionRequestId:randomUUID(),quotedDate:"2026-10-06",validity:"7 Days",proposedBy:"Atif Hameed",discount:"11800",includeDiscountInSellingPrice:true,
+      });
+      assert.equal(embeddedQuote.footer.some(row=>/discount/i.test(row.label)),false,`${presentation} ${taxMode}: embedded discounts have no separate discount footer row`);
+      const originalLinesByGroup=new Map<string,string>();
+      for(const line of q.lines)if(line.amount!==undefined)originalLinesByGroup.set(line.group,(new Decimal(originalLinesByGroup.get(line.group)??0).add(line.amount)).toFixed(2));
+      for(const group of ["solar","structure","earthing"]){
+        const before=originalLinesByGroup.get(group),after=embeddedQuote.lines.filter(line=>line.group===group&&line.amount!==undefined).reduce((sum,line)=>sum.add(line.amount!),new Decimal(0)).toFixed(2);
+        assert.equal(after,before??"0.00",`${presentation} ${taxMode}: ${group} stays at standard price`);
+      }
+      if(taxMode==="Tax Included"){
+        assert.equal(embeddedQuote.footer.length,1);
+        assert.equal(embeddedQuote.footer[0].label,"Total");
+      }else{
+        const subtotal=embeddedQuote.footer.find(row=>row.label==="Subtotal Before Tax")!.amount;
+        const taxTotal=embeddedQuote.footer.filter(row=>/SALES TAX/.test(row.label)).reduce((sum,row)=>sum.add(row.amount),new Decimal(0));
+        assert.equal(embeddedQuote.footer.at(-1)!.label,"Net Total");
+        assert.equal(embeddedQuote.footer.at(-1)!.amount,new Decimal(subtotal).add(taxTotal).toFixed(2));
+      }
+      if(presentation!=="No Breakup"){
+        const amountLines=embeddedQuote.lines.filter(line=>line.amount!==undefined);
+        const displayedTotal=amountLines.reduce((sum,line)=>sum.add(line.amount!),new Decimal(0)).toFixed(2);
+        assert.equal(displayedTotal,taxMode==="Tax Included"?embeddedQuote.footer[0].amount:embeddedQuote.footer.find(row=>row.label==="Subtotal Before Tax")!.amount);
+      }
+
+      const percentPriced = price(boq.snapshot, boq.number, {
+        ...basis,
+        presentation,
+        taxMode,
+        discountPercent: "1",
+      });
+      const percentQuote = quote(percentPriced, boq.snapshot, {
+        pricingId: randomUUID(),
+        quotedDate: "2026-10-06",
+        validity: "7 Days",
+        proposedBy: "Atif Hameed",
+      });
+      assert.equal(
+        percentQuote.footer.find((row) => row.label === "Special Discount")!.amount,
+        percentPriced.discount,
+      );
+      assert.equal(
+        percentQuote.footer.at(-1)!.amount,
+        percentPriced.netTotal,
+        `${presentation} ${taxMode}: a percentage discount is applied once`,
+      );
+
+      const roundedTarget = new Decimal(percentPriced.total)
+        .minus("100000")
+        .toFixed(2);
+      const roundedPricing = price(boq.snapshot, boq.number, {
+        ...basis,
+        presentation,
+        taxMode,
+        roundedTotal: roundedTarget,
+      });
+      const roundedQuote = quote(roundedPricing, boq.snapshot, {
+        pricingId: randomUUID(),
+        quotedDate: "2026-10-06",
+        validity: "7 Days",
+        proposedBy: "Atif Hameed",
+      });
+      assert.equal(
+        roundedQuote.footer.at(-1)!.amount,
+        roundedTarget,
+        `${presentation} ${taxMode}: rounding is included in the one discount`,
       );
     }
 });
