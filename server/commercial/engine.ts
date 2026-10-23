@@ -612,18 +612,32 @@ export function quote(
   bmsDescription?: string,
   currentCableRates?: Record<string, string>,
 ) {
-  const requestedDiscount=input.discount??p.discount;
-  // Customer-facing item amounts always remain at the standard selling price.
-  // Keep the discount separate from the standard-price line amounts and subtotal.
-  const result=quoteBase(p,boq,{...input,discount:requestedDiscount},bmsDescription,currentCableRates);
-  // Keep standard prices in the visible rows, but calculate the payable using
-  // the approved discount allocation and saved tax treatment.
-  const review=discountedSellingReview(p,requestedDiscount);
-  const netTotal=result.footer.find(row=>row.label==='Net Total');
-  if(netTotal)netTotal.amount=review.netTotal;
-  if(review.allocation)Object.assign(result,{discountAllocation:{...review.allocation,lines:review.allocation.lines.map(({cost,approvedAllowance,category,...safe})=>safe)}});
-  if(p.discountAuthorization)Object.assign(result,{discountAuthorization:{...p.discountAuthorization,requestedBeforeTax:requestedDiscount,requiresManagementApproval:D(requestedDiscount).gt(p.discountAuthorization.preapprovedBeforeTax)}});
-  return result as typeof result & {discountAuthorization?: NonNullable<PricingSnapshot['discountAuthorization']>;discountAllocation?:ReturnType<typeof allocateApprovedDiscount>};
+  const requestedDiscount = input.discount ?? p.discount;
+  // Keep standard selling prices and subtotal on the customer-facing rows.
+  // Apply the entered discount once against the gross payable total.
+  const result = quoteBase(
+    p,
+    boq,
+    { ...input, discount: requestedDiscount },
+    bmsDescription,
+    currentCableRates,
+  );
+  if (p.discountAuthorization)
+    Object.assign(result, {
+      discountAuthorization: {
+        ...p.discountAuthorization,
+        requestedBeforeTax: requestedDiscount,
+        requiresManagementApproval: D(requestedDiscount).gt(
+          p.discountAuthorization.preapprovedBeforeTax,
+        ),
+      },
+    });
+  return result as typeof result & {
+    discountAuthorization?: NonNullable<
+      PricingSnapshot["discountAuthorization"]
+    >;
+    discountAllocation?: ReturnType<typeof allocateApprovedDiscount>;
+  };
 }
 function quoteBase(p:PricingSnapshot,boq:BoqSnapshot,input:QuotationInput,bmsDescription?:string,currentCableRates?:Record<string,string>){
   const full = p.input.presentation === "Full Breakup";
