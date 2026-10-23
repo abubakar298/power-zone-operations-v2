@@ -27,7 +27,7 @@ function appendQuotation(
   label?: string,
 ) {
   // Promotional presentation only. The immutable net/tax basis remains unchanged for review and IPO/PT.
-  if(s.standardDiscountStrategy && s.standardDiscountStrategy.version !== 'PZ-STANDARD-DISCOUNT-2'){
+    if(s.standardDiscountStrategy && s.standardDiscountStrategy.version !== 'PZ-STANDARD-DISCOUNT-2' && (s as any).discountPresentation !== 'included-in-selling-prices'){
     const D=Decimal;
     const included=s.footer.some(r=>r.label==="Total");
     const groups=s.standardDiscountStrategy.groups.map(g=>({...g,amount:new D(g.beforeTax).mul(included?new D(g.taxRate).div(100).add(1):1).toDecimalPlaces(2,Decimal.ROUND_HALF_UP)}));
