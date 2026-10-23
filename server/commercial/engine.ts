@@ -612,51 +612,123 @@ export function quote(
   bmsDescription?: string,
   currentCableRates?: Record<string, string>,
 ) {
-  const requestedDiscount = input.discount ?? p.discount;
-  // Customer-facing rows and subtotal always retain standard selling prices.
-  const result = quoteBase(
-    p,
-    boq,
-    { ...input, discount: requestedDiscount },
-    bmsDescription,
-    currentCableRates,
-  );
-  // Pricing-approved discounts follow their saved tax allocation. A custom
-  // quote discount is a deduction from the gross payable in quoteBase.
-  const followsPricingAllocation =
+  const requestedDiscount=input.discount??p.discount;
+  // Customer-facing item amounts always remain at the standard selling price.
+  // Keep the discount separate from the standard-price line amounts and subtotal.
+  const result=quoteBase(p,boq,{...input,discount:requestedDiscount},bmsDescription,currentCableRates);
+  if(input.includeDiscountInSellingPrice&&!input.revisionRequestId)throw new HttpError(422,'Including a discount in selling prices is available only when preparing a quotation revision.');
+  if(input.includeDiscountInSellingPrice&&D(requestedDiscount).gt(0))applyDiscountToSellingPrices(result,p,requestedDiscount,input);
+  // Keep standard prices in the visible rows, but calculate the payable using
+  // the approved discount allocation and saved tax treatment.
+  // A discount entered on the quotation replaces any draft pricing discount;
+  // it is not another discount to apply through the pricing allocation path.
+  const customQuoteDiscount = input.discount !== undefined && !D(requestedDiscount).eq(p.discount);
+  const followsPricingAllocation = !input.includeDiscountInSellingPrice && !customQuoteDiscount && (
     Boolean(p.discountStrategy) ||
     (p.input.discountPercent !== undefined &&
-      (D(requestedDiscount).gt(0) || p.input.roundedTotal !== undefined));
+      (D(requestedDiscount).gt(0) || p.input.roundedTotal !== undefined))
+  );
   if (followsPricingAllocation) {
-    const review = discountedSellingReview(p, requestedDiscount);
-    const netTotal = result.footer.find((row) => row.label === "Net Total");
-    if (netTotal) netTotal.amount = review.netTotal;
-    if (review.allocation)
-      Object.assign(result, {
-        discountAllocation: {
-          ...review.allocation,
-          lines: review.allocation.lines.map(
-            ({ cost, approvedAllowance, category, ...safe }) => safe,
-          ),
-        },
-      });
+    const review=discountedSellingReview(p,requestedDiscount);
+    const netTotal=result.footer.find(row=>row.label==='Net Total');
+    if(netTotal)netTotal.amount=review.netTotal;
+    if(review.allocation)Object.assign(result,{discountAllocation:{...review.allocation,lines:review.allocation.lines.map(({cost,approvedAllowance,category,...safe})=>safe)}});
   }
-  if (p.discountAuthorization)
-    Object.assign(result, {
-      discountAuthorization: {
-        ...p.discountAuthorization,
-        requestedBeforeTax: requestedDiscount,
-        requiresManagementApproval: D(requestedDiscount).gt(
-          p.discountAuthorization.preapprovedBeforeTax,
-        ),
-      },
+  if(p.discountAuthorization)Object.assign(result,{discountAuthorization:{...p.discountAuthorization,requestedBeforeTax:requestedDiscount,requiresManagementApproval:D(requestedDiscount).gt(p.discountAuthorization.preapprovedBeforeTax)}});
+  return result as typeof result & {discountAuthorization?: NonNullable<PricingSnapshot['discountAuthorization']>;discountAllocation?:ReturnType<typeof allocateApprovedDiscount>};
+}
+
+/** Apply an optional revision discount to eligible customer prices, then recalculate GST. */
+function applyDiscountToSellingPrices(result:any,p:PricingSnapshot,discount:string,input:QuotationInput){
+  const protectedGroups=new Set(['solar','structure','earthing']);
+  const eligible=p.rows.filter(row=>!protectedGroups.has(row.key)&&D(row.beforeTax).gt(0));
+  if(input.additionalItem){
+    const beforeTax=D(input.additionalItem.cost).mul(sellingFactor(p.input,input.additionalItem.taxRate)).mul(D(input.additionalItem.markup).div(100).add(1));
+    if(beforeTax.gt(0))eligible.push({key:'additional',name:'Additional item',beforeTax:beforeTax.toString(),taxRate:cashDeal(p.input)?'0':input.additionalItem.taxRate} as any);
+  }
+  const eligibleTotal=eligible.reduce((sum,row)=>sum.add(row.beforeTax),D('0'));
+  const cents=D(discount).mul(100).toDecimalPlaces(0,Decimal.ROUND_HALF_UP);
+  if(cents.div(100).gt(eligibleTotal))throw new HttpError(422,'The discount is larger than the eligible selling price after protecting solar panels, structure and earthing.');
+  const weightTotal=eligible.reduce((sum,row)=>sum.add(row.beforeTax),D('0'));
+  if(weightTotal.isZero())throw new HttpError(422,'There are no eligible selling prices to receive this discount.');
+  const exact=eligible.map(row=>cents.mul(row.beforeTax).div(weightTotal));
+  const shares=exact.map(value=>value.floor());
+  let remaining=cents.sub(shares.reduce((sum,value)=>sum.add(value),D('0'))).toNumber();
+  exact.map((value,index)=>({index,fraction:value.sub(shares[index])})).sort((a,b)=>b.fraction.comparedTo(a.fraction)||a.index-b.index).forEach(({index})=>{if(remaining>0){shares[index]=shares[index].add(1);remaining--;}});
+  const reductions=new Map<string,{before:Decimal;afterTax:Decimal}>();
+  let newSubtotal=D('0'),newTax=D('0'),newSolarTax=D('0'),newOtherTax=D('0');
+  eligible.forEach((row,index)=>{
+    const reduction=shares[index].div(100),before=D(row.beforeTax).sub(reduction),rate=D(row.taxRate);
+    const oldTotal=D(row.beforeTax).mul(rate.div(100).add(1));
+    const newTotal=before.mul(rate.div(100).add(1));
+    const current=reductions.get(row.key)??{before:D('0'),afterTax:D('0')};
+    current.before=current.before.add(reduction);
+    current.afterTax=current.afterTax.add(oldTotal.sub(newTotal));
+    reductions.set(row.key,current);
+    newSubtotal=newSubtotal.add(before);
+    const rowTax=before.mul(rate.div(100));newTax=newTax.add(rowTax);
+    if(rate.eq(10))newSolarTax=newSolarTax.add(rowTax);else if(rate.eq(18))newOtherTax=newOtherTax.add(rowTax);
+  });
+  for(const row of p.rows){
+    if(protectedGroups.has(row.key)||!eligible.some(item=>item.key===row.key)){
+      newSubtotal=newSubtotal.add(row.beforeTax);
+      newTax=newTax.add(row.tax);
+      if(row.taxRate==='10')newSolarTax=newSolarTax.add(row.tax);else if(row.taxRate==='18')newOtherTax=newOtherTax.add(row.tax);
+    }
+  }
+  // Additional quotation scope is not part of the saved pricing rows.
+  if(input.additionalItem&&!p.rows.some(row=>row.key==='additional')){
+    const before=D(input.additionalItem.cost).mul(sellingFactor(p.input,input.additionalItem.taxRate)).mul(D(input.additionalItem.markup).div(100).add(1));
+    const rate=D(cashDeal(p.input)?'0':input.additionalItem.taxRate);
+    const reduction=reductions.get('additional')?.before??D('0');
+    newSubtotal=newSubtotal.add(before.sub(reduction));
+    const rowTax=before.sub(reduction).mul(rate).div(100);newTax=newTax.add(rowTax);
+    if(rate.eq(10))newSolarTax=newSolarTax.add(rowTax);else if(rate.eq(18))newOtherTax=newOtherTax.add(rowTax);
+  }
+  newSubtotal=D(money(newSubtotal));
+  const tax=money(newTax),total=money(newSubtotal.add(tax));
+  for(const [group,reduction] of reductions){
+    const displayReduction=p.input.taxMode==='Tax Included'?reduction.afterTax:reduction.before;
+    const members=(result.lines??[]).filter((line:any)=>line.group===group&&line.amount!==undefined);
+    if(!members.length)continue;
+    const memberCents=displayReduction.mul(100).toDecimalPlaces(0,Decimal.ROUND_HALF_UP);
+    const weights:Decimal[]=members.map((line:any)=>D(String(line.amount)));
+    const sum=weights.reduce((acc,value)=>acc.add(value),D('0'));
+    if(sum.isZero())continue;
+    const sharesExact=weights.map(weight=>memberCents.mul(weight).div(sum));
+    const memberShares=sharesExact.map(value=>value.floor());
+    let left=memberCents.sub(memberShares.reduce((acc,value)=>acc.add(value),D('0'))).toNumber();
+    sharesExact.map((value,index)=>({index,fraction:value.sub(memberShares[index])})).sort((a,b)=>b.fraction.comparedTo(a.fraction)||a.index-b.index).forEach(({index})=>{if(left>0){memberShares[index]=memberShares[index].add(1);left--;}});
+    members.forEach((line:any,index:number)=>{
+      const lineReduction=memberShares[index].div(100);
+      line.amount=money(D(line.amount).sub(lineReduction));
+      const itemRows=line.items?.filter((item:any)=>item.amount!==undefined)??[];
+      if(itemRows.length){
+        const itemTotal=itemRows.reduce((acc:Decimal,item:any)=>acc.add(String(item.amount)),D('0'));
+        let assigned=D('0');
+        itemRows.forEach((item:any,itemIndex:number)=>{
+          const itemReduction=itemIndex===itemRows.length-1?lineReduction.sub(assigned):lineReduction.mul(item.amount).div(itemTotal).toDecimalPlaces(2,Decimal.ROUND_HALF_UP);
+          item.amount=money(D(item.amount).sub(itemReduction));
+          assigned=assigned.add(itemReduction);
+        });
+      }
     });
-  return result as typeof result & {
-    discountAuthorization?: NonNullable<
-      PricingSnapshot["discountAuthorization"]
-    >;
-    discountAllocation?: ReturnType<typeof allocateApprovedDiscount>;
-  };
+  }
+  const solarTax=money(newSolarTax),otherTax=money(newOtherTax);
+  const footer=result.footer.filter((row:any)=>!['Special Discount','Approved Discount','Management Special Discount','Net Total'].includes(row.label));
+  if(p.input.taxMode==='Tax Included'){
+    const totalRow=footer.find((row:any)=>row.label==='Total');
+    if(totalRow)totalRow.amount=total;else footer.push({label:'Total',amount:total});
+  }else{
+    const subtotalRow=footer.find((row:any)=>row.label==='Subtotal Before Tax');
+    if(subtotalRow)subtotalRow.amount=money(newSubtotal);
+    footer.forEach((row:any)=>{if(/10%/.test(row.label))row.amount=solarTax;if(/18%/.test(row.label))row.amount=otherTax;});
+    footer.push({label:'Net Total',amount:total});
+  }
+  result.footer=footer;
+  result.input={...result.input,includeDiscountInSellingPrice:true};
+  result.discountPresentation='included-in-selling-prices';
+  result.discountAllocation={policy:'revision-selling-price-v1',discount:money(cents.div(100)),lines:[...reductions].map(([group,value])=>({group,beforeTaxReduction:money(value.before),sellingReductionIncludingTax:money(value.afterTax)}))};
 }
 function quoteBase(p:PricingSnapshot,boq:BoqSnapshot,input:QuotationInput,bmsDescription?:string,currentCableRates?:Record<string,string>){
   const full = p.input.presentation === "Full Breakup";
