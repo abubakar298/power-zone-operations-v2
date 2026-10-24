@@ -41,9 +41,9 @@ export class MastersRepository {
       "SELECT * FROM inverter_configurations ORDER BY total_kw,configuration",
       "SELECT * FROM costing_classifications",
       "SELECT * FROM master_imports",
-      "SELECT * FROM inventory_catalogue_current ORDER BY item_id",
+      "SELECT * FROM inventory_catalogue_final_current ORDER BY item_id",
       "SELECT * FROM engineering_profiles_current ORDER BY key",
-      "SELECT * FROM inventory_item_aliases ORDER BY alias",
+      "SELECT * FROM inventory_item_aliases_current ORDER BY alias",
     ];
     const results = [];
     if (this.serial) {
@@ -87,7 +87,7 @@ export class MastersRepository {
       const user = (await c.query("SELECT active,role FROM users WHERE id=$1 FOR SHARE", [actor])).rows[0];
       if (!user?.active || !["Admin", "Management", "Coordinator"].includes(user.role))
         throw new HttpError(403, "Commercial description editing access required.");
-      const current = (await c.query("SELECT * FROM inventory_catalogue_current WHERE item_id=$1", [itemId])).rows[0];
+      const current = (await c.query("SELECT * FROM inventory_catalogue_final_current WHERE item_id=$1", [itemId])).rows[0];
       if (!current) throw new HttpError(404, "Item ID not found.");
       if (current.version !== version) throw new HttpError(409, "This item changed. Refresh and review its latest description.");
       const wording = description.trim();
@@ -99,7 +99,7 @@ export class MastersRepository {
     });
   }
   private async resolveRateKey(key: string, pool: Pool | PoolClient = this.pool) {
-    const row = (await pool.query(`SELECT rate_key FROM inventory_catalogue_current WHERE item_id=$1 UNION ALL SELECT c.rate_key FROM inventory_item_aliases a JOIN inventory_catalogue_current c ON c.item_id=a.item_id WHERE a.alias=$1 LIMIT 1`, [key])).rows[0];
+    const row = (await pool.query(`SELECT rate_key FROM inventory_catalogue_final_current WHERE item_id=$1 UNION ALL SELECT c.rate_key FROM inventory_item_aliases_current a JOIN inventory_catalogue_final_current c ON c.item_id=a.item_id WHERE a.alias=$1 LIMIT 1`, [key])).rows[0];
     return row?.rate_key || key;
   }
   async save(

@@ -76,13 +76,15 @@ export async function saveUpsManagementBudget(pool:Pool,actor:string,ipoId:strin
   await c.query('SELECT pg_advisory_xact_lock(hashtext($1))',['ups-budget:'+ipoId]);
   const source=(await c.query(`SELECT p.basis,i.snapshot FROM project_workflow_issuances w JOIN project_po_receipts p ON p.id=w.receipt_id JOIN internal_purchase_orders i ON i.id=w.ipo_id WHERE i.id=$1`,[ipoId])).rows[0];
   if(!source||source.basis.order.allocation.policy!=='fixed-bank-ups')throw new HttpError(422,'Select a confirmed bank UPS order.');
-  const allowed=['CH-PCS-HYB-SP-006','CH-BMS-LV','CH-BAT-LV-05 KW'];
+  const inverterIds=['CH-PCS-HYB-SP-006','CH-PCS-HYB-1P-006'];
+  const allowed=[...inverterIds,'CH-BMS-LV','CH-BAT-LV-05 KW'];
+  if(inverterIds.every(id=>Object.hasOwn(rates,id)))throw new HttpError(400,'Enter the inverter budget once, using either its current or historical ID.');
   if(Object.keys(rates).some(id=>!allowed.includes(id)))throw new HttpError(400,'Only the agreed UPS component budgets can be changed.');
   const previous=(await c.query('SELECT version,snapshot FROM ups_management_budget_versions WHERE ipo_id=$1 ORDER BY version DESC LIMIT 1',[ipoId])).rows[0];
   const lines=structuredClone(previous?.snapshot.lines??source.basis.boq.lines);
   for(const [id,rate]of Object.entries(rates)){
    if(!/^\d+(?:\.\d{1,4})?$/.test(rate))throw new HttpError(400,'Enter a non-negative budget rate.');
-   const matches=lines.filter((l:any)=>l.itemId===id);if(matches.length!==1)throw new HttpError(422,'Budget component is missing or ambiguous.');
+   const matches=lines.filter((l:any)=>l.itemId===id||(inverterIds.includes(id)&&inverterIds.includes(l.itemId)));if(matches.length!==1)throw new HttpError(422,'Budget component is missing or ambiguous.');
    matches[0].rate=rate;matches[0].total=new Decimal(rate).mul(matches[0].qty).toFixed(2);
   }
   const snapshot={source:'Management approved budget',lines,total:lines.reduce((n:Decimal,l:any)=>n.add(l.total),new Decimal(0)).toFixed(2),issuedCost:source.basis.boq.total};

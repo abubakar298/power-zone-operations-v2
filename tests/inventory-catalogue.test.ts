@@ -12,14 +12,14 @@ import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 test('approved catalogue: exact brand identity, shared cable rates, standard/UPS scopes and immutable versions',async()=>{
  const db=await testDatabase();try{
- const repo=new MastersRepository(db.pool);const m=await repo.list();assert.equal(m.catalogue.length,126);
+ const repo=new MastersRepository(db.pool);const m=await repo.list();assert.equal(m.catalogue.length,199);
  assert.deepEqual(await repo.history('rates','CH-CBL-ERT-10MM/1C-PK'),await repo.history('rates','10mm² Earthing Cable'));
  assert.deepEqual(await repo.history('rates','CH-Cable-6mm 1/C AC'),await repo.history('rates','CH-CBL-AC-6MM/1C-RB-AOB'));
  const brand=(category:string,name?:string)=>m.brands.find((b:any)=>b.category===category&&b.status==='Active'&&(!name||b.name===name))!.id;
  const survey=surveySchema.parse({customerId:3,siteName:'Isolated master fixture',siteCode:'MASTER01',location:'Lahore',panelQty:12,panelWattage:'620',structure:'Elevated',dcMetres:'100',earth25:'12',earth6:'25',earth10:'25',spLoadPanelRunMetres:'20',sourceMode:'General quotation',inverter:'6 kW SP',bessId:'6-10',batteryKwh:10,smartMeter:false,genset:false,preparedBy:'Test',brands:{solar:brand('Solar Panel','Any of the Above'),inverter:brand('Inverter'),battery:brand('Battery & BMS'),cable:brand('Cable','Pakistan Cables'),switchgear:brand('Switchgear','CHINT')}});
  const sp=calculate(survey,m);const find=(s:any,k:string)=>s.lines.find((l:any)=>l.key===k);
  assert.equal(sp.engineering.strings,2);assert.equal(find(sp,'500V 2P DC Breaker').qty,'4');assert.equal(find(sp,'DC SPD').qty,'2');assert.equal(find(sp,'DC Fuse with Holder').qty,'2');assert.equal(find(sp,'Earthing Bore').qty,'2');assert.equal(find(sp,'Misc. Accessories'),undefined);assert.equal(find(sp,'Labour').total,'15000');assert.equal(find(sp,'Delivery').total,'15000');
- assert.equal(find(sp,'10mm² 1C AC Cable').itemId,'CH-CBL-AC-10MM/1C-RB');assert.equal(find(sp,'10mm² Earthing Cable').itemId,'CH-CBL-ERT-10MM/1C-PK');assert.equal(find(sp,'6mm² DC Cable Red').itemId,find(sp,'6mm² DC Cable Black').itemId);
+ assert.equal(find(sp,'10mm² 1C AC Cable').itemId,'CH-CBL-AC-10MM/1C-RB');assert.equal(find(sp,'10mm² Earthing Cable').itemId,'CH-CBL-ERT-10MM/1C-PK');assert.equal(find(sp,'6mm² DC Cable Red').itemId,'CH-CBL-DC-6MM/1C-R/PK');assert.equal(find(sp,'6mm² DC Cable Black').itemId,'CH-CBL-DC-6MM/1C-B/PK');
  for(const brandName of ['Pakistan Cables','Newage Cables','Any of the Above']){
   const item=selectCatalogueItem(m,'2.5mm² Earthing Cable',brandName)!;
   assert.equal(item.rate_key,'2.5mm² Earthing Cable');assert.equal(item.payload.brandCategory,brandName==='Any of the Above'?'All other cables':brandName);

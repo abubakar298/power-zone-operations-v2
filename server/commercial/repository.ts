@@ -470,7 +470,7 @@ export class CommercialRepository {
           ],
         )
       ).rows,
-      catalogueWording = (await c.query("SELECT item_id,payload->>'commercialDescription' AS description FROM inventory_catalogue_current WHERE item_id=ANY($1::text[])", [b.snapshot.lines.map((l:any)=>l.itemId).filter(Boolean)])).rows,
+      catalogueWording = (await c.query("SELECT item_id,payload->>'commercialDescription' AS description FROM inventory_catalogue_final_current WHERE item_id=ANY($1::text[])", [b.snapshot.lines.map((l:any)=>l.itemId).filter(Boolean)])).rows,
       commercialBoq = {...b.snapshot, lines:b.snapshot.lines.map((l:any)=>({...l, commercialDescription:catalogueWording.find((w:any)=>w.item_id===l.itemId)?.description?.trim() || undefined}))},
       snapshot = quote(
         p.snapshot,

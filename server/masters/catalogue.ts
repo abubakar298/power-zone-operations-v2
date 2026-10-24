@@ -15,6 +15,10 @@ export interface CatalogueItem {
     itemType: string;
     status: string;
     reviewNotes: string;
+    finalStockId?: boolean;
+    rateLinkPending?: boolean;
+    legacyItemId?: string | null;
+    stockUnits?: string[];
   };
 }
 export interface EngineeringProfile {
@@ -43,15 +47,15 @@ export function selectCatalogueItem(
   panelWatts?: string,
 ): CatalogueItem | undefined {
   const rateKey = key === "6mm² DC Cable Black" ? "6mm² DC Cable Red" : key;
-  let candidates = (m.catalogue ?? []).filter((i) => i.rate_key === rateKey);
+  let candidates = (m.catalogue ?? []).filter((i) => i.rate_key === rateKey && !i.payload.rateLinkPending);
   if (key.startsWith("Structure -"))
     return m.catalogue?.find((i) => i.item_id === "CH-Structure");
   if (key === "Solar PV Modules")
     candidates = (m.catalogue ?? [])
       .filter(
         (i) =>
-          i.payload.itemGroup === "Solar Panels" ||
-          i.payload.category === "Solar PV Modules",
+          !i.payload.rateLinkPending && (i.payload.itemGroup === "Solar Panels" ||
+          i.payload.category === "Solar PV Modules"),
       )
       .filter((i) =>
         new RegExp(`(?:^|\\D)${panelWatts}(?:\\D|$)`).test(
@@ -70,7 +74,13 @@ export function selectCatalogueItem(
     candidates = candidates.filter(
       (i) => normalize(i.payload.brandCategory) === normalize(target),
     );
-    // Generic combined IDs are preferred over separate historical colour IDs.
+    // Final DC IDs distinguish colour while preserving the shared approved rate.
+    if (/^6mm² DC Cable (Red|Black)$/.test(key)) {
+      const colour = key.endsWith('Black') ? 'B' : 'R';
+      const final = candidates.find(i => i.payload.finalStockId && new RegExp(`/1C-${colour}/`).test(i.item_id));
+      if (final) return final;
+    }
+    // Preserve the established selection for other cable types.
     return (
       candidates.find((i) => /RB/.test(i.item_id)) ??
       candidates.find((i) => !/-[RB]$/.test(i.item_id)) ??
