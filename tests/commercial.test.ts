@@ -1172,6 +1172,13 @@ test("standard selling prices and one discount reconcile across six quote varian
       const embeddedQuote=quote(p,boq.snapshot,{
         pricingId:randomUUID(),revisionRequestId:randomUUID(),quotedDate:"2026-10-06",validity:"7 Days",proposedBy:"Atif Hameed",discount:"11800",includeDiscountInSellingPrice:true,
       });
+      const newQuotation=quote(p,boq.snapshot,{pricingId:randomUUID(),quotedDate:'2026-10-24',validity:'7 Days',proposedBy:'Atif Hameed',discount:'11800',includeDiscountInSellingPrice:true});
+      assert.deepEqual(newQuotation.lines,embeddedQuote.lines,'New quotations and revisions allocate the same discount');
+      assert.deepEqual(newQuotation.footer,embeddedQuote.footer);
+      const inherited=quote({...p,input:{...p.input,includeDiscountInSellingPrice:true}},boq.snapshot,{pricingId:randomUUID(),quotedDate:'2026-10-24',validity:'7 Days',proposedBy:'Atif Hameed',discount:'11800'});
+      assert.deepEqual(inherited.footer,embeddedQuote.footer,'Saved pricing retains its selected discount treatment');
+      const separated=quote({...p,input:{...p.input,includeDiscountInSellingPrice:true}},boq.snapshot,{pricingId:randomUUID(),quotedDate:'2026-10-24',validity:'7 Days',proposedBy:'Atif Hameed',discount:'11800',includeDiscountInSellingPrice:false});
+      assert.deepEqual(separated.footer,q.footer,'An explicit unchecked option restores separate discounts');
       await mkdir('.local/quotation-qa',{recursive:true});
       await writeFile(`.local/quotation-qa/embedded-${presentation.replaceAll(' ','-')}-${taxMode==='Tax Included'?'included':'separate'}.pdf`,buildQuotationPdf(embeddedQuote));
       assert.equal(embeddedQuote.footer.some(row=>/discount/i.test(row.label)),false,`${presentation} ${taxMode}: embedded discounts have no separate discount footer row`);

@@ -152,9 +152,13 @@ test('Coordinator can embed a revision discount, save it, export all six formats
  await openSavedQuote(page,quote.number);await page.getByRole('button',{name:'Create new quotation version',exact:true}).click();
  await page.getByLabel('Revision reason',{exact:true}).fill('Customer requests the approved discount in item prices');await page.getByLabel('Requires costing change').selectOption('no');
  await page.getByRole('button',{name:'Start revision',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Confirm and send',exact:true}).click();
+ await page.getByRole('button',{name:'Back to Quotation Settings',exact:true}).click();
+ await expect(page.getByLabel('Discount (%)',{exact:true})).toBeVisible();
  await expect(page.getByLabel('Add discount to selling price')).toBeVisible();
  await page.getByLabel('Add discount to selling price').check();
- await page.getByRole('button',{name:'Preview quotation',exact:true}).click();await expect(page.locator('.quotation-pdf-pages canvas').first()).toBeVisible();
+ await page.getByLabel('Discount (%)',{exact:true}).fill('1.0');
+ await expect(page.getByRole('button',{name:'Preview Quotation',exact:true})).toBeEnabled();
+ await page.getByRole('button',{name:'Preview Quotation',exact:true}).click();await expect(page.locator('.quotation-pdf-pages canvas').first()).toBeVisible();
  await expect(page.getByLabel('Quotation discount (PKR)',{exact:true})).toHaveCount(0);
  const acknowledgement=page.getByLabel('I have reviewed and acknowledge the change in payable.');if(await acknowledgement.isVisible())await acknowledgement.check();
  const save=page.waitForResponse(r=>r.url().endsWith('/api/commercial/quotations')&&r.request().method()==='POST');
