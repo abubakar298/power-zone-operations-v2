@@ -69,7 +69,7 @@ test("Procurement: stock against coming sites, purchase requests with quotations
     r = await repo.addQuote(u.buyer, r.id, line.id, { vendor: "Pak Cables", rate: "120", note: "" });
     r = await repo.addQuote(u.buyer, r.id, line.id, { vendor: "Powerline", rate: "110", note: "" });
     let l1 = r.lines.find((l) => l.id === line.id)!;
-    assert.equal(l1.chosen?.vendor, "Pak Cables", "the first quotation stays chosen once picked");
+    assert.equal(l1.chosen?.vendor, "Powerline", "the lowest is chosen until the buyer picks another");
     r = await repo.chooseQuote(u.buyer, r.id, line.id, l1.best!.id);
     l1 = r.lines.find((l) => l.id === line.id)!;
     assert.equal(l1.chosen?.vendor, "Powerline");
@@ -98,7 +98,9 @@ test("Procurement: stock against coming sites, purchase requests with quotations
     assert.equal(o.inventory.find((i) => i.itemKey === cable.itemKey)!.onOrder, l1.quantity);
     r = await repo.markOrdered(u.buyer, r.id, { orderReference: "Powerline SO-2210" });
     assert.equal(r.status, "ordered");
-    await assert.rejects(repo.markReceived(u.accounts, r.id, { note: "" }), /Only Store or the Procurement buyer/);
+    const one = { lines: [{ itemKey: cable.itemKey, quantity: "1" }], note: "" };
+    await assert.rejects(repo.markReceived(u.accounts, r.id, one), /Only Store can receive/);
+    await assert.rejects(repo.markReceived(u.buyer, r.id, one), /Only Store can receive/, "the buyer does not receive; Store does");
     // Store (Shaigan) sees what to receive and every item to count, but no purchase prices.
     const store = await repo.storeView(u.store);
     const waiting = store.toReceive.find((x) => x.id === r.id)!;
@@ -109,8 +111,24 @@ test("Procurement: stock against coming sites, purchase requests with quotations
     await assert.rejects(repo.listRequests(u.store), /not part of the Store workspace/);
     await assert.rejects(repo.getRequest(u.store, r.id), /not part of the Store workspace/);
     assert.equal((await repo.overview(u.store)).requests.length, 0, "Store's overview has no request totals");
-    const received = await repo.markReceived(u.store, r.id, { note: "All arrived" });
+    // Part of the cable arrives: it goes into stock, the rest stays on order and on Store's list.
+    const part = await repo.markReceived(u.store, r.id, { lines: [{ itemKey: cable.itemKey, quantity: "5" }], note: "First lot" });
+    assert.equal(part.status, "ordered");
+    const partRow = (await repo.overview(u.buyer)).inventory.find((i) => i.itemKey === cable.itemKey)!;
+    assert.equal(Number(partRow.inStock), 15);
+    assert.equal(Number(partRow.onOrder), Number(l1.quantity) - 5, "only what is still due counts as on order");
+    const dueLine = (await repo.storeView(u.store)).toReceive.find((x) => x.id === r.id)!.lines.find((l) => l.itemKey === cable.itemKey)!;
+    assert.equal(Number(dueLine.received), 5);
+    assert.equal(Number(dueLine.due), Number(l1.quantity) - 5);
+    assert.equal(Number((await repo.getRequest(u.buyer, r.id)).lines.find((l) => l.itemKey === cable.itemKey)!.received), 5);
+    await assert.rejects(repo.markReceived(u.store, r.id, { lines: [{ itemKey: cable.itemKey, quantity: l1.quantity }], note: "" }), /still due on this order/);
+    await assert.rejects(repo.markReceived(u.store, r.id, { lines: [{ itemKey: cable.itemKey, quantity: "0" }], note: "" }), /at least one item/);
+    await assert.rejects(repo.markReceived(u.store, r.id, { lines: [{ itemKey: battery.itemKey, quantity: "1" }], note: "" }), /not on this order/);
+    // The rest arrives and the request closes.
+    const rest = (await repo.storeView(u.store)).toReceive.find((x) => x.id === r.id)!.lines.map((l) => ({ itemKey: l.itemKey, quantity: l.due }));
+    const received = await repo.markReceived(u.store, r.id, { lines: rest, note: "All arrived" });
     assert.equal(received.status, "received");
+    assert.ok(!(await repo.storeView(u.store)).toReceive.some((x) => x.id === r.id), "a fully received order leaves Store's list");
     assert.ok(!("totals" in received), "receiving returns no prices to Store");
     r = await repo.getRequest(u.buyer, r.id);
     assert.equal(r.status, "received");
@@ -118,7 +136,7 @@ test("Procurement: stock against coming sites, purchase requests with quotations
     const after = o.inventory.find((i) => i.itemKey === cable.itemKey)!;
     assert.equal(Number(after.inStock), 10 + Number(l1.quantity), "received quantities are added to stock");
     assert.equal(after.onOrder, "0");
-    assert.deepEqual(r.events.map((e) => e.kind).reverse(), ["created", "submitted", "sent_back", "submitted", "approved", "ordered", "received"]);
+    assert.deepEqual(r.events.map((e) => e.kind).reverse(), ["created", "submitted", "sent_back", "submitted", "approved", "ordered", "part_received", "received"]);
     await assert.rejects(db.pool.query("DELETE FROM purchase_request_events WHERE request_id=$1", [r.id]), /immutable/);
 
     // The approved purchase is now the cable's last buying rate.

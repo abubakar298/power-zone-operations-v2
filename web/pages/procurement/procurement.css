@@ -69,3 +69,29 @@
 .sto-count{display:inline-flex;gap:6px;align-items:center;justify-content:flex-end}
 .sto-count input{width:7rem;height:32px;text-align:right}
 .sto-count .pz-button{height:32px;font-size:12px}
+/* Misc items BOQ on the site's survey step (24 Oct 2026): folded, inside the department workspace's own panels. */
+.pz-misc > summary{cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-height:44px}
+.pz-misc-num{text-align:right}
+.pz-misc-qty{width:7rem;text-align:right}
+.pz-misc-unit{width:6rem}
+.pz-misc-remove{background:none;border:0;color:inherit;text-decoration:underline;cursor:pointer;min-height:44px}
+.pz-misc-hits{display:flex;flex-wrap:wrap;gap:6px}
+.pz-misc-hits button{min-height:44px;padding:0 12px;border:1px solid var(--pz-border,#e4e4e7);border-radius:8px;background:none;cursor:pointer}
+.pz-misc-hits small{opacity:.7;margin-left:4px}
+.pz-misc-error{color:var(--pz-danger,#b42318)}
+.pz-misc-history{margin:6px 0 0;padding-left:18px}
+.pr .pr{padding:0}
+.pr-misc-lines > summary{cursor:pointer;padding:10px 14px;min-height:44px;display:flex;align-items:center;color:var(--ops-muted,#52525b)}
+/* Inverter, battery and BMS watch (24 Oct 2026). */
+.sw-kpis{display:flex;gap:8px;flex-wrap:wrap}
+.sw-open td{background:var(--ops-soft,#fafafa)}
+.sw-sites{margin:0 0 10px;padding-left:18px;display:grid;gap:4px;font-size:12.5px}
+/* Requests for quotation (24 Oct 2026). */
+.pr-rfq-form{display:grid;gap:10px;padding:12px 14px;border:1px solid var(--ops-line,#e4e4e7);border-radius:12px}
+.pr-rfq-form label{display:grid;gap:4px}
+.pr-rfq-form input[type=date]{height:38px;max-width:12rem}
+.pr-upload{position:relative;cursor:pointer;min-height:38px;display:inline-flex;align-items:center}
+.pr-upload input{position:absolute;inset:0;opacity:0;cursor:pointer}
+/* Divider between main stock and misc site items (24 Oct 2026). */
+.ops-table tr.pr-divider td{background:var(--ops-soft,#f4f4f5);font-weight:600;font-size:12px;letter-spacing:.02em;text-transform:uppercase;color:var(--ops-ink,#18181b);border-top:2px solid var(--ops-line,#d4d4d8);padding-top:10px;padding-bottom:10px}
+.ops-table tr.pr-divider small{font-weight:400;text-transform:none;letter-spacing:0;color:var(--ops-muted,#52525b);margin-left:8px}

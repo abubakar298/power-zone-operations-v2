@@ -10,7 +10,7 @@ export interface UpcomingPo {
   workflowStage: string | null; expectedDate: string | null; items: number; bigItems: { panels: string; batteries: string; inverters: string }; updatedAt: string;
 }
 export interface InventoryRow {
-  itemKey: string; name: string; unit: string; inRateMaster: boolean; boughtByBuyer: boolean; counted: boolean; lastCountAt: string | null; stockUnit: string | null;
+  itemKey: string; name: string; unit: string; inRateMaster: boolean; misc: boolean; boughtByBuyer: boolean; counted: boolean; lastCountAt: string | null; stockUnit: string | null;
   inStock: string; receivedNeed: string; upcomingNeed: string; onOrder: string; requested: string; toBuy: string; shortForReceived: boolean; unitMismatch: boolean;
 }
 export type RequestStatus = "draft" | "pending_approval" | "approved" | "rejected" | "ordered" | "received" | "cancelled";
@@ -20,7 +20,7 @@ export interface RequestRow {
 }
 export interface Quote { id: string; vendor: string; rate: string; note: string; createdAt: string }
 export interface RequestLine {
-  id: string; itemKey: string; name: string; masterUnit: string | null; quantity: string; unit: string; note: string; quotes: Quote[]; chosenQuoteId: string | null;
+  id: string; itemKey: string; name: string; masterUnit: string | null; quantity: string; received: string; unit: string; note: string; quotes: Quote[]; chosenQuoteId: string | null;
   chosen: Quote | null; best: Quote | null; lastRate: { rate: string; unit: string; source: string; comparable: boolean } | null; difference: string | null; lineTotal: string;
 }
 export interface RequestDetail {

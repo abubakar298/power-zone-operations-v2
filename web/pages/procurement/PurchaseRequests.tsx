@@ -3,6 +3,7 @@ import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
 import { Field } from "../../ui/Field.js";
 import "./procurement.css";
+import { RfqPanel } from "./RfqPanel.js";
 import { fmtAt, fmtDay, pkr, qty, STATUS_CHIP, type RequestDetail, type RequestRow, type RequestStatus } from "./types.js";
 
 const TABS: { key: string; label: string; match: (s: RequestStatus) => boolean }[] = [
@@ -20,7 +21,7 @@ const STEPS: { key: RequestStatus | "quotes"; label: string }[] = [
 ];
 const EVENT_TEXT: Record<string, string> = {
   created: "Created", submitted: "Sent to Abu Bakar", approved: "Approved", sent_back: "Sent back for changes", rejected: "Rejected",
-  ordered: "Marked ordered", received: "Received into Store", cancelled: "Cancelled",
+  rfq_sent: "Quotations requested", ordered: "Marked ordered", part_received: "Part received into Store", received: "Received into Store", cancelled: "Cancelled",
 };
 
 /**
@@ -148,6 +149,9 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
   if (error && !d) return <div className="pr"><p className="ops-feedback" role="alert">{error}</p><Button variant="neutral" onClick={onBack}>Back</Button></div>;
   if (!d) return <p className="pr-muted">Loading request…</p>;
   const hasQuotes = d.lines.length > 0 && d.lines.every((l) => l.chosen);
+  // Once ordered, each line shows what Store has received against it.
+  const showReceived = d.status === "ordered" || d.status === "received";
+  const allIn = d.lines.filter((l) => Number(l.received) >= Number(l.quantity)).length;
   const reached = (k: RequestStatus | "quotes") => {
     const order = ["draft", "quotes", "pending_approval", "approved", "ordered", "received"];
     const at = d.status === "draft" ? (hasQuotes ? 1 : 0) : order.indexOf(d.status);
@@ -182,7 +186,7 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
         <div className="ops-tc-h"><h3>Items and quotations</h3><span className="pr-muted">{d.lines.length} item{d.lines.length === 1 ? "" : "s"} · rate master IDs · best quotation is chosen unless you pick another</span></div>
         <div className="pz-table-scroll">
           <table className="ops-table pr-lines">
-            <thead><tr><th>Rate master item</th><th className="num">Qty</th><th className="num">Last buying rate</th><th>Quotations (vendor · rate)</th><th className="num">Chosen rate</th><th className="num">Line total (PKR)</th>{d.can.edit && <th></th>}</tr></thead>
+            <thead><tr><th>Rate master item</th><th className="num">Qty</th>{showReceived && <th className="num">Received</th>}<th className="num">Last buying rate</th><th>Quotations (vendor · rate)</th><th className="num">Chosen rate</th><th className="num">Line total (PKR)</th>{d.can.edit && <th></th>}</tr></thead>
             <tbody>
               {d.lines.length === 0 ? <tr><td colSpan={7} className="ops-empty">No items yet. Search the rate master below to add one.</td></tr> : d.lines.map((l) => {
                 const qf = quoteForm[l.id] ?? { vendor: "", rate: "" };
@@ -197,6 +201,13 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
                         </span>
                       ) : qty(l.quantity)}
                     </td>
+                    {showReceived && (
+                      <td className="num">
+                        {Number(l.received) >= Number(l.quantity) ? <span className="sw-chip sw-chip--ok">All in</span>
+                          : Number(l.received) > 0 ? <><b>{qty(l.received)}</b><br /><small className="pr-muted">{qty(String(Number(l.quantity) - Number(l.received)))} still due</small></>
+                          : <span className="pr-muted">not yet</span>}
+                      </td>
+                    )}
                     <td className="num">
                       {l.lastRate ? <>{pkr(l.lastRate.rate)} <small className="pr-muted">/{l.lastRate.unit}</small><br /><small className="pr-muted">{l.lastRate.source}{!l.lastRate.comparable ? " · different unit" : ""}</small></>
                         : <><span className="sw-chip">No rate yet</span><br /><small className="pr-muted">first purchase sets it</small></>}
@@ -234,12 +245,12 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
             </tbody>
             {d.lines.length > 0 && (
               <tfoot>
-                <tr><td colSpan={5} className="num"><b>Total at the chosen rates</b></td><td className="num"><b>{pkr(d.totals.atChosen)}</b></td>{d.can.edit && <td></td>}</tr>
+                <tr><td colSpan={showReceived ? 6 : 5} className="num"><b>Total at the chosen rates</b></td><td className="num"><b>{pkr(d.totals.atChosen)}</b></td>{d.can.edit && <td></td>}</tr>
                 {Number(d.totals.lastComparable) > 0 && (
-                  <tr><td colSpan={5} className="num pr-muted">Items with a last buying rate: {pkr(d.totals.lastComparable)} at last rates, {pkr(d.totals.chosenComparable)} now</td>
+                  <tr><td colSpan={showReceived ? 6 : 5} className="num pr-muted">Items with a last buying rate: {pkr(d.totals.lastComparable)} at last rates, {pkr(d.totals.chosenComparable)} now</td>
                     <td className="num"><span className={`sw-chip ${Number(d.totals.saving) >= 0 ? "sw-chip--ok" : "sw-chip--danger"}`}>{Number(d.totals.saving) >= 0 ? `${pkr(d.totals.saving)} below last` : `${pkr(-Number(d.totals.saving))} above last`}</span></td>{d.can.edit && <td></td>}</tr>
                 )}
-                {d.totals.firstPurchases > 0 && <tr><td colSpan={d.can.edit ? 7 : 6} className="pr-muted">{d.totals.firstPurchases} item{d.totals.firstPurchases === 1 ? " has" : "s have"} no comparable last buying rate; this purchase sets it.</td></tr>}
+                {d.totals.firstPurchases > 0 && <tr><td colSpan={(d.can.edit ? 7 : 6) + (showReceived ? 1 : 0)} className="pr-muted">{d.totals.firstPurchases} item{d.totals.firstPurchases === 1 ? " has" : "s have"} no comparable last buying rate; this purchase sets it.</td></tr>}
               </tfoot>
             )}
           </table>
@@ -266,6 +277,8 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
           </div>
         )}
       </section>
+
+      {d.lines.length > 0 && <RfqPanel session={session} d={d} post={post} />}
 
       <div className="pr-grid">
         <section className="ops-card pr-pad">
@@ -301,14 +314,7 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
               </div>
             </>
           )}
-          {d.can.receive && (
-            <>
-              <p className="pr-muted">Ordered {fmtAt(d.orderedAt)} · {d.orderReference}. When the material reaches Store, mark it received; the quantities are added to stock.</p>
-              <textarea className="pr-note" placeholder="Note (optional): what arrived, any shortage" value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} />
-              <div className="pr-actions"><Button variant="primary" loading={busy} onClick={async () => { if (await post("/received", { note }, "Received into Store; stock updated.")) setNote(""); }}>Mark received into Store</Button></div>
-            </>
-          )}
-          {d.status === "ordered" && !d.can.receive && <p className="pr-muted">Ordered {fmtAt(d.orderedAt)} · {d.orderReference}. Waiting for the material to reach Store.</p>}
+          {d.status === "ordered" && <p className="pr-muted">Ordered {fmtAt(d.orderedAt)} · {d.orderReference}. Store (Shaigan) records what arrives, item by item; {allIn} of {d.lines.length} item{d.lines.length === 1 ? "" : "s"} fully received so far.</p>}
           {d.status === "received" && <p className="pr-muted">Received into Store by {d.receivedBy} {fmtAt(d.receivedAt)}. The quantities were added to stock.</p>}
           {(d.status === "rejected" || d.status === "cancelled") && <p className="pr-muted">This request is closed.</p>}
         </section>

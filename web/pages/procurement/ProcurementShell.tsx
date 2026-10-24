@@ -3,18 +3,20 @@ import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
 import { NotificationCenter } from "../../components/NotificationCenter.js";
 import { PurchaseRequests } from "./PurchaseRequests.js";
+import { MiscSites } from "./MiscSites.js";
 import "../ops/ops.css";
 import "../../components/global-search.css";
 import "./procurement.css";
 import { fmtAt, fmtDay, fmtShort, pkr, qty, relDay, shiftDays, short, stageText, STATUS_CHIP, type InventoryRow, type Overview, type RequestDetail } from "./types.js";
 
 const PasswordChange = lazy(() => import("../Dashboard.js").then((m) => ({ default: m.PasswordChange })));
-type View = "dashboard" | "received" | "upcoming" | "stock" | "requests" | "account";
-const VIEWS: View[] = ["dashboard", "received", "upcoming", "stock", "requests", "account"];
+type View = "dashboard" | "received" | "upcoming" | "stock" | "misc" | "requests" | "account";
+const VIEWS: View[] = ["dashboard", "received", "upcoming", "stock", "misc", "requests", "account"];
 const PAGE: Record<Exclude<View, "dashboard">, { title: string; note: string }> = {
   received: { title: "POs received", note: "Every site with a customer PO and an IPO. Material is checked against stock, oldest PO first." },
   upcoming: { title: "Upcoming POs", note: "Heads-up BOQs from Coordination whose customer PO has not arrived yet. Their material counts into what to buy." },
   stock: { title: "Inventory status", note: "What Store has, what the received and upcoming POs need, what is on order, and what is left to buy." },
+  misc: { title: "Misc items", note: "Misc items BOQs filled by Design with the survey report, site by site. Store sends them to site; until then they count into what to buy." },
   requests: { title: "Purchase requests", note: "Needed items go on a request, vendors quote, Abu Bakar approves, you order, Store receives." },
   account: { title: "My account", note: "Your identity and access to the Procurement workspace." },
 };
@@ -24,6 +26,7 @@ const I = {
   po: <svg className="i" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4M9 13h6M9 17h6" /></svg>,
   clock: <svg className="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>,
   box: <svg className="i" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z" /><path d="M3 7l9 4 9-4M12 11v10" /></svg>,
+  misc: <svg className="i" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10" /><circle cx="19" cy="18" r="2" /></svg>,
   req: <svg className="i" viewBox="0 0 24 24"><path d="M9 5h6l1 2h3v13H5V7h3z" /><path d="M9 13l2 2 4-4" /></svg>,
   account: <svg className="i" viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0" /><circle cx="12" cy="7" r="4" /></svg>,
   key: <svg className="i" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" /><path d="M10.9 12.1 20 3M15 8l3 3M18 5l3 3" /></svg>,
@@ -138,14 +141,15 @@ export function ProcurementShell({ session, onLogout, viewingAs, onReturn }: { s
             {item("received", "POs received", I.po, counts.received)}
             {item("upcoming", "Upcoming POs", I.clock, counts.upcoming)}
             {item("stock", "Inventory status", I.box, counts.toBuy, true)}
+            {item("misc", "Misc items", I.misc)}
             {item("requests", "Purchase requests", I.req, counts.requests)}
           </nav>
           <div className="ops-side-foot">Procurement · Power Zone V2</div>
         </aside>
         <main className="ops-main">
           {error && <p className="ops-feedback" role="alert">{error}</p>}
-          {view !== "dashboard" && <div className="ops-page-head"><div><h2>{PAGE[view].title}</h2><p>{PAGE[view].note}{region && view !== "stock" && view !== "requests" && view !== "account" ? ` Showing ${region} only.` : ""}</p></div></div>}
-          {!scoped && view !== "account" && view !== "requests" ? <p className="ops-foot">Loading…</p> : (
+          {view !== "dashboard" && <div className="ops-page-head"><div><h2>{PAGE[view].title}</h2><p>{PAGE[view].note}{region && view !== "stock" && view !== "misc" && view !== "requests" && view !== "account" ? ` Showing ${region} only.` : ""}</p></div></div>}
+          {!scoped && view !== "account" && view !== "requests" && view !== "misc" ? <p className="ops-foot">Loading…</p> : (
             <>
               {view === "dashboard" && scoped && <Home session={session} data={scoped} region={region} onGo={go} onOpenRequest={openReq} />}
               {view === "received" && scoped && <ReceivedPage data={scoped} />}
@@ -153,6 +157,7 @@ export function ProcurementShell({ session, onLogout, viewingAs, onReturn }: { s
               {view === "stock" && scoped && <StockPage data={scoped} busy={busy} onFromToBuy={() => void fromToBuy()} />}
             </>
           )}
+          {view === "misc" && <MiscSites session={session} mode="buyer" />}
           {view === "requests" && <PurchaseRequests session={session} mode="buyer" openId={openRequest} onOpened={() => undefined} onChanged={() => void load()} key={openRequest ?? "list"} />}
           {view === "account" && (
             <div className="ops-account">
@@ -368,9 +373,12 @@ function StockPage({ data, busy, onFromToBuy }: { data: Overview; busy: boolean;
     { key: "short", label: "Short for received POs", f: (i: InventoryRow) => i.boughtByBuyer && i.shortForReceived },
     { key: "order", label: "On order or requested", f: (i: InventoryRow) => Number(i.onOrder) > 0 || Number(i.requested) > 0 },
     { key: "enough", label: "Enough", f: (i: InventoryRow) => i.boughtByBuyer && Number(i.toBuy) === 0 },
+    { key: "misc", label: "Misc items", f: (i: InventoryRow) => i.misc },
     { key: "others", label: "Not bought by Procurement", f: (i: InventoryRow) => !i.boughtByBuyer },
   ];
-  const rows = data.inventory.filter(tabs.find((t) => t.key === tab)!.f);
+  // Main stock first; misc site items follow under their own divider (Moaz, 24 Oct 2026).
+  const rows = data.inventory.filter(tabs.find((t) => t.key === tab)!.f).sort((a, b) => Number(a.misc) - Number(b.misc));
+  const firstMisc = rows.findIndex((i) => i.misc);
   return (
     <div className="pr">
       <div className="ops-banner">{I.info}To buy = received POs need + upcoming POs need − in stock − on order − already on a request. In stock = Store's latest count plus anything received after it; only Store changes counts. Batteries, BMS and inverters are shown for information; they are not bought through Procurement. Inventory covers all regions.</div>
@@ -381,17 +389,18 @@ function StockPage({ data, busy, onFromToBuy }: { data: Overview; busy: boolean;
           <table className="ops-table">
             <thead><tr><th>Item</th><th className="num">In stock</th><th className="num">Received POs need</th><th className="num">Upcoming POs need</th><th className="num">On order</th><th className="num">On a request</th><th className="num">To buy</th><th>Status</th></tr></thead>
             <tbody>
-              {rows.length === 0 ? <tr><td colSpan={8} className="ops-empty">No items here.</td></tr> : rows.map((i) => {
+              {rows.length === 0 ? <tr><td colSpan={8} className="ops-empty">No items here.</td></tr> : rows.flatMap((i, n) => {
                 const st = inventoryStatus(i);
-                return (
+                return [
+                  ...(n === firstMisc ? [<tr key="misc-divider" className="pr-divider"><td colSpan={8}>Misc items <small>small site items from Design's misc items BOQs</small></td></tr>] : []),
                   <tr key={i.itemKey}>
-                    <td className="site"><b>{i.name}</b><small>{i.unit}{i.lastCountAt ? ` · counted ${fmtAt(i.lastCountAt)}` : " · not counted yet"}{!i.inRateMaster ? " · not in the rate master" : ""}{i.unitMismatch ? ` · counted in ${i.stockUnit}` : ""}</small></td>
+                    <td className="site"><b>{i.name}</b><small>{i.misc ? "Misc item · " : ""}{i.unit}{i.lastCountAt ? ` · counted ${fmtAt(i.lastCountAt)}` : " · not counted yet"}{!i.inRateMaster ? " · not in the rate master" : ""}{i.unitMismatch ? ` · counted in ${i.stockUnit}` : ""}</small></td>
                     <td className="num">{qty(i.inStock)}</td>
                     <td className="num">{qty(i.receivedNeed)}</td><td className="num">{qty(i.upcomingNeed)}</td><td className="num">{qty(i.onOrder)}</td><td className="num">{qty(i.requested)}</td>
                     <td className="num"><b>{i.boughtByBuyer ? qty(i.toBuy) : "—"}</b></td>
                     <td><span className={st.cls}>{st.text}</span></td>
-                  </tr>
-                );
+                  </tr>,
+                ];
               })}
             </tbody>
           </table>

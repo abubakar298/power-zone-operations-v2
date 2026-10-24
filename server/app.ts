@@ -31,6 +31,9 @@ import { SiteWorkflowRepository } from "./site-workflow/repository.js";
 import { siteWorkflowHttp } from "./site-workflow/http.js";
 import { operationsAccess } from "./http/operations-access.js";
 import { ProcurementRepository } from "./procurement/repository.js";
+import { MiscItemsRepository } from "./procurement/misc.js";
+import { StockWatchRepository } from "./procurement/stock-watch.js";
+import { RfqRepository } from "./procurement/rfq.js";
 import { procurementHttp } from "./procurement/http.js";
 import { operationsHttp } from "./operations/http.js";
 import { CommercialRepository } from "./commercial/repository.js";
@@ -234,7 +237,7 @@ export function createApp(
     operationsHttp(new OperationsRepository(pool), sessionForWorkspace),
   );
   app.use("/api/site-workflow", sessionForWorkspace, siteWorkflowHttp(new SiteWorkflowRepository(pool), sessionForWorkspace));
-  app.use("/api/procurement", sessionForWorkspace, procurementHttp(new ProcurementRepository(pool), sessionForWorkspace));
+  app.use("/api/procurement", sessionForWorkspace, procurementHttp(new ProcurementRepository(pool), sessionForWorkspace, new MiscItemsRepository(pool), new StockWatchRepository(pool), new RfqRepository(pool, new ProcurementRepository(pool))));
   app.use(
     "/api/coordinator",
     sessionForWorkspace,

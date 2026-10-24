@@ -36,6 +36,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { api, type Session } from "../api.js";
 import { Button } from "../ui/Button.js";
 import { Field } from "../ui/Field.js";
+import { MiscItemsBoq } from "./procurement/MiscItemsBoq.js";
 import { DocumentPreview } from "../components/DocumentPreview.js";
 import { NewCustomer } from "../components/NewCustomer.js";
 import { canWriteMaster } from "../../server/masters/permissions.js";
@@ -2869,6 +2870,7 @@ function RecordEditor({
           <p>Submitted to Coordination · Preview only</p>
           <CoordinationTechnicalSummary session={session} detail={detail} />
         </section>
+        <MiscItemsBoq session={session} recordId={r.id} />
       </div>
     );
   if (
@@ -2907,6 +2909,7 @@ function RecordEditor({
             <CoordinationTechnicalSummary session={session} detail={detail} />
           )}
         </section>
+        {manager && r.stage !== "survey_requested" && <MiscItemsBoq session={session} recordId={r.id} />}
       </div>
     );
   if (editingRequest)
@@ -3198,6 +3201,12 @@ function RecordEditor({
         ["report_received", "technical_review", "technical_revision"].includes(
           r.stage,
         ) && <TechnicalReview {...{ session, refs, detail, action }} />}
+      {(design || manager) &&
+        r.stage !== "declined" &&
+        !["request_review", "survey_requested"].includes(r.stage) &&
+        !(r.stage === "survey_scheduled" && !r.data.surveyDispatchId) && (
+          <MiscItemsBoq session={session} recordId={r.id} />
+        )}
       {!design &&
         r.task &&
         !designOutputReview &&

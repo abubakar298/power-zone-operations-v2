@@ -54,6 +54,9 @@ const StoreStock = lazy(() =>
 const PurchaseApprovals = lazy(() =>
   import("./procurement/PurchaseApprovals.js").then((module) => ({ default: module.PurchaseApprovals })),
 );
+const StockWatch = lazy(() =>
+  import("./procurement/StockWatch.js").then((module) => ({ default: module.StockWatch })),
+);
 const OperationsHome = lazy(() =>
   import("./site-workflow/OperationsHome.js").then((module) => ({ default: module.OperationsHome })),
 );
@@ -159,6 +162,7 @@ export function Dashboard({
     | "sites-completed"
     | "sites-docs"
     | "purchase-approvals"
+    | "stock-watch"
     | "stock-count"
     | "reports"
     | "inventory"
@@ -256,6 +260,7 @@ export function Dashboard({
       | "sites-completed"
       | "sites-docs"
       | "purchase-approvals"
+      | "stock-watch"
       | "stock-count"
       | "reports"
       | "inventory"
@@ -464,6 +469,11 @@ export function Dashboard({
               {approvals.approver && (
                 <button className={view === "purchase-approvals" ? "nav-active" : ""} aria-current={view === "purchase-approvals" ? "page" : undefined} onClick={() => navigate("purchase-approvals")}>
                   <Icon name="shield" /><span>Purchase approvals</span>{approvals.waiting > 0 && <small className="nav-count">{approvals.waiting}</small>}
+                </button>
+              )}
+              {approvals.approver && (
+                <button className={view === "stock-watch" ? "nav-active" : ""} aria-current={view === "stock-watch" ? "page" : undefined} onClick={() => navigate("stock-watch")}>
+                  <Icon name="shield" /><span>Inverter & battery stock</span>
                 </button>
               )}
             </nav>
@@ -832,6 +842,8 @@ export function Dashboard({
                                 ? "Sites completed (last 30 days)"
                                 : view === "stock-count"
                                 ? "Stock count"
+                                : view === "stock-watch"
+                                ? "Inverter & battery stock"
                                 : view === "purchase-approvals"
                                 ? "Purchase approvals"
                                 : view === "sites-docs"
@@ -980,6 +992,8 @@ export function Dashboard({
                                       ? "Sites completed (last 30 days)"
                                       : view === "stock-count"
                                       ? "Stock count"
+                                      : view === "stock-watch"
+                                      ? "Inverter & battery stock"
                                       : view === "purchase-approvals"
                                       ? "Purchase approvals"
                                       : view === "sites-docs"
@@ -1047,6 +1061,8 @@ export function Dashboard({
                                       ? "Sites closed in the last 30 days."
                                       : view === "stock-count"
                                       ? "Receive what Procurement ordered and keep the stock count. Procurement uses these counts to work out what to buy."
+                                      : view === "stock-watch"
+                                      ? "Inverters, batteries and BMS against the coming sites. You are alerted when to order."
                                       : view === "purchase-approvals"
                                       ? "Purchase requests from Procurement. Only you can approve them."
                                       : view === "sites-docs"
@@ -1279,6 +1295,7 @@ export function Dashboard({
               {view === "sites-docs" && <SiteBoard session={session} mode="docs" />}
               {view === "reports" && <SiteReport session={session} />}
               {view === "stock-count" && session.user.role === "Inventory" && <StoreStock session={session} />}
+              {view === "stock-watch" && approvals.approver && <StockWatch session={session} />}
               {view === "purchase-approvals" && approvals.approver && <PurchaseApprovals session={session} onChanged={() => setApprovals((a) => ({ ...a }))} />}
               {view === "operations" && (
                 <Operations session={session} initialIpoId={operationsIpoId} portal={departmentView==='operations'} initialAdvanceReference={advanceToOpen} advanceNonce={advanceOpenNonce} />

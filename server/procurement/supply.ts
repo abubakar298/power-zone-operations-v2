@@ -7,6 +7,10 @@ export const SERVICE_LINE = /^(labou?r|delivery|transport|installation|commissio
 /** Batteries, BMS and inverters are not bought by the Procurement buyer (Moaz, 20 Oct 2026). */
 export const NOT_BOUGHT_BY_BUYER = /^(bat|hyb|inv)|battery|bms|inverter/i;
 export const boughtByBuyer = (key: string, name = key) => !NOT_BOUGHT_BY_BUYER.test(key) && !NOT_BOUGHT_BY_BUYER.test(name);
+/** Misc site items (MSC-…) sit outside the rate master so they stay off BOQs and quotations (Moaz, 24 Oct 2026). */
+export const isMiscItem = (key: string) => /^MSC-\d+$/.test(key);
+/** Every item Procurement and Store can use: the rate master plus the active misc items. */
+export const PROCUREMENT_ITEMS = "(SELECT key, display_name, unit FROM item_master UNION ALL SELECT key, name, unit FROM misc_items WHERE active)";
 
 export const num = (v: unknown) => (v == null ? 0 : Number(v));
 /** Plain decimal text without trailing zeros: 12.500000 → "12.5". */
@@ -38,9 +42,11 @@ export interface UpcomingPo {
   workflowStage: string | null; expectedDate: string | null; items: number; bigItems: { panels: string; batteries: string; inverters: string }; updatedAt: string;
 }
 export interface InventoryRow {
-  itemKey: string; name: string; unit: string; inRateMaster: boolean; boughtByBuyer: boolean; counted: boolean; lastCountAt: string | null; stockUnit: string | null;
+  itemKey: string; name: string; unit: string; inRateMaster: boolean; misc: boolean; boughtByBuyer: boolean; counted: boolean; lastCountAt: string | null; stockUnit: string | null;
   inStock: string; receivedNeed: string; upcomingNeed: string; onOrder: string; requested: string; toBuy: string; shortForReceived: boolean; unitMismatch: boolean;
 }
+/** One site's need for an inverter, battery or BMS item, for Abu Bakar's watch. */
+export interface WatchNeed { itemKey: string; label: string; kind: "received" | "upcoming"; date: string | null; qty: number }
 export interface RateMasterItem { name: string; unit: string; rate: number | null; since: string | null }
 
 export async function rateMaster(c: Db, keys: string[]) {
@@ -49,7 +55,8 @@ export async function rateMaster(c: Db, keys: string[]) {
     `SELECT m.key, m.display_name, m.unit,
       (SELECT rate FROM rate_versions v WHERE v.key=m.key AND v.status='Active' ORDER BY version DESC LIMIT 1) AS rate,
       (SELECT to_char(created_at,'YYYY-MM-DD') FROM rate_versions v WHERE v.key=m.key AND v.status='Active' ORDER BY version DESC LIMIT 1) AS since
-     FROM item_master m WHERE m.key = ANY($1)`,
+     FROM item_master m WHERE m.key = ANY($1)
+     UNION ALL SELECT x.key, x.name, x.unit, NULL, NULL FROM misc_items x WHERE x.key = ANY($1)`,
     [keys],
   )).rows;
   return new Map(rows.map((r) => [r.key as string, { name: (r.display_name || r.key) as string, unit: r.unit as string, rate: r.rate == null ? null : num(r.rate), since: r.since as string | null }]));
@@ -118,8 +125,12 @@ export async function computeSupply(pool: Pool, c: Db) {
     qty: num(r.counted_qty) + num(r.received), counted: r.counted_at != null,
     countedAt: r.counted_at ? new Date(r.counted_at).toISOString() : null, unit: (r.count_unit ?? r.last_unit) as string,
   }]));
+  // Still due from vendors: approved and ordered quantities less what Store has already received against them.
   const order = new Map((await c.query(
-    `SELECT l.item_key, sum(l.quantity) AS qty FROM purchase_request_lines l JOIN purchase_requests r ON r.id=l.request_id
+    `SELECT l.item_key, sum(GREATEST(l.quantity - COALESCE(g.qty,0), 0)) AS qty
+     FROM purchase_request_lines l JOIN purchase_requests r ON r.id=l.request_id
+     LEFT JOIN (SELECT request_id, item_key, sum(quantity) AS qty FROM stock_on_hand_entries WHERE kind='receipt' AND request_id IS NOT NULL GROUP BY 1,2) g
+       ON g.request_id=l.request_id AND g.item_key=l.item_key
      WHERE r.status IN ('approved','ordered') GROUP BY 1`,
   )).rows.map((r) => [r.item_key as string, num(r.qty)]));
   // Already on a draft or a request waiting for Abu Bakar: not counted twice.
@@ -129,12 +140,27 @@ export async function computeSupply(pool: Pool, c: Db) {
   )).rows.map((r) => [r.item_key as string, num(r.qty)]));
 
   const pending = new Set(pos.filter((p) => !p.delivered_on && p.stage !== "closed").map((p) => p.issuance_id as string));
+  // Misc items BOQs from Design that Store has not sent yet: they count with the site's received PO, or as upcoming.
+  const miscRows = (await c.query(
+    `SELECT b.record_id, l.item_key, l.quantity AS qty, m.unit,
+       (SELECT x.issuance_id FROM (
+          SELECT operations_id AS issuance_id FROM project_workflow_issuances WHERE record_id=b.record_id
+          UNION ALL SELECT confirmed_issuance_id FROM project_advance_planning WHERE record_id=b.record_id AND confirmed_issuance_id IS NOT NULL
+          UNION ALL SELECT operations_id FROM headsup_advance_final_links WHERE record_id=b.record_id) x LIMIT 1) AS issuance_id
+     FROM site_misc_boqs b JOIN site_misc_boq_lines l ON l.record_id=b.record_id JOIN misc_items m ON m.key=l.item_key
+     WHERE b.sent_at IS NULL`,
+  )).rows;
+  const upcomingIds = new Set(up.map((u) => u.record_id as string));
   const need = new Map<string, { unit: string; received: number; upcoming: number }>();
   const add = (key: string, unit: string, field: "received" | "upcoming", qty: number) => {
     const row = need.get(key) ?? { unit, received: 0, upcoming: 0 };
     row[field] += qty;
     need.set(key, row);
   };
+  for (const m of miscRows) {
+    if (m.issuance_id && pending.has(m.issuance_id)) lines.push({ issuance_id: m.issuance_id, item_key: m.item_key, unit: m.unit, qty: m.qty });
+    else if (!m.issuance_id && upcomingIds.has(m.record_id)) add(m.item_key, m.unit, "upcoming", num(m.qty));
+  }
   for (const l of lines) if (pending.has(l.issuance_id)) add(l.item_key, l.unit, "received", num(l.qty));
   for (const u of up) for (const item of (u.snapshot?.items ?? []) as any[]) {
     const key = String(item.key ?? item.rateKey ?? "");
@@ -144,12 +170,29 @@ export async function computeSupply(pool: Pool, c: Db) {
   for (const key of stock.keys()) if (!need.has(key)) need.set(key, { unit: stock.get(key)!.unit, received: 0, upcoming: 0 });
   const master = await rateMaster(c, [...need.keys()]);
 
+  // Inverters, batteries and BMS site by site, for Abu Bakar's watch.
+  const watchNeeds: WatchNeed[] = [];
+  const watched = (key: string) => !isMiscItem(key) && !boughtByBuyer(key, master.get(key)?.name ?? key);
+  const site = (n: unknown, code: unknown) => `${n ?? "Site"}${code ? ` (${code})` : ""}`;
+  const poBy = new Map(pos.map((p) => [p.issuance_id as string, p]));
+  for (const l of lines) if (pending.has(l.issuance_id) && watched(l.item_key)) {
+    const p = poBy.get(l.issuance_id);
+    const date = p?.expected_delivery ?? p?.po_date ?? null;
+    watchNeeds.push({ itemKey: l.item_key, label: site(p?.site_name, p?.site_code), kind: "received", date: date ? String(date).slice(0, 10) : null, qty: num(l.qty) });
+  }
+  for (const u of up) for (const item of (u.snapshot?.items ?? []) as any[]) {
+    const key = String(item.key ?? item.rateKey ?? "");
+    if (!key || SERVICE_LINE.test(key) || !watched(key)) continue;
+    const date = u.snapshot?.expectedDate ?? null;
+    watchNeeds.push({ itemKey: key, label: site(u.site_name, u.site_code), kind: "upcoming", date: date ? String(date).slice(0, 10) : null, qty: num(item.qty ?? item.boqQty) });
+  }
+
   const inventory: InventoryRow[] = [...need.entries()].map(([key, x]) => {
     const s = stock.get(key);
     const have = s?.qty ?? 0, ord = order.get(key) ?? 0, req = requested.get(key) ?? 0;
     const name = master.get(key)?.name ?? key;
     return {
-      itemKey: key, name, unit: x.unit || s?.unit || master.get(key)?.unit || "", inRateMaster: master.has(key), boughtByBuyer: boughtByBuyer(key, name),
+      itemKey: key, name, unit: x.unit || s?.unit || master.get(key)?.unit || "", inRateMaster: master.has(key), misc: isMiscItem(key), boughtByBuyer: boughtByBuyer(key, name),
       counted: Boolean(s?.counted), lastCountAt: s?.countedAt ?? null, stockUnit: s?.unit ?? null,
       inStock: fixed(have), receivedNeed: fixed(x.received), upcomingNeed: fixed(x.upcoming), onOrder: fixed(ord), requested: fixed(req),
       toBuy: fixed(Math.max(0, x.received + x.upcoming - have - ord - req)),
@@ -186,5 +229,5 @@ export async function computeSupply(pool: Pool, c: Db) {
       bigItems: { panels: sum("panels"), batteries: sum("batteries"), inverters: sum("inverters") }, updatedAt: new Date(u.updated_at).toISOString(),
     };
   }).sort((a, b) => (a.expectedDate ?? "9999").localeCompare(b.expectedDate ?? "9999"));
-  return { inventory, receivedPOs, upcoming };
+  return { inventory, receivedPOs, upcoming, watchNeeds };
 }
