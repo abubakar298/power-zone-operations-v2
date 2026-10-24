@@ -143,7 +143,7 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
             <b>Enter a vendor's quotation for all items</b>
             <div className="pr-addrow">
               <input aria-label="Vendor for this quotation" list={`rfq-asked-${d.id}`} placeholder="Vendor" value={vendor} maxLength={200} onChange={(e) => setVendor(e.target.value)} onBlur={(e) => e.target.value.trim() && pickVendor(e.target.value.trim())} />
-              <datalist id={`rfq-asked-${d.id}`}>{[...asked, ...(data?.vendorsUsed ?? [])].map((v) => <option key={v} value={v} />)}</datalist>
+              <datalist id={`rfq-asked-${d.id}`}>{[...new Map([...asked, ...(data?.vendorsUsed ?? [])].map((v) => [v.trim().toLowerCase(), v] as const)).values()].map((v) => <option key={v} value={v} />)}</datalist>
               <label className="sw-link pr-upload">Read the vendor's filled Excel<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ""; }} /></label>
             </div>
             {read && <p className="pr-muted" role="status">{read}</p>}
