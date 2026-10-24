@@ -46,11 +46,19 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     .fill("browser-test-passphrase-298");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Welcome, Abu Bakar Siddique." }),
+    page.getByRole("heading", { name: "Dashboard", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Management approvals" }),
   ).toBeVisible();
+  await expect(page.getByRole('button',{name:'Dashboard',exact:true})).toHaveAttribute('aria-current','page');
+  const upsBucket=page.getByRole('button',{name:/^UBL UPS 0 IPOs received/});
+  await expect(upsBucket).toBeVisible();
+  await upsBucket.click();
+  await expect(page.getByRole('region',{name:'UBL UPS IPOs and installations'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Installed (0)',exact:true})).toBeVisible();
+  await openWorkspaceSection(page, 'Dashboard');
+  await expect(page.getByRole('region',{name:'UBL UPS IPOs and installations'})).toHaveCount(0);
   await openWorkspaceSection(page, 'My account');
   await expect(
     page.getByRole("heading", { name: "Your account", exact: true }),
@@ -58,7 +66,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await openWorkspaceSection(page, 'Dashboard');
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Welcome, Abu Bakar Siddique." }),
+    page.getByRole("heading", { name: "Dashboard", exact: true }),
   ).toBeVisible();
   await openWorkspaceSection(page, 'Master data');
   await expect(

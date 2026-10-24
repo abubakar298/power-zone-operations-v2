@@ -1,5 +1,5 @@
 import {UpsAlerts} from '../components/UpsAlerts.js';
-import {ManagementApprovals} from "../components/ManagementApprovals.js";
+import {ManagementDashboard} from "../components/ManagementDashboard.js";
 import {UpsManagementPortfolio} from "../components/UpsManagementPortfolio.js";
 import {DepartmentViewSwitcher} from "../components/DepartmentViewSwitcher.js";
 import {OperationsAreaSwitcher,ProcurementWorkspace,type OperationsArea} from "../components/OperationsAreaSwitcher.js";
@@ -470,6 +470,7 @@ export function Dashboard({
         <div className="sidebar-navigation">
           {["Admin", "Management"].includes(session.user.role) ? (
             <nav aria-label="Customer workspaces">
+              <button className={view === "dashboard" ? "nav-active" : ""} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard", undefined, true)}><Icon name="dashboard"/><span>Dashboard</span></button>
               {([
                 ["ubl", "UBL Solar"],
                 ["ubl-ups", "UBL UPS"],
@@ -1018,7 +1019,7 @@ export function Dashboard({
                       : view === "dashboard"
                         ? ["Coordinator", "Design"].includes(session.user.role)
                           ? bucketLabel(departmentPage)
-                          : `Welcome, ${session.user.displayName}.`
+                          : ["Admin", "Management"].includes(session.user.role) ? "Dashboard" : `Welcome, ${session.user.displayName}.`
                         : view === "design"
                           ? "Design workspace"
                           : view === "masters"
@@ -1092,7 +1093,7 @@ export function Dashboard({
                                 : ["Admin", "Management"].includes(
                                       session.user.role,
                                     )
-                                  ? "Review documents awaiting your approval."
+                                  ? "Review quotations awaiting your approval and UBL UPS installation progress."
                                   : "Select a bucket or review all pending tasks."
                         : view === "design"
                           ? "Design workspace"
@@ -1233,7 +1234,7 @@ export function Dashboard({
               {view === "dashboard" && session.user.role === "Operations" && (
                 <OperationsHome session={session} onGo={(target) => { if (target === "operations") setOperationsIpoId(undefined); navigate(target); }} onOpenSite={openSiteFromAnywhere} onOpenStage={(stage) => { setStageToOpen(stage); setSiteToOpen(undefined); navigate("sites"); }} />
               )}
-              {managementHome && <ManagementApprovals session={session} onOpen={(task)=>{
+              {managementHome && <ManagementDashboard session={session} onOpenUps={()=>navigate("ubl-ups")} onOpen={(task)=>{
                 setRevisionDraftId(task.draft_id);
                 setPricingRevisionId(task.boq_revision_id);
                 setPricingRequestId(task.request_id);
