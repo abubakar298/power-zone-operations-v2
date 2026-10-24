@@ -17,8 +17,9 @@ INSERT INTO inventory_final_stock_aliases(old_id,item_id) SELECT x->>'oldId',jso
 
 CREATE VIEW inventory_catalogue_recorded AS
  SELECT DISTINCT ON(item_id) * FROM inventory_catalogue_versions ORDER BY item_id,version DESC;
--- Retain the existing column names/types for all dependent queries.
-CREATE OR REPLACE VIEW inventory_catalogue_current AS
+-- The old application keeps its recorded catalogue throughout rolling deployment.
+-- Only the new application reads the final-ID projection.
+CREATE VIEW inventory_catalogue_final_current AS
  SELECT c.item_id,c.version,
    c.payload || jsonb_build_object('finalStockId',f.item_id IS NOT NULL,
      'stockUnits',coalesce(f.units,'[]'::jsonb),'stockDescription',f.description,

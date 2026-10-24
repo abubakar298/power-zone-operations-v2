@@ -26,6 +26,8 @@ test('final stock ID release preserves recorded business, pricing and current wo
   const box=m.catalogue.find(i=>i.item_id==='CH-11WAY-DB')!;
   assert.equal(box.payload.commercialDescription,'Current live wording retained');assert.equal(box.rate_key,old.rate_key);assert.equal(box.payload.unit,old.payload.unit);assert.deepEqual(box.payload.stockUnits,['piece']);
   assert(!m.catalogue.some(i=>i.item_id==='CH-11 WAY-DB'));
+  assert.equal((await db.pool.query("SELECT * FROM inventory_catalogue_current WHERE item_id='CH-11 WAY-DB'")).rows[0].payload.commercialDescription,old.payload.commercialDescription,'previous live application retains its old read projection during rollout');
+  assert.equal((await db.pool.query('SELECT count(*) FROM inventory_catalogue_current')).rows[0].count,'126');
   assert(m.itemAliases.some(a=>a.alias==='CH-11 WAY-DB'&&a.item_id==='CH-11WAY-DB'));
   assert(!m.itemAliases.some(a=>a.alias==='CH-Cable-DC-6MM'),'combined cable cannot resolve to an arbitrary colour');
   assert.equal(selectCatalogueItem(m,'6mm² DC Cable Red','Pakistan Cables')?.item_id,'CH-CBL-DC-6MM/1C-R/PK');
