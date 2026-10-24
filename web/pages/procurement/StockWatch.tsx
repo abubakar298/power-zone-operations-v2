@@ -39,6 +39,7 @@ export function StockWatch({ session }: { session: Session }) {
   const [setting, setSetting] = useState<Record<string, { leadDays: string; minStock: string }>>({});
   const [form, setForm] = useState({ vendor: "", orderReference: "", expectedOn: "", note: "" });
   const [lines, setLines] = useState<OrderLine[]>([]);
+  const [password, setPassword] = useState("");
 
   const load = useCallback(async () => {
     try { setData(await api<Watch>("/procurement/stock-watch")); setError(""); }
@@ -57,6 +58,11 @@ export function StockWatch({ session }: { session: Session }) {
     document.getElementById("sw-order")?.scrollIntoView({ behavior: "smooth" });
   };
   const submit = async () => {
+    // Recording an order needs the password again within the last 5 minutes (Moaz, 24 Oct 2026).
+    if (password) {
+      try { await api("/auth/confirm-password", { body: { password }, csrf: session.csrfToken }); setPassword(""); }
+      catch (e) { setError(e instanceof ApiError ? e.message : "Your password could not be checked."); setNotice(""); return; }
+    }
     const ok = await post("/procurement/stock-watch/orders", {
       vendor: form.vendor.trim(), orderReference: form.orderReference.trim(), expectedOn: form.expectedOn || null, note: form.note.trim(),
       lines: lines.map((l) => ({ itemKey: l.itemKey, quantity: l.quantity.trim().replace(/,/g, ""), rate: l.rate.trim() ? l.rate.trim().replace(/,/g, "") : null })),
@@ -152,6 +158,9 @@ export function StockWatch({ session }: { session: Session }) {
                 </table>
               )}
               <input aria-label="Note" placeholder="Note (optional)" value={form.note} maxLength={2000} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+              <label className="pr-muted pr-password">Your password, to record the order (asked again after 5 minutes)
+                <input type="password" autoComplete="current-password" maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} />
+              </label>
               <div className="pr-actions">
                 <Button variant="primary" loading={busy} disabled={!form.vendor.trim() || !form.orderReference.trim() || lines.length === 0 || lines.some((l) => !(Number(l.quantity) > 0))} onClick={() => void submit()}>Record order</Button>
               </div>

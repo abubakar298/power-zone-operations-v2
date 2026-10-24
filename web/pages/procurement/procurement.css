@@ -95,3 +95,6 @@
 /* Divider between main stock and misc site items (24 Oct 2026). */
 .ops-table tr.pr-divider td{background:var(--ops-soft,#f4f4f5);font-weight:600;font-size:12px;letter-spacing:.02em;text-transform:uppercase;color:var(--ops-ink,#18181b);border-top:2px solid var(--ops-line,#d4d4d8);padding-top:10px;padding-bottom:10px}
 .ops-table tr.pr-divider small{font-weight:400;text-transform:none;letter-spacing:0;color:var(--ops-muted,#52525b);margin-left:8px}
+/* Password re-entry before approving (24 Oct 2026). */
+.pr-password{display:grid;gap:4px;max-width:22rem}
+.pr-password input{height:38px}

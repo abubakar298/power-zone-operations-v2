@@ -64,6 +64,28 @@ export function App() {
   useEffect(() => {
     if (!linkPage) void load();
   }, []);
+  // Idle sign-out (Moaz, 24 Oct 2026): the server ends a session after PZ_IDLE_MINUTES without real activity.
+  useEffect(() => {
+    const ended = (e: Event) => {
+      const message = (e as CustomEvent<string>).detail ?? "";
+      if (state.kind !== "authenticated") return;
+      try { if (message) sessionStorage.setItem("pz:signed-out", message); } catch { /* the sign-in page then shows no reason */ }
+      signedOut();
+    };
+    window.addEventListener("pz:session-ended", ended);
+    return () => window.removeEventListener("pz:session-ended", ended);
+  }, [signedOut, state.kind]);
+  useEffect(() => {
+    if (state.kind !== "authenticated") return;
+    let lastPing = Date.now();
+    // A click, key press or scroll counts as activity even when it loads nothing (reading a long page).
+    const active = () => { if (Date.now() - lastPing > 120_000) { lastPing = Date.now(); void api("/auth/session").catch(() => undefined); } };
+    const names = ["pointerdown", "keydown", "wheel", "touchstart"];
+    for (const name of names) window.addEventListener(name, active, { passive: true });
+    // A quiet check every minute notices an ended session even when nothing is clicked.
+    const timer = setInterval(() => void api("/auth/session").catch(() => undefined), 60_000);
+    return () => { for (const name of names) window.removeEventListener(name, active); clearInterval(timer); };
+  }, [state.kind]);
   if (linkPage)
     return (
       <AuthLayout>

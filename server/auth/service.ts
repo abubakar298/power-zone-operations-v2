@@ -105,6 +105,18 @@ export class AuthService {
     );
   }
 
+  /** Password re-entry before money approvals (Moaz, 24 Oct 2026). Every try counts toward the sign-in lockout. */
+  async confirmPassword(user: User, body: unknown, ip: string) {
+    await this.throttle(ip, "password-check-ip", 30);
+    const input = z.object({ password: z.string().min(1).max(128) }).strict().safeParse(body);
+    if (!input.success) throw new HttpError(400, "Enter your password.");
+    if (!(await this.repository.consumeRateLimit(digest(`login-email:${user.email}`), 10)))
+      throw new HttpError(429, "Too many attempts. Please try again in 15 minutes.");
+    const stored = await this.repository.findUser(user.email);
+    if (!stored?.active || !(await verifyPassword(input.data.password, stored.password_hash)))
+      throw new HttpError(403, "Your password is incorrect.");
+  }
+
   async login(body: unknown, ip: string, oldTokenHash?: string) {
     await this.throttle(ip, "login-ip", 30);
     const input = credentials.safeParse(body);

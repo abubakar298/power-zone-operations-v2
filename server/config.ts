@@ -11,6 +11,8 @@ const schema = z.object({
   DATABASE_SSL: z.enum(["true", "false"]).default("false"),
   DATABASE_CA_FILE: z.string().optional(),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(0),
+  // Sign out after this many minutes without real activity (Moaz, 24 Oct 2026). The 12-hour limit still applies.
+  PZ_IDLE_MINUTES: z.coerce.number().int().min(5).max(720).default(30),
   EMAIL_DELIVERY_ENABLED: z.enum(["true", "false"]).default("true"),
   RESEND_WEBHOOK_SECRET: z.string().regex(/^whsec_[A-Za-z0-9+/=]+$/).optional(),
   RESEND_API_KEY: z.string().min(10).optional(),
@@ -39,6 +41,7 @@ export interface Config {
   databaseCaFile?: string;
   trustProxyHops: number;
   sessionHours: number;
+  idleMinutes?: number;
   emailDeliveryEnabled?: boolean;
   emailWebhookSecret?: string;
   emailApiKey?: string;
@@ -76,6 +79,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseCaFile: e.DATABASE_CA_FILE,
     trustProxyHops: e.TRUST_PROXY_HOPS,
     sessionHours: 12,
+    idleMinutes: e.PZ_IDLE_MINUTES,
     emailDeliveryEnabled: e.EMAIL_DELIVERY_ENABLED === "true",
     emailWebhookSecret: e.RESEND_WEBHOOK_SECRET,
     emailApiKey: e.RESEND_API_KEY,

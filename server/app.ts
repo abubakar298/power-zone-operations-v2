@@ -34,6 +34,8 @@ import { ProcurementRepository } from "./procurement/repository.js";
 import { MiscItemsRepository } from "./procurement/misc.js";
 import { StockWatchRepository } from "./procurement/stock-watch.js";
 import { RfqRepository } from "./procurement/rfq.js";
+import { ProcurementAccessRepository } from "./procurement/access.js";
+import { securityAudit, securityEventsHttp } from "./security/events.js";
 import { procurementHttp } from "./procurement/http.js";
 import { operationsHttp } from "./operations/http.js";
 import { CommercialRepository } from "./commercial/repository.js";
@@ -90,6 +92,8 @@ export function createApp(
     res.set("Cache-Control", "no-store");
     next();
   });
+  // Security log: price and cost views and exports, approvals and backup downloads (Moaz, 24 Oct 2026).
+  app.use("/api", securityAudit(pool));
   app.use(
     "/api/email-webhooks/resend",
     notificationWebhook(pool, config.emailWebhookSecret),
@@ -237,7 +241,8 @@ export function createApp(
     operationsHttp(new OperationsRepository(pool), sessionForWorkspace),
   );
   app.use("/api/site-workflow", sessionForWorkspace, siteWorkflowHttp(new SiteWorkflowRepository(pool), sessionForWorkspace));
-  app.use("/api/procurement", sessionForWorkspace, procurementHttp(new ProcurementRepository(pool), sessionForWorkspace, new MiscItemsRepository(pool), new StockWatchRepository(pool), new RfqRepository(pool, new ProcurementRepository(pool))));
+  app.use("/api/procurement", sessionForWorkspace, procurementHttp(new ProcurementRepository(pool), sessionForWorkspace, new MiscItemsRepository(pool), new StockWatchRepository(pool), new RfqRepository(pool, new ProcurementRepository(pool)), new ProcurementAccessRepository(pool)));
+  app.use("/api/security-events", securityEventsHttp(pool, sessionForWorkspace));
   app.use(
     "/api/coordinator",
     sessionForWorkspace,

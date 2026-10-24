@@ -5,13 +5,15 @@ import { HttpError } from "../http/errors.js";
 import type { ProcurementRepository } from "./repository.js";
 import type { MiscItemsRepository } from "./misc.js";
 import type { StockWatchRepository } from "./stock-watch.js";
+import type { ProcurementAccessRepository } from "./access.js";
+import { requireRecentPassword } from "../security/events.js";
 import { buildComparisonPdf, buildComparisonXlsx, buildRfqPdf, buildRfqXlsx, buildRfqZip, safeFileName, type RfqRepository } from "./rfq.js";
 import {
   chooseSchema, countSchema, decisionSchema, lineSchema, lineUpdateSchema, miscItemSchema, miscItemUpdateSchema, miscKeySchema, miscSaveSchema,
-  noteSchema, orderedSchema, quoteSchema, receiveSchema, requestSchema, requestUpdateSchema, watchOrderSchema, watchSettingSchema, rfqSchema, importQuotesSchema,
+  noteSchema, orderedSchema, quoteSchema, receiveSchema, requestSchema, requestUpdateSchema, watchOrderSchema, watchSettingSchema, rfqSchema, importQuotesSchema, accessChangeSchema,
 } from "./schema.js";
 
-export function procurementHttp(repo: ProcurementRepository, requireSession: RequestHandler, misc: MiscItemsRepository, watch: StockWatchRepository, rfqs: RfqRepository) {
+export function procurementHttp(repo: ProcurementRepository, requireSession: RequestHandler, misc: MiscItemsRepository, watch: StockWatchRepository, rfqs: RfqRepository, access: ProcurementAccessRepository) {
   const r = Router();
   r.use(requireSession);
   r.use((req, _res, next) => {
@@ -52,7 +54,11 @@ export function procurementHttp(repo: ProcurementRepository, requireSession: Req
     res.json(await repo.chooseQuote(actor(req), id(req.params.id), id(req.params.lineId, "line"), parse(chooseSchema, req.body).quoteId)));
   r.post("/requests/:id/quotes/:quoteId/remove", async (req, res) => res.json(await repo.removeQuote(actor(req), id(req.params.id), id(req.params.quoteId, "quotation"))));
   r.post("/requests/:id/submit", async (req, res) => res.json(await repo.submit(actor(req), id(req.params.id))));
-  r.post("/requests/:id/decide", async (req, res) => res.json(await repo.decide(actor(req), id(req.params.id), parse(decisionSchema, req.body))));
+  r.post("/requests/:id/decide", async (req, res) => {
+    const input = parse(decisionSchema, req.body);
+    if (input.decision === "approve") requireRecentPassword(req);
+    res.json(await repo.decide(actor(req), id(req.params.id), input));
+  });
   r.post("/requests/:id/ordered", async (req, res) => res.json(await repo.markOrdered(actor(req), id(req.params.id), parse(orderedSchema, req.body))));
   r.post("/requests/:id/received", async (req, res) => res.json(await repo.markReceived(actor(req), id(req.params.id), parse(receiveSchema, req.body))));
   r.post("/requests/:id/cancel", async (req, res) => res.json(await repo.cancel(actor(req), id(req.params.id), parse(noteSchema, req.body))));
@@ -71,7 +77,15 @@ export function procurementHttp(repo: ProcurementRepository, requireSession: Req
   r.get("/stock-watch", async (req, res) => res.json(await watch.view(actor(req))));
   r.post("/stock-watch/settings/:itemKey", async (req, res) =>
     res.json(await watch.saveSetting(actor(req), String(req.params.itemKey).slice(0, 200), parse(watchSettingSchema, req.body))));
-  r.post("/stock-watch/orders", async (req, res) => res.json(await watch.createOrder(actor(req), parse(watchOrderSchema, req.body))));
+  r.post("/stock-watch/orders", async (req, res) => {
+    const input = parse(watchOrderSchema, req.body);
+    requireRecentPassword(req);
+    res.json(await watch.createOrder(actor(req), input));
+  });
+
+  // Procurement access, managed by Admin.
+  r.get("/access", async (req, res) => res.json(await access.list(actor(req))));
+  r.post("/access/change", async (req, res) => res.json(await access.change(actor(req), parse(accessChangeSchema, req.body), req)));
 
   // Requests for quotation, quotations entered in bulk, and the comparative statement.
   const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";

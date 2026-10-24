@@ -1,6 +1,7 @@
 import { HttpError } from "../http/errors.js";
 import type { Pool, PoolClient } from "pg";
 import { transaction } from "../db/transaction.js";
+import { securityEvent } from "../security/events.js";
 
 export interface User {
   id: string;
@@ -27,6 +28,8 @@ export interface Session {
   csrfToken: string;
   expiresAt: Date;
   tokenHash: string;
+  lastActivityAt?: Date;
+  reauthAt?: Date | null;
 }
 
 export class AuthRepository {
@@ -123,16 +126,28 @@ export class AuthRepository {
 
   async getSession(tokenHash: string): Promise<Session | undefined> {
     const r = await this.pool.query<
-      User & { csrf_token: string; expires_at: Date }
+      User & { csrf_token: string; expires_at: Date; last_activity_at: Date; reauth_at: Date | null }
     >(
-      `SELECT u.id,u.email,u.display_name,u.role,EXISTS(SELECT 1 FROM restricted_cost_access a WHERE a.user_id=u.id) AS "restrictedCostAccess",s.csrf_token,s.expires_at
+      `SELECT u.id,u.email,u.display_name,u.role,EXISTS(SELECT 1 FROM restricted_cost_access a WHERE a.user_id=u.id) AS "restrictedCostAccess",s.csrf_token,s.expires_at,s.last_activity_at,s.reauth_at
       FROM auth_sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > now() AND u.active = true`,
       [tokenHash],
     );
     if (!r.rows[0]) return undefined;
-    const { csrf_token, expires_at, ...user } = r.rows[0];
-    return { user, csrfToken: csrf_token, expiresAt: expires_at, tokenHash };
+    const { csrf_token, expires_at, last_activity_at, reauth_at, ...user } = r.rows[0];
+    return { user, csrfToken: csrf_token, expiresAt: expires_at, tokenHash, lastActivityAt: last_activity_at, reauthAt: reauth_at };
+  }
+
+  /** Real activity keeps a session alive; background refreshes do not (Moaz, 24 Oct 2026). */
+  async touchSession(tokenHash: string) {
+    await this.pool.query("UPDATE auth_sessions SET last_activity_at=now() WHERE token_hash=$1 AND last_activity_at < now() - interval '20 seconds'", [tokenHash]);
+  }
+  /** The password was entered again just now (before a money approval). */
+  async markReauth(tokenHash: string) {
+    await this.pool.query("UPDATE auth_sessions SET reauth_at=now(), last_activity_at=now() WHERE token_hash=$1", [tokenHash]);
+  }
+  async logSecurity(...args: Parameters<typeof securityEvent> extends [unknown, ...infer R] ? R : never) {
+    await securityEvent(this.pool, ...args);
   }
 
   async deleteSession(session: Session) {

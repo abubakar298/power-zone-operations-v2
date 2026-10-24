@@ -95,3 +95,13 @@ export const importQuotesSchema = z
     lines: z.array(z.object({ lineId: z.uuid(), rate: amount, note: z.string().trim().max(500).default("") }).strict()).min(1, "Enter at least one rate.").max(150),
   })
   .strict();
+
+// Procurement access managed by Admin, by exact email (Moaz, 24 Oct 2026).
+export const accessChangeSchema = z
+  .object({
+    email: z.email("Enter the user's exact email.").max(254).transform((s) => s.trim().toLowerCase()),
+    capability: z.enum(["buyer", "approver"]),
+    action: z.enum(["grant", "remove"]),
+    reason: z.string().trim().min(3, "Write why (at least 3 characters).").max(500),
+  })
+  .strict();

@@ -29,7 +29,7 @@ const EVENT_TEXT: Record<string, string> = {
  * `mode="approver"` is Abu Bakar's view: it opens on the requests waiting for him and shows the decision buttons.
  */
 export function PurchaseRequests({ session, mode, openId, onOpened, onChanged }: {
-  session: Session; mode: "buyer" | "approver"; openId?: string; onOpened?: () => void; onChanged?: () => void;
+  session: Session; mode: "buyer" | "approver" | "reader"; openId?: string; onOpened?: () => void; onChanged?: () => void;
 }) {
   const [rows, setRows] = useState<RequestRow[] | null>(null);
   const [tab, setTab] = useState(mode === "approver" ? "pending" : "all");
@@ -118,6 +118,7 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
   const [adding, setAdding] = useState<{ item: ItemHit; quantity: string } | null>(null);
   const [note, setNote] = useState("");
   const [orderRef, setOrderRef] = useState("");
+  const [password, setPassword] = useState("");
 
   const apply = (r: RequestDetail) => {
     setD(r);
@@ -144,6 +145,13 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
       return true;
     } catch (e) { setError(e instanceof ApiError ? e.message : "The change was not saved."); setNotice(""); return false; }
     finally { setBusy(false); }
+  };
+
+  // Approving needs the password again within the last 5 minutes (Moaz, 24 Oct 2026).
+  const confirmPassword = async () => {
+    if (!password) return true;
+    try { await api("/auth/confirm-password", { body: { password }, csrf: session.csrfToken }); setPassword(""); return true; }
+    catch (e) { setError(e instanceof ApiError ? e.message : "Your password could not be checked."); setNotice(""); return false; }
   };
 
   if (error && !d) return <div className="pr"><p className="ops-feedback" role="alert">{error}</p><Button variant="neutral" onClick={onBack}>Back</Button></div>;
@@ -296,8 +304,11 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
             <>
               <p className="pr-muted">PKR {pkr(d.totals.atChosen)} for {d.lines.length} item{d.lines.length === 1 ? "" : "s"}{Number(d.totals.saving) > 0 ? `, ${pkr(d.totals.saving)} below last rates` : ""}. Only you can approve this.</p>
               <textarea className="pr-note" placeholder="Note to Hamza (needed to send back or reject)" value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} />
+              <label className="pr-muted pr-password">Your password, to approve (asked again after 5 minutes)
+                <input type="password" autoComplete="current-password" maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} />
+              </label>
               <div className="pr-actions">
-                <Button variant="primary" loading={busy} onClick={async () => { if (await post("/decide", { decision: "approve", note }, "Approved.")) setNote(""); }}>Approve</Button>
+                <Button variant="primary" loading={busy} onClick={async () => { if ((await confirmPassword()) && (await post("/decide", { decision: "approve", note }, "Approved."))) setNote(""); }}>Approve</Button>
                 <Button variant="neutral" loading={busy} disabled={!note.trim()} onClick={async () => { if (await post("/decide", { decision: "send_back", note }, "Sent back to Hamza.")) setNote(""); }}>Send back for changes</Button>
                 <Button variant="danger" loading={busy} disabled={!note.trim()} onClick={async () => { if (await post("/decide", { decision: "reject", note }, "Rejected.")) setNote(""); }}>Reject</Button>
               </div>

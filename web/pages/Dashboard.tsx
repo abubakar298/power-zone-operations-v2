@@ -54,6 +54,12 @@ const StoreStock = lazy(() =>
 const PurchaseApprovals = lazy(() =>
   import("./procurement/PurchaseApprovals.js").then((module) => ({ default: module.PurchaseApprovals })),
 );
+const ProcurementAccess = lazy(() =>
+  import("./security/ProcurementAccess.js").then((module) => ({ default: module.ProcurementAccess })),
+);
+const SecurityLog = lazy(() =>
+  import("./security/SecurityLog.js").then((module) => ({ default: module.SecurityLog })),
+);
 const StockWatch = lazy(() =>
   import("./procurement/StockWatch.js").then((module) => ({ default: module.StockWatch })),
 );
@@ -162,6 +168,9 @@ export function Dashboard({
     | "sites-completed"
     | "sites-docs"
     | "purchase-approvals"
+    | "purchase-requests"
+    | "procurement-access"
+    | "security-log"
     | "stock-watch"
     | "stock-count"
     | "reports"
@@ -260,6 +269,9 @@ export function Dashboard({
       | "sites-completed"
       | "sites-docs"
       | "purchase-approvals"
+      | "purchase-requests"
+      | "procurement-access"
+      | "security-log"
       | "stock-watch"
       | "stock-count"
       | "reports"
@@ -477,6 +489,16 @@ export function Dashboard({
                   <Icon name="shield" /><span>Purchase approvals</span>{approvals.waiting > 0 && <small className="nav-count">{approvals.waiting}</small>}
                 </button>
               )}
+              {session.user.role === "Admin" && (
+                <button className={view === "procurement-access" ? "nav-active" : ""} aria-current={view === "procurement-access" ? "page" : undefined} onClick={() => navigate("procurement-access")}>
+                  <Icon name="users" /><span>Procurement access</span>
+                </button>
+              )}
+              {session.user.role === "Admin" && (
+                <button className={view === "security-log" ? "nav-active" : ""} aria-current={view === "security-log" ? "page" : undefined} onClick={() => navigate("security-log")}>
+                  <Icon name="shield" /><span>Security log</span>
+                </button>
+              )}
               {approvals.approver && (
                 <button className={view === "stock-watch" ? "nav-active" : ""} aria-current={view === "stock-watch" ? "page" : undefined} onClick={() => navigate("stock-watch")}>
                   <Icon name="shield" /><span>Inverter & battery stock</span>
@@ -561,6 +583,8 @@ export function Dashboard({
                   Dashboard
                 </button>
                 {["Accounts"].includes(session.user.role) && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
+                {/* Accounts reads purchase requests and their prices; nothing to approve (Moaz, 24 Oct 2026). */}
+                {session.user.role === "Accounts" && <button className={view === "purchase-requests" ? "nav-active" : ""} aria-current={view === "purchase-requests" ? "page" : undefined} onClick={() => navigate("purchase-requests")}><Icon name="file" /><span>Purchase requests</span></button>}
 
                 {["Admin", "Management", "Coordinator"].includes(
                   session.user.role,
@@ -588,6 +612,19 @@ export function Dashboard({
                 >
                   <Icon name="users" />
                   Team access
+                </button>
+              )}
+              {/* Admin only: Procurement access and the security log (Moaz, 24 Oct 2026). */}
+              {session.user.role === "Admin" && (
+                <button className={view === "procurement-access" ? "nav-active" : ""} aria-current={view === "procurement-access" ? "page" : undefined} onClick={() => navigate("procurement-access")}>
+                  <Icon name="users" />
+                  Procurement access
+                </button>
+              )}
+              {session.user.role === "Admin" && (
+                <button className={view === "security-log" ? "nav-active" : ""} aria-current={view === "security-log" ? "page" : undefined} onClick={() => navigate("security-log")}>
+                  <Icon name="shield" />
+                  Security log
                 </button>
               )}
               {[
@@ -830,6 +867,10 @@ export function Dashboard({
                     ? "Design workspace"
                     : view === "masters"
                       ? session.user.role === "Coordinator" ? "Databases" : "Master data"
+                      : view === "procurement-access"
+                        ? "Procurement access"
+                      : view === "security-log"
+                        ? "Security log"
                       : view === "team"
                         ? "Team access"
                         : (view === "boqs" || view === "newboq")
@@ -848,6 +889,8 @@ export function Dashboard({
                                 ? "Sites completed (last 30 days)"
                                 : view === "stock-count"
                                 ? "Stock count"
+                                : view === "purchase-requests"
+                                ? "Purchase requests"
                                 : view === "stock-watch"
                                 ? "Inverter & battery stock"
                                 : view === "purchase-approvals"
@@ -980,6 +1023,10 @@ export function Dashboard({
                           ? "Design workspace"
                           : view === "masters"
                             ? session.user.role === "Coordinator" ? "Databases" : "Master data"
+                            : view === "procurement-access"
+                              ? "Procurement access"
+                            : view === "security-log"
+                              ? "Security log"
                             : view === "team"
                               ? "Team access"
                               : (view === "boqs" || view === "newboq")
@@ -998,6 +1045,8 @@ export function Dashboard({
                                       ? "Sites completed (last 30 days)"
                                       : view === "stock-count"
                                       ? "Stock count"
+                                      : view === "purchase-requests"
+                                      ? "Purchase requests"
                                       : view === "stock-watch"
                                       ? "Inverter & battery stock"
                                       : view === "purchase-approvals"
@@ -1055,6 +1104,10 @@ export function Dashboard({
                                 ? "Set markup and selling price against an approved BOQ."
                                 : view === "quotes"
                                   ? "Prepare and share immutable customer quotation versions."
+                                  : view === "procurement-access"
+                                    ? "Grant or remove Procurement buyer and approver by exact email. Every change is kept."
+                                  : view === "security-log"
+                                    ? "Sign-ins, price and cost views, approvals, access changes and backups."
                                   : view === "team"
                                     ? "Invite and manage authorised team members."
                                     : view === "reports"
@@ -1067,6 +1120,8 @@ export function Dashboard({
                                       ? "Sites closed in the last 30 days."
                                       : view === "stock-count"
                                       ? "Receive what Procurement ordered and keep the stock count. Procurement uses these counts to work out what to buy."
+                                      : view === "purchase-requests"
+                                      ? "Purchase requests from Procurement, with prices. Read only."
                                       : view === "stock-watch"
                                       ? "Inverters, batteries and BMS against the coming sites. You are alerted when to order."
                                       : view === "purchase-approvals"
@@ -1302,6 +1357,9 @@ export function Dashboard({
               {view === "reports" && <SiteReport session={session} />}
               {view === "stock-count" && session.user.role === "Inventory" && <StoreStock session={session} />}
               {view === "stock-watch" && approvals.approver && <StockWatch session={session} />}
+              {view === "procurement-access" && session.user.role === "Admin" && <ProcurementAccess session={session} />}
+              {view === "security-log" && session.user.role === "Admin" && <SecurityLog />}
+              {view === "purchase-requests" && session.user.role === "Accounts" && <PurchaseApprovals session={session} mode="reader" />}
               {view === "purchase-approvals" && approvals.approver && <PurchaseApprovals session={session} onChanged={() => setApprovals((a) => ({ ...a }))} />}
               {view === "operations" && (
                 <Operations session={session} initialIpoId={operationsIpoId} portal={departmentView==='operations'} initialAdvanceReference={advanceToOpen} advanceNonce={advanceOpenNonce} />

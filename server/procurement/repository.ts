@@ -10,6 +10,9 @@ const NEW_NUMBER = "'PR-' || to_char(now(),'YY') || '-' || lpad(nextval('purchas
 const NOT_FOR_BUYER = "Batteries, BMS and inverters are not bought through Procurement.";
 
 export interface Me { role: string; displayName: string; buyer: boolean; approver: boolean }
+/** Who sees purchase prices (Moaz, 24 Oct 2026): the buyer, the approver, Admin, Management and Accounts. Never Store. */
+const PRICE_ROLES = new Set(["Admin", "Management", "Accounts"]);
+export const seesPrices = (me: Me) => me.buyer || me.approver || PRICE_ROLES.has(me.role);
 
 export class ProcurementRepository {
   constructor(private pool: Pool) {}
@@ -26,10 +29,10 @@ export class ProcurementRepository {
     if (!me.buyer && !me.approver && !READ_ROLES.has(me.role)) throw new HttpError(403, "Procurement is not part of your workspace.");
     return me;
   }
-  /** Purchase prices and totals: the buyer, the approver and management. Store (Shaigan) does not see them. */
+  /** Purchase prices and totals: see seesPrices. Store (Shaigan) and everyone else are refused. */
   private async priceReader(actor: string, c: Db = this.pool) {
-    const me = await this.reader(actor, c);
-    if (me.role === "Inventory" && !me.buyer && !me.approver) throw new HttpError(403, "Purchase prices are not part of the Store workspace.");
+    const me = await this.me(actor, c);
+    if (!seesPrices(me)) throw new HttpError(403, me.role === "Inventory" ? "Purchase prices are not part of the Store workspace." : "Purchase prices are not part of your workspace.");
     return me;
   }
   private async buyer(actor: string, c: Db) {
@@ -60,7 +63,7 @@ export class ProcurementRepository {
   // ----- what is coming, what is in stock -----
   async overview(actor: string) {
     const me = await this.reader(actor);
-    const prices = !(me.role === "Inventory" && !me.buyer && !me.approver);
+    const prices = seesPrices(me);
     const { watchNeeds: _sites, ...supply } = await computeSupply(this.pool, this.pool);
     return { me, ...supply, requests: prices ? await this.requestRows(this.pool, this.seesDirect(me)) : [] };
   }
@@ -111,7 +114,7 @@ export class ProcurementRepository {
        FROM ${PROCUREMENT_ITEMS} m WHERE lower(m.key) LIKE $1 OR lower(m.display_name) LIKE $1 ORDER BY m.display_name LIMIT 40`,
       [text],
     )).rows
-      .map((r) => ({ itemKey: r.key as string, name: (r.display_name || r.key) as string, unit: r.unit as string, misc: isMiscItem(r.key), rate: r.rate == null ? null : fixed(num(r.rate)) }))
+      .map((r) => ({ itemKey: r.key as string, name: (r.display_name || r.key) as string, unit: r.unit as string, misc: isMiscItem(r.key), ...(seesPrices(me) ? { rate: r.rate == null ? null : fixed(num(r.rate)) } : {}) }))
       .filter((i) => !me.buyer || boughtByBuyer(i.itemKey, i.name))
       .slice(0, 25);
   }
@@ -133,7 +136,7 @@ export class ProcurementRepository {
 
   // ----- purchase requests -----
   /** Abu Bakar's own inverter, battery and BMS orders stay out of the buyer's list (Moaz, 24 Oct 2026). */
-  private seesDirect(me: Me) { return me.approver || ["Admin", "Management"].includes(me.role); }
+  private seesDirect(me: Me) { return me.approver || PRICE_ROLES.has(me.role); }
   private async requestRows(c: Db, direct = true) {
     return (await c.query(
       `SELECT r.*, u.display_name AS created_by_name,
@@ -409,6 +412,12 @@ export class ProcurementRepository {
       await this.approver(actor, c);
       const status = await this.lock(c, id);
       if (status !== "pending_approval") throw new HttpError(422, "This request is not waiting for approval.");
+      // Nobody decides a request they created or sent for approval, whatever their role (Moaz, 24 Oct 2026).
+      const own = (await c.query(
+        "SELECT 1 FROM purchase_requests WHERE id=$1 AND created_by=$2 UNION SELECT 1 FROM purchase_request_events WHERE request_id=$1 AND kind='submitted' AND created_by=$2",
+        [id, actor],
+      )).rowCount;
+      if (own) throw new HttpError(403, "You cannot decide a request you created or sent for approval.");
       if (input.decision !== "approve" && !input.note.trim()) throw new HttpError(422, "Write a note for Hamza: what needs to change, or why it is rejected.");
       const to = input.decision === "approve" ? "approved" : input.decision === "reject" ? "rejected" : "draft";
       await c.query("UPDATE purchase_requests SET status=$2, decided_by=$3, decided_at=now(), decision_note=$4, updated_at=now() WHERE id=$1", [id, to, actor, input.note]);
