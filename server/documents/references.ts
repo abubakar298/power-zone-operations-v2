@@ -13,7 +13,7 @@ export function revisedReference(reference:string,revision:number) {
 export async function allocateReference(c:PoolClient,type:DocumentType,familyId:string,customerId:number,siteCode:string) {
   if(!documentTypes.includes(type)||!siteCode.trim())throw new HttpError(400,"A site code is required for document numbering.");
   await c.query("SELECT pg_advisory_xact_lock(742019040)");
-  const prior=(await c.query("SELECT reference FROM document_reference_roots WHERE document_type=$1 AND family_id=$2",[type,familyId])).rows[0];
+  const prior=(await c.query("SELECT reference FROM document_reference_roots WHERE document_type=$1 AND family_id=$2 UNION ALL SELECT reference FROM document_reference_aliases WHERE document_type=$1 AND family_id=$2",[type,familyId])).rows[0];
   if(prior)return prior.reference as string;
   const customer=(await c.query("SELECT id,short_code FROM customers WHERE id=$1",[customerId])).rows[0];
   if(!customer)throw new HttpError(400,"Customer not found for document numbering.");

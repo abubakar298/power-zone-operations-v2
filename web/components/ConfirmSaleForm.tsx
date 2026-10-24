@@ -84,6 +84,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
       pt: Blob;
     }>(),
     [previewReviewed, setPreviewReviewed] = useState(false);
+  useEffect(()=>{setIpoError('');setIpoCheck('');},[input.orderNumber]);
   const automaticPreview = useRef(false);
   useUnsavedChanges(!!document);
   useEffect(() => {
@@ -474,7 +475,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
           <fieldset disabled={busy} className="order-fields">
             {directUps&&<label>Order number (unit / total)<input value={input.orderNumber??''} placeholder="For example 20/60" onChange={e=>change('orderNumber',e.target.value)}/><small>Unit sequence within the customer's order; separate from its PO reference.</small></label>}
             {<label>IPO Number (optional)
-              <input value={input.ipoNumber??''} maxLength={100} placeholder="Automatic numbering if blank" onChange={e=>{change('ipoNumber',e.target.value);setIpoError('');setIpoCheck('');}} onBlur={async()=>{const number=input.ipoNumber?.trim();if(!number)return;setIpoCheck('Checking IPO number…');try{const result=await api<{available:boolean}>(`/project-workflow/ipo-number-availability?number=${encodeURIComponent(number)}`);setIpoCheck(result.available?'IPO number is available.':'');setIpoError(result.available?'':'This IPO number is already in use. Enter a different number or leave blank for automatic numbering.');}catch(e){setIpoCheck('');setIpoError(e instanceof Error?e.message:'Unable to check IPO number.');}}}/>
+              <input value={input.ipoNumber??''} maxLength={100} placeholder="Automatic numbering if blank" onChange={e=>{change('ipoNumber',e.target.value);setIpoError('');setIpoCheck('');}} onBlur={async()=>{const number=input.ipoNumber?.trim();if(!number)return;setIpoCheck('Checking IPO number…');try{const result=await api<{available:boolean}>(`/project-workflow/ipo-number-availability?number=${encodeURIComponent(number)}&recordId=${encodeURIComponent(r.id)}&orderNumber=${encodeURIComponent(input.orderNumber??'')}`);setIpoCheck(result.available?'IPO number is available.':'');setIpoError(result.available?'':'This IPO number is in use. For the same UPS batch, enter a different order unit with the same total.');}catch(e){setIpoCheck('');setIpoError(e instanceof Error?e.message:'Unable to check IPO number.');}}}/>
               <small>The number is assigned only after sale confirmation. Duplicate numbers are blocked.</small>
               {ipoCheck&&<span role="status">{ipoCheck}</span>}{ipoError&&<span className="form-error" role="alert">{ipoError}</span>}
             </label>}

@@ -1,6 +1,6 @@
 import {loadDocumentListMetadata,snapshotListMetadata} from '../documents/list-metadata.js';
 import {directPoFields,directPoSiteMatches,directPoChanges,validOrderPosition,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
-import {manualIpoAvailable,requireDirectUps,requireEditableIpoRoute} from "../documents/manual-ipo.js";
+import {manualIpoAvailable,ipoNumberConflict,requireDirectUps,requireEditableIpoRoute} from "../documents/manual-ipo.js";
 import {approvedMaterialView} from './advance-material-view.js';
 import {ptDetail} from '../orders/pt-detail.js';
 import {ipoReference} from '../documents/historical-ipo.js';
@@ -1494,7 +1494,7 @@ export class ProjectWorkflowRepository {
         if(!saved.values.siteName)throw new HttpError(422,'Enter the site name.');
         z.iso.date().parse(saved.values.approvalDate);
         if(saved.values.orderNumber&&!validOrderPosition(saved.values.orderNumber))throw new HttpError(422,'Enter the unit number and total, for example 20/60.');
-        if(saved.values.ipoNumber&&!await manualIpoAvailable(c,saved.values.ipoNumber,r.id))throw new HttpError(409,'This IPO number is already in use.');
+        if(saved.values.ipoNumber&&!await manualIpoAvailable(c,saved.values.ipoNumber,r.id,saved.values.orderNumber))throw new HttpError(409,ipoNumberConflict);
         const capacityIssues=directPoCapacityIssues(saved.sourceText,data.basis?.source?.key??'');if(capacityIssues.length)throw new HttpError(422,capacityIssues.join(' '));
         const previous=data.directPoDetails;
         const changes=directPoChanges(previous?.values??saved.extracted,saved.values);
@@ -2767,7 +2767,7 @@ export class ProjectWorkflowRepository {
             "The PO already has issued documents. Open its issuance history.",
           );
         const received = receiptSchema.parse(input);
-        if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id))throw new HttpError(409,'This IPO number is already in use. Enter a different number or select automatic numbering.');}
+        if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);}
         await this.requireFile(c, r, received.evidenceId, "PO / confirmation");
         let basis: any;
         if (received.basisType === "quotation") {
@@ -3282,7 +3282,7 @@ export class ProjectWorkflowRepository {
     const po = randomUUID(),
       ipo = randomUUID(),
       ops = randomUUID(),
-      number = await ipoReference(c,r,ipo,receipt.input.ipoNumber),
+      number = await ipoReference(c,r,ipo,receipt.input.ipoNumber,basis.order.input.orderNumber),
       opsNumber = await allocateReference(
         c,
         "BOQ",
@@ -3523,13 +3523,18 @@ export class ProjectWorkflowRepository {
     const doc=(await c.query("SELECT COALESCE(NULLIF(snapshot->'enteredSurvey'->>'panelQty','0'),NULLIF(snapshot->'boq'->'survey'->>'panelQty','0')) AS qty FROM project_workflow_documents WHERE id=$1 AND record_id=$2 AND kind='Technical review'",[r.data.reviewDocumentId,r.id])).rows[0];
     return doc?.qty??r.data.surveyInputs?.panelQty;
   }
-  async ipoAvailability(actor:string,number:string){const u=await this.user(actor);this.requireRole(u,['Coordinator']);return {available:await manualIpoAvailable(this.pool,number)};}
+  async ipoAvailability(actor:string,number:string,options:{recordId?:string;frameworkId?:string;orderNumber?:string}={}){
+    const u=await this.user(actor);this.requireRole(u,['Coordinator']);
+    if(options.recordId){await this.record(actor,uuid(options.recordId));return {available:await manualIpoAvailable(this.pool,number,options.recordId,options.orderNumber)};}
+    const f=options.frameworkId?(await this.pool.query('SELECT customer_id,configuration_key FROM project_framework_current WHERE id=$1',[uuid(options.frameworkId)])).rows[0]:undefined;
+    return {available:await manualIpoAvailable(this.pool,number,undefined,options.orderNumber,f?{customerId:f.customer_id,configurationKey:f.configuration_key}:undefined)};
+  }
   async salePreview(actor: string, id: string, raw: unknown) {
     const received = receiptSchema.parse(raw);
     const { u, r } = await this.record(actor, id);
     this.requireRole(u, ["Coordinator"]);
     await this.requireReceivingDepartment(u, r);
-    if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(this.pool,received.ipoNumber,r.id))throw new HttpError(409,'This IPO number is already in use. Enter a different number or select automatic numbering.');}
+    if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(this.pool,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);}
     const current = await this.decorate(r, u);
     if (r.stage !== "customer_tracking" && current.coordinationBucket !== "Customer Decision & Order Tracking" && !(r.stage === "po_receipt" && r.route === "direct-framework" && !r.data.originalOrderPreserved))
       throw new HttpError(
