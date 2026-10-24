@@ -4,6 +4,7 @@ export const protectedReleaseTables = [
   "document_sequences",
   "document_site_identities",
   "document_reference_roots",
+  "document_reference_aliases",
   "customers",
   "sites",
   "brands",
