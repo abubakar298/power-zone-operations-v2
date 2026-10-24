@@ -640,7 +640,7 @@ export function Commercial({
         csrf: session.csrfToken,
       });
       setDirty(true);
-      setInput(old=>({...old,includeDiscountInSellingPrice:data.includeDiscountInSellingPrice??data.previewPricing?.includeDiscountInSellingPrice??input.includeDiscountInSellingPrice??false}));
+      setInput(old=>({...old,includeDiscountInSellingPrice:data.includeDiscountInSellingPrice??data.previewPricing?.includeDiscountInSellingPrice??input.includeDiscountInSellingPrice}));
       setQuoteInput({
         ...data,
         discount: result.snapshot.input.discount,
