@@ -467,3 +467,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pz-ups-alerts-toolbar .pz-field{flex:1;max-width:500px}
 .pz-ups-alerts .master-table{min-width:900px}
 .pz-ups-alerts p,.pz-ups-alerts h2{margin:0}
+
+/* Quotation discount treatment lives alongside the discount percentage. */
+.survey-grid .discount-presentation-control>span{display:flex;align-items:center;gap:var(--pz-space-8,8px);min-height:44px}
+.survey-grid .discount-presentation-control input[type=checkbox]{width:18px;height:18px;min-height:18px;flex:none;padding:0;accent-color:var(--pz-primary)}

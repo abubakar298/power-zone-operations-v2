@@ -612,11 +612,11 @@ export function quote(
   bmsDescription?: string,
   currentCableRates?: Record<string, string>,
 ) {
+  input={...input,includeDiscountInSellingPrice:input.includeDiscountInSellingPrice??p.input.includeDiscountInSellingPrice};
   const requestedDiscount=input.discount??p.discount;
   // Customer-facing item amounts always remain at the standard selling price.
   // Keep the discount separate from the standard-price line amounts and subtotal.
   const result=quoteBase(p,boq,{...input,discount:requestedDiscount},bmsDescription,currentCableRates);
-  if(input.includeDiscountInSellingPrice&&!input.revisionRequestId)throw new HttpError(422,'Including a discount in selling prices is available only when preparing a quotation revision.');
   if(input.includeDiscountInSellingPrice&&D(requestedDiscount).gt(0))applyDiscountToSellingPrices(result,p,requestedDiscount,input);
   // Keep standard prices in the visible rows, but calculate the payable using
   // the approved discount allocation and saved tax treatment.
@@ -656,7 +656,7 @@ export function quote(
   return result as typeof result & {discountAuthorization?: NonNullable<PricingSnapshot['discountAuthorization']>;discountAllocation?:ReturnType<typeof allocateApprovedDiscount>};
 }
 
-/** Apply an optional revision discount to eligible customer prices, then recalculate GST. */
+/** Apply an optional quotation discount to eligible customer prices, then recalculate GST. */
 function applyDiscountToSellingPrices(result:any,p:PricingSnapshot,discount:string,input:QuotationInput){
   const protectedGroups=new Set(['solar','structure','earthing']);
   const eligible=p.rows.filter(row=>!protectedGroups.has(row.key)&&D(row.beforeTax).gt(0));
