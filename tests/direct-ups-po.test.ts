@@ -1,3 +1,4 @@
+import {allocateReference} from '../server/documents/references.js';
 import {AccountsRepository} from '../server/accounts/repository.js';
 import {upsPortfolio,saveUpsManagementBudget} from '../server/director/ups-portfolio.js';
 import {test} from 'node:test';
@@ -136,5 +137,54 @@ test('0999 permits separate construction sites while other codes and same-site a
  for(const code of ['0208','0000']){await make('Ordinary branch '+code,code,'First address');await assert.rejects(make('Another branch '+code,code,'Other address'),/already has active work/);}
  const m=(await db.pool.query("SELECT * FROM project_framework_current WHERE configuration_key='MBL-UPS-6-5'")).rows[0];
  const mbl=(name:string)=>repo.create(actor,{requestKey:randomUUID(),customerId:m.customer_id,siteName:name,siteCode:'0999',siteAddress:name,route:'direct-framework',frameworkId:m.id,notes:'Only UBL UPS shares code'});await mbl('Meezan A');await assert.rejects(mbl('Meezan B'),/already has active work/);
+ }finally{await db.close();if(previous===undefined)delete process.env.ENABLE_DEFERRED_UPS_WORKFLOW;else process.env.ENABLE_DEFERRED_UPS_WORKFLOW=previous;}
+});
+
+test('UPS sites share an IPO by distinct order units; preview, save, registry and database keep duplicate and cross-customer guards',async()=>{
+ const previous=process.env.ENABLE_DEFERRED_UPS_WORKFLOW;process.env.ENABLE_DEFERRED_UPS_WORKFLOW='true';
+ const db=await testDatabase();
+ try{
+  const actor=randomUUID();await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,'UPS batch test','Coordinator','isolated-only')",[actor,actor+'@test.invalid']);
+  const repo=new ProjectWorkflowRepository(db.pool),orders=new OrdersRepository(db.pool);
+  const mbl=(await db.pool.query("SELECT * FROM project_framework_current WHERE configuration_key='MBL-UPS-6-5'")).rows[0];
+  const ubl=(await db.pool.query("SELECT * FROM project_framework_current WHERE configuration_key='UBL-UPS-6-10'")).rows[0];
+  async function prepare(code:string,orderNumber:string,f=mbl){
+   const record=await repo.create(actor,{requestKey:randomUUID(),customerId:f.customer_id,siteName:'UPS batch '+code,siteCode:code,route:'direct-framework',frameworkId:f.id,notes:'Isolated batch numbering regression'});
+   const file=await repo.attach(actor,record.id,{kind:'PO / confirmation',filename:'batch.pdf',mime:'application/pdf',base64:Buffer.from('%PDF-1.4 fixture').toString('base64')});
+   const basis=(await db.pool.query('SELECT data FROM project_workflow_records WHERE id=$1',[record.id])).rows[0].data.basis;
+   const input={reference:'UPS-BATCH-'+code,date:'2026-10-24',evidenceId:file.id,basisType:'framework',frameworkId:f.id,ipoNumber:'CHP-UPS-BATCH',actual:basis.comparison,confirmationType:'Customer PO',saleDetails:{orderNumber,invoiceCompany:'PZES (PVT Ltd)',salesPerson:'Waqas ul Haq'},reviewed:true,notes:'Reviewed batch unit'};
+   return {record,file,input};
+  }
+  async function issue(f:Awaited<ReturnType<typeof prepare>>){const d=await repo.detail(actor,f.record.id);return repo.action(actor,f.record.id,{version:d.record.version,requestKey:randomUUID(),action:'receipt',input:f.input});}
+  const first=await prepare('BATCH-A','1/60');await issue(first);
+  const original=(await db.pool.query('SELECT * FROM internal_purchase_orders WHERE number=$1',['CHP-UPS-BATCH'])).rows[0];
+  const frozen=JSON.stringify(original.snapshot);
+  const second=await prepare('BATCH-B','2/60');
+  assert.equal((await repo.ipoAvailability(actor,'CHP-UPS-BATCH',{frameworkId:mbl.id,orderNumber:'2/60'})).available,true);
+  assert.equal((await repo.ipoAvailability(actor,'CHP-UPS-BATCH',{recordId:second.record.id,orderNumber:'2/60'})).available,true);
+  assert.equal((await repo.salePreview(actor,second.record.id,second.input)).input.orderNumber,'2/60');
+  const values={...directPoSuggestions(''),siteCode:'BATCH-B',siteName:'UPS batch BATCH-B',approvalDate:'2026-10-24',ipoNumber:'CHP-UPS-BATCH',orderNumber:'2/60'};
+  const detail=await repo.detail(actor,second.record.id);
+  await repo.action(actor,second.record.id,{version:detail.record.version,requestKey:randomUUID(),action:'save-direct-po-details',input:{evidenceId:second.file.id,evidenceType:'Customer PO',extracted:values,values,notes:'Reviewed second unit'}});
+  await issue(second);
+  const issued=(await db.pool.query('SELECT * FROM internal_purchase_orders WHERE number=$1 ORDER BY created_at',['CHP-UPS-BATCH'])).rows;
+  assert.equal(issued.length,2);assert.notEqual(issued[0].id,issued[1].id);
+  assert.deepEqual(issued.map((i:any)=>i.snapshot.input.orderNumber),['1/60','2/60']);
+  assert.equal(JSON.stringify(issued[0].snapshot),frozen,'Original issued document remains byte-for-byte unchanged');
+  for(const row of issued)assert.equal((await orders.get(row.id)).snapshot.input.orderNumber,row.snapshot.input.orderNumber);
+  assert.equal((await db.pool.query('SELECT count(*) AS n FROM document_reference_roots WHERE reference=$1',['CHP-UPS-BATCH'])).rows[0].n,'1');
+  assert.equal((await db.pool.query('SELECT count(*) AS n FROM document_reference_aliases WHERE reference=$1',['CHP-UPS-BATCH'])).rows[0].n,'1');
+  const registry=await db.pool.connect();try{await registry.query('BEGIN');assert.equal(await allocateReference(registry,'IPO',issued[1].id,mbl.customer_id,'BATCH-B'),'CHP-UPS-BATCH');await registry.query('ROLLBACK');}finally{registry.release();}
+  for(const orderNumber of ['1/60','2/60','3/61',''])assert.equal((await repo.ipoAvailability(actor,'CHP-UPS-BATCH',{frameworkId:mbl.id,orderNumber})).available,false);
+  assert.equal((await repo.ipoAvailability(actor,'CHP-UPS-BATCH',{frameworkId:ubl.id,orderNumber:'3/60'})).available,false);
+  assert.equal(await manualIpoAvailable(db.pool,'CHP-UPS-BATCH'),false,'Ordinary IPO routes cannot reuse the batch number');
+  const duplicate=await prepare('BATCH-C','2/60');await assert.rejects(repo.salePreview(actor,duplicate.record.id,duplicate.input),/already in use/);await assert.rejects(issue(duplicate),/already in use/);
+  const raceA=await prepare('BATCH-D','3/60'),raceB=await prepare('BATCH-E','3/60');
+  const raced=await Promise.allSettled([issue(raceA),issue(raceB)]);assert.equal(raced.filter(x=>x.status==='fulfilled').length,1);assert.equal(raced.filter(x=>x.status==='rejected').length,1);
+  assert.equal((await db.pool.query('SELECT count(*) AS n FROM internal_purchase_orders WHERE number=$1',['CHP-UPS-BATCH'])).rows[0].n,'3');
+  // Database-level guard also rejects a bypassed duplicate batch unit.
+  const bypassPo=randomUUID();await db.pool.query('INSERT INTO customer_purchase_orders(id,customer_id,po_number,input,created_by) VALUES($1,$2,$3,$4,$5)',[bypassPo,mbl.customer_id,'BYPASS-PO',{},actor]);
+  await assert.rejects(db.pool.query('INSERT INTO internal_purchase_orders(id,customer_po_id,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),bypassPo,'CHP-UPS-BATCH',original.snapshot,'fixture',randomUUID(),actor]),/already in use/);
+  await assert.rejects(db.pool.query('INSERT INTO internal_purchase_orders(id,customer_po_id,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),bypassPo,'CHP-UPS-BATCH',{input:{orderNumber:'4/60'}},'fixture',randomUUID(),actor]),/already in use/);
  }finally{await db.close();if(previous===undefined)delete process.env.ENABLE_DEFERRED_UPS_WORKFLOW;else process.env.ENABLE_DEFERRED_UPS_WORKFLOW=previous;}
 });

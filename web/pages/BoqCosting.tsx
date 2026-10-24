@@ -64,7 +64,7 @@ export function BoqCosting({
         </details>
       )}
       <h3>Project Costing Summary</h3>
-      <table>
+      <div className="table-scroll"><table>
         <thead>
           <tr>
             <th>Item</th>
@@ -86,9 +86,9 @@ export function BoqCosting({
             <th className="numeric">{bessOnly ? "—" : format(s.perWatt, 2)}</th>
           </tr>
         </tbody>
-      </table>
+      </table></div>
       {!direct && <><h3>EPC Costing Breakup</h3>
-      <table>
+      <div className="table-scroll"><table>
         <thead>
           <tr>
             <th>Item</th>
@@ -105,11 +105,11 @@ export function BoqCosting({
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
       </>}
       <h3>{direct ? "Product Costing Detailed Breakup" : "Project Costing Detailed Breakup"}</h3>
       <div className="table-scroll">
-        <table>
+        <div className="table-scroll"><table>
           <thead>
             <tr>
               {[
@@ -149,7 +149,7 @@ export function BoqCosting({
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
       <p>
         Prepared by {s.survey.preparedBy}.{" "}

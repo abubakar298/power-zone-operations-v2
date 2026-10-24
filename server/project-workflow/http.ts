@@ -34,7 +34,7 @@ export function projectWorkflowHttp(
     const file=await repo.frameworkReferenceAttachment(actor(req),id(req));
     res.set('Content-Type',file.mime).set('Content-Disposition',`inline; filename="${file.filename.replace(/["\r\n\\]/g,'_')}"`).set('Cache-Control','private, no-store').send(file.content);
   });
-  r.get('/ipo-number-availability',async(req,res)=>res.json(await repo.ipoAvailability(actor(req),String(req.query.number??''))));
+  r.get('/ipo-number-availability',async(req,res)=>res.json(await repo.ipoAvailability(actor(req),String(req.query.number??''),{recordId:typeof req.query.recordId==='string'?req.query.recordId:undefined,frameworkId:typeof req.query.frameworkId==='string'?req.query.frameworkId:undefined,orderNumber:typeof req.query.orderNumber==='string'?req.query.orderNumber:undefined})));
   r.post('/:id/informational-technical-report',async(req,res)=>res.json(await repo.sendInformationalTechnicalReport(actor(req),id(req),req.body)));
   r.get("/po-followup-sources", async (req, res) =>
     res.json({

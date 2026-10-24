@@ -39,6 +39,7 @@ export const pricingFieldsSchema = z.object({
     .optional(),
   // Accepted for compatibility with older drafts; pricing never applies it.
   discount: amount.optional(),
+  includeDiscountInSellingPrice: z.boolean().optional(),
   discountMode:z.enum(["Pre-approved","Custom"]).optional(),
   discountPercent: z.string().regex(/^\d{1,3}(\.\d{1,6})?$/, "Enter a discount from 0 to 100%.").refine(v=>Number(v)<=100,"Discount cannot exceed 100%.").optional(),
   roundedTotal:amount.optional(),
@@ -59,6 +60,7 @@ export const quotationSchema = z.object({
   revisionRequestId: z.uuid().optional(),
   pricingId: z.uuid(),
   discount: amount.optional(),
+  includeDiscountInSellingPrice: z.boolean().optional(),
   quotedDate: z.iso.date(),
   additionalItem: z
     .object({

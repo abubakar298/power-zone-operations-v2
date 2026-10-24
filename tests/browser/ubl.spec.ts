@@ -1,19 +1,20 @@
 import {test,expect} from '@playwright/test';
-test('UBL four configurations preserve original scope, dated budgets and commercial history',async({page})=>{
- page.on('dialog',d=>d.accept());
- const origin=`http://127.0.0.1:${process.env.PZ_E2E_PORT??'3180'}`;
- expect((await page.request.post('/api/auth/setup',{headers:{Origin:origin},data:{email:'ubl-admin@example.test',displayName:'UBL admin',password:'browser-test-passphrase-298',setupToken:'browser-test-setup-key-isolated-only'}})).status()).toBe(201);
- await page.goto('/login');await page.getByLabel('Email address').fill('ubl-admin@example.test');await page.getByLabel('Password',{exact:true}).fill('browser-test-passphrase-298');await page.getByRole('button',{name:'Sign in',exact:true}).click();
- await expect(page.getByRole('button',{name:'Customers & Sites',exact:true})).toBeVisible();
- await page.goto('/dashboard#workspace=ubl&configuration=30-30-40');
- await expect(page.getByRole('heading',{name:'30-30-40 · UBL Hybrid Solar'})).toBeVisible();
- for(const id of ['20-20-30','25-20-30','30-30-40','35-30-40'])await expect(page.getByRole('button',{name:`Open ${id}`,exact:true})).toBeVisible();
- const row=page.getByRole('row').filter({has:page.getByRole('cell',{name:'E19',exact:true})});await expect(row).toContainText('16 mm');
- await page.getByRole('button',{name:'Original agreed BOQ',exact:true}).click();await expect(row).toContainText('25 mm');
- const download=page.waitForEvent('download');await page.getByRole('link',{name:'Download original Financial Proposal R3'}).click();expect((await download).suggestedFilename()).toContain('Opt C');
- await page.getByRole('button',{name:'Negotiation history',exact:true}).click();await expect(page.getByRole('row').filter({has:page.getByRole('rowheader',{name:'Revised',exact:true})}).getByRole('cell',{name:'7,200,000.00',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Budget versions',exact:true}).click();await page.getByLabel('Budget refresh reason').fill('Initial checked budget');await page.getByRole('button',{name:'Create initial dated budget',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'New budget version saved'})).toBeVisible();
- await expect(page.getByText('Inputs awaiting review',{exact:true})).toBeVisible();await expect(page.getByRole('columnheader',{name:'Budgeted cost (PKR)',exact:true})).toBeVisible();
- await page.getByLabel('Budget refresh reason').fill('New dated refresh');await page.getByRole('button',{name:'Refresh costs — create new version',exact:true}).click();await expect(page.getByLabel('Saved budget').locator('option')).toHaveCount(2);await page.getByLabel('Saved budget').selectOption('1');await expect(page.getByText('Refresh reason: Initial checked budget',{exact:true})).toBeVisible();
- await page.setViewportSize({width:390,height:844});await page.screenshot({path:'output/ubl-mobile.png',fullPage:true});await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:'output/ubl-budget.png',fullPage:true});await page.reload();await expect(page.getByRole('heading',{name:'30-30-40 · UBL Hybrid Solar'})).toBeVisible();
+import {Decimal} from 'decimal.js';
+import {actors,login} from './release-fixtures.js';
+test('UBL configuration history preserves original scopes and prices and tolerates restricted portfolio costs',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await actors(page.request);await login(page.request);const list=await(await page.request.get('/api/ubl')).json();expect(list.configurations).toHaveLength(4);
+ const details=await Promise.all(list.configurations.map(async(c:any)=>(await page.request.get('/api/ubl/'+c.id)).json()));
+ const evidence=details.map(d=>JSON.stringify({technical:d.technical,history:d.history}));
+ await page.goto('/dashboard#workspace=ubl');await expect(page.getByRole('heading',{name:'UBL Solar — Configuration Price History',exact:true})).toBeVisible();
+ const table=page.locator('.ubl-history-table');
+ await expect(table.locator('tbody tr')).toHaveCount(details.reduce((n,d)=>n+d.history.length,0));
+ for(const detail of details){
+  await expect(table.getByRole('rowheader',{name:detail.configuration.id,exact:true}).first()).toBeVisible();
+  for(const h of detail.history){const s=h.snapshot;const panel=new Decimal(s.panelSellingExcludingGst);const selling=panel.add(new Decimal(s.totalIncludingGst).sub(panel.mul('1.10')).div('1.18'));const shown=selling.toDecimalPlaces(0).toNumber().toLocaleString('en-US');await expect(table.getByRole('cell',{name:shown,exact:true}).first()).toBeVisible();}
+ }
+ await expect(page.getByRole('heading',{name:'Portfolio Performance',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'This workspace could not be opened'})).toHaveCount(0);
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.setViewportSize({width:1280,height:900});await page.reload();await expect(table.locator('tbody tr')).toHaveCount(details.reduce((n,d)=>n+d.history.length,0));
+ for(let i=0;i<details.length;i++){const d=await(await page.request.get('/api/ubl/'+details[i].configuration.id)).json();expect(JSON.stringify({technical:d.technical,history:d.history})).toBe(evidence[i]);}
+ expect(errors).toEqual([]);
 });

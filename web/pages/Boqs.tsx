@@ -419,6 +419,8 @@ export function Boqs({
       },
       csrf: session.csrfToken,
     });
+    // The first save changes the form key; seed the remount with the saved inputs.
+    setInitial(inputs);
     setDraft(d);
     savedSolution.current=inputs;if(d.solutionRevision)setSolutionRevision(d.solutionRevision);
     if(initialContext?.workflowRecordId)await api(`/project-workflow/${initialContext.workflowRecordId}/link-quotation-draft`,{csrf:session.csrfToken,body:{draftId:d.id}});
@@ -426,7 +428,7 @@ export function Boqs({
     await load();
     return d;
   }
-  async function calculate(e: FormEvent) {
+  async function calculate(e: FormEvent, reviewOnly = false) {
     e.preventDefault();
     if (busy) return;
     const inputs = read();
@@ -439,7 +441,7 @@ export function Boqs({
         { body: {...inputs,...(baseRevisionId?{baseRevisionId}:{})}, csrf: session.csrfToken },
       );
       const savedDraft=await persist(inputs);if(!savedDraft)return;
-      if(onPricing&&["Admin","Management","Coordinator"].includes(session.user.role)){
+      if(!reviewOnly&&onPricing&&["Admin","Management","Coordinator"].includes(session.user.role)){
         const revision=await api<{id:string}>("/boqs/save",{body:{draftId:savedDraft.id,version:savedDraft.version,fingerprint:p.fingerprint},csrf:session.csrfToken});
         onPricing(revision.id);
         return;
@@ -1718,6 +1720,7 @@ export function Boqs({
                 >
                   Save BOQ Draft
                 </button>
+                {onPricing&&["Admin","Management","Coordinator"].includes(session.user.role)&&<button type="button" disabled={busy||revisionMode} onClick={event=>{const formElement=event.currentTarget.form;if(formElement?.reportValidity())void calculate(event,true);}}>Calculate &amp; review BOQ</button>}
                 <button className="primary" disabled={busy || revisionMode} type="submit">
                   {busy ? "Processing…" : onPricing&&["Admin","Management","Coordinator"].includes(session.user.role)?"Enter Pricing":"Calculate & review BOQ"}
                 </button>
@@ -1730,7 +1733,7 @@ export function Boqs({
                 snapshot={preview.snapshot}
                 pdfUrl={`/api/boqs/drafts/${draft?.id}/costing.pdf?fingerprint=${preview.fingerprint}`}
               />
-              {["Admin", "Management"].includes(session.user.role) && (
+              {["Admin", "Management"].includes(session.user.role) && !(preview.snapshot as any).costVisibility && (
                 <StandardSellingSummary snapshot={preview.snapshot} />
               )}
               <div className="save-boq-panel">

@@ -42,7 +42,7 @@ process.on("SIGUSR2", () => {
     generation++;
     await import("node:fs/promises").then((fs) =>
       fs.writeFile(
-        ".local/e2e-control.json",
+        `.local/e2e-control-${port}.json`,
         JSON.stringify({ pid: process.pid, generation }),
       ),
     );
@@ -73,7 +73,7 @@ process.on("SIGINT", () => {
 // Browser test can request a restart without a production HTTP backdoor.
 await import("node:fs/promises").then((fs) =>
   fs.writeFile(
-    ".local/e2e-control.json",
+    `.local/e2e-control-${port}.json`,
     JSON.stringify({ pid: process.pid, generation }),
   ),
 );

@@ -521,7 +521,7 @@ export function Commercial({
   useEffect(() => {
     if (
       initialQuotationId ||
-      section !== "pricing" ||
+      (section !== "pricing" && !revisionInfo) ||
       !policy ||
       revisionLoading ||
       !input.boqRevisionId ||
@@ -546,13 +546,14 @@ export function Commercial({
       active = false;
       clearTimeout(timer);
     };
-  }, [initialRevisionId, policy, revisionLoading, input, savedPrice]);
+  }, [initialRevisionId, policy, revisionLoading, revisionInfo, input, savedPrice]);
   async function pricingSave() {
     if (!preview||pricingUpdating) return;
       await prepareQuote({
         pricingId: crypto.randomUUID(),
         previewPricing:{...input,discountPercent:input.discountMode==='Pre-approved'?undefined:input.discountPercent?.trim()||'0'},
         revisionRequestId: input.revisionRequestId,
+        includeDiscountInSellingPrice: input.includeDiscountInSellingPrice,
         quotedDate: new Intl.DateTimeFormat("en-CA", {
           timeZone: "Asia/Karachi",
           year: "numeric",
@@ -585,6 +586,7 @@ export function Commercial({
       let data: QuotationInput = copy ?? {
         pricingId: savedPrice.id,
         discount: savedPrice.snapshot.discount,
+        includeDiscountInSellingPrice: savedPrice.snapshot.input.includeDiscountInSellingPrice,
         revisionRequestId: savedPrice.snapshot.input.revisionRequestId,
         quotedDate: new Intl.DateTimeFormat("en-CA", {
           timeZone: "Asia/Karachi",
@@ -638,6 +640,7 @@ export function Commercial({
         csrf: session.csrfToken,
       });
       setDirty(true);
+      setInput(old=>({...old,includeDiscountInSellingPrice:data.includeDiscountInSellingPrice??data.previewPricing?.includeDiscountInSellingPrice??input.includeDiscountInSellingPrice}));
       setQuoteInput({
         ...data,
         discount: result.snapshot.input.discount,
@@ -729,6 +732,11 @@ export function Commercial({
     setKey(crypto.randomUUID());
   }
   function changeQuotationDiscount(value: string) {
+    if(quoteInput?.includeDiscountInSellingPrice){
+      quoteChange({discount:value});
+      setNotice('Preview the quotation to recalculate selling prices and GST.');
+      return;
+    }
     ++previewSequence.current;
     if (!quoteInput || !quotePreview) return;
     setDirty(true);
@@ -803,7 +811,7 @@ export function Commercial({
           {notice}
         </p>
       )}
-      {section === "pricing" && manager && !quoteInput && !quotePreview && (
+      {(section === "pricing" || revisionInfo) && manager && !quoteInput && !quotePreview && (
         <>
           <form
             className="survey-form"
@@ -983,6 +991,7 @@ export function Commercial({
                 <label>
                   Discount (%)
                   <input
+                    aria-label="Discount (%)"
                     type="number"
                     min="0"
                     max="100"
@@ -993,6 +1002,15 @@ export function Commercial({
                   />
                   <small>{preview?.snapshot.discountAuthorization ? `${new Decimal(preview.snapshot.discountAuthorization.preapprovedPercent).toFixed(1)}% is the Approved Discount. Any amount above this is a Management Special Discount and requires Management approval.` : 'Applied before sales tax; subject to Management approval.'}</small>
                     {preview?.snapshot.discountAuthorization && input.discountMode!=='Pre-approved' && <Button variant="neutral" onClick={()=>update({discountMode:'Pre-approved',discountPercent:undefined,roundedTotal:undefined})}>Use Approved Discount</Button>}
+                </label>
+                <label className="discount-presentation-control">
+                  <span>
+                    <input type="checkbox" aria-label="Add discount to selling price" checked={!!input.includeDiscountInSellingPrice}
+                      onChange={e=>update({includeDiscountInSellingPrice:e.target.checked})}
+                      aria-describedby="discount-presentation-help"/>
+                    Add discount to selling price
+                  </span>
+                  <small id="discount-presentation-help">Spread the total approved and special discount across eligible item prices. Solar panels, structure and earthing keep their standard prices. GST is recalculated and separate discount lines are removed.</small>
                 </label>
                 <label>
                   Commercial remarks (internal)

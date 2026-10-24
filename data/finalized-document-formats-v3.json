@@ -1,0 +1,23 @@
+{
+  "version": 3,
+  "fingerprint": "5a30f475211e6640d9f06b4966bd78891e7162cca3eefacacb0c520ef9075015",
+  "files": {
+    "server/commercial/report.ts": "62db8e4f3cccd36107cf99b834579705d0a6725d65303bf00bba47b98f3ab1c2",
+    "server/commercial/quotation-rows.ts": "ce0aeccd27e5775f37bdb398ff7c740d98c85ac7b2a7064b1fc6317bb527aeee",
+    "server/commercial/cni-report.ts": "7e802c3cd8c4b06c0d36dabcdeba9441a41632e33e2e3ea37a7e59186379326f",
+    "server/commercial/cni-approved-report.ts": "bd71f08bb76963be48a711b563f5845c97efe96e7af50d8592f56a0301bcdc7d",
+    "server/commercial/cni-assets.ts": "97dd4bbacc17164f3650046489ae5959c26fe21c951054ee37d4c4c5888fae96",
+    "server/orders/report.ts": "2ae60afb47881d1c969fa68a5140a5c7f5301113f571d8c6d5ce9aa62722ea47",
+    "server/orders/peachtree-report.ts": "3bf68fe4956c3f70c3dfc6a1a89792afc4b57d95b71b7e40a992fd30915a998b",
+    "server/orders/presentation.ts": "d7089e4ec3f27c6dab2dc6fcd6cb14b78408400e5a8322d322ce20302c548215",
+    "server/orders/peachtree.ts": "350478ca7f72ad1bc0ec968362f63ab32c5105834c8271ae71a4e2316eb5eb06",
+    "server/ubl/ipo-sample-report.ts": "62efe2af49419cb91009e46f825101f72d73be63efdc5758983e63e867e35ff7",
+    "server/ubl/ipo-sample.ts": "034239f4025d6608bd9662ae1b94ae322ca73d07ce82f112abb0f5b298603fa6",
+    "server/boq/report.ts": "47c789953e813c8e2469ad77be5fe7a867e7caaf4560b4ffb5a7275fa9750ceb",
+    "server/operations/report.ts": "b3be8c94b286970314a71afcda0b1b4c70d657c33f0bd300058394db3b8b8898",
+    "server/reports/branding.ts": "15dc0b5aa21f55a893ca90abee7402d42dfa3f8a07e16e908cd3c24e53a7840a",
+    "server/reports/brand-assets.ts": "942554f9f269c7dfea745e6a835c5f24a2402f54287323b54fb452ce4f60c7e0"
+  },
+  "previousVersionManifest": "data/finalized-document-formats-v2.json",
+  "change": "Owner requested item database commercial descriptions in new quotations across families; C&I commercial labels freeze exact CH-CNI-125-261 wording. Historical snapshots fall back to previous wording; technical pages unchanged."
+}
