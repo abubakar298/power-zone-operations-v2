@@ -43,7 +43,7 @@ export class MastersRepository {
       "SELECT * FROM master_imports",
       "SELECT * FROM inventory_catalogue_current ORDER BY item_id",
       "SELECT * FROM engineering_profiles_current ORDER BY key",
-      "SELECT * FROM inventory_item_aliases ORDER BY alias",
+      "SELECT * FROM inventory_item_aliases_current ORDER BY alias",
     ];
     const results = [];
     if (this.serial) {
@@ -99,7 +99,7 @@ export class MastersRepository {
     });
   }
   private async resolveRateKey(key: string, pool: Pool | PoolClient = this.pool) {
-    const row = (await pool.query(`SELECT rate_key FROM inventory_catalogue_current WHERE item_id=$1 UNION ALL SELECT c.rate_key FROM inventory_item_aliases a JOIN inventory_catalogue_current c ON c.item_id=a.item_id WHERE a.alias=$1 LIMIT 1`, [key])).rows[0];
+    const row = (await pool.query(`SELECT rate_key FROM inventory_catalogue_current WHERE item_id=$1 UNION ALL SELECT c.rate_key FROM inventory_item_aliases_current a JOIN inventory_catalogue_current c ON c.item_id=a.item_id WHERE a.alias=$1 LIMIT 1`, [key])).rows[0];
     return row?.rate_key || key;
   }
   async save(
