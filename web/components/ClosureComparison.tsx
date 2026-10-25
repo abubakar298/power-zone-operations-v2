@@ -15,10 +15,10 @@ export function ClosureComparison({job,actual,epcAggregate}:{job:any;actual:Reco
   const selling=name==='Total'?job.selling:job.phaseSelling?.[name];
   const cost=name==='Total'?(actualCard?actualTotal:budgetTotal):(actualCard?costs[name]:job.budget[name]);
   const peer=name==='Total'?job.phaseCostComparison?.total:job.phaseCostComparison?.phases?.[name];
-  return <tr key={name}><th scope="row">{name}</th><td className="pz-number">{cash(selling)}</td><td className="pz-number">{cash(cost)}</td><td className="pz-number">{cash(markup(selling,cost))}<br/><span className="pz-caption">{markupPercent(selling,cost)}</span></td>{actualCard&&<td className="pz-number">{cash(peer?.averageActualCost)}<br/><span className="pz-caption">{peer?.jobs?`${peer.jobs} closed ${peer.jobs===1?'job':'jobs'}`:'No comparable closed costs'}</span></td>}</tr>;
+  return <tr key={name}><th scope="row">{name}</th><td className="pz-number">{cash(selling)}</td><td className="pz-number">{cash(cost)}</td><td className="pz-number">{cash(markup(selling,cost))}<br/><span className="pz-caption">{valid(cost)?markupPercent(selling,cost):'Not entered'}</span></td>{actualCard&&<td className="pz-number">{cash(peer?.averageActualCost)}<br/><span className="pz-caption">{peer?.jobs?`${peer.jobs} closed ${peer.jobs===1?'job':'jobs'}`:'No comparable closed costs'}</span></td>}</tr>;
  };
  return <section className="pz-stack pz-closure-comparison" aria-label="Budget and actual closure comparison">
-  <p className="pz-caption">PKR · excluding GST · Markup = selling price − cost; percentage is markup on cost. Submitted figures are the saved Accounts version awaiting your decision.</p>
+  <p className="pz-caption">PKR · excluding GST · Markup = selling price − cost; percentage is markup on cost. {job.history?.[0]?.stage==='Awaiting Management'?'Submitted figures are the saved Accounts version awaiting your decision.':job.history?.[0]?.stage==='Closed'?'Figures are the approved closed-job version.':'Draft costs are not yet submitted for approval.'}</p>
   <div className="pz-form-grid pz-closure-cards">
    {[false,true].map(isActual=><section key={String(isActual)} className="pz-panel pz-stack" aria-label={isActual?'Actual job performance':'Budgeted job performance'}>
     <h3>{isActual?'Actual':'Budgeted'}</h3>

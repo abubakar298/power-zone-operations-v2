@@ -1021,7 +1021,7 @@ export function AccountsWorkspace({
             {installationDays(job.entry) ?? "Not available"} (inclusive)
           </p>
           {manager && <ClosureComparison job={job} actual={actual} epcAggregate={epcAggregate}/>}
-          <details><summary>Costing breakdown and EPC details</summary>
+          <details open={!readonly}><summary>Costing breakdown and EPC details</summary>
           <ClosureCostTables
             job={job}
             actual={actual}

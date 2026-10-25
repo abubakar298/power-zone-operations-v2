@@ -2,6 +2,15 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {phaseCostComparison} from '../server/accounts/phase-comparison.js';
 import {awaitingClosures,pendingTechnicalPackages,pendingBoqReviews} from '../web/workspaces/management-reviews.js';
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {ClosureComparison} from '../web/components/ClosureComparison.js';
+test('Empty Accounts draft costs remain visibly missing without a financial render error',()=>{
+ const names=['Solar Panels','Structure','Inverter','Batteries','BMS','EPC'];
+ const html=renderToStaticMarkup(createElement(ClosureComparison,{job:{selling:'1200',budget:Object.fromEntries(names.map(p=>[p,'100'])),phaseSelling:Object.fromEntries(names.map(p=>[p,'200']))},actual:{},epcAggregate:''}));
+ assert.ok(html.includes('Not entered'));
+ assert.ok(html.includes('Draft costs are not yet submitted'));
+});
 test('Phase cost averages exclude missing values, preserve zero and use arithmetic mean',()=>{
  const peers=[{summary:{actual:'100'},input:{actual:{Inverter:'20',BMS:'0'},epcAggregate:'30'}},{summary:{actual:'300'},actualEpc:'50',input:{actual:{Inverter:'60'}}},{summary:{actual:null},input:{actual:{Inverter:'999'}}}];
  const before=JSON.stringify(peers),r=phaseCostComparison(peers);
