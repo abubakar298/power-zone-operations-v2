@@ -52,6 +52,17 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("region", { name: "Management approvals" }),
   ).toBeVisible();
   await expect(page.getByRole('button',{name:'Dashboard',exact:true})).toHaveAttribute('aria-current','page');
+  const solarBucket=page.getByRole('button',{name:/^UBL Solar \d+ IPOs received/});
+  await expect(solarBucket).toBeVisible();
+  await solarBucket.click();
+  await expect(page.getByRole('region',{name:'UBL Solar IPOs and installations'})).toBeVisible();
+  await expect(page.getByRole('button',{name:/^Active POs \(\d+\)$/})).toBeVisible();
+  await page.getByRole('searchbox',{name:'Search UBL Solar sites'}).fill('Adda Jahan');
+  await expect(page.getByRole('table').getByText(/Adda Jahan/i)).toBeVisible();
+  await page.screenshot({path:'test-results/management-solar-dashboard.png',fullPage:true});
+  await page.getByRole('button',{name:'Open UBL Solar workspace',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'UBL Solar',exact:true})).toBeVisible();
+  await openWorkspaceSection(page,'Dashboard');
   const upsBucket=page.getByRole('button',{name:/^UBL UPS 209 IPOs received/});
   await expect(upsBucket).toBeVisible();
   await upsBucket.click();
