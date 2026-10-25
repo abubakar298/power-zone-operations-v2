@@ -6,6 +6,7 @@ import { HttpError } from "../http/errors.js";
 import type { BoqSnapshot } from "../boq/engine.js";
 import {upsInstallationAlerts} from './ups-alerts.js';
 import {upsPortfolio} from './ups-portfolio.js';
+import {managementReceivedPos} from './received-pos.js';
 import {upsDataReview,saveUpsDataReview} from './ups-data-review.js';
 const names = [
   "Solar Panels",
@@ -78,6 +79,7 @@ export class DirectorRepository {
   constructor(private pool: Pool) {}
   upsInstallationAlerts(actor:string){return upsInstallationAlerts(this.pool,actor);}
   upsPortfolio(actor:string,customer:'MBL'|'UBL'){return upsPortfolio(this.pool,actor,customer);}
+  receivedPos(actor:string){return managementReceivedPos(this.pool,actor);}
   upsDataReview(actor:string,customer:'MBL'|'UBL'){return upsDataReview(this.pool,actor,customer);}
   saveUpsDataReview(actor:string,input:unknown){return saveUpsDataReview(this.pool,actor,input);}
   async portfolio(actor: string, customerId?: number) {

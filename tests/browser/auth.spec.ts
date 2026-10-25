@@ -52,13 +52,20 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
     page.getByRole("region", { name: "Management approvals" }),
   ).toBeVisible();
   await expect(page.getByRole('button',{name:'Dashboard',exact:true})).toHaveAttribute('aria-current','page');
-  const upsBucket=page.getByRole('button',{name:/^UBL UPS 0 IPOs received/});
+  const upsBucket=page.getByRole('button',{name:/^UBL UPS 209 IPOs received/});
   await expect(upsBucket).toBeVisible();
   await upsBucket.click();
-  await expect(page.getByRole('region',{name:'UBL UPS IPOs and installations'})).toBeVisible();
-  await expect(page.getByRole('button',{name:'Installed (0)',exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'UBL UPS received POs'})).toBeVisible();
+  await expect(page.getByRole('button',{name:/^Installed \(\d+\)$/,exact:true})).toBeVisible();
+  await page.getByRole('button',{name:/^Mapping \/ status flags/}).click();
+  await page.getByRole('searchbox',{name:'Search received POs'}).fill('Pull Wasil');
+  await expect(page.getByRole('cell',{name:'Pull Wasil, Multan',exact:false})).toBeVisible();
+  await expect(page.getByText('Link held for review',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:/^Meezan UPS · 6 \+ 10 /}).click();
+  await expect(page.getByRole('region',{name:'Meezan UPS · 6 + 10 received POs'})).toBeVisible();
+  await expect(page.getByRole('cell',{name:/233/})).toHaveCount(3);
   await openWorkspaceSection(page, 'Dashboard');
-  await expect(page.getByRole('region',{name:'UBL UPS IPOs and installations'})).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Meezan UPS · 6 + 10 received POs'})).toHaveCount(0);
   await openWorkspaceSection(page, 'My account');
   await expect(
     page.getByRole("heading", { name: "Your account", exact: true }),

@@ -1,46 +1,34 @@
 import {useEffect,useState} from 'react';
 import {api,type Session} from '../api.js';
 import {Button} from '../ui/Button.js';
+import {StatusBadge} from '../ui/StatusBadge.js';
 import {ManagementApprovals} from './ManagementApprovals.js';
-import {isInstalledUpsSite,upsDashboardSummary,type UpsDashboardData} from '../workspaces/management-dashboard.js';
 
+type Row={key:string;customer:string;program:string;variant:string;section:string;orderNumber:string;sourceOrderLabel:string;site:string;siteCode:string;customerPo:string;poReceived:string;delivery:string;installation:string;accountsDelivery?:string;accountsInstallation?:string;accountsReferences:string[];invoiceReferences:string[];accountSourceRows:number[];sourceRow:number;sourceSheet:string;sourceUrl:string;accountsUrl:string;mappingStatus:string;flags:string[];cancelled:boolean;transferred:boolean;active:boolean;delivered:boolean;installed:boolean;remarks:string;suggestedAccounts:{order:string;site:string;invoice:string;row:number}[]};
+type Received={rows:Row[];sourceDate:string;unallocatedAccounts:{customer:string;program:string;order:string;site:string;invoice:string;row:number}[]};
+const groups=[{key:'UBL-6-10',customer:'UBL',variant:'6-10',label:'UBL UPS'},{key:'MBL-6-5',customer:'MBL',variant:'6-5',label:'Meezan UPS · 6 + 5'},{key:'MBL-6-10',customer:'MBL',variant:'6-10',label:'Meezan UPS · 6 + 10'}];
 export function ManagementDashboard({session,onOpen,onOpenUps}:{session:Session;onOpen:(task:any)=>void;onOpenUps:()=>void}){
- const [data,setData]=useState<UpsDashboardData>(),[error,setError]=useState('');
- const [expanded,setExpanded]=useState(false),[filter,setFilter]=useState('all'),[search,setSearch]=useState('');
- useEffect(()=>{
-  let active=true,generation=0;
-  const load=async()=>{const request=++generation;try{
-   const result=await api<UpsDashboardData>('/director/ups?customer=UBL');
-   if(active&&request===generation){setData(result);setError('');}
-  }catch(e){if(active&&request===generation)setError((e as Error).message);}};
-  const reset=()=>{setExpanded(false);setFilter('all');setSearch('');void load();};
-  void load();window.addEventListener('focus',load);window.addEventListener('pz:workspace-open',reset);
-  const timer=setInterval(load,30000);
-  return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);window.removeEventListener('pz:workspace-open',reset);};
- },[session.user.id]);
- const totals=data?upsDashboardSummary(data):undefined;
- const rows=(data?.register.rows??[]).filter(r=>(filter==='all'||(filter==='installed'?isInstalledUpsSite(r):!isInstalledUpsSite(r)))&&[r.site,r.siteCode,r.number,r.projectReference,r.orderNumber].join(' ').toLowerCase().includes(search.trim().toLowerCase()));
- return <ManagementApprovals session={session} onOpen={onOpen} additionalBuckets={
-  <button type="button" className={`stage-card${expanded?' selected':''}`} aria-expanded={expanded} aria-controls="management-ubl-ups" onClick={()=>setExpanded(!expanded)}>
-   <span>UBL UPS</span><strong>{totals?totals.received:'—'}</strong>
-   <small>{totals?`IPOs received · ${totals.installed} ${totals.installed===1?'site':'sites'} installed`:'Loading IPO and installation totals…'}</small>
-   {totals&&<small>{totals.completionUnconfirmed} sites awaiting installation confirmation</small>}
-  </button>
- }>
-  {error&&<p className="form-error" role="alert">UBL UPS summary could not refresh: {error}{data?' Displayed counts are from the last successful refresh.':''}</p>}
-  {expanded&&<section id="management-ubl-ups" className="pz-stack" aria-label="UBL UPS IPOs and installations">
-   <h2>UBL UPS · IPOs received and installed sites</h2>
-   <p className="pz-caption">Saved site IPOs, including the historical register, count once as in the UBL UPS workspace. Installed means completion is recorded; delivery or an invoice alone does not count as installation.</p>
-   <div className="pz-action-row">
-    {([['all','All IPOs',totals?.received],['installed','Installed',totals?.installed],['unconfirmed','Installation unconfirmed',totals?.completionUnconfirmed]] as const).map(([value,label,count])=><Button key={value} variant={filter===value?'secondary':'neutral'} aria-pressed={filter===value} onClick={()=>setFilter(value)}>{label}{count===undefined?'':` (${count})`}</Button>)}
-    <Button variant="secondary" onClick={onOpenUps}>Open UBL UPS workspace</Button>
-   </div>
-   <label className="pz-field">Search UBL UPS sites<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Site, branch code, IPO or order number"/></label>
-   {!data&&!error&&<p role="status">Loading UBL UPS sites…</p>}
-   {data&&<><p className="pz-caption" role="status">{rows.length} {rows.length===1?'site':'sites'} shown</p><div className="pz-table-scroll"><table className="master-table"><thead><tr><th>Site / branch</th><th>IPO / order number</th><th>Installation</th></tr></thead><tbody>
-    {rows.map(r=><tr key={r.id}><td><strong>{r.site||'Site not entered'}</strong>{r.siteCode&&<><br/>{r.siteCode}</>}</td><td>{r.number||r.projectReference||'Not entered'}{r.orderNumber&&<><br/>{r.orderNumber}</>}</td><td>{isInstalledUpsSite(r)?'Installed':'Completion not confirmed'}<p className="pz-caption">{r.status}</p></td></tr>)}
-    {!rows.length&&<tr><td colSpan={3}>No UBL UPS sites match this selection.</td></tr>}
-   </tbody></table></div></>}
+ const [data,setData]=useState<Received>(),[error,setError]=useState(''),[selected,setSelected]=useState(''),[filter,setFilter]=useState('active'),[search,setSearch]=useState('');
+ useEffect(()=>{let active=true,generation=0;const load=async()=>{const n=++generation;try{const next=await api<Received>('/director/received-pos');if(active&&n===generation){setData(next);setError('');}}catch(e){if(active&&n===generation)setError((e as Error).message);}};const reset=()=>{setSelected('');setFilter('active');setSearch('');void load();};void load();window.addEventListener('focus',load);window.addEventListener('pz:workspace-open',reset);const timer=setInterval(load,30000);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);window.removeEventListener('pz:workspace-open',reset);};},[session.user.id]);
+ const group=groups.find(g=>g.key===selected);
+ const all=(data?.rows??[]).filter(r=>r.customer===group?.customer&&r.variant===group?.variant);
+ const pending=(r:Row)=>r.active&&!r.delivered;
+ const review=(r:Row)=>r.mappingStatus==='Mapping review required'||r.flags.some(f=>!f.startsWith('Transferred'));
+ const filters=[['active','Active POs',(r:Row)=>r.active],['pending','Pending delivery',pending],['installed','Installed',(r:Row)=>r.active&&r.installed],['review','Mapping / status flags',review],['cancelled','Cancelled',(r:Row)=>r.cancelled],['transferred','Transferred',(r:Row)=>r.transferred],['all','All history',()=>true]] as const;
+ const rows=all.filter(r=>(filters.find(f=>f[0]===filter)?.[2](r)??true)&&[r.site,r.siteCode,r.program,r.orderNumber,r.customerPo,...r.accountsReferences,...r.invoiceReferences].join(' ').toLowerCase().includes(search.trim().toLowerCase()));
+ return <ManagementApprovals session={session} onOpen={onOpen} additionalBuckets={<>{groups.map(g=>{const scoped=(data?.rows??[]).filter(r=>r.customer===g.customer&&r.variant===g.variant),received=scoped.filter(r=>!r.transferred),installed=scoped.filter(r=>r.active&&r.installed).length;return <button type="button" key={g.key} className={`stage-card${selected===g.key?' selected':''}`} aria-expanded={selected===g.key} aria-controls="management-received-pos" onClick={()=>{setSelected(selected===g.key?'':g.key);setFilter('active');setSearch('');}}><span>{g.label}</span><strong>{data?received.length:'—'}</strong><small>{data?`IPOs received · ${installed} sites installed`:'Loading received POs…'}</small>{data&&<small>{scoped.filter(pending).length} pending delivery · {scoped.filter(review).length} flagged{scoped.some(r=>r.cancelled)?` · ${scoped.filter(r=>r.cancelled).length} cancelled`:''}</small>}</button>;})}</>}>
+  {error&&<p className="form-error" role="alert">Received PO register could not refresh: {error}{data?' Showing the last successful refresh.':''}</p>}
+  {group&&<section id="management-received-pos" className="pz-stack" aria-label={`${group.label} received POs`}>
+   <h2>{group.label} · POs received</h2>
+   <p className="pz-caption">Atif’s IPO order number and Accounts’ invoicing reference are separate. Different numbers are expected; identity conflicts stay flagged. This bulk register is visible to Management only and has not been sent to IPOs Shared.</p>
+   <div className="pz-action-row">{filters.map(([value,label,test])=><Button key={value} variant={filter===value?'secondary':'neutral'} aria-pressed={filter===value} onClick={()=>setFilter(value)}>{label} ({all.filter(test).length})</Button>)}{group.customer==='UBL'&&<Button variant="secondary" onClick={onOpenUps}>Open existing UBL UPS costing</Button>}</div>
+   <label className="pz-field">Search received POs<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Site, branch, IPO order, customer PO or invoice"/></label>
+   <p className="pz-caption" role="status">{rows.length} orders shown · source checked {data?.sourceDate}. Transferred orders are retained in history and excluded from received totals. Cancelled orders are shown separately.</p>
+   <div className="pz-table-scroll"><table className="master-table"><thead><tr><th>Site / branch</th><th>IPO · Atif’s order</th><th>Customer PO</th><th>Accounts’ reference · invoice</th><th>Delivery / installation</th><th>Mapping / evidence</th></tr></thead><tbody>
+    {rows.map(r=><tr key={r.key}><td><strong>{r.site}</strong>{r.siteCode&&<><br/>{r.siteCode}</>}<p className="pz-caption">{r.section}</p></td><td>{r.program}<br/><strong>{r.orderNumber}</strong></td><td>{r.customerPo||'Not recorded in Atif’s sheet'}<p className="pz-caption">PO received: {r.poReceived||'Date not recorded'}</p></td><td>{r.accountsReferences.join('; ')||(r.mappingStatus==='Mapping review required'?'Link held for review':'Not recorded yet')}<p className="pz-caption">{r.invoiceReferences.join('; ')}</p></td><td><StatusBadge tone={r.cancelled?'warning':r.transferred?'pending':r.installed?'success':'pending'}>{r.cancelled?'Cancelled':r.transferred?'Transferred':r.installed?'Installed':r.delivered?'Delivered · installation pending':'Pending delivery'}</StatusBadge><p className="pz-caption">Atif: {r.delivery||'No delivery date'} / {r.installation||'No installation date'}{r.accountsDelivery&&<><br/>Accounts: {r.accountsDelivery} / {r.accountsInstallation}</>}</p></td><td><StatusBadge tone={review(r)?'warning':undefined}>{r.mappingStatus}</StatusBadge>{r.flags.map(f=><p className="pz-caption" key={f}>{f}</p>)}<details><summary>Source details</summary><p><a href={r.sourceUrl} target="_blank" rel="noreferrer">Atif: {r.sourceSheet}, row {r.sourceRow}</a></p>{r.accountSourceRows.length>0&&<p><a href={r.accountsUrl} target="_blank" rel="noreferrer">Accounts source, rows {r.accountSourceRows.join(', ')}</a></p>}{r.suggestedAccounts.map(a=><p key={`${a.row}:${a.order}`}>Pending candidate: {a.order} · {a.site} · {a.invoice} (Accounts row {a.row})</p>)}{r.remarks&&<p>{r.remarks}</p>}</details></td></tr>)}
+    {!rows.length&&<tr><td colSpan={6}>No orders match this selection.</td></tr>}
+   </tbody></table></div>
+   {data&&<details><summary>Unlinked Accounts references ({data.unallocatedAccounts.filter(a=>a.customer===group.customer&&all.some(r=>r.program===a.program)).length})</summary><p className="pz-caption">Preserved as invoice references, without creating another PO or moving costing and payments.</p>{data.unallocatedAccounts.filter(a=>a.customer===group.customer&&all.some(r=>r.program===a.program)).map(a=><p key={`${a.customer}:${a.row}`}>{a.program} · {a.order} · {a.site} · {a.invoice} (Accounts row {a.row})</p>)}</details>}
   </section>}
  </ManagementApprovals>;
 }

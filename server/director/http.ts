@@ -9,6 +9,7 @@ export function directorHttp(
 ) {
   const r = Router();
   r.use(requireSession);
+  r.get('/received-pos',async(req,res)=>{res.json(await repo.receivedPos(req.authSession!.user.id));});
   r.get('/ups-alerts',async(req,res)=>{res.json(await repo.upsInstallationAlerts(req.authSession!.user.id));});
   r.get('/ups-data-review',async(req,res)=>{const customer=z.enum(['MBL','UBL']).parse(req.query.customer);res.json(await repo.upsDataReview(req.authSession!.user.id,customer));});
   r.post('/ups-data-review',async(req,res)=>{if(!equalSecrets(req.get('X-CSRF-Token')??'',req.authSession!.csrfToken))throw new HttpError(403,'Refresh and try again.');res.json(await repo.saveUpsDataReview(req.authSession!.user.id,req.body));});
