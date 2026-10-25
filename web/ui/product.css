@@ -471,3 +471,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* Quotation discount treatment lives alongside the discount percentage. */
 .survey-grid .discount-presentation-control>span{display:flex;align-items:center;gap:var(--pz-space-8,8px);min-height:44px}
 .survey-grid .discount-presentation-control input[type=checkbox]{width:18px;height:18px;min-height:18px;flex:none;padding:0;accent-color:var(--pz-primary)}
+
+/* Management closure: keep parallel summaries aligned and monetary figures intact. */
+.pz-closure-cards>.pz-panel{min-width:0;display:flex;flex-direction:column;gap:var(--pz-space-4);align-self:start}
+.pz-closure-cards h3{margin:0}
+.pz-closure-cards .project-facts{display:grid;grid-template-columns:1fr;gap:var(--pz-space-3)}
+.pz-closure-cards .project-facts>div{display:flex;justify-content:space-between;align-items:baseline;gap:var(--pz-space-3)}
+.pz-closure-cards .project-facts dd{margin:0;text-align:right;white-space:nowrap;overflow-wrap:normal;font-variant-numeric:tabular-nums}
+.pz-closure-cards .pz-table-scroll{min-width:0}
+.pz-closure-cards table{min-width:480px}
+.pz-closure-cards td.pz-number{white-space:nowrap;overflow-wrap:normal}
+@media(max-width:1400px){.pz-closure-cards{grid-template-columns:1fr}}

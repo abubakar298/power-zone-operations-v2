@@ -1,3 +1,4 @@
+import { phaseCostComparison } from "./phase-comparison.js";
 import { cableInvoiceAdjustment } from "../inventory/reconciliation.js";
 import { createHash, randomUUID } from "node:crypto";
 import { Decimal } from "decimal.js";
@@ -464,11 +465,21 @@ export class AccountsRepository {
           : null,
       };
     }
+    const identity = (await new InventoryRepository(this.pool).jobs(actor)).find(j => j.key === key);
+    const comparisonIdentity = history[0]?.snapshot?.identity ?? identity;
+    const phasePeers = comparisonIdentity?.configuration_id && comparisonIdentity?.customer_code ? (await this.pool.query(`
+      SELECT j.snapshot FROM
+        (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures ORDER BY job_key,version DESC) j
+      LEFT JOIN ubl_effective_site_orders o ON j.job_key='ubl:'||o.site_id
+      LEFT JOIN internal_purchase_orders i ON j.job_key='ipo:'||i.id
+      WHERE j.stage='Closed' AND j.job_key<>$1
+        AND COALESCE(j.snapshot->'identity'->>'configuration_id',o.configuration_id,i.snapshot->>'solutionId')=$2
+        AND COALESCE(j.snapshot->'identity'->>'customer_code',CASE WHEN o.site_id IS NOT NULL THEN 'UBL' ELSE i.snapshot->'customer'->>'shortCode' END)=$3
+    `,[key,comparisonIdentity.configuration_id,comparisonIdentity.customer_code])).rows : [];
     return {
       configurationComparison,
-      identity: (await new InventoryRepository(this.pool).jobs(actor)).find(
-        (j) => j.key === key,
-      ),
+      phaseCostComparison: phaseCostComparison(phasePeers.map(r=>r.snapshot)),
+      identity,
       jobKey: key,
       jobId: irr.snapshot.jobId,
       title: irr.snapshot.title,
