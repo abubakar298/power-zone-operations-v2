@@ -243,6 +243,7 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
         "ubl:" + peer.site_id,
         closed.report_version_id,
         {
+          input:{actual:{Inverter:"20000",BMS:"0"}},actualEpc:"30000",
           summary: {
             actual: "100000",
             actualMarkup: "21110",
@@ -270,6 +271,7 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
         "ubl:" + peer2.site_id,
         closed.report_version_id,
         {
+          input:{actual:{Inverter:"60000"}},actualEpc:"50000",
           summary: {
             actual: "300000",
             actualMarkup: "150000",
@@ -286,6 +288,12 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       "Average is weighted by actual cost, not an average of percentages",
     );
 
+    const phaseComparison=(await repo.job(users.Management,j.key)).phaseCostComparison;
+    assert.deepEqual(phaseComparison.phases.Inverter,{jobs:2,averageActualCost:'40000.00'});
+    assert.deepEqual(phaseComparison.phases.BMS,{jobs:1,averageActualCost:'0.00'});
+    assert.deepEqual(phaseComparison.phases.EPC,{jobs:2,averageActualCost:'40000.00'});
+    assert.deepEqual(phaseComparison.total,{jobs:2,averageActualCost:'200000.00'});
+    assert.deepEqual(phaseComparison.phases.Structure,{jobs:0,averageActualCost:null});
     const portfolio = await new UblRepository(db.pool).closedJobs(
       users.Management,
     );
@@ -521,6 +529,14 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       requestKey: randomUUID(),
     });
     assert.ok(newClosure.version > 1);
+    // A newer non-closed version and a different saved configuration must not pollute phase averages.
+    for(const [version,stage,identity] of [[2,'Draft',null],[3,'Closed',{customer_code:'UBL',configuration_id:'different-config'}]] as const){
+      await db.pool.query("INSERT INTO accounts_job_closures(id,job_key,report_version_id,version,stage,snapshot,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",[
+        randomUUID(),'ubl:'+peer2.site_id,closed.report_version_id,version,stage,{identity,summary:{actual:'900000',actualMarkup:'100'},input:{actual:{Inverter:'999999'}}},randomUUID(),users.Management
+      ]);
+      assert.deepEqual((await repo.job(users.Management,j.key)).phaseCostComparison.phases.Inverter,{jobs:1,averageActualCost:'20000.00'});
+    }
+
   } finally {
     await db.close();
   }

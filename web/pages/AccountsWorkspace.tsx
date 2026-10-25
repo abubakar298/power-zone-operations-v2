@@ -1,3 +1,4 @@
+import {ClosureComparison} from "../components/ClosureComparison.js";
 import {FileUpload} from '../ui/FileUpload.js';
 import { cableInvoiceAdjustment } from "../../server/inventory/reconciliation.js";
 import { jobLabel } from "../components/job-label.js";
@@ -16,7 +17,6 @@ import { orderCustomerScopeLines } from "../../server/commercial/customer-scope.
 import { DocumentPreview } from "../components/DocumentPreview.js";
 import {
   ClosureCostTables,
-  ClosureIndicators,
   installationDays,
 } from "../components/ClosurePerformance.js";
 import { Decimal } from "decimal.js";
@@ -31,10 +31,16 @@ export function AccountsWorkspace({
   session,
   initialRecordId,
   initialJobKey,
+  managementReview = false,
+  onBack,
+  onDecision,
 }: {
   session: Session;
   initialRecordId?: string;
   initialJobKey?: string;
+  managementReview?: boolean;
+  onBack?: () => void;
+  onDecision?: () => void;
 }) {
   const [tab, setTab] = useState(
       initialRecordId ? "IPO Review" : "My Workspace",
@@ -182,7 +188,9 @@ export function AccountsWorkspace({
         pt: i?.ptReference ?? "",
         ptAttachmentId: i?.ptAttachmentId ?? null,
       };
-      setJob(j);
+      // Review the immutable submitted figures, retaining current peer comparisons.
+      const frozen = ["Awaiting Management", "Closed"].includes(j.history[0]?.stage) ? j.history[0].snapshot : null;
+      setJob(frozen ? {...j,...frozen,history:j.history,identity:frozen.identity??j.identity,configurationComparison:j.configurationComparison,phaseCostComparison:j.phaseCostComparison} : j);
       setActual(v.actual);
       setEpc(v.epc);
       setEpcAggregate(v.epcAggregate);
@@ -373,6 +381,7 @@ export function AccountsWorkspace({
       await openJob(job.jobKey);
       await load();
       setMessage("Management decision recorded.");
+      onDecision?.();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -405,9 +414,12 @@ export function AccountsWorkspace({
         new Decimal(0),
       )
     : new Decimal(0);
+  if(managementReview&&job&&!['Awaiting Management','Closed'].includes(latest?.stage))return <section className="pz-stack"><Button variant="neutral" onClick={onBack}>Back to jobs awaiting closure</Button><p role="status">This closure is no longer awaiting your approval. Current status: {latest?.stage??'Not submitted'}.</p></section>;
+  if(managementReview&&!job)return <section className="pz-stack"><Button variant="neutral" onClick={onBack}>Back to jobs awaiting closure</Button>{error?<p role="alert" className="form-error">{error}</p>:<p role="status">Loading the saved Accounts closure…</p>}</section>;
   return (
     <section className="pz-accounts">
-      <div className="pz-action-row">
+      {managementReview && <div className="pz-action-row"><Button variant="neutral" onClick={onBack}>Back to jobs awaiting closure</Button></div>}
+      {!managementReview && <div className="pz-action-row">
         {[
           "My Workspace",
           "IPO Review",
@@ -425,8 +437,8 @@ export function AccountsWorkspace({
             {t}
           </Button>
         ))}
-      </div>
-      <h2>{tab}</h2>
+      </div>}
+      <h2>{managementReview?"Review job closure":tab}</h2>
       {tab === "Project checkpoints" && (
         <ProjectCheckpoints session={session} mode="Accounts" />
       )}
@@ -1008,15 +1020,8 @@ export function AccountsWorkspace({
             Installation: {job.entry.start} → {job.entry.end} · Net days:{" "}
             {installationDays(job.entry) ?? "Not available"} (inclusive)
           </p>
-          {manager && (
-            <ClosureIndicators
-              budget={budgetTotal.toString()}
-              actual={actualTotal?.toString() ?? null}
-              selling={job.selling}
-              average={job.configurationComparison?.averageActualMarkupPercent}
-              entry={job.entry}
-            />
-          )}
+          {manager && <ClosureComparison job={job} actual={actual} epcAggregate={epcAggregate}/>}
+          <details><summary>Costing breakdown and EPC details</summary>
           <ClosureCostTables
             job={job}
             actual={actual}
@@ -1029,6 +1034,8 @@ export function AccountsWorkspace({
             onAggregate={setEpcAggregate}
             onDetails={setEpcDetails}
           />
+          </details>
+          {!manager && <>
           <h3>Closure summary · excluding GST</h3>
           <div className="table-scroll">
             <table>
@@ -1095,6 +1102,7 @@ export function AccountsWorkspace({
               </tbody>
             </table>
           </div>
+          </>}
           {actualTotal && (
             <section>
               <h3>Potential cable invoice adjustment impact · excluding GST</h3>
