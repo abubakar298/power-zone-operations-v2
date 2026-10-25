@@ -1093,7 +1093,7 @@ export function Dashboard({
                                 : ["Admin", "Management"].includes(
                                       session.user.role,
                                     )
-                                  ? "Review quotations awaiting your approval and UBL UPS installation progress."
+                                  ? "Review quotations awaiting your approval, received IPOs and installation progress."
                                   : "Select a bucket or review all pending tasks."
                         : view === "design"
                           ? "Design workspace"
@@ -1234,7 +1234,7 @@ export function Dashboard({
               {view === "dashboard" && session.user.role === "Operations" && (
                 <OperationsHome session={session} onGo={(target) => { if (target === "operations") setOperationsIpoId(undefined); navigate(target); }} onOpenSite={openSiteFromAnywhere} onOpenStage={(stage) => { setStageToOpen(stage); setSiteToOpen(undefined); navigate("sites"); }} />
               )}
-              {managementHome && <ManagementDashboard session={session} onOpenUps={()=>navigate("ubl-ups")} onOpen={(task)=>{
+              {managementHome && <ManagementDashboard session={session} onOpenUps={()=>navigate("ubl-ups")} onOpenSolar={()=>navigate("ubl")} onOpen={(task)=>{
                 setRevisionDraftId(task.draft_id);
                 setPricingRevisionId(task.boq_revision_id);
                 setPricingRequestId(task.request_id);
