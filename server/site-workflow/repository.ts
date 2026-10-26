@@ -132,7 +132,7 @@ function shape(r: any) {
     openProblems: r.open_problems as number,
     missingPictureDays: r.missing_picture_days as number,
     // Quality Control documents: what is in, what is missing, and whether the site is red (26 Oct 2026).
-    qc: assessQc({ siteType: r.site_type ?? null, scope, deliveredOn: r.delivered_on ?? null, bessDeliveredOn: r.bess_delivered_on ?? null }, new Set((r.qc_done ?? []) as QcKind[])),
+    qc: assessQc({ siteType: r.site_type ?? null, scope, deliveredOn: r.delivered_on ?? null, bessDeliveredOn: r.bess_delivered_on ?? null, closed: stage === "closed" }, new Set((r.qc_done ?? []) as QcKind[])),
     updatedAt: r.updated_at as string,
     updatedBy: (r.updated_by_name ?? null) as string | null,
   };

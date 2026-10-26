@@ -50,7 +50,7 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialSiteNon
       {s.missingPictureDays > 0 && <span className="sw-chip sw-chip--warning">{s.missingPictureDays} day{s.missingPictureDays === 1 ? "" : "s"} no pictures</span>}
       {s.qc.red && <span className="sw-chip sw-chip--danger">No delivery papers from QC</span>}
       {!s.qc.red && s.qc.overdue.length > 0 && <span className="sw-chip sw-chip--danger">QC overdue: {s.qc.overdue.join(", ")}</span>}
-      {(s.deliveredOn || s.bessDeliveredOn) && s.qc.done < s.qc.required && <span className="sw-chip sw-chip--warning">QC documents {s.qc.done}/{s.qc.required}</span>}
+      {s.stage !== "closed" && (s.deliveredOn || s.bessDeliveredOn) && s.qc.done < s.qc.required && <span className="sw-chip sw-chip--warning">QC documents {s.qc.done}/{s.qc.required}</span>}
       {!s.late && s.overdue.length === 0 && s.openProblems === 0 && s.missingPictureDays === 0 && !s.qc.red && s.qc.overdue.length === 0 && <span className="sw-chip sw-chip--ok">On track</span>}
     </>
   );

@@ -18,7 +18,7 @@ const SITES_SQL = `SELECT w.id, w.stage, w.site_type, w.scope, to_char(w.deliver
    i.number AS ipo_number, i.snapshot->'customer'->>'name' AS customer, COALESCE(NULLIF(i.snapshot->>'siteName',''), s.name) AS site_name,
    i.snapshot->>'siteCode' AS site_code, s.region
  FROM site_workflow w JOIN internal_purchase_orders i ON i.id=w.ipo_id LEFT JOIN sites s ON s.id=w.site_id`;
-const site = (r: any): QcSite => ({ siteType: r.site_type ?? null, scope: r.scope ?? null, deliveredOn: r.delivered_on ?? null, bessDeliveredOn: r.bess_delivered_on ?? null });
+const site = (r: any): QcSite & { closed: boolean } => ({ siteType: r.site_type ?? null, scope: r.scope ?? null, deliveredOn: r.delivered_on ?? null, bessDeliveredOn: r.bess_delivered_on ?? null, closed: Boolean(r.closed_at) });
 const label = (r: any) => `${r.site_name ?? "Site"}${r.site_code ? ` (${r.site_code})` : ""}`;
 
 /**
@@ -205,7 +205,8 @@ export class QualityRepository {
       site: names.get(s.workflow_id) ?? "Site", document: kindLabel(s.kind, site(rows.find((r) => r.id === s.workflow_id) ?? {})),
       dueAt: new Date(s.due_at).toISOString(), submittedAt: new Date(s.submitted_at).toISOString(), status: s.on_time ? "on_time" : "late",
     }));
-    for (const r of rows) for (const kind of requiredKinds(site(r))) {
+    // A closed site can take no more documents, so it is not counted as missing.
+    for (const r of rows.filter((x) => !x.closed_at)) for (const kind of requiredKinds(site(r))) {
       const due = dueAt(kind, site(r));
       if (due && due >= start && due < end && due < now && !(done.get(r.id)?.has(kind))) items.push({ site: label(r), document: kindLabel(kind, site(r)), dueAt: due.toISOString(), submittedAt: null, status: "missing" });
     }

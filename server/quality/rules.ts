@@ -69,18 +69,18 @@ export function dueAt(kind: QcKind, s: QcSite): Date | null {
   return null;
 }
 
-/** The checklist for a site: what is needed, what is in, what is overdue, and whether the site is red. */
-export function assessQc(s: QcSite, submitted: Set<QcKind>, now = new Date()) {
+/** The checklist for a site: what is needed, what is in, what is overdue, and whether the site is red. A closed site is never red. */
+export function assessQc(s: QcSite & { closed?: boolean }, submitted: Set<QcKind>, now = new Date()) {
   const required = requiredKinds(s);
   const items = required.map((kind) => {
     const due = dueAt(kind, s);
     const done = submitted.has(kind);
-    return { kind, label: kindLabel(kind, s), done, dueAt: due ? due.toISOString() : null, overdue: !done && Boolean(due && now > due) };
+    return { kind, label: kindLabel(kind, s), done, dueAt: due ? due.toISOString() : null, overdue: !s.closed && !done && Boolean(due && now > due) };
   });
   // Bright red: a delivery happened, its next working day has ended, and its papers are still not in.
-  const red =
+  const red = !s.closed && (
     (hasSolar(s.siteType) && Boolean(s.deliveredOn) && !submitted.has("solar_dc") && now > deliveryDeadline(s.deliveredOn!).redAfter) ||
-    (Boolean(bessDay(s)) && !submitted.has("bess_dc") && now > deliveryDeadline(bessDay(s)!).redAfter);
+    (Boolean(bessDay(s)) && !submitted.has("bess_dc") && now > deliveryDeadline(bessDay(s)!).redAfter));
   const missing = items.filter((i) => !i.done);
   return { items, red, required: required.length, done: required.length - missing.length, missing: missing.map((i) => i.label), overdue: items.filter((i) => i.overdue).map((i) => i.label) };
 }

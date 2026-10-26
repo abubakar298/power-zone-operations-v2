@@ -9,7 +9,7 @@ import { createDashboardSamples } from "../server/coordinator/samples.js";
 import { OperationsRepository } from "../server/operations/repository.js";
 import { SiteWorkflowRepository } from "../server/site-workflow/repository.js";
 import { QualityRepository } from "../server/quality/repository.js";
-import { bessPapersDeadline, deliveryDeadline, dueAt, requiredKinds } from "../server/quality/rules.js";
+import { assessQc, bessPapersDeadline, deliveryDeadline, dueAt, requiredKinds } from "../server/quality/rules.js";
 import { NotificationsRepository } from "../server/notifications/repository.js";
 import { hashPassword } from "../server/auth/crypto.js";
 
@@ -32,6 +32,8 @@ test("Quality Control: deadlines, checklists, uploads, read-only viewers, notice
   assert.equal(dueAt("bess_dc", s("Solar + BESS", "installation"))!.toISOString(), "2026-10-23T07:00:00.000Z", "from the BESS delivery day");
   assert.equal(dueAt("installation", s("Solar + BESS", "installation"))!.toISOString(), bessPapersDeadline("2026-10-22").toISOString());
   assert.equal(dueAt("installation", s("Solar", "installation")), null, "solar-only installation papers have no clock");
+  assert.equal(assessQc({ ...s("Solar", "installation"), deliveredOn: "2026-10-01", closed: true }, new Set()).red, false, "a closed site is never red");
+  assert.equal(assessQc({ ...s("Solar", "installation"), deliveredOn: "2026-10-01" }, new Set()).red, true);
 
   const db = await testDatabase();
   try {
