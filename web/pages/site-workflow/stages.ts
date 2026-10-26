@@ -24,6 +24,9 @@ export interface SiteRow {
   handedOverOn: string | null; customerSignoff: boolean | null; doDate: string | null; acknowledgementDate: string | null; submittedToCustomerDate: string | null;
   advanceClaimed: boolean; finalClaimed: boolean; documentsNote: string; notes: string; closedAt: string | null; openProblems: number; missingPictureDays: number;
   updatedAt: string; updatedBy: string | null;
+  bessDeliveredOn: string | null;
+  /** Quality Control documents (26 Oct 2026): red once a delivery's papers are not in by the end of the next working day. */
+  qc: { required: number; done: number; missing: string[]; overdue: string[]; red: boolean };
 }
 
 export const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

@@ -48,6 +48,7 @@ export class AccountsService {
           "Inventory",
           "Accounts",
           "Design",
+          "Quality Control",
         ]),
         password: z.string().max(128),
         newPassword: z.string().min(12).max(128),
@@ -90,6 +91,7 @@ export class AccountsService {
           "Inventory",
           "Accounts",
           "Design",
+          "Quality Control",
         ]),
         password: z.string().max(128),
       })
@@ -192,6 +194,7 @@ export class AccountsService {
             "Inventory",
             "Accounts",
             "Design",
+            "Quality Control",
           ])
           .optional(),
         active: z.boolean().optional(),

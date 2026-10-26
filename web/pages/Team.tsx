@@ -203,6 +203,7 @@ export function Team({
                     <option>Inventory</option>
                     <option>Accounts</option>
                     <option>Design</option>
+                    <option>Quality Control</option>
                     <option>Management</option>
                     <option>Admin</option>
                   </select>
@@ -312,6 +313,7 @@ export function Team({
                             <option>Inventory</option>
                             <option>Accounts</option>
                             <option>Design</option>
+                            <option>Quality Control</option>
                             <option>Management</option>
                             <option>Admin</option>
                           </select>

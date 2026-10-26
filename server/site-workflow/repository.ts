@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import { HttpError } from "../http/errors.js";
 import { transaction } from "../db/transaction.js";
+import { assessQc, type QcKind } from "../quality/rules.js";
 import {
   LATE_AFTER_DAYS,
   STAGE_LABELS,
@@ -27,6 +28,7 @@ const COLUMNS: Record<Exclude<keyof FieldsInput, "region">, string> = {
   expectedDelivery: "expected_delivery",
   expectedCompletion: "expected_completion",
   deliveredOn: "delivered_on",
+  bessDeliveredOn: "bess_delivered_on",
   startedOn: "started_on",
   installationCompletedOn: "installation_completed_on",
   commissionedOn: "commissioned_on",
@@ -43,7 +45,7 @@ const COLUMNS: Record<Exclude<keyof FieldsInput, "region">, string> = {
   notes: "notes",
 };
 const DATE_COLUMNS = [
-  "expected_start", "expected_delivery", "expected_completion", "delivered_on", "started_on", "installation_completed_on",
+  "expected_start", "expected_delivery", "expected_completion", "delivered_on", "bess_delivered_on", "started_on", "installation_completed_on",
   "commissioned_on", "handed_over_on", "do_date", "acknowledgement_date", "submitted_to_customer_date",
 ];
 /** pg returns DATE as a JS Date at local midnight; the API speaks plain YYYY-MM-DD. */
@@ -64,7 +66,8 @@ const LIST_SQL = `SELECT w.*, ${DATE_COLUMNS.map((c) => `to_char(w.${c},'YYYY-MM
   CASE WHEN w.scope IS DISTINCT FROM 'installation' OR w.started_on IS NULL OR w.started_on > CURRENT_DATE THEN 0 ELSE GREATEST(
     (LEAST(COALESCE(w.installation_completed_on, CURRENT_DATE), CURRENT_DATE) - w.started_on + 1)
     - (SELECT count(*) FROM site_workflow_picture_days p WHERE p.workflow_id=w.id AND p.pictures
-       AND p.day BETWEEN w.started_on AND LEAST(COALESCE(w.installation_completed_on, CURRENT_DATE), CURRENT_DATE)), 0) END::int AS missing_picture_days
+       AND p.day BETWEEN w.started_on AND LEAST(COALESCE(w.installation_completed_on, CURRENT_DATE), CURRENT_DATE)), 0) END::int AS missing_picture_days,
+  (SELECT COALESCE(array_agg(DISTINCT q.kind), '{}') FROM qc_submissions q WHERE q.workflow_id=w.id) AS qc_done
  FROM site_workflow w
  JOIN operations_boq_issuances o ON o.id=w.issuance_id
  JOIN internal_purchase_orders i ON i.id=w.ipo_id
@@ -110,6 +113,7 @@ function shape(r: any) {
     expectedDelivery: r.expected_delivery as string | null,
     expectedCompletion: r.expected_completion as string | null,
     deliveredOn: r.delivered_on as string | null,
+    bessDeliveredOn: (r.bess_delivered_on ?? null) as string | null,
     startedOn: r.started_on as string | null,
     installationCompletedOn: r.installation_completed_on as string | null,
     commissionedOn: r.commissioned_on as string | null,
@@ -127,6 +131,8 @@ function shape(r: any) {
     closedAt: (r.closed_at ?? null) as string | null,
     openProblems: r.open_problems as number,
     missingPictureDays: r.missing_picture_days as number,
+    // Quality Control documents: what is in, what is missing, and whether the site is red (26 Oct 2026).
+    qc: assessQc({ siteType: r.site_type ?? null, scope, deliveredOn: r.delivered_on ?? null, bessDeliveredOn: r.bess_delivered_on ?? null }, new Set((r.qc_done ?? []) as QcKind[])),
     updatedAt: r.updated_at as string,
     updatedBy: (r.updated_by_name ?? null) as string | null,
   };
@@ -310,6 +316,9 @@ export class SiteWorkflowRepository {
       const to = nextStage(site.stage, site.scope);
       if (!to) throw new HttpError(422, site.stage === "closed" ? "This site is closed." : "Decide first: installation and commissioning by us, or delivery only.");
       this.gate(site, to);
+      // A site closes only once Quality Control has submitted every required document (Moaz, 26 Oct 2026).
+      if (to === "closed" && site.qc.missing.length)
+        throw new HttpError(422, `Quality Control documents are still missing: ${site.qc.missing.join(", ")}. The site can close once they are submitted.`);
       await this.move(c, actor, id, to, "stage_forward", input.note, site.stage);
       return this.get(actor, id, c);
     });

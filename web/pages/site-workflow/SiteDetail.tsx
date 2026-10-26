@@ -26,7 +26,7 @@ interface Detail extends SiteRow {
 interface Form {
   siteType: string; region: string; notes: string;
   expectedStart: string; expectedDelivery: string; expectedCompletion: string;
-  deliveredOn: string; scope: string;
+  deliveredOn: string; bessDeliveredOn: string; scope: string;
   startedOn: string; installationCompletedOn: string;
   commissionedOn: string; matriCloud: string; fourG: string;
   handedOverOn: string; customerSignoff: "" | "yes" | "no";
@@ -35,7 +35,7 @@ interface Form {
 const toForm = (d: Detail): Form => ({
   siteType: d.siteType ?? "", region: d.region ?? "", notes: d.notes,
   expectedStart: d.expectedStart ?? "", expectedDelivery: d.expectedDelivery ?? "", expectedCompletion: d.expectedCompletion ?? "",
-  deliveredOn: d.deliveredOn ?? "", scope: d.scope ?? "",
+  deliveredOn: d.deliveredOn ?? "", bessDeliveredOn: d.bessDeliveredOn ?? "", scope: d.scope ?? "",
   startedOn: d.startedOn ?? "", installationCompletedOn: d.installationCompletedOn ?? "",
   commissionedOn: d.commissionedOn ?? "", matriCloud: d.matriCloud ?? "", fourG: d.fourG ?? "",
   handedOverOn: d.handedOverOn ?? "", customerSignoff: d.customerSignoff === true ? "yes" : d.customerSignoff === false ? "no" : "",
@@ -45,7 +45,7 @@ const toForm = (d: Detail): Form => ({
 const SECTION_KEYS = {
   site: ["siteType", "region", "notes"],
   planning: ["expectedStart", "expectedDelivery", "expectedCompletion"],
-  delivery: ["deliveredOn", "scope"],
+  delivery: ["deliveredOn", "bessDeliveredOn", "scope"],
   installation: ["startedOn", "installationCompletedOn"],
   commissioning: ["commissionedOn", "matriCloud", "fourG"],
   handover: ["handedOverOn", "customerSignoff"],
@@ -331,6 +331,7 @@ export function SiteDetail({ session, id, reference, onBack }: { session: Sessio
       <Section id="delivery" title="Delivery">
         <div className="sw-grid">
           {dateField("deliveredOn", "Delivered on", "Needed before the site leaves Delivery.")}
+          {form.siteType === "Solar + BESS" && dateField("bessDeliveredOn", "BESS delivered on", "Batteries and inverters, if they arrived on another day. Quality Control's deadline counts from it.")}
           {selectField("scope", "After delivery", reference.scopes, "Installation and commissioning by us, or delivery only (the site closes after delivery).")}
         </div>
       </Section>

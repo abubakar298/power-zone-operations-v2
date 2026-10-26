@@ -48,7 +48,10 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialSiteNon
       {s.overdue.map((o) => <span key={o} className="sw-chip sw-chip--danger">{OVERDUE_TEXT[o] ?? o}</span>)}
       {s.openProblems > 0 && <span className="sw-chip sw-chip--danger">{s.openProblems} problem{s.openProblems === 1 ? "" : "s"}</span>}
       {s.missingPictureDays > 0 && <span className="sw-chip sw-chip--warning">{s.missingPictureDays} day{s.missingPictureDays === 1 ? "" : "s"} no pictures</span>}
-      {!s.late && s.overdue.length === 0 && s.openProblems === 0 && s.missingPictureDays === 0 && <span className="sw-chip sw-chip--ok">On track</span>}
+      {s.qc.red && <span className="sw-chip sw-chip--danger">No delivery papers from QC</span>}
+      {!s.qc.red && s.qc.overdue.length > 0 && <span className="sw-chip sw-chip--danger">QC overdue: {s.qc.overdue.join(", ")}</span>}
+      {(s.deliveredOn || s.bessDeliveredOn) && s.qc.done < s.qc.required && <span className="sw-chip sw-chip--warning">QC documents {s.qc.done}/{s.qc.required}</span>}
+      {!s.late && s.overdue.length === 0 && s.openProblems === 0 && s.missingPictureDays === 0 && !s.qc.red && s.qc.overdue.length === 0 && <span className="sw-chip sw-chip--ok">On track</span>}
     </>
   );
   const scopeText = (s: SiteRow) => (s.scope === "delivery_only" ? "Delivery only" : s.scope === "installation" ? "Install & commission" : "—");
@@ -89,7 +92,7 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialSiteNon
               {!data ? <tr><td colSpan={7} className="ops-empty">Loading…</td></tr>
               : visible.length === 0 ? <tr><td colSpan={7} className="ops-empty">{emptyText}</td></tr>
               : visible.map((s) => (
-                <tr key={s.id} data-clickable onClick={() => setSelected(s.id)}>
+                <tr key={s.id} data-clickable className={s.qc.red ? "qc-red" : undefined} onClick={() => setSelected(s.id)}>
                   <td className="site"><b>{s.siteName ?? "Site"}{s.siteCode ? ` (${s.siteCode})` : ""}</b><small>{s.customer ?? "—"}</small></td>
                   <td>{s.region ?? "—"}</td>
                   <td>{stageCell(s, "ops-stage")}</td>
@@ -140,7 +143,7 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialSiteNon
               {!data ? <tr><td colSpan={7}>Loading…</td></tr>
               : visible.length === 0 ? <tr><td colSpan={7}>{emptyText}</td></tr>
               : visible.map((s) => (
-                <tr key={s.id} data-clickable onClick={() => setSelected(s.id)}>
+                <tr key={s.id} data-clickable className={s.qc.red ? "qc-red" : undefined} onClick={() => setSelected(s.id)}>
                   <td><strong>{s.siteName ?? "Site"}</strong>{s.siteCode ? ` (${s.siteCode})` : ""}<br /><small>{s.customer ?? "—"}</small></td>
                   <td>{s.region ?? "—"}</td>
                   <td>{stageCell(s, "sw-stage-tag")}</td>

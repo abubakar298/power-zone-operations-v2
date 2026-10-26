@@ -60,6 +60,10 @@ const ProcurementAccess = lazy(() =>
 const SecurityLog = lazy(() =>
   import("./security/SecurityLog.js").then((module) => ({ default: module.SecurityLog })),
 );
+const QcShell = lazy(() => import("./quality/QcShell.js").then((module) => ({ default: module.QcShell })));
+const QcSites = lazy(() => import("./quality/QcSites.js").then((module) => ({ default: module.QcSites })));
+const QcKpi = lazy(() => import("./quality/QcKpi.js").then((module) => ({ default: module.QcKpi })));
+const QcAccess = lazy(() => import("./quality/QcAccess.js").then((module) => ({ default: module.QcAccess })));
 const StockWatch = lazy(() =>
   import("./procurement/StockWatch.js").then((module) => ({ default: module.StockWatch })),
 );
@@ -171,6 +175,8 @@ export function Dashboard({
     | "purchase-requests"
     | "procurement-access"
     | "security-log"
+    | "qc-documents"
+    | "qc-access"
     | "stock-watch"
     | "stock-count"
     | "reports"
@@ -272,6 +278,8 @@ export function Dashboard({
       | "purchase-requests"
       | "procurement-access"
       | "security-log"
+      | "qc-documents"
+      | "qc-access"
       | "stock-watch"
       | "stock-count"
       | "reports"
@@ -446,6 +454,21 @@ export function Dashboard({
     const t = setInterval(check, 120_000);
     return () => { live = false; clearInterval(t); };
   }, [session.user.id, isManagerRole]);
+  // Site documents from Quality Control: Admin, Management and the people Admin names see them (Moaz, 26 Oct 2026).
+  const [qcView, setQcView] = useState(false);
+  useEffect(() => {
+    if (!["Admin", "Management", "Inventory", "Accounts"].includes(session.user.role)) { setQcView(false); return; }
+    let live = true;
+    void api<{ view: boolean }>("/qc/me").then((m) => { if (live) setQcView(m.view); }).catch(() => { if (live) setQcView(false); });
+    return () => { live = false; };
+  }, [session.user.id, session.user.role]);
+  // The Quality Control login has its own workspace (Moaz, 26 Oct 2026).
+  if ((session.user.role as string) === "Quality Control")
+    return (
+      <Suspense fallback={null}>
+        <QcShell session={session} onLogout={onLogout} />
+      </Suspense>
+    );
   // The Operations login has its own shell (Moaz, 19 Oct 2026); every other role keeps this one unchanged.
   if ((session.user.role as string) === "Operations")
     return (
@@ -488,6 +511,12 @@ export function Dashboard({
               {approvals.approver && (
                 <button className={view === "purchase-approvals" ? "nav-active" : ""} aria-current={view === "purchase-approvals" ? "page" : undefined} onClick={() => navigate("purchase-approvals")}>
                   <Icon name="shield" /><span>Purchase approvals</span>{approvals.waiting > 0 && <small className="nav-count">{approvals.waiting}</small>}
+                </button>
+              )}
+              {qcView && <button className={view === "qc-documents" ? "nav-active" : ""} aria-current={view === "qc-documents" ? "page" : undefined} onClick={() => navigate("qc-documents")}><Icon name="file" /><span>Site documents</span></button>}
+              {session.user.role === "Admin" && (
+                <button className={view === "qc-access" ? "nav-active" : ""} aria-current={view === "qc-access" ? "page" : undefined} onClick={() => navigate("qc-access")}>
+                  <Icon name="users" /><span>QC document access</span>
                 </button>
               )}
               {session.user.role === "Admin" && (
@@ -585,6 +614,7 @@ export function Dashboard({
                 </button>
                 {["Accounts"].includes(session.user.role) && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
                 {/* Accounts reads purchase requests and their prices; nothing to approve (Moaz, 24 Oct 2026). */}
+                {session.user.role === "Accounts" && qcView && <button className={view === "qc-documents" ? "nav-active" : ""} aria-current={view === "qc-documents" ? "page" : undefined} onClick={() => navigate("qc-documents")}><Icon name="file" /><span>Site documents</span></button>}
                 {session.user.role === "Accounts" && <button className={view === "purchase-requests" ? "nav-active" : ""} aria-current={view === "purchase-requests" ? "page" : undefined} onClick={() => navigate("purchase-requests")}><Icon name="file" /><span>Purchase requests</span></button>}
 
                 {["Admin", "Management", "Coordinator"].includes(
@@ -796,6 +826,7 @@ export function Dashboard({
                     Stock count
                   </button>
                 )}
+                {session.user.role === "Inventory" && qcView && <button className={view === "qc-documents" ? "nav-active" : ""} aria-current={view === "qc-documents" ? "page" : undefined} onClick={() => navigate("qc-documents")}><Icon name="file" /><span>Site documents</span></button>}
                 {["Admin", "Management", "Accounts"].includes(
                   session.user.role,
                 ) && (
@@ -870,6 +901,10 @@ export function Dashboard({
                       ? session.user.role === "Coordinator" ? "Databases" : "Master data"
                       : view === "procurement-access"
                         ? "Procurement access"
+                      : view === "qc-documents"
+                        ? "Site documents"
+                      : view === "qc-access"
+                        ? "QC document access"
                       : view === "security-log"
                         ? "Security log"
                       : view === "team"
@@ -1026,6 +1061,10 @@ export function Dashboard({
                             ? session.user.role === "Coordinator" ? "Databases" : "Master data"
                             : view === "procurement-access"
                               ? "Procurement access"
+                            : view === "qc-documents"
+                              ? "Site documents"
+                            : view === "qc-access"
+                              ? "QC document access"
                             : view === "security-log"
                               ? "Security log"
                             : view === "team"
@@ -1107,6 +1146,10 @@ export function Dashboard({
                                   ? "Prepare and share immutable customer quotation versions."
                                   : view === "procurement-access"
                                     ? "Grant or remove Procurement buyer and approver by exact email. Every change is kept."
+                                  : view === "qc-documents"
+                                    ? "Delivery challans, pictures, reports and acknowledgements from Quality Control. View only."
+                                  : view === "qc-access"
+                                    ? "Who sees Quality Control's site documents and is told on each submission."
                                   : view === "security-log"
                                     ? "Sign-ins, price and cost views, approvals, access changes and backups."
                                   : view === "team"
@@ -1360,6 +1403,8 @@ export function Dashboard({
               {view === "stock-watch" && approvals.approver && <StockWatch session={session} />}
               {view === "procurement-access" && session.user.role === "Admin" && <ProcurementAccess session={session} />}
               {view === "security-log" && session.user.role === "Admin" && <SecurityLog />}
+              {view === "qc-documents" && qcView && <div className="ops ops-embed"><QcSites session={session} mode="view" />{["Admin", "Management"].includes(session.user.role) && <QcKpi />}</div>}
+              {view === "qc-access" && session.user.role === "Admin" && <QcAccess session={session} />}
               {view === "purchase-requests" && session.user.role === "Accounts" && <PurchaseApprovals session={session} mode="reader" />}
               {view === "purchase-approvals" && approvals.approver && <PurchaseApprovals session={session} onChanged={() => setApprovals((a) => ({ ...a }))} />}
               {view === "operations" && (

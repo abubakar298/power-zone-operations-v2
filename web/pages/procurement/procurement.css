@@ -103,3 +103,15 @@
 /* PO details for the buyer (26 Oct 2026). */
 .pr-po{display:grid;gap:10px;padding:6px 0}
 .pr-po .ops-kv{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+/* Quality Control site documents (26 Oct 2026). */
+.ops-table tr.qc-red td{background:#fecaca;color:#7f1d1d}
+.ops-table tr.qc-red td:first-child{box-shadow:inset 5px 0 0 #dc2626}
+.qc-doc{border:1px solid var(--ops-line,#e4e4e7);border-radius:12px;padding:12px 14px;display:grid;gap:8px}
+.qc-doc.qc-doc--red{border-color:#dc2626;background:#fff5f5}
+.qc-doc-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center}
+.qc-files{display:flex;flex-wrap:wrap;gap:8px}
+.qc-file{display:grid;gap:4px;width:120px;font-size:11.5px;color:var(--ops-muted,#52525b);text-decoration:none}
+.qc-file img{width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--ops-line,#e4e4e7);background:#fafafa}
+.qc-file .qc-pdf{width:120px;height:90px;border-radius:8px;border:1px solid var(--ops-line,#e4e4e7);display:grid;place-items:center;font-weight:600;background:#fafafa}
+.qc-upload{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.qc-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}

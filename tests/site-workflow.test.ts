@@ -101,6 +101,13 @@ test("Site workflow: IPO received → planning → delivery → (install & commi
     assert.equal(d.stage, "doc_dispatch");
     await assert.rejects(repo.forward(operations, a.id, { note: "" }), /submitted to the customer/);
     d = await repo.update(operations, a.id, { doDate: "2026-10-11", acknowledgementDate: "2026-10-15", submittedToCustomerDate: "2026-10-16", advanceClaimed: true });
+    // Quality Control's documents must be in before a site closes (26 Oct 2026).
+    const qcIn = (id: string) => db.pool.query(
+      "INSERT INTO qc_submissions(workflow_id, kind, submitted_by) SELECT $1, k, $2 FROM unnest(ARRAY['solar_dc','bess_dc','installation','cable_variance','acknowledgement']) k",
+      [id, operations],
+    );
+    await assert.rejects(repo.forward(operations, a.id, { note: "" }), /Quality Control documents are still missing/);
+    await qcIn(a.id);
     d = await repo.forward(operations, a.id, { note: "All documents out" });
     assert.equal(d.stage, "closed");
     assert.ok(d.closedAt, "closing stamps closed_at");
@@ -120,6 +127,7 @@ test("Site workflow: IPO received → planning → delivery → (install & commi
     d = await repo.forward(operations, b.id, { note: "" });
     d = await repo.update(operations, b.id, { scope: "delivery_only", deliveredOn: "2026-10-10" });
     assert.equal(d.nextStage, "closed");
+    await qcIn(b.id);
     d = await repo.forward(operations, b.id, { note: "Customer installs" });
     assert.equal(d.stage, "closed");
     assert.equal(d.previousStage, "delivery");

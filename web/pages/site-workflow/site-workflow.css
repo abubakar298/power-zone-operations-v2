@@ -81,3 +81,6 @@
 .sw-table--compact th,.sw-table--compact td{padding:8px 6px;white-space:nowrap}
 .sw-table tr[data-clickable]{cursor:pointer}
 .sw-table tr[data-clickable]:hover td{background:var(--pz-selected-bg)}
+/* Quality Control (26 Oct 2026): a delivery whose papers are not in by the end of the next working day. */
+tr.qc-red td{background:#fecaca !important;color:#7f1d1d}
+tr.qc-red td:first-child{box-shadow:inset 5px 0 0 #dc2626}

@@ -13,7 +13,8 @@ export interface User {
     | "Operations"
     | "Inventory"
     | "Accounts"
-    | "Design";
+    | "Design"
+    | "Quality Control";
 }
 export interface Session {
   user: User;

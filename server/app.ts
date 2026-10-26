@@ -36,6 +36,8 @@ import { StockWatchRepository } from "./procurement/stock-watch.js";
 import { RfqRepository } from "./procurement/rfq.js";
 import { ProcurementAccessRepository } from "./procurement/access.js";
 import { securityAudit, securityEventsHttp } from "./security/events.js";
+import { QualityRepository } from "./quality/repository.js";
+import { qualityHttp } from "./quality/http.js";
 import { procurementHttp } from "./procurement/http.js";
 import { operationsHttp } from "./operations/http.js";
 import { CommercialRepository } from "./commercial/repository.js";
@@ -210,6 +212,8 @@ export function createApp(
       sessionForWorkspace,
     ),
   );
+  // Quality Control site documents: pictures shrunk in the browser, each file up to 8 MB (Moaz, 26 Oct 2026).
+  app.use("/api/qc", express.json({ limit: "12mb" }), qualityHttp(new QualityRepository(pool), sessionForWorkspace));
   app.use(express.json({ limit: "8kb" }));
   app.get("/api/health", async (_req, res) => {
     try {

@@ -70,6 +70,8 @@ export const fieldsSchema = z
     expectedDelivery: isoDate.nullable().optional(),
     expectedCompletion: isoDate.nullable().optional(),
     deliveredOn: isoDate.nullable().optional(),
+    // Solar + BESS sites: the day the batteries and inverters arrived (Quality Control deadlines, 26 Oct 2026).
+    bessDeliveredOn: isoDate.nullable().optional(),
     startedOn: isoDate.nullable().optional(),
     installationCompletedOn: isoDate.nullable().optional(),
     commissionedOn: isoDate.nullable().optional(),
