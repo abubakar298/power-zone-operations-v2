@@ -16,6 +16,35 @@ import {
 } from "./schema.js";
 
 const WRITERS = new Set(["Admin", "Management", "Operations"]);
+/**
+ * Turn by turn (Moaz, 26 Oct 2026): each stage's details are filled while the site is at that stage, and once the site
+ * moves on there is no coming back. Site details come from Coordination's IPO. Admin can still correct a mistake.
+ */
+const FIELD_STAGES: Partial<Record<keyof FieldsInput, Stage[]>> = {
+  expectedStart: ["ipo_received", "planning"], expectedDelivery: ["ipo_received", "planning"], expectedCompletion: ["ipo_received", "planning"],
+  deliveredOn: ["delivery"], scope: ["ipo_received", "planning", "delivery"], bessDeliveredOn: ["delivery", "installation", "commissioning", "handover"],
+  startedOn: ["installation"], installationCompletedOn: ["installation"],
+  commissionedOn: ["commissioning"], matriCloud: ["commissioning"], fourG: ["commissioning"],
+  handedOverOn: ["handover"], customerSignoff: ["handover"],
+  doDate: ["doc_dispatch"], acknowledgementDate: ["doc_dispatch"], submittedToCustomerDate: ["doc_dispatch"], documentsNote: ["doc_dispatch"],
+  advanceClaimed: ["doc_dispatch", "closed"], finalClaimed: ["doc_dispatch", "closed"],
+};
+const FIELD_LABELS: Partial<Record<keyof FieldsInput, string>> = {
+  expectedStart: "The expected start", expectedDelivery: "The expected delivery", expectedCompletion: "The expected completion",
+  deliveredOn: "The delivery date", scope: "Installation or delivery only", bessDeliveredOn: "The BESS delivery date",
+  startedOn: "The installation start", installationCompletedOn: "The installation finish", commissionedOn: "The commissioning date",
+  matriCloud: "Matri cloud", fourG: "The 4G device", handedOverOn: "The handover date", customerSignoff: "Customer sign-off",
+  doDate: "The DO date", acknowledgementDate: "The acknowledgement date", submittedToCustomerDate: "The submission date",
+  documentsNote: "The documents note", advanceClaimed: "The advance claim", finalClaimed: "The final claim",
+};
+const SITE_DETAILS = new Set<string>(["siteType", "region"]);
+function inStageWindow(role: string, stage: Stage, stages: Stage[], what: string) {
+  if (role === "Admin" || stages.includes(stage)) return;
+  const passed = STAGE_ORDER[stage] > Math.max(...stages.map((x) => STAGE_ORDER[x]));
+  throw new HttpError(422, passed
+    ? `${what} can no longer change: the site has moved past ${STAGE_LABELS[stages[stages.length - 1]]}, and there is no going back.`
+    : `${what} is filled in at ${STAGE_LABELS[stages[0]]}; the site is not there yet.`);
+}
 const READERS = new Set(["Admin", "Management", "Operations", "Inventory", "Accounts", "Coordinator"]);
 /** BOQ lines treated as cables for the variance check. */
 const CABLE_LINE = "cable";
@@ -58,7 +87,7 @@ const n = (v: unknown) => (v == null ? 0 : Number(v));
 const fixed = (v: number) => v.toFixed(6).replace(/\.?0+$/, "").replace(/^-0$/, "0");
 
 const LIST_SQL = `SELECT w.*, ${DATE_COLUMNS.map((c) => `to_char(w.${c},'YYYY-MM-DD') AS ${c}`).join(", ")},
-  o.number AS boq_number, i.number AS ipo_number,
+  o.number AS boq_number, i.number AS ipo_number, (SELECT display_name FROM users WHERE id=i.created_by) AS ipo_by,
   i.snapshot->'customer'->>'name' AS customer, i.snapshot->>'siteName' AS site_name,
   i.snapshot->>'siteCode' AS site_code, i.snapshot->'input'->>'orderDate' AS po_date,
   s.region, s.name AS master_site_name, u.display_name AS updated_by_name,
@@ -91,6 +120,7 @@ function shape(r: any) {
     issuanceId: r.issuance_id as string,
     ipoId: r.ipo_id as string,
     ipoNumber: r.ipo_number as string,
+    ipoBy: (r.ipo_by ?? null) as string | null,
     boqNumber: r.boq_number as string,
     customer: (r.customer ?? null) as string | null,
     siteName: (r.site_name || r.master_site_name || null) as string | null,
@@ -326,7 +356,8 @@ export class SiteWorkflowRepository {
   /** Step back one stage to correct a mistake. The note says why. */
   async back(actor: string, id: string, input: { note: string }) {
     return transaction(this.pool, async (c) => {
-      await this.writer(c, actor);
+      const role = await this.writer(c, actor);
+      if (role !== "Admin") throw new HttpError(403, "There is no going back: once a stage is done it stays done. Ask Admin if a correction is needed.");
       const site = await this.lock(c, id);
       const to = previousStage(site.stage, site.scope);
       if (!to) throw new HttpError(422, "This site is at the first stage.");
@@ -338,13 +369,13 @@ export class SiteWorkflowRepository {
 
   async update(actor: string, id: string, input: FieldsInput) {
     return transaction(this.pool, async (c) => {
-      await this.writer(c, actor);
+      const role = await this.writer(c, actor);
       const site = await this.lock(c, id);
       const changes: Record<string, { from: unknown; to: unknown }> = {};
       const sets: string[] = [], values: unknown[] = [id];
       const next = { ...site, ...input } as Record<string, unknown>;
       if (input.scope !== undefined && input.scope !== site.scope && !["ipo_received", "planning", "delivery"].includes(site.stage))
-        throw new HttpError(422, "Go back to Delivery to change whether we install and commission.");
+        throw new HttpError(422, "Installation or delivery only can no longer change: the site has moved past Delivery, and there is no going back.");
       if (next.startedOn && next.installationCompletedOn && String(next.installationCompletedOn) < String(next.startedOn))
         throw new HttpError(422, "Installation cannot finish before it starts.");
       if (next.siteType === "UPS") { input.matriCloud = null; input.fourG = null; }
@@ -352,11 +383,21 @@ export class SiteWorkflowRepository {
         if (input[field] === undefined) continue;
         const to = input[field] ?? null, from = (site as Record<string, unknown>)[field] ?? null;
         if (to === from) continue;
+        if (SITE_DETAILS.has(field) && !["Admin", "Management"].includes(role))
+          throw new HttpError(403, "Site details come from Coordination's IPO and cannot be changed here.");
+        const stages = FIELD_STAGES[field];
+        if (stages) inStageWindow(role, site.stage, stages, FIELD_LABELS[field] ?? field);
+        // Some answers are one-way once given: a late BESS date after delivery, and a payment marked as claimed.
+        if (role !== "Admin" && field === "bessDeliveredOn" && from && site.stage !== "delivery")
+          throw new HttpError(422, "The BESS delivery date is already entered and can no longer change.");
+        if (role !== "Admin" && (field === "advanceClaimed" || field === "finalClaimed") && from === true)
+          throw new HttpError(422, `${FIELD_LABELS[field]} is already marked as claimed and stays that way.`);
         values.push(to);
         sets.push(`${column}=$${values.length}`);
         changes[field] = { from, to };
       }
       if (input.region !== undefined && input.region !== site.region) {
+        if (!["Admin", "Management"].includes(role)) throw new HttpError(403, "Site details come from Coordination's IPO and cannot be changed here.");
         const siteId = (await c.query("SELECT site_id FROM site_workflow WHERE id=$1", [id])).rows[0]?.site_id;
         if (!siteId) throw new HttpError(422, "This record is not linked to a site master, so its region cannot be set.");
         await c.query("UPDATE sites SET region=$2 WHERE id=$1", [siteId, input.region ?? ""]);
@@ -376,8 +417,9 @@ export class SiteWorkflowRepository {
 
   async setPictures(actor: string, id: string, input: { day: string; pictures: boolean }) {
     return transaction(this.pool, async (c) => {
-      await this.writer(c, actor);
+      const role = await this.writer(c, actor);
       const site = await this.lock(c, id);
+      inStageWindow(role, site.stage, ["installation"], "Pictures");
       if (!site.startedOn) throw new HttpError(422, "Enter the installation start date first.");
       const last = site.installationCompletedOn ?? today();
       if (input.day < site.startedOn || input.day > last) throw new HttpError(422, `Picture days run from ${site.startedOn} to ${last}.`);
@@ -446,8 +488,8 @@ export class SiteWorkflowRepository {
   }
   async assignVendor(actor: string, id: string, input: { category: string; vendorId: string; agreedDate: string | null; notes: string }) {
     return transaction(this.pool, async (c) => {
-      await this.writer(c, actor);
-      await this.lock(c, id);
+      const role = await this.writer(c, actor);
+      inStageWindow(role, (await this.lock(c, id)).stage, ["ipo_received", "planning"], "Vendors");
       const vendor = (await c.query("SELECT name, category, status FROM site_workflow_vendors WHERE id=$1", [input.vendorId])).rows[0];
       if (!vendor) throw new HttpError(404, "Vendor not found.");
       if (vendor.category !== input.category) throw new HttpError(422, `${vendor.name} is a ${vendor.category} vendor, not ${input.category}.`);
@@ -464,8 +506,8 @@ export class SiteWorkflowRepository {
   }
   async removeVendor(actor: string, id: string, assignmentId: string, input: { reason: string }) {
     return transaction(this.pool, async (c) => {
-      await this.writer(c, actor);
-      await this.lock(c, id);
+      const role = await this.writer(c, actor);
+      inStageWindow(role, (await this.lock(c, id)).stage, ["ipo_received", "planning"], "Vendors");
       const r = await c.query(
         `UPDATE site_workflow_vendor_assignments a SET removed_by=$3, removed_at=now(), removal_reason=$4 FROM site_workflow_vendors v
          WHERE a.id=$2 AND a.workflow_id=$1 AND a.removed_at IS NULL AND v.id=a.vendor_id RETURNING a.category, v.name`,
@@ -479,8 +521,9 @@ export class SiteWorkflowRepository {
 
   async setCable(actor: string, id: string, input: { itemKey: string; usedQty: string; returnedQty: string; note: string }) {
     return transaction(this.pool, async (c) => {
-      await this.writer(c, actor);
+      const role = await this.writer(c, actor);
       const site = await this.lock(c, id);
+      inStageWindow(role, site.stage, ["installation", "commissioning", "handover"], "Cable use");
       const line = (await c.query(
         "SELECT 1 FROM operations_stock_demand WHERE issuance_id=$1 AND item_key=$2 AND (item_key ~* $3 OR COALESCE(specification,'') ~* $3)",
         [site.issuanceId, input.itemKey, CABLE_LINE],
@@ -502,8 +545,8 @@ export class SiteWorkflowRepository {
 
   async addAdditionalItem(actor: string, id: string, input: { description: string; quantity: string; unit: string; reason: string }) {
     return transaction(this.pool, async (c) => {
-      await this.writer(c, actor);
-      await this.lock(c, id);
+      const role = await this.writer(c, actor);
+      inStageWindow(role, (await this.lock(c, id)).stage, ["installation", "commissioning", "handover"], "Items used outside the quotation");
       const a = (await c.query(
         "INSERT INTO site_workflow_additional_items(workflow_id,description,quantity,unit,reason,created_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING id",
         [id, input.description, input.quantity, input.unit, input.reason, actor],
@@ -515,8 +558,8 @@ export class SiteWorkflowRepository {
   }
   async withdrawAdditionalItem(actor: string, id: string, itemId: string, input: { reason: string }) {
     return transaction(this.pool, async (c) => {
-      await this.writer(c, actor);
-      await this.lock(c, id);
+      const role = await this.writer(c, actor);
+      inStageWindow(role, (await this.lock(c, id)).stage, ["installation", "commissioning", "handover"], "Items used outside the quotation");
       const r = await c.query(
         "UPDATE site_workflow_additional_items SET withdrawn_by=$3, withdrawn_at=now(), withdrawal_reason=$4 WHERE id=$2 AND workflow_id=$1 AND withdrawn_at IS NULL RETURNING description",
         [id, itemId, actor, input.reason],

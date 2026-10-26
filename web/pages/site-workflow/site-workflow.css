@@ -84,3 +84,64 @@
 /* Quality Control (26 Oct 2026): a delivery whose papers are not in by the end of the next working day. */
 tr.qc-red td{background:#fecaca !important;color:#7f1d1d}
 tr.qc-red td:first-child{box-shadow:inset 5px 0 0 #dc2626}
+/* One site, turn by turn (Moaz, 26 Oct 2026): laid out like the AMC complaint form. */
+.sx{display:grid;gap:var(--pz-space-3);max-width:var(--pz-form-width)}
+.sx-sum{border:1px solid var(--pz-border);border-radius:var(--pz-radius-card);background:var(--pz-secondary-bg);padding:var(--pz-space-4);display:grid;gap:var(--pz-space-3)}
+.sx-sum-head{display:flex;justify-content:space-between;gap:var(--pz-space-2);flex-wrap:wrap;align-items:flex-start}
+.sx-sum-head h2{margin:0;font-size:20px}
+.sx-sum-head small{color:var(--pz-muted)}
+.sx-sum-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 16px;font-size:var(--pz-text-sm)}
+.sx-sum-grid div{min-width:0;overflow-wrap:anywhere}
+.sx-sum-grid b{display:block;font-size:11px;color:var(--pz-muted);font-weight:600;margin-bottom:2px;text-transform:uppercase;letter-spacing:.04em}
+.sx-auto{display:block;width:max-content;max-width:100%;margin-top:3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--pz-secondary-text);background:var(--pz-surface);padding:1px 6px;border-radius:5px}
+.sx-steps{list-style:none;margin:0;padding:0;display:flex;gap:6px;overflow-x:auto}
+.sx-step{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:var(--pz-text-sm);font-weight:600;color:var(--pz-muted);padding:6px 10px 6px 6px;border:1px solid var(--pz-border);border-radius:999px;background:var(--pz-surface)}
+.sx-step span{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;background:var(--pz-disabled-bg);color:var(--pz-disabled-text)}
+.sx-step--done{color:var(--pz-success);border-color:var(--pz-success);background:var(--pz-success-bg)}
+.sx-step--done span{background:var(--pz-success);color:#fff}
+.sx-step--current{color:var(--pz-primary);border-color:var(--pz-selected-border);background:var(--pz-selected-bg)}
+.sx-step--current span{background:var(--pz-primary);color:#fff}
+.sx-card{border:1px solid var(--pz-border);border-radius:var(--pz-radius-card);background:var(--pz-surface)}
+.sx-card>header{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--pz-border);flex-wrap:wrap}
+.sx-card>header h3{margin:0;font-size:15px}
+.sx-card>header small{color:var(--pz-muted);margin-left:auto}
+.sx-card--current{border:2px solid var(--pz-selected-border)}
+.sx-card--done{display:flex;align-items:center;gap:12px;padding:10px 18px;flex-wrap:wrap}
+.sx-card--done>small{color:var(--pz-muted);margin-left:auto}
+.sx-done-text{display:grid;gap:2px;flex:1 1 200px;min-width:0}
+.sx-title{font-weight:700}
+.sx-line{color:var(--pz-muted);font-size:var(--pz-text-sm)}
+.sx-lock{margin-left:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--pz-muted);border:1px solid var(--pz-border);padding:1px 6px;border-radius:5px;vertical-align:middle}
+.sx-more>summary{display:flex;align-items:center;gap:10px;padding:12px 18px;cursor:pointer;min-height:44px}
+.sx-more>summary h3{margin:0;font-size:15px}
+.sx-more>*:not(summary){padding:0 18px 14px}
+.sx-n{width:26px;height:26px;border-radius:50%;background:var(--pz-selected-bg);color:var(--pz-primary);display:grid;place-items:center;font-size:12px;font-weight:800;flex:none}
+.sx-n--done{background:var(--pz-success);color:#fff}
+.sx-body{padding:16px 18px;display:grid;gap:var(--pz-space-3)}
+.sx-body>p{margin:0}
+.sx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 16px;align-items:start}
+.sx-grid input,.sx-grid select{min-height:var(--pz-control-height)}
+.sx-wide{grid-column:1/-1}
+.sx-field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.sx-field label{font-size:12.5px;font-weight:600;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.sx-field input{min-height:var(--pz-control-height)}
+.sx-field small{font-size:11.5px;color:var(--pz-muted);line-height:1.35}
+.sx-req{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--pz-danger);background:var(--pz-danger-bg);padding:1px 6px;border-radius:5px}
+.sx-sub{font-weight:700;font-size:var(--pz-text-sm);margin-top:4px}
+.sx-seg{display:flex;flex-wrap:wrap;gap:3px;padding:3px;background:var(--pz-canvas);border:1px solid var(--pz-border);border-radius:11px;width:max-content;max-width:100%}
+.sx-seg button{min-height:40px;padding:7px 14px;border:1px solid transparent;border-radius:8px;background:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--pz-muted);cursor:pointer}
+.sx-seg button:hover:not(:disabled){color:var(--pz-text)}
+.sx-seg button:disabled{cursor:default}
+.sx-seg button.on{background:var(--pz-primary);color:#fff}
+.sx-seg button:focus-visible{outline:2px solid var(--pz-focus);outline-offset:1px}
+.sx-vendors{display:grid;gap:8px}
+.sx-vendor{display:grid;grid-template-columns:150px minmax(0,1fr);gap:10px;align-items:center;font-size:var(--pz-text-sm)}
+.sx-inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sx-inline select,.sx-inline input{min-height:40px}
+.sx-extra{border-top:1px dashed var(--pz-border);padding-top:10px;display:grid;gap:10px}
+.sx-extra>summary{cursor:pointer;font-size:var(--pz-text-sm);font-weight:600;color:var(--pz-primary);min-height:32px;display:flex;align-items:center}
+.sx-later{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;border-top:1px dashed var(--pz-border);padding-top:12px}
+.sx-qc{display:grid;gap:3px;border:1px solid var(--pz-success);background:var(--pz-success-bg);color:var(--pz-success);border-radius:10px;padding:10px 12px;font-size:var(--pz-text-sm)}
+.sx-qc--missing{border-color:var(--pz-danger);background:var(--pz-danger-bg);color:var(--pz-danger)}
+.sx-actions{position:sticky;bottom:0;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--pz-border);background:var(--pz-surface);border-radius:0 0 var(--pz-radius-card) var(--pz-radius-card)}
+@media (max-width:640px){.sx-vendor{grid-template-columns:1fr}.sx-card>header small,.sx-card--done>small{margin-left:0}.sx-actions>*{flex:1 1 auto}}

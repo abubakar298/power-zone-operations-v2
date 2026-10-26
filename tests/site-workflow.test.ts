@@ -38,7 +38,12 @@ test("Site workflow: IPO received → planning → delivery → (install & commi
     assert.equal(d.stage, "planning");
     assert.equal(d.events[0].kind, "stage_forward");
     await assert.rejects(repo.forward(operations, a.id, { note: "" }), /expected delivery date/);
-    d = await repo.update(operations, a.id, { expectedStart: "2026-10-12", expectedDelivery: "2026-10-11", expectedCompletion: "2026-10-15", region: "Punjab", siteType: "Solar + BESS" });
+    d = await repo.update(operations, a.id, { expectedStart: "2026-10-12", expectedDelivery: "2026-10-11", expectedCompletion: "2026-10-15" });
+    // Site details come from Coordination's IPO: Operations cannot change them (26 Oct 2026); Admin can.
+    await assert.rejects(repo.update(operations, a.id, { region: "Punjab" }), /Site details come from Coordination/);
+    await assert.rejects(repo.update(operations, a.id, { siteType: "UPS" }), /Site details come from Coordination/);
+    await assert.rejects(repo.update(operations, a.id, { startedOn: "2026-10-12" }), /filled in at Installation; the site is not there yet/);
+    d = await repo.update(admin, a.id, { region: "Punjab", siteType: "Solar + BESS" });
     assert.equal(d.region, "Punjab");
     assert.ok(d.events.find((e) => e.kind === "field_update" && e.changes.expectedDelivery?.to === "2026-10-11"));
     // Vendors are chosen under planning.
@@ -50,13 +55,17 @@ test("Site workflow: IPO received → planning → delivery → (install & commi
     await assert.rejects(db.pool.query("UPDATE site_workflow_vendor_assignments SET notes='x' WHERE id=$1", [d.vendors[0].id]), /only be removed/);
     d = await repo.forward(operations, a.id, { note: "" });
     assert.equal(d.stage, "delivery");
+    await assert.rejects(repo.assignVendor(operations, a.id, { category: "Delivery", vendorId: vendor.id, agreedDate: null, notes: "" }), /Vendors can no longer change/);
     await assert.rejects(repo.forward(operations, a.id, { note: "" }), /Decide first/);
     d = await repo.update(operations, a.id, { scope: "installation" });
     await assert.rejects(repo.forward(operations, a.id, { note: "" }), /delivery date/);
     d = await repo.update(operations, a.id, { deliveredOn: "2026-10-11" });
     d = await repo.forward(operations, a.id, { note: "" });
     assert.equal(d.stage, "installation");
-    await assert.rejects(repo.update(operations, a.id, { scope: "delivery_only" }), /Go back to Delivery/);
+    // Answers that are one-way once given (26 Oct 2026): a late BESS date cannot change after delivery.
+    d = await repo.update(operations, a.id, { bessDeliveredOn: "2026-10-13" });
+    await assert.rejects(repo.update(operations, a.id, { bessDeliveredOn: "2026-10-14" }), /BESS delivery date is already entered/);
+    await assert.rejects(repo.update(operations, a.id, { scope: "delivery_only" }), /moved past Delivery/);
     await assert.rejects(repo.forward(operations, a.id, { note: "" }), /installation start date/);
     await assert.rejects(repo.setPictures(operations, a.id, { day: "2026-10-12", pictures: true }), /start date first/);
     d = await repo.update(operations, a.id, { startedOn: "2026-10-12", installationCompletedOn: "2026-10-13" });
@@ -75,10 +84,12 @@ test("Site workflow: IPO received → planning → delivery → (install & commi
     assert.equal(d.stage, "commissioning");
     d = await repo.update(operations, a.id, { commissionedOn: "2026-10-14", matriCloud: "Connected", fourG: "Not connected" });
     assert.equal(d.matriCloud, "Connected");
-    d = await repo.update(operations, a.id, { siteType: "UPS" });
+    await assert.rejects(repo.update(operations, a.id, { deliveredOn: "2026-10-12" }), /can no longer change: the site has moved past Delivery/);
+    d = await repo.update(admin, a.id, { siteType: "UPS" });
     assert.equal(d.matriCloud, null, "UPS clears the monitoring status");
     assert.equal(d.fourG, null);
-    d = await repo.update(operations, a.id, { siteType: "Solar + BESS", matriCloud: "Connected", fourG: "Connected" });
+    d = await repo.update(admin, a.id, { siteType: "Solar + BESS" });
+    d = await repo.update(operations, a.id, { matriCloud: "Connected", fourG: "Connected" });
     d = await repo.forward(operations, a.id, { note: "" });
     assert.equal(d.stage, "handover");
     // Cables against BOQ and additional items belong to handover.
@@ -101,6 +112,7 @@ test("Site workflow: IPO received → planning → delivery → (install & commi
     assert.equal(d.stage, "doc_dispatch");
     await assert.rejects(repo.forward(operations, a.id, { note: "" }), /submitted to the customer/);
     d = await repo.update(operations, a.id, { doDate: "2026-10-11", acknowledgementDate: "2026-10-15", submittedToCustomerDate: "2026-10-16", advanceClaimed: true });
+    await assert.rejects(repo.update(operations, a.id, { advanceClaimed: false }), /already marked as claimed/);
     // Quality Control's documents must be in before a site closes (26 Oct 2026).
     const qcIn = (id: string) => db.pool.query(
       "INSERT INTO qc_submissions(workflow_id, kind, submitted_by) SELECT $1, k, $2 FROM unnest(ARRAY['solar_dc','bess_dc','installation','cable_variance','acknowledgement']) k",
@@ -113,9 +125,10 @@ test("Site workflow: IPO received → planning → delivery → (install & commi
     assert.ok(d.closedAt, "closing stamps closed_at");
     assert.equal(d.nextStage, null);
     await assert.rejects(repo.forward(operations, a.id, { note: "" }), /closed/);
-    // Going back needs a reason and reopens the site.
-    await assert.rejects(repo.back(operations, a.id, { note: "" }), /Say why/);
-    d = await repo.back(operations, a.id, { note: "Ack was for the wrong branch" });
+    // No going back for Operations (26 Oct 2026); Admin can correct a mistake, with a reason.
+    await assert.rejects(repo.back(operations, a.id, { note: "Wrong branch" }), /no going back/);
+    await assert.rejects(repo.back(admin, a.id, { note: "" }), /Say why/);
+    d = await repo.back(admin, a.id, { note: "Ack was for the wrong branch" });
     assert.equal(d.stage, "doc_dispatch");
     assert.equal(d.closedAt, null);
     assert.equal(d.events[0].kind, "stage_back");
@@ -131,7 +144,7 @@ test("Site workflow: IPO received → planning → delivery → (install & commi
     d = await repo.forward(operations, b.id, { note: "Customer installs" });
     assert.equal(d.stage, "closed");
     assert.equal(d.previousStage, "delivery");
-    d = await repo.back(operations, b.id, { note: "They want us to install after all" });
+    d = await repo.back(admin, b.id, { note: "They want us to install after all" });
     assert.equal(d.stage, "delivery");
     d = await repo.update(operations, b.id, { scope: "installation" });
     assert.equal(d.nextStage, "installation");
