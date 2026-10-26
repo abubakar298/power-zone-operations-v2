@@ -1,0 +1,4 @@
+CREATE TABLE headsup_received_sites(record_id uuid PRIMARY KEY REFERENCES project_workflow_records(id),receipt_id uuid NOT NULL REFERENCES customer_headsup_receipts(id),source_key text NOT NULL,created_by uuid NOT NULL REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now());
+INSERT INTO headsup_received_sites(record_id,receipt_id,source_key,created_by,created_at)
+SELECT DISTINCT ON(m->>'recordId') (m->>'recordId')::uuid,h.id,h.source_key,h.created_by,h.created_at FROM customer_headsup_receipts h CROSS JOIN LATERAL jsonb_array_elements(h.snapshot->'matches') m WHERE m->>'recordId' IS NOT NULL ORDER BY m->>'recordId',h.created_at,h.id;
+CREATE TRIGGER immutable_headsup_received_site BEFORE UPDATE OR DELETE ON headsup_received_sites FOR EACH ROW EXECUTE FUNCTION prevent_master_version_mutation();

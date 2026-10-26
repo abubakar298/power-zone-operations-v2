@@ -1,12 +1,23 @@
 import { HttpError } from "../http/errors.js";
 import type { Pool, PoolClient } from "pg";
 import { transaction } from "../db/transaction.js";
+import { securityEvent } from "../security/events.js";
 
 export interface User {
   id: string;
   email: string;
   display_name: string;
-  role: "Admin" | "Management" | "Employee";
+  restrictedCostAccess?: boolean;
+  role:
+    | "Admin"
+    | "Management"
+    | "Employee"
+    | "Coordinator"
+    | "Operations"
+    | "Inventory"
+    | "Accounts"
+    | "Design"
+    | "Quality Control";
 }
 export interface StoredUser extends User {
   password_hash: string;
@@ -18,10 +29,31 @@ export interface Session {
   csrfToken: string;
   expiresAt: Date;
   tokenHash: string;
+  lastActivityAt?: Date;
+  reauthAt?: Date | null;
 }
 
 export class AuthRepository {
   constructor(private pool: Pool) {}
+
+  private requireManagement(user: User) {
+    if (!['Admin','Management'].includes(user.role)) throw new HttpError(403,'Only Management can open another department account.');
+  }
+  async departmentUsers(principal: User) {
+    this.requireManagement(principal);
+    return (await this.pool.query<User>(`SELECT id,email,display_name,role,EXISTS(SELECT 1 FROM restricted_cost_access a WHERE a.user_id=users.id) AS "restrictedCostAccess" FROM users WHERE active AND role IN ('Coordinator','Design','Accounts','Operations','Inventory') ORDER BY display_name,id`)).rows;
+  }
+  async departmentUser(principal: User, id: string) {
+    this.requireManagement(principal);
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new HttpError(400,'Select an active department user.');
+    const user=(await this.departmentUsers(principal)).find(u=>u.id===id);
+    if(!user)throw new HttpError(403,'This department user is inactive or unavailable.');
+    return user;
+  }
+  async departmentAudit(principal: User, target: User|null, details: Record<string,unknown>) {
+    this.requireManagement(principal);
+    await this.pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[principal.id,'management.department-view:'+JSON.stringify({actingUserId:target?.id??null,actingRole:target?.role??null,...details})]);
+  }
 
   async setupRequired() {
     const r = await this.pool.query(
@@ -54,7 +86,7 @@ export class AuthRepository {
 
   async findUser(email: string) {
     const result = await this.pool.query<StoredUser>(
-      "SELECT id, email, display_name, role, password_hash, active, email_verified_at FROM users WHERE email = $1",
+      `SELECT id, email, display_name, role, password_hash, active, email_verified_at,EXISTS(SELECT 1 FROM restricted_cost_access a WHERE a.user_id=users.id) AS "restrictedCostAccess" FROM users WHERE email = $1`,
       [email],
     );
     return result.rows[0];
@@ -95,16 +127,28 @@ export class AuthRepository {
 
   async getSession(tokenHash: string): Promise<Session | undefined> {
     const r = await this.pool.query<
-      User & { csrf_token: string; expires_at: Date }
+      User & { csrf_token: string; expires_at: Date; last_activity_at: Date; reauth_at: Date | null }
     >(
-      `SELECT u.id,u.email,u.display_name,u.role,s.csrf_token,s.expires_at
+      `SELECT u.id,u.email,u.display_name,u.role,EXISTS(SELECT 1 FROM restricted_cost_access a WHERE a.user_id=u.id) AS "restrictedCostAccess",s.csrf_token,s.expires_at,s.last_activity_at,s.reauth_at
       FROM auth_sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > now() AND u.active = true`,
       [tokenHash],
     );
     if (!r.rows[0]) return undefined;
-    const { csrf_token, expires_at, ...user } = r.rows[0];
-    return { user, csrfToken: csrf_token, expiresAt: expires_at, tokenHash };
+    const { csrf_token, expires_at, last_activity_at, reauth_at, ...user } = r.rows[0];
+    return { user, csrfToken: csrf_token, expiresAt: expires_at, tokenHash, lastActivityAt: last_activity_at, reauthAt: reauth_at };
+  }
+
+  /** Real activity keeps a session alive; background refreshes do not (Moaz, 24 Oct 2026). */
+  async touchSession(tokenHash: string) {
+    await this.pool.query("UPDATE auth_sessions SET last_activity_at=now() WHERE token_hash=$1 AND last_activity_at < now() - interval '20 seconds'", [tokenHash]);
+  }
+  /** The password was entered again just now (before a money approval). */
+  async markReauth(tokenHash: string) {
+    await this.pool.query("UPDATE auth_sessions SET reauth_at=now(), last_activity_at=now() WHERE token_hash=$1", [tokenHash]);
+  }
+  async logSecurity(...args: Parameters<typeof securityEvent> extends [unknown, ...infer R] ? R : never) {
+    await securityEvent(this.pool, ...args);
   }
 
   async deleteSession(session: Session) {
@@ -113,6 +157,24 @@ export class AuthRepository {
         session.tokenHash,
       ]);
       await this.audit(client, session.user.id, "auth.logout");
+    });
+  }
+
+  async changePassword(userId: string, expectedHash: string, newHash: string) {
+    await transaction(this.pool, async (client) => {
+      const result = await client.query(
+        "UPDATE users SET password_hash=$3 WHERE id=$1 AND password_hash=$2 AND active=true RETURNING id",
+        [userId, expectedHash, newHash],
+      );
+      if (!result.rowCount)
+        throw new HttpError(
+          409,
+          "Your account changed. Sign in again before changing your password.",
+        );
+      await client.query("DELETE FROM auth_sessions WHERE user_id=$1", [
+        userId,
+      ]);
+      await this.audit(client, userId, "auth.password_changed");
     });
   }
 

@@ -1,0 +1,19 @@
+/* Advance BOQ search: pill search bar, stage tabs with counts, compact filter row. Colours from design-tokens.css. */
+.abq-tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--pz-border);padding-bottom:10px}
+.abq-tab{display:inline-flex;align-items:center;gap:6px;border:0;background:none;border-radius:999px;padding:7px 12px;font:inherit;font-size:var(--pz-text-sm);font-weight:600;color:var(--pz-muted);cursor:pointer}
+.abq-tab:hover{color:var(--pz-text)}
+.abq-tab[aria-selected="true"]{background:var(--pz-selected-bg);color:var(--pz-text)}
+.abq-count{font-size:var(--pz-text-xs);font-weight:600;color:var(--pz-muted);background:var(--pz-canvas);border-radius:999px;padding:1px 7px;font-variant-numeric:tabular-nums}
+.abq-tab[aria-selected="true"] .abq-count{background:var(--pz-surface)}
+.abq-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.abq-filters select,.abq-date{height:36px;min-height:36px;border:1px solid var(--pz-border);border-radius:999px;background:var(--pz-surface);padding:0 12px;font:inherit;font-size:var(--pz-text-sm);color:var(--pz-text);width:auto}
+.abq-filters select:focus,.abq-date:focus-within{border-color:var(--pz-focus);outline:none}
+.abq-date{display:inline-flex;align-items:center;gap:6px;color:var(--pz-muted);white-space:nowrap}
+.abq-date input{border:0;background:none;font:inherit;font-size:var(--pz-text-sm);color:var(--pz-text);outline:none;padding:0;height:auto;min-height:0}
+.abq-summary{margin-left:auto;color:var(--pz-muted);font-size:var(--pz-text-sm);white-space:nowrap}
+.abq-clear{border:0;background:none;color:var(--pz-primary);font:inherit;font-size:var(--pz-text-sm);font-weight:600;cursor:pointer;padding:0}
+.abq-clear:hover{text-decoration:underline}
+.abq-table th,.abq-table td{padding:10px 8px}
+.abq-table tr[data-clickable]{cursor:pointer}
+.abq-table tr[data-clickable]:hover td,.abq-table tr[data-clickable]:focus-visible td{background:var(--pz-selected-bg)}
+.abq-nowrap{white-space:nowrap}

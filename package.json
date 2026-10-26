@@ -9,13 +9,13 @@
   "scripts": {
     "dev": "tsx watch server/main.ts",
     "dev:web": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build && node scripts/ocr-assets.mjs && tsc -p tsconfig.server.json",
+    "build": "node scripts/verify-document-formats.mjs && tsc --noEmit && vite build && node scripts/ocr-assets.mjs && tsc -p tsconfig.server.json",
     "start": "node dist/server/main.js",
     "migrate": "tsx server/db/migrate-cli.ts",
     "migrate:production": "node dist/server/db/migrate-cli.js",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/browser-tests.mjs",
     "db:local": "tsx scripts/local-db.ts"
   },
   "dependencies": {
@@ -26,13 +26,14 @@
     "helmet": "^8.1.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
-    "pdfjs-dist": "^5.7.284",
+    "pdfjs-dist": "^6.2.108",
     "pg": "^8.16.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tesseract.js": "^6.0.1",
     "tesseract.js-core": "^6.1.2",
-    "zod": "^4.1.5"
+    "zod": "^4.6.6",
+    "fflate": "^0.8.3"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

@@ -7,6 +7,11 @@ const quantity = z
   );
 export const surveySchema = z
   .object({
+    family: z.enum(["solar-hybrid", "bess-only", "direct-product"]).optional(),
+    directProducts: z.array(z.object({kind:z.enum(["item","bess"]),key:z.string().trim().min(1).max(200),qty:quantity.refine(v=>Number(v)>0),brandId:z.number().int().positive().optional()}).strict()).min(1).max(30).optional(),
+    saleType: z.enum(["Tax Deal", "Cash Deal"]).optional(),
+    cashGstTreatment: z.enum(["Included in selling price", "No GST added"]).optional(),
+    sourceMode: z.enum(["Survey", "General quotation"]).optional(),
     customerId: z.number().int().min(0),
     siteName: z.string().trim().min(1).max(200),
     siteCode: z
@@ -16,27 +21,55 @@ export const surveySchema = z
       .max(30)
       .regex(/^[A-Za-z0-9_-]+$/),
     location: z.string().trim().max(1000),
-    panelQty: z.number().int().min(1).max(1000000),
-    panelWattage: quantity.refine((v) => Number(v) > 0),
+    panelQty: z.number().int().min(0).max(1000000),
+    panelWattage: quantity,
     structure: z.enum(["L1", "L2", "L3", "Elevated"]),
     dcMetres: quantity,
+    acInverter16: quantity.optional(),
+    spInverterTerminationMetres: quantity.optional(),
+    acInverter25: quantity.optional(),
+    acTerminationMode: z.enum(["Fixed", "Measured"]).optional(),
+    acPanel16: quantity.optional(),
+    acPanel25: quantity.optional(),
+    spLoadPanelRunMetres: quantity.optional(),
+
+    spIncludeEarthingBore: z.boolean().optional(),
     earth25: quantity,
     earth6: quantity,
     earth10: quantity,
+    bessId: z
+      .string()
+      .regex(/^(BESS-\d+-\d+|6-(5|10|15|20|25|30|35|40|45|50|55|60))$/)
+      .optional(),
     inverter: z.string().min(1).max(30),
     batteryKwh: z.number().int().min(0).max(120),
     smartMeter: z.boolean(),
     genset: z.boolean(),
     brands: z
       .object({
-        solar: z.number().int().positive(),
-        inverter: z.number().int().positive(),
-        battery: z.number().int().positive(),
-        cable: z.number().int().positive(),
-        switchgear: z.number().int().positive(),
+        solar: z.number().int().min(0).default(0),
+        inverter: z.number().int().min(0).default(0),
+        battery: z.number().int().min(0).default(0),
+        cable: z.number().int().min(0).default(0),
+        switchgear: z.number().int().min(0).default(0),
       })
       .strict(),
     preparedBy: z.string().trim().min(1).max(100),
+    brandSelections:z.object({solar:z.array(z.number().int().positive()).max(30).optional(),inverter:z.array(z.number().int().positive()).max(30).optional(),battery:z.array(z.number().int().positive()).max(30).optional(),cable:z.array(z.number().int().positive()).max(30).optional(),switchgear:z.array(z.number().int().positive()).max(30).optional()}).strict().optional(),
+    specifications: z
+      .record(z.string().min(1).max(200), z.string().trim().min(1).max(1500))
+      .optional(),
+    additionalItem: z
+      .object({
+        description: z.string().trim().min(1).max(1500),
+        specification: z.string().trim().max(1500).default(""),
+        qty: quantity.refine((v) => Number(v) > 0),
+        unit: z.string().trim().min(1).max(20),
+        unitCost: quantity,
+        taxRate: z.enum(["0", "10", "18"]),
+      })
+      .strict()
+      .optional(),
     uploadIds: z.array(z.uuid()).max(10).default([]),
     ocrText: z.string().max(100000).default(""),
     ocrReviewed: z.boolean().default(false),
@@ -72,3 +105,4 @@ export function recommendSiteCode(name: string) {
       .toUpperCase()
   );
 }
+

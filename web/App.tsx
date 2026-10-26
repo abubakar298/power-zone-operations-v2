@@ -5,6 +5,7 @@ import { AccountLink } from "./pages/AccountLink.js";
 import { Login } from "./pages/Login.js";
 import { Setup } from "./pages/Setup.js";
 import { Dashboard } from "./pages/Dashboard.js";
+import {clearDepartmentUser} from './department-view.js';
 
 type State =
   | { kind: "loading" }
@@ -13,6 +14,11 @@ type State =
   | { kind: "login" }
   | { kind: "authenticated"; session: Session };
 export function App() {
+  const [pricingCarryLink]=useState(()=>{const token=new URLSearchParams(window.location.search).get('pricingPreviewToken');return token&&/^[0-9a-f-]{36}$/i.test(token)?`?pricingPreviewToken=${token}#workspace=pricing`:'';});
+  const [notificationLink] = useState(()=>{
+    const hash=window.location.hash,params=new URLSearchParams(hash.slice(1));
+    return /^#notification=[0-9a-f-]{36}$/i.test(hash)||["dashboard","projects","documents","ubl","ubl-workflow","account","team","masters","boqs","newboq","pricing","quotes","orders","reports","rates","coordination","design","operations","inventory","finance","alerts","ubl-ups","mbl-ups","bafl-solar"].includes(params.get("workspace")??"")?hash:"";
+  });
   const [state, setState] = useState<State>({ kind: "loading" });
   const [linkPage, setLinkPage] = useState(
     window.location.pathname === "/account-link"
@@ -23,10 +29,11 @@ export function App() {
   );
   const [setupComplete, setSetupComplete] = useState(false);
   const go = useCallback(
-    (path: string) => window.history.replaceState(null, "", path),
-    [],
+    (path: string) => window.history.replaceState(null, "", path+(path==="/dashboard"?(pricingCarryLink||notificationLink):"")),
+    [notificationLink,pricingCarryLink],
   );
   const signedOut = useCallback(() => {
+    clearDepartmentUser();
     setState({ kind: "login" });
     go("/login");
   }, [go]);
@@ -57,6 +64,28 @@ export function App() {
   useEffect(() => {
     if (!linkPage) void load();
   }, []);
+  // Idle sign-out (Moaz, 24 Oct 2026): the server ends a session after PZ_IDLE_MINUTES without real activity.
+  useEffect(() => {
+    const ended = (e: Event) => {
+      const message = (e as CustomEvent<string>).detail ?? "";
+      if (state.kind !== "authenticated") return;
+      try { if (message) sessionStorage.setItem("pz:signed-out", message); } catch { /* the sign-in page then shows no reason */ }
+      signedOut();
+    };
+    window.addEventListener("pz:session-ended", ended);
+    return () => window.removeEventListener("pz:session-ended", ended);
+  }, [signedOut, state.kind]);
+  useEffect(() => {
+    if (state.kind !== "authenticated") return;
+    let lastPing = Date.now();
+    // A click, key press or scroll counts as activity even when it loads nothing (reading a long page).
+    const active = () => { if (Date.now() - lastPing > 120_000) { lastPing = Date.now(); void api("/auth/session").catch(() => undefined); } };
+    const names = ["pointerdown", "keydown", "wheel", "touchstart"];
+    for (const name of names) window.addEventListener(name, active, { passive: true });
+    // A quiet check every minute notices an ended session even when nothing is clicked.
+    const timer = setInterval(() => void api("/auth/session").catch(() => undefined), 60_000);
+    return () => { for (const name of names) window.removeEventListener(name, active); clearInterval(timer); };
+  }, [state.kind]);
   if (linkPage)
     return (
       <AuthLayout>

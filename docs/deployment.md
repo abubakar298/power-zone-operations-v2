@@ -44,30 +44,16 @@ Configure the health check as `/api/health`; it checks database schema access an
 
 Use a dedicated test environment for automation. Do not run the destructive test cleanup against an existing application database. Browser/API fixture tests own disposable databases and ignore production `DATABASE_URL`.
 
-## Current V2 deployment
+## Current V2 deployment — 8 October 2026 checkpoint
 
-Deployed on 5 October 2026 in Abu Bakar's workspace. Both resources use free plans in Singapore:
+Both web service and PostgreSQL are paid resources in Singapore. The primary origin is https://app.powerzone.systems. Service IDs remain `srv-db1uma17lnhs73cuhfjg` and `dpg-db1uldbncjis73b1a5s0-a`. The production branch is `milestone-5/commercial-quotations`; the last verified live commit is `de49d7a3efd7aaeb8d6ea9e271eb9a8105d9fd20`. Earlier free-plan expiry guidance is historical and no longer describes this deployment.
 
-- Application: https://power-zone-operations-v2.onrender.com
-- Web service: `srv-db1uma17lnhs73cuhfjg`
-- PostgreSQL 18: `dpg-db1uldbncjis73b1a5s0-a` (`power-zone-v2-db`)
-- Source branch: `milestone-1/auth-shell`
-- Health check: `/api/health`
+The configured build is `corepack pnpm install --frozen-lockfile --prod=false && corepack pnpm build && corepack pnpm prune --prod`. Startup runs `node dist/server/db/migrate-cli.js && node dist/server/main.js`. Recommended: move `node dist/server/db/migrate-cli.js` to the Pre-Deploy Command so a failed migration fails the deploy and the previous release keeps serving, instead of leaving the new instance unable to start. Health is `/api/health`. Database migrations use checksums, locking and transactions; startup refuses incompatible migration history.
 
-Render's native Node runtime has a read-only system directory. Its configured build command is:
+Auto-Deploy is switched off on the web service; every deploy is triggered through the Render deploy hook and appears as "Triggered via API" in the service events. Recommended: set Auto-Deploy to "After CI Checks Pass" for the production branch and stop using the hook for routine deploys, so a red `verify.yml` run blocks a release. Keep release candidates on a separate branch. Before merging security changes, require passing CI and controlled deployment. Never push partially tested hardening directly to the production branch. This hardening pass has not deployed.
 
-```
-corepack pnpm install --frozen-lockfile --prod=false && corepack pnpm build && corepack pnpm prune --prod
-```
+Use the exact custom domain for APP_ORIGIN. Same-origin frontend/API need no cross-origin allowance. Production cookies are Secure, HttpOnly and SameSite Strict. The legacy onrender URL is not the approved mutation origin. Do not add permissive CORS or relax origin checks to accommodate it.
 
-The free plan does not support a pre-deploy command, so migrations run before server startup:
+The current service and database are single-instance resources, without high availability. Verify the provider recovery window, capacity and alerts in the dashboard. Do not open public database network access for convenience. Local encrypted backups supplement managed recovery; the Mac must be available for its daily catch-up download. A real production-archive restore drill into a separate empty database remains an owner/operator action.
 
-```
-node dist/server/db/migrate-cli.js && node dist/server/main.js
-```
-
-Live acceptance passed on 5 October 2026: the owner created the administrator and signed in; the dashboard and account page loaded; refreshing preserved authentication; a completed redeploy preserved the same session; signing out returned to login; signing in again succeeded. Health returns 200, setup status reports setup closed, and the anonymous dashboard API returns 401. Automated native PostgreSQL and Chromium authentication tests also pass in GitHub Actions. Milestone 1 is complete; operational persistence remains subject to the free database expiry below.
-
-The owner explicitly authorized deletion of V1's hosted web service and database to release the free database slot. Both were deleted; the V1 GitHub repository was retained.
-
-Free web services sleep after inactivity. This free database expires on **4 November 2026**; arrange an upgrade or export before expiry. No paid resources were provisioned. Credentials and setup keys are excluded from this repository.
+Before release: verify the exact candidate SHA, run the full isolated test/build/browser suite, confirm migrations on a staging database, download a fresh backup, verify role-based access and health on the target origin, and retain the preceding release for rollback. For this candidate no new schema migration is introduced. Rolling back application code must not delete business records. If any future migration is added, separately review backward compatibility and restore using the archive-matching release first.

@@ -1,10 +1,17 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import type { Config } from "../config.js";
 
+export interface EmailAttachment {
+  filename: string;
+  /** Base64 file bytes, sent as an attachment rather than a public URL. */
+  content: string;
+}
 export interface Message {
   to: string;
   subject: string;
   text: string;
+  html?: string;
+  attachments?: EmailAttachment[];
 }
 export interface EmailDelivery {
   configured: boolean;
@@ -42,13 +49,14 @@ export class ResendDelivery implements EmailDelivery {
   constructor(private config: Config) {}
   get configured() {
     return !!(
+      this.config.emailDeliveryEnabled !== false &&
       this.config.emailApiKey &&
       this.config.emailFrom &&
       this.config.emailEncryptionKey
     );
   }
   async send(message: Message, id: string) {
-    if (!this.config.emailApiKey || !this.config.emailFrom)
+    if (!this.configured)
       throw new Error("Email is not configured");
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -59,10 +67,15 @@ export class ResendDelivery implements EmailDelivery {
         "Idempotency-Key": id,
       },
       body: JSON.stringify({
-        from: this.config.emailFrom,
+        from: this.config.emailFromName
+          ? `${this.config.emailFromName} <${this.config.emailFrom}>`
+          : this.config.emailFrom,
         to: [message.to],
         subject: message.subject,
         text: message.text,
+        ...(message.html ? {html:message.html} : {}),
+        ...(message.attachments?.length ? {attachments:message.attachments.map(({filename,content})=>({filename,content}))} : {}),
+        ...(this.config.emailReplyTo ? {reply_to:this.config.emailReplyTo} : {}),
       }),
     });
     // Provider bodies may contain recipient information. Never log them.

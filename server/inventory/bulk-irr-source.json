@@ -1,0 +1,2537 @@
+{
+  "receivedFrom": "Abu Bakar",
+  "receivedDate": "2026-10-11",
+  "sourceUrl": "https://docs.google.com/spreadsheets/d/1twgWvvGbFknm5s-f-_HJsJEfkL3tWK7Kj52TuMOax8s/edit?gid=1255399001",
+  "rows": [
+    [
+      "CHP-293",
+      "PV Panels/Modules [Watt]",
+      20460
+    ],
+    [
+      "CHP-293",
+      "Customized Elevated Structure [Watt]",
+      20460
+    ],
+    [
+      "CHP-293",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-293",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-293",
+      "DC SPD [Nos]",
+      3
+    ],
+    [
+      "CHP-293",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-293",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-293",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-293",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      200
+    ],
+    [
+      "CHP-293",
+      "Grid Input Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-293",
+      "Inverter Output Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-293",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-293",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-293",
+      "AC Cable for Inverter Termination [Meter]",
+      5
+    ],
+    [
+      "CHP-293",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      20
+    ],
+    [
+      "CHP-293",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-293",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-293",
+      "Earth Cables Panel to Panel [Meter]",
+      10
+    ],
+    [
+      "CHP-293",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      50
+    ],
+    [
+      "CHP-293",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      40
+    ],
+    [
+      "CHP-293",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-293",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-293",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      20460
+    ],
+    [
+      "CHP-232",
+      "PV Panels/Modules [Watt]",
+      20460
+    ],
+    [
+      "CHP-232",
+      "Customized Elevated Structure [Watt]",
+      20460
+    ],
+    [
+      "CHP-232",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-232",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-232",
+      "DC SPD [Nos]",
+      3
+    ],
+    [
+      "CHP-232",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      2
+    ],
+    [
+      "CHP-232",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-232",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-232",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      200
+    ],
+    [
+      "CHP-232",
+      "Grid Input Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-232",
+      "Inverter Output Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-232",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-232",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-232",
+      "AC Cable for Inverter Termination [Meter]",
+      10
+    ],
+    [
+      "CHP-232",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      10
+    ],
+    [
+      "CHP-232",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-232",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-232",
+      "Earth Cables Panel to Panel [Meter]",
+      15
+    ],
+    [
+      "CHP-232",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      45
+    ],
+    [
+      "CHP-232",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      45
+    ],
+    [
+      "CHP-232",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-232",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-232",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      20460
+    ],
+    [
+      "CHP-285",
+      "PV Panels/Modules [Watt]",
+      20460
+    ],
+    [
+      "CHP-285",
+      "Customized Elevated Structure [Watt]",
+      20460
+    ],
+    [
+      "CHP-285",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-285",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-285",
+      "DC SPD [Nos]",
+      3
+    ],
+    [
+      "CHP-285",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-285",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-285",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-285",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      240
+    ],
+    [
+      "CHP-285",
+      "Grid Input Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-285",
+      "Inverter Output Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-285",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-285",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-285",
+      "AC Cable for Inverter Termination [Meter]",
+      10
+    ],
+    [
+      "CHP-285",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      13
+    ],
+    [
+      "CHP-285",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-285",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-285",
+      "Earth Cables Panel to Panel [Meter]",
+      10
+    ],
+    [
+      "CHP-285",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      60
+    ],
+    [
+      "CHP-285",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      40
+    ],
+    [
+      "CHP-285",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-285",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-285",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      20460
+    ],
+    [
+      "CHP-292",
+      "PV Panels/Modules [Watt]",
+      30315
+    ],
+    [
+      "CHP-292",
+      "Customized Elevated Structure [Watt]",
+      30315
+    ],
+    [
+      "CHP-292",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-292",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-292",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-292",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-292",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-292",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-292",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      240
+    ],
+    [
+      "CHP-292",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-292",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-292",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-292",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-292",
+      "AC Cable for Inverter Termination [Meter]",
+      15
+    ],
+    [
+      "CHP-292",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      25
+    ],
+    [
+      "CHP-292",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-292",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-292",
+      "Earth Cables Panel to Panel [Meter]",
+      10
+    ],
+    [
+      "CHP-292",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      35
+    ],
+    [
+      "CHP-292",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      40
+    ],
+    [
+      "CHP-292",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-292",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-292",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      30315
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "PV Panels/Modules [Watt]",
+      30315
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "Customized Elevated Structure [Watt]",
+      30315
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      326
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "AC Cable for Inverter Termination [Meter]",
+      15
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      23
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "Earth Cables Panel to Panel [Meter]",
+      13
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      30
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      15
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-317 (Mankera)",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      30315
+    ],
+    [
+      "CHP-319",
+      "PV Panels/Modules [Watt]",
+      25155
+    ],
+    [
+      "CHP-319",
+      "Customized Elevated Structure [Watt]",
+      25155
+    ],
+    [
+      "CHP-319",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-319",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-319",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-319",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-319",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-319",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-319",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      232
+    ],
+    [
+      "CHP-319",
+      "Grid Input Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-319",
+      "Inverter Output Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-319",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-319",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-319",
+      "AC Cable for Inverter Termination [Meter]",
+      10
+    ],
+    [
+      "CHP-319",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      10
+    ],
+    [
+      "CHP-319",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-319",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-319",
+      "Earth Cables Panel to Panel [Meter]",
+      15
+    ],
+    [
+      "CHP-319",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      40
+    ],
+    [
+      "CHP-319",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      25
+    ],
+    [
+      "CHP-319",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-319",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-319",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      25155
+    ],
+    [
+      "CHP-286",
+      "PV Panels/Modules [Watt]",
+      20460
+    ],
+    [
+      "CHP-286",
+      "Customized Elevated Structure [Watt]",
+      20460
+    ],
+    [
+      "CHP-286",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-286",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-286",
+      "DC SPD [Nos]",
+      3
+    ],
+    [
+      "CHP-286",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-286",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-286",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-286",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      164
+    ],
+    [
+      "CHP-286",
+      "Grid Input Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-286",
+      "Inverter Output Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-286",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-286",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-286",
+      "AC Cable for Inverter Termination [Meter]",
+      10
+    ],
+    [
+      "CHP-286",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      10
+    ],
+    [
+      "CHP-286",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-286",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-286",
+      "Earth Cables Panel to Panel [Meter]",
+      10
+    ],
+    [
+      "CHP-286",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      62
+    ],
+    [
+      "CHP-286",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      70
+    ],
+    [
+      "CHP-286",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-286",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-286",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      20460
+    ],
+    [
+      "CHP-295",
+      "PV Panels/Modules [Watt]",
+      30315
+    ],
+    [
+      "CHP-295",
+      "Customized Elevated Structure [Watt]",
+      30315
+    ],
+    [
+      "CHP-295",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-295",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-295",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-295",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-295",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-295",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-295",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      345
+    ],
+    [
+      "CHP-295",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-295",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-295",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-295",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-295",
+      "AC Cable for Inverter Termination [Meter]",
+      15
+    ],
+    [
+      "CHP-295",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      20
+    ],
+    [
+      "CHP-295",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-295",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-295",
+      "Earth Cables Panel to Panel [Meter]",
+      10
+    ],
+    [
+      "CHP-295",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      35
+    ],
+    [
+      "CHP-295",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      28
+    ],
+    [
+      "CHP-295",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-295",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-295",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      30315
+    ],
+    [
+      "CHP-302",
+      "PV Panels/Modules [Watt]",
+      35475
+    ],
+    [
+      "CHP-302",
+      "Customized Elevated Structure [Watt]",
+      35475
+    ],
+    [
+      "CHP-302",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-302",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-302",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-302",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-302",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-302",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-302",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      260
+    ],
+    [
+      "CHP-302",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-302",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-302",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-302",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-302",
+      "AC Cable for Inverter Termination [Meter]",
+      15
+    ],
+    [
+      "CHP-302",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      20
+    ],
+    [
+      "CHP-302",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-302",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-302",
+      "Earth Cables Panel to Panel [Meter]",
+      10
+    ],
+    [
+      "CHP-302",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      35
+    ],
+    [
+      "CHP-302",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      40
+    ],
+    [
+      "CHP-302",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-302",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-302",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      35475
+    ],
+    [
+      "CHP-309",
+      "PV Panels/Modules [Watt]",
+      25155
+    ],
+    [
+      "CHP-309",
+      "Customized Elevated Structure [Watt]",
+      25155
+    ],
+    [
+      "CHP-309",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-309",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-309",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-309",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-309",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-309",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-309",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      280
+    ],
+    [
+      "CHP-309",
+      "Grid Input Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-309",
+      "Inverter Output Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-309",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-309",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-309",
+      "AC Cable for Inverter Termination [Meter]",
+      5
+    ],
+    [
+      "CHP-309",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      5
+    ],
+    [
+      "CHP-309",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-309",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-309",
+      "Earth Cables Panel to Panel [Meter]",
+      15
+    ],
+    [
+      "CHP-309",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      30
+    ],
+    [
+      "CHP-309",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      30
+    ],
+    [
+      "CHP-309",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-309",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-309",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      25155
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "PV Panels/Modules [Watt]",
+      19995
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "Customized Elevated Structure [Watt]",
+      19995
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "DC SPD [Nos]",
+      3
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      3
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      160
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "Grid Input Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "Inverter Output Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "AC Cable for Inverter Termination [Meter]",
+      6
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      6
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "Earth Cables Panel to Panel [Meter]",
+      15
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      25
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      25
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-317 (Darya Khan)",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      19995
+    ],
+    [
+      "CHP-318",
+      "PV Panels/Modules [Watt]",
+      25155
+    ],
+    [
+      "CHP-318",
+      "Customized Elevated Structure [Watt]",
+      25155
+    ],
+    [
+      "CHP-318",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-318",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-318",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-318",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-318",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-318",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-318",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      277
+    ],
+    [
+      "CHP-318",
+      "Grid Input Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-318",
+      "Inverter Output Breaker [Nos]",
+      1
+    ],
+    [
+      "CHP-318",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-318",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-318",
+      "AC Cable for Inverter Termination [Meter]",
+      10
+    ],
+    [
+      "CHP-318",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      16
+    ],
+    [
+      "CHP-318",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-318",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-318",
+      "Earth Cables Panel to Panel [Meter]",
+      15
+    ],
+    [
+      "CHP-318",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      25
+    ],
+    [
+      "CHP-318",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      35
+    ],
+    [
+      "CHP-318",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-318",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-318",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      25155
+    ],
+    [
+      "CHP-320",
+      "PV Panels/Modules [Watt]",
+      35475
+    ],
+    [
+      "CHP-320",
+      "Customized Elevated Structure [Watt]",
+      35475
+    ],
+    [
+      "CHP-320",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-320",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-320",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-320",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-320",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-320",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-320",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      190
+    ],
+    [
+      "CHP-320",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-320",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-320",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-320",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-320",
+      "AC Cable for Inverter Termination [Meter]",
+      13
+    ],
+    [
+      "CHP-320",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      21
+    ],
+    [
+      "CHP-320",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-320",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-320",
+      "Earth Cables Panel to Panel [Meter]",
+      12
+    ],
+    [
+      "CHP-320",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      33
+    ],
+    [
+      "CHP-320",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      46
+    ],
+    [
+      "CHP-320",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-320",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-320",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      35475
+    ],
+    [
+      "CHP-301",
+      "PV Panels/Modules [Watt]",
+      30380
+    ],
+    [
+      "CHP-301",
+      "Customized Elevated Structure [Watt]",
+      30380
+    ],
+    [
+      "CHP-301",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-301",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-301",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-301",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-301",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-301",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-301",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      300
+    ],
+    [
+      "CHP-301",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-301",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-301",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-301",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-301",
+      "AC Cable for Inverter Termination [Meter]",
+      15
+    ],
+    [
+      "CHP-301",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      22
+    ],
+    [
+      "CHP-301",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-301",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-301",
+      "Earth Cables Panel to Panel [Meter]",
+      10
+    ],
+    [
+      "CHP-301",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      50
+    ],
+    [
+      "CHP-301",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      20
+    ],
+    [
+      "CHP-301",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-301",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-301",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      30380
+    ],
+    [
+      "CHP-306",
+      "PV Panels/Modules [Watt]",
+      30380
+    ],
+    [
+      "CHP-306",
+      "Customized Elevated Structure [Watt]",
+      30380
+    ],
+    [
+      "CHP-306",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-306",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-306",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-306",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-306",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-306",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-306",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      250
+    ],
+    [
+      "CHP-306",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-306",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-306",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-306",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-306",
+      "AC Cable for Inverter Termination [Meter]",
+      12
+    ],
+    [
+      "CHP-306",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      27
+    ],
+    [
+      "CHP-306",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-306",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-306",
+      "Earth Cables Panel to Panel [Meter]",
+      15
+    ],
+    [
+      "CHP-306",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      30
+    ],
+    [
+      "CHP-306",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      45
+    ],
+    [
+      "CHP-306",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-306",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-306",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      30380
+    ],
+    [
+      "CHP-311",
+      "PV Panels/Modules [Watt]",
+      35340
+    ],
+    [
+      "CHP-311",
+      "Customized Elevated Structure [Watt]",
+      35340
+    ],
+    [
+      "CHP-311",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-311",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-311",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-311",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-311",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-311",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-311",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      318
+    ],
+    [
+      "CHP-311",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-311",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-311",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-311",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-311",
+      "AC Cable for Inverter Termination [Meter]",
+      12
+    ],
+    [
+      "CHP-311",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      12
+    ],
+    [
+      "CHP-311",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-311",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-311",
+      "Earth Cables Panel to Panel [Meter]",
+      20
+    ],
+    [
+      "CHP-311",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      70
+    ],
+    [
+      "CHP-311",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      40
+    ],
+    [
+      "CHP-311",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-311",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-311",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      35340
+    ],
+    [
+      "CHP-299",
+      "PV Panels/Modules [Watt]",
+      30380
+    ],
+    [
+      "CHP-299",
+      "Customized Elevated Structure [Watt]",
+      30380
+    ],
+    [
+      "CHP-299",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-299",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-299",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-299",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-299",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-299",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-299",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      449
+    ],
+    [
+      "CHP-299",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-299",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-299",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-299",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-299",
+      "AC Cable for Inverter Termination [Meter]",
+      11
+    ],
+    [
+      "CHP-299",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      20
+    ],
+    [
+      "CHP-299",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-299",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-299",
+      "Earth Cables Panel to Panel [Meter]",
+      20
+    ],
+    [
+      "CHP-299",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      60
+    ],
+    [
+      "CHP-299",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      70
+    ],
+    [
+      "CHP-299",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-299",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-299",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      30380
+    ],
+    [
+      "CHP-296",
+      "PV Panels/Modules [Watt]",
+      35340
+    ],
+    [
+      "CHP-296",
+      "Customized Elevated Structure [Watt]",
+      35340
+    ],
+    [
+      "CHP-296",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-296",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-296",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-296",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-296",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-296",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-296",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      225
+    ],
+    [
+      "CHP-296",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-296",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-296",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-296",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-296",
+      "AC Cable for Inverter Termination [Meter]",
+      14
+    ],
+    [
+      "CHP-296",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      20
+    ],
+    [
+      "CHP-296",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-296",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-296",
+      "Earth Cables Panel to Panel [Meter]",
+      20
+    ],
+    [
+      "CHP-296",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      70
+    ],
+    [
+      "CHP-296",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      32
+    ],
+    [
+      "CHP-296",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-296",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-296",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      35340
+    ],
+    [
+      "CHP-290",
+      "PV Panels/Modules [Watt]",
+      30380
+    ],
+    [
+      "CHP-290",
+      "Customized Elevated Structure [Watt]",
+      30380
+    ],
+    [
+      "CHP-290",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-290",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-290",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-290",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-290",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-290",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-290",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      250
+    ],
+    [
+      "CHP-290",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-290",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-290",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-290",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-290",
+      "AC Cable for Inverter Termination [Meter]",
+      15
+    ],
+    [
+      "CHP-290",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      20
+    ],
+    [
+      "CHP-290",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-290",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-290",
+      "Earth Cables Panel to Panel [Meter]",
+      0
+    ],
+    [
+      "CHP-290",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      70
+    ],
+    [
+      "CHP-290",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      50
+    ],
+    [
+      "CHP-290",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-290",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-290",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      30380
+    ],
+    [
+      "CHP-298",
+      "PV Panels/Modules [Watt]",
+      30380
+    ],
+    [
+      "CHP-298",
+      "Customized Elevated Structure [Watt]",
+      30380
+    ],
+    [
+      "CHP-298",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-298",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-298",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-298",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-298",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-298",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-298",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      235
+    ],
+    [
+      "CHP-298",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-298",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-298",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-298",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-298",
+      "AC Cable for Inverter Termination [Meter]",
+      10.5
+    ],
+    [
+      "CHP-298",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      20
+    ],
+    [
+      "CHP-298",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-298",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-298",
+      "Earth Cables Panel to Panel [Meter]",
+      0
+    ],
+    [
+      "CHP-298",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      50
+    ],
+    [
+      "CHP-298",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      38
+    ],
+    [
+      "CHP-298",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-298",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-298",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      30380
+    ],
+    [
+      "CHP-312",
+      "PV Panels/Modules [Watt]",
+      30380
+    ],
+    [
+      "CHP-312",
+      "Customized Elevated Structure [Watt]",
+      30380
+    ],
+    [
+      "CHP-312",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-312",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-312",
+      "DC SPD [Nos]",
+      4
+    ],
+    [
+      "CHP-312",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      4
+    ],
+    [
+      "CHP-312",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHP-312",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHP-312",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      133
+    ],
+    [
+      "CHP-312",
+      "Grid Input Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-312",
+      "Inverter Output Breaker [Nos]",
+      3
+    ],
+    [
+      "CHP-312",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHP-312",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHP-312",
+      "AC Cable for Inverter Termination [Meter]",
+      14
+    ],
+    [
+      "CHP-312",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      52
+    ],
+    [
+      "CHP-312",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHP-312",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHP-312",
+      "Earth Cables Panel to Panel [Meter]",
+      20
+    ],
+    [
+      "CHP-312",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      70
+    ],
+    [
+      "CHP-312",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      50
+    ],
+    [
+      "CHP-312",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHP-312",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHP-312",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      30380
+    ],
+    [
+      "CHJ-287",
+      "PV Panels/Modules [Watt]",
+      24800
+    ],
+    [
+      "CHJ-287",
+      "Customized Elevated Structure [Watt]",
+      24800
+    ],
+    [
+      "CHJ-287",
+      "DC Circuit Breaker (Roof DB) [Nos]",
+      3
+    ],
+    [
+      "CHJ-287",
+      "DC Fuse with Holder (Roof DB) [Nos]",
+      3
+    ],
+    [
+      "CHJ-287",
+      "DC SPD [Nos]",
+      3
+    ],
+    [
+      "CHJ-287",
+      "DC Circuit Breaker (Inverter Room DB) [Nos]",
+      3
+    ],
+    [
+      "CHJ-287",
+      "PV String Combiner Box (Rooftop) [Nos]",
+      1
+    ],
+    [
+      "CHJ-287",
+      "PV String Combiner Box (Inverter Room) [Nos]",
+      1
+    ],
+    [
+      "CHJ-287",
+      "DC Cables (Red and Black for Positive and Negative) [Meter]",
+      190
+    ],
+    [
+      "CHJ-287",
+      "Grid Input Breaker [Nos]",
+      1
+    ],
+    [
+      "CHJ-287",
+      "Inverter Output Breaker [Nos]",
+      1
+    ],
+    [
+      "CHJ-287",
+      "AC SPD [Nos]",
+      1
+    ],
+    [
+      "CHJ-287",
+      "Changeover Switch [Nos]",
+      1
+    ],
+    [
+      "CHJ-287",
+      "AC Cable for Inverter Termination [Meter]",
+      10
+    ],
+    [
+      "CHJ-287",
+      "AC Cable from AC Bus Bar to Load Panel [Meter]",
+      4
+    ],
+    [
+      "CHJ-287",
+      "AC Combiner Box [Set]",
+      1
+    ],
+    [
+      "CHJ-287",
+      "Earthing Pit with Copper Bonded Electrode [Nos]",
+      2
+    ],
+    [
+      "CHJ-287",
+      "Earth Cables Panel to Panel [Meter]",
+      20
+    ],
+    [
+      "CHJ-287",
+      "Panels/DC combiner box to DC Earth Pit [Meter]",
+      90
+    ],
+    [
+      "CHJ-287",
+      "Earth Cables (Inverter/AC Combiner box to AC Earth Pit) [Meter]",
+      25
+    ],
+    [
+      "CHJ-287",
+      "EMS & Energy Meter [Nos]",
+      1
+    ],
+    [
+      "CHJ-287",
+      "Wifi Router with Internet of 5 MPBS [job]",
+      1
+    ],
+    [
+      "CHJ-287",
+      "End-to-End Installation, Testing & Commissioning [Wp]",
+      24800
+    ]
+  ]
+}

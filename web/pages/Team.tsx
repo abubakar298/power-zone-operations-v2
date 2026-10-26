@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, type Session } from "../api.js";
+import { Backups } from "./Backups.js";
 type Person = {
   id: string;
   email: string;
@@ -22,6 +23,9 @@ export function Team({
   session: Session;
   onLogout: () => void;
 }) {
+  const [creationMode, setCreationMode] = useState<"invite" | "direct">(
+    "invite",
+  );
   const [data, setData] = useState<{
       users: Person[];
       invitations: Invitation[];
@@ -58,12 +62,23 @@ export function Team({
     setMessage("");
     try {
       const result = await api<{ message: string }>(
-        action ? action.path : "/accounts/invite",
+        action
+          ? action.path
+          : creationMode === "direct"
+            ? "/accounts/create"
+            : "/accounts/invite",
         {
           csrf: session.csrfToken,
           body: action
             ? { ...action.body, password: f.get("password") }
             : {
+                ...(creationMode === "direct"
+                  ? {
+                      displayName: f.get("displayName"),
+                      newPassword: f.get("newPassword"),
+                      confirmPassword: f.get("confirmPassword"),
+                    }
+                  : {}),
                 email: f.get("email"),
                 role: f.get("role"),
                 password: f.get("password"),
@@ -108,10 +123,63 @@ export function Team({
               will be available after the sender is configured.
             </p>
           )}
+          {!action && (
+            <div className="survey-actions">
+              <button onClick={() => setCreationMode("direct")} disabled={busy}>
+                Create account with password
+              </button>
+              <button onClick={() => setCreationMode("invite")} disabled={busy}>
+                Email invitation
+              </button>
+            </div>
+          )}
           <form onSubmit={submit} className="team-form">
-            <h3>{action ? action.label : "Invite a team member"}</h3>
+            <h3>
+              {action
+                ? action.label
+                : creationMode === "direct"
+                  ? "Create a separate login"
+                  : "Invite a team member"}
+            </h3>
             {!action && (
               <>
+                {creationMode === "direct" && (
+                  <>
+                    <label>
+                      Full name
+                      <input
+                        name="displayName"
+                        aria-label="New account name"
+                        required
+                        maxLength={100}
+                      />
+                    </label>
+                    <label>
+                      New account password
+                      <input
+                        name="newPassword"
+                        aria-label="New account password"
+                        type="password"
+                        autoComplete="new-password"
+                        required
+                        minLength={12}
+                        maxLength={128}
+                      />
+                    </label>
+                    <label>
+                      Confirm new account password
+                      <input
+                        name="confirmPassword"
+                        aria-label="Confirm new account password"
+                        type="password"
+                        autoComplete="new-password"
+                        required
+                        minLength={12}
+                        maxLength={128}
+                      />
+                    </label>
+                  </>
+                )}
                 <label>
                   Email address
                   <input
@@ -130,6 +198,12 @@ export function Team({
                     defaultValue="Employee"
                   >
                     <option>Employee</option>
+                    <option>Coordinator</option>
+                    <option>Operations</option>
+                    <option>Inventory</option>
+                    <option>Accounts</option>
+                    <option>Design</option>
+                    <option>Quality Control</option>
                     <option>Management</option>
                     <option>Admin</option>
                   </select>
@@ -149,13 +223,18 @@ export function Team({
             </label>
             <button
               className="primary"
-              disabled={busy || (!action && !data.emailConfigured)}
+              disabled={
+                busy ||
+                (!action && creationMode === "invite" && !data.emailConfigured)
+              }
             >
               {busy
                 ? "Saving…"
                 : action
                   ? "Confirm account change"
-                  : "Send invitation"}
+                  : creationMode === "direct"
+                    ? "Create account"
+                    : "Send invitation"}
             </button>
             {action && (
               <button type="button" onClick={() => setAction(undefined)}>
@@ -229,6 +308,12 @@ export function Team({
                             }
                           >
                             <option>Employee</option>
+                            <option>Coordinator</option>
+                            <option>Operations</option>
+                            <option>Inventory</option>
+                            <option>Accounts</option>
+                            <option>Design</option>
+                            <option>Quality Control</option>
                             <option>Management</option>
                             <option>Admin</option>
                           </select>
@@ -267,6 +352,7 @@ export function Team({
           )}
         </>
       )}
+      <Backups session={session} />
     </section>
   );
 }

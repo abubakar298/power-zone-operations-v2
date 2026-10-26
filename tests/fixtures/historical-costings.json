@@ -1,0 +1,1217 @@
+{
+  "source": "02_PZ_Solar-Hybrid_BOQ_CLEAN_BUILD_V1.xlsx",
+  "sha256": "c9a738a179b30b063f53e293af724ee3883cced83751856b5c0e9bd746d9d827",
+  "sheet": "Historical Snapshot Database",
+  "limitations": [
+    "Older MBL-0128 rows did not capture brands. Active reference brands are used only to satisfy schema validation; historical brand selections are not claimed as validated.",
+    "Historical snapshots record combined AC cable quantities, not the later inverter/panel entry split. Tests preserve those combined quantities."
+  ],
+  "cases": [
+    {
+      "number": "MBL-0128-001-R0",
+      "survey": {
+        "customerId": 2,
+        "siteName": "Raiwind Road 0128",
+        "siteCode": "0128",
+        "location": "Historical reference workbook",
+        "panelQty": 35,
+        "panelWattage": "620",
+        "structure": "Elevated",
+        "dcMetres": "210",
+        "earth25": "15",
+        "earth6": "60",
+        "earth10": "60",
+        "inverter": "15 kW",
+        "batteryKwh": 30,
+        "smartMeter": true,
+        "genset": false,
+        "preparedBy": "Abu Bakar",
+        "acInverter16": "30",
+        "acInverter25": "0",
+        "acPanel16": "0",
+        "acPanel25": "0"
+      },
+      "historicalBrands": {},
+      "lines": [
+        {
+          "key": "Solar PV Modules",
+          "qty": "21700",
+          "rate": "39",
+          "amount": "846300"
+        },
+        {
+          "key": "Structure - Elevated",
+          "qty": "21700",
+          "rate": "20",
+          "amount": "434000"
+        },
+        {
+          "key": "HYB-3P-015",
+          "qty": "1",
+          "rate": "380014",
+          "amount": "380014"
+        },
+        {
+          "key": "BAT-HV-05 KW WO BMS",
+          "qty": "6",
+          "rate": "231962",
+          "amount": "1391772"
+        },
+        {
+          "key": "CH-BMS-HV",
+          "qty": "2",
+          "rate": "158996",
+          "amount": "317992"
+        },
+        {
+          "key": "Labour",
+          "qty": "21700",
+          "rate": "5",
+          "amount": "108500"
+        },
+        {
+          "key": "Earthing Bore",
+          "qty": "2",
+          "rate": "45000",
+          "amount": "90000"
+        },
+        {
+          "key": "Delivery",
+          "qty": "21700",
+          "rate": "3",
+          "amount": "65100"
+        },
+        {
+          "key": "6mm² DC Cable Red",
+          "qty": "105",
+          "rate": "420",
+          "amount": "44100"
+        },
+        {
+          "key": "6mm² DC Cable Black",
+          "qty": "105",
+          "rate": "420",
+          "amount": "44100"
+        },
+        {
+          "key": "2.5mm² Earthing Cable",
+          "qty": "15",
+          "rate": "193",
+          "amount": "2895"
+        },
+        {
+          "key": "6mm² Earthing Cable",
+          "qty": "60",
+          "rate": "380",
+          "amount": "22800"
+        },
+        {
+          "key": "10mm² Earthing Cable",
+          "qty": "60",
+          "rate": "665",
+          "amount": "39900"
+        },
+        {
+          "key": "16mm² 4C AC Cable",
+          "qty": "30",
+          "rate": "3350",
+          "amount": "100500"
+        },
+        {
+          "key": "25mm² 4C AC Cable",
+          "qty": "0",
+          "rate": "5500",
+          "amount": "0"
+        },
+        {
+          "key": "DC Breaker",
+          "qty": "6",
+          "rate": "4950",
+          "amount": "29700"
+        },
+        {
+          "key": "DC SPD",
+          "qty": "3",
+          "rate": "10500",
+          "amount": "31500"
+        },
+        {
+          "key": "DC Fuse with Holder",
+          "qty": "3",
+          "rate": "2900",
+          "amount": "8700"
+        },
+        {
+          "key": "63A 4P MCB",
+          "qty": "2",
+          "rate": "2640",
+          "amount": "5280"
+        },
+        {
+          "key": "100A 4P MCCB",
+          "qty": "0",
+          "rate": "8800",
+          "amount": "0"
+        },
+        {
+          "key": "100A Rotary Changeover with Box",
+          "qty": "1",
+          "rate": "25150",
+          "amount": "25150"
+        },
+        {
+          "key": "AC SPD",
+          "qty": "1",
+          "rate": "11000",
+          "amount": "11000"
+        },
+        {
+          "key": "AC & DC Boxes",
+          "qty": "2",
+          "rate": "50000",
+          "amount": "100000"
+        },
+        {
+          "key": "Misc. Accessories",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        },
+        {
+          "key": "Extra Smart Meter",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        },
+        {
+          "key": "Genset Synchronisation with Battery SOC",
+          "qty": "0",
+          "rate": "50000",
+          "amount": "0"
+        }
+      ],
+      "summary": {
+        "Solar Panels": "846300.0",
+        "Structure": "434000.0",
+        "BESS": "2089778.0",
+        "EPC": "829225.0",
+        "TOTAL PROJECT COST": "4199303.0"
+      },
+      "epc": {
+        "Electrical Labour": "108500.0",
+        "Earthing Cost": "90000.0",
+        "Deliveries": "65100.0",
+        "Installation Cost": "565625.0"
+      }
+    },
+    {
+      "number": "MBL-0128-001-R1",
+      "survey": {
+        "customerId": 2,
+        "siteName": "Raiwind Road 0128",
+        "siteCode": "0128",
+        "location": "Historical reference workbook",
+        "panelQty": 36,
+        "panelWattage": "620",
+        "structure": "Elevated",
+        "dcMetres": "210",
+        "earth25": "15",
+        "earth6": "60",
+        "earth10": "60",
+        "inverter": "15 kW",
+        "batteryKwh": 30,
+        "smartMeter": true,
+        "genset": false,
+        "preparedBy": "Abu Bakar",
+        "acInverter16": "30",
+        "acInverter25": "0",
+        "acPanel16": "0",
+        "acPanel25": "0"
+      },
+      "historicalBrands": {},
+      "lines": [
+        {
+          "key": "Solar PV Modules",
+          "qty": "22320",
+          "rate": "39",
+          "amount": "870480"
+        },
+        {
+          "key": "Structure - Elevated",
+          "qty": "22320",
+          "rate": "20",
+          "amount": "446400"
+        },
+        {
+          "key": "HYB-3P-015",
+          "qty": "1",
+          "rate": "380014",
+          "amount": "380014"
+        },
+        {
+          "key": "BAT-HV-05 KW WO BMS",
+          "qty": "6",
+          "rate": "231962",
+          "amount": "1391772"
+        },
+        {
+          "key": "CH-BMS-HV",
+          "qty": "2",
+          "rate": "158996",
+          "amount": "317992"
+        },
+        {
+          "key": "Labour",
+          "qty": "22320",
+          "rate": "5",
+          "amount": "111600"
+        },
+        {
+          "key": "Earthing Bore",
+          "qty": "2",
+          "rate": "45000",
+          "amount": "90000"
+        },
+        {
+          "key": "Delivery",
+          "qty": "22320",
+          "rate": "3",
+          "amount": "66960"
+        },
+        {
+          "key": "6mm² DC Cable Red",
+          "qty": "105",
+          "rate": "420",
+          "amount": "44100"
+        },
+        {
+          "key": "6mm² DC Cable Black",
+          "qty": "105",
+          "rate": "420",
+          "amount": "44100"
+        },
+        {
+          "key": "2.5mm² Earthing Cable",
+          "qty": "15",
+          "rate": "193",
+          "amount": "2895"
+        },
+        {
+          "key": "6mm² Earthing Cable",
+          "qty": "60",
+          "rate": "380",
+          "amount": "22800"
+        },
+        {
+          "key": "10mm² Earthing Cable",
+          "qty": "60",
+          "rate": "665",
+          "amount": "39900"
+        },
+        {
+          "key": "16mm² 4C AC Cable",
+          "qty": "30",
+          "rate": "3350",
+          "amount": "100500"
+        },
+        {
+          "key": "25mm² 4C AC Cable",
+          "qty": "0",
+          "rate": "5500",
+          "amount": "0"
+        },
+        {
+          "key": "DC Breaker",
+          "qty": "6",
+          "rate": "4950",
+          "amount": "29700"
+        },
+        {
+          "key": "DC SPD",
+          "qty": "3",
+          "rate": "10500",
+          "amount": "31500"
+        },
+        {
+          "key": "DC Fuse with Holder",
+          "qty": "3",
+          "rate": "2900",
+          "amount": "8700"
+        },
+        {
+          "key": "63A 4P MCB",
+          "qty": "2",
+          "rate": "2640",
+          "amount": "5280"
+        },
+        {
+          "key": "100A 4P MCCB",
+          "qty": "0",
+          "rate": "8800",
+          "amount": "0"
+        },
+        {
+          "key": "100A Rotary Changeover with Box",
+          "qty": "1",
+          "rate": "25150",
+          "amount": "25150"
+        },
+        {
+          "key": "AC SPD",
+          "qty": "1",
+          "rate": "11000",
+          "amount": "11000"
+        },
+        {
+          "key": "AC & DC Boxes",
+          "qty": "2",
+          "rate": "50000",
+          "amount": "100000"
+        },
+        {
+          "key": "Misc. Accessories",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        },
+        {
+          "key": "Extra Smart Meter",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        },
+        {
+          "key": "Genset Synchronisation with Battery SOC",
+          "qty": "0",
+          "rate": "50000",
+          "amount": "0"
+        }
+      ],
+      "summary": {
+        "Solar Panels": "870480.0",
+        "Structure": "446400.0",
+        "BESS": "2089778.0",
+        "EPC": "834185.0",
+        "TOTAL PROJECT COST": "4240843.0"
+      },
+      "epc": {
+        "Electrical Labour": "111600.0",
+        "Earthing Cost": "90000.0",
+        "Deliveries": "66960.0",
+        "Installation Cost": "565625.0"
+      }
+    },
+    {
+      "number": "BAFL-2520-001-R0",
+      "survey": {
+        "customerId": 3,
+        "siteName": "Skardu -2520",
+        "siteCode": "2520",
+        "location": "Historical reference workbook",
+        "panelQty": 50,
+        "panelWattage": "620",
+        "structure": "L1",
+        "dcMetres": "360",
+        "earth25": "15",
+        "earth6": "60",
+        "earth10": "60",
+        "inverter": "2×15 kW",
+        "batteryKwh": 40,
+        "smartMeter": true,
+        "genset": true,
+        "preparedBy": "Abu Bakar",
+        "acInverter16": "15",
+        "acInverter25": "0",
+        "acPanel16": "0",
+        "acPanel25": "20"
+      },
+      "historicalBrands": {
+        "Solar Panel Brand": "Astronergy (ASTRO)",
+        "Inverter Brand": "Chint Power",
+        "Battery & BMS Brand": "Chint Power",
+        "Cable Brand": "Any of the Above",
+        "Switchgear Brand": "CHINT"
+      },
+      "lines": [
+        {
+          "key": "Solar PV Modules",
+          "qty": "31000",
+          "rate": "39",
+          "amount": "1209000"
+        },
+        {
+          "key": "Structure - L1",
+          "qty": "31000",
+          "rate": "10",
+          "amount": "310000"
+        },
+        {
+          "key": "HYB-3P-015",
+          "qty": "2",
+          "rate": "380014",
+          "amount": "760028"
+        },
+        {
+          "key": "BAT-HV-05 KW WO BMS",
+          "qty": "8",
+          "rate": "231962",
+          "amount": "1855696"
+        },
+        {
+          "key": "CH-BMS-HV",
+          "qty": "2",
+          "rate": "158996",
+          "amount": "317992"
+        },
+        {
+          "key": "Labour",
+          "qty": "31000",
+          "rate": "5",
+          "amount": "155000"
+        },
+        {
+          "key": "Earthing Bore",
+          "qty": "2",
+          "rate": "45000",
+          "amount": "90000"
+        },
+        {
+          "key": "Delivery",
+          "qty": "31000",
+          "rate": "3",
+          "amount": "93000"
+        },
+        {
+          "key": "6mm² DC Cable Red",
+          "qty": "180",
+          "rate": "420",
+          "amount": "75600"
+        },
+        {
+          "key": "6mm² DC Cable Black",
+          "qty": "180",
+          "rate": "420",
+          "amount": "75600"
+        },
+        {
+          "key": "2.5mm² Earthing Cable",
+          "qty": "15",
+          "rate": "193",
+          "amount": "2895"
+        },
+        {
+          "key": "6mm² Earthing Cable",
+          "qty": "60",
+          "rate": "380",
+          "amount": "22800"
+        },
+        {
+          "key": "10mm² Earthing Cable",
+          "qty": "60",
+          "rate": "665",
+          "amount": "39900"
+        },
+        {
+          "key": "16mm² 4C AC Cable",
+          "qty": "15",
+          "rate": "3350",
+          "amount": "50250"
+        },
+        {
+          "key": "25mm² 4C AC Cable",
+          "qty": "20",
+          "rate": "5500",
+          "amount": "110000"
+        },
+        {
+          "key": "DC Breaker",
+          "qty": "8",
+          "rate": "4950",
+          "amount": "39600"
+        },
+        {
+          "key": "DC SPD",
+          "qty": "4",
+          "rate": "10500",
+          "amount": "42000"
+        },
+        {
+          "key": "DC Fuse with Holder",
+          "qty": "4",
+          "rate": "2900",
+          "amount": "11600"
+        },
+        {
+          "key": "63A 4P MCB",
+          "qty": "4",
+          "rate": "2640",
+          "amount": "10560"
+        },
+        {
+          "key": "100A 4P MCCB",
+          "qty": "2",
+          "rate": "8800",
+          "amount": "17600"
+        },
+        {
+          "key": "100A Rotary Changeover with Box",
+          "qty": "1",
+          "rate": "25150",
+          "amount": "25150"
+        },
+        {
+          "key": "AC SPD",
+          "qty": "1",
+          "rate": "11000",
+          "amount": "11000"
+        },
+        {
+          "key": "AC & DC Boxes",
+          "qty": "2",
+          "rate": "50000",
+          "amount": "100000"
+        },
+        {
+          "key": "Misc. Accessories",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        },
+        {
+          "key": "Extra Smart Meter",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        },
+        {
+          "key": "Genset Synchronisation with Battery SOC",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        }
+      ],
+      "summary": {
+        "Solar Panels": "1209000.0",
+        "Structure": "310000.0",
+        "BESS": "2933716.0",
+        "EPC": "1122555.0",
+        "TOTAL PROJECT COST": "5575271.0"
+      },
+      "epc": {
+        "Electrical Labour": "155000.0",
+        "Earthing Cost": "90000.0",
+        "Deliveries": "93000.0",
+        "Installation Cost": "784555.0"
+      }
+    },
+    {
+      "number": "BAFL-2520-001-R1",
+      "survey": {
+        "customerId": 3,
+        "siteName": "Skardu -2520",
+        "siteCode": "2520",
+        "location": "Historical reference workbook",
+        "panelQty": 50,
+        "panelWattage": "620",
+        "structure": "L1",
+        "dcMetres": "360",
+        "earth25": "15",
+        "earth6": "60",
+        "earth10": "60",
+        "inverter": "20 kW",
+        "batteryKwh": 40,
+        "smartMeter": true,
+        "genset": true,
+        "preparedBy": "Abu Bakar",
+        "acInverter16": "30",
+        "acInverter25": "0",
+        "acPanel16": "0",
+        "acPanel25": "0"
+      },
+      "historicalBrands": {
+        "Solar Panel Brand": "LONGi",
+        "Inverter Brand": "Chint Power",
+        "Battery & BMS Brand": "Chint Power",
+        "Cable Brand": "Any of the Above",
+        "Switchgear Brand": "CHINT"
+      },
+      "lines": [
+        {
+          "key": "Solar PV Modules",
+          "qty": "31000",
+          "rate": "39",
+          "amount": "1209000"
+        },
+        {
+          "key": "Structure - L1",
+          "qty": "31000",
+          "rate": "10",
+          "amount": "310000"
+        },
+        {
+          "key": "HYB-3P-020",
+          "qty": "1",
+          "rate": "412144",
+          "amount": "412144"
+        },
+        {
+          "key": "BAT-HV-05 KW WO BMS",
+          "qty": "8",
+          "rate": "231962",
+          "amount": "1855696"
+        },
+        {
+          "key": "CH-BMS-HV",
+          "qty": "2",
+          "rate": "158996",
+          "amount": "317992"
+        },
+        {
+          "key": "Labour",
+          "qty": "31000",
+          "rate": "5",
+          "amount": "155000"
+        },
+        {
+          "key": "Earthing Bore",
+          "qty": "2",
+          "rate": "45000",
+          "amount": "90000"
+        },
+        {
+          "key": "Delivery",
+          "qty": "31000",
+          "rate": "3",
+          "amount": "93000"
+        },
+        {
+          "key": "6mm² DC Cable Red",
+          "qty": "180",
+          "rate": "420",
+          "amount": "75600"
+        },
+        {
+          "key": "6mm² DC Cable Black",
+          "qty": "180",
+          "rate": "420",
+          "amount": "75600"
+        },
+        {
+          "key": "2.5mm² Earthing Cable",
+          "qty": "15",
+          "rate": "193",
+          "amount": "2895"
+        },
+        {
+          "key": "6mm² Earthing Cable",
+          "qty": "60",
+          "rate": "380",
+          "amount": "22800"
+        },
+        {
+          "key": "10mm² Earthing Cable",
+          "qty": "60",
+          "rate": "665",
+          "amount": "39900"
+        },
+        {
+          "key": "16mm² 4C AC Cable",
+          "qty": "30",
+          "rate": "3350",
+          "amount": "100500"
+        },
+        {
+          "key": "25mm² 4C AC Cable",
+          "qty": "0",
+          "rate": "5500",
+          "amount": "0"
+        },
+        {
+          "key": "DC Breaker",
+          "qty": "8",
+          "rate": "4950",
+          "amount": "39600"
+        },
+        {
+          "key": "DC SPD",
+          "qty": "4",
+          "rate": "10500",
+          "amount": "42000"
+        },
+        {
+          "key": "DC Fuse with Holder",
+          "qty": "4",
+          "rate": "2900",
+          "amount": "11600"
+        },
+        {
+          "key": "63A 4P MCB",
+          "qty": "2",
+          "rate": "2640",
+          "amount": "5280"
+        },
+        {
+          "key": "100A 4P MCCB",
+          "qty": "0",
+          "rate": "8800",
+          "amount": "0"
+        },
+        {
+          "key": "100A Rotary Changeover with Box",
+          "qty": "1",
+          "rate": "25150",
+          "amount": "25150"
+        },
+        {
+          "key": "AC SPD",
+          "qty": "1",
+          "rate": "11000",
+          "amount": "11000"
+        },
+        {
+          "key": "AC & DC Boxes",
+          "qty": "2",
+          "rate": "50000",
+          "amount": "100000"
+        },
+        {
+          "key": "Misc. Accessories",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        },
+        {
+          "key": "Extra Smart Meter",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        },
+        {
+          "key": "Genset Synchronisation with Battery SOC",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        }
+      ],
+      "summary": {
+        "Solar Panels": "1209000.0",
+        "Structure": "310000.0",
+        "BESS": "2585832.0",
+        "EPC": "1039925.0",
+        "TOTAL PROJECT COST": "5144757.0"
+      },
+      "epc": {
+        "Electrical Labour": "155000.0",
+        "Earthing Cost": "90000.0",
+        "Deliveries": "93000.0",
+        "Installation Cost": "701925.0"
+      }
+    },
+    {
+      "number": "MBL-5858-001-R0",
+      "survey": {
+        "customerId": 2,
+        "siteName": "Fasb 5858",
+        "siteCode": "5858",
+        "location": "Historical reference workbook",
+        "panelQty": 42,
+        "panelWattage": "620",
+        "structure": "Elevated",
+        "dcMetres": "270",
+        "earth25": "15",
+        "earth6": "60",
+        "earth10": "60",
+        "inverter": "20 kW",
+        "batteryKwh": 20,
+        "smartMeter": false,
+        "genset": true,
+        "preparedBy": "Abu Bakar",
+        "acInverter16": "30",
+        "acInverter25": "0",
+        "acPanel16": "0",
+        "acPanel25": "0"
+      },
+      "historicalBrands": {
+        "Solar Panel Brand": "LONGi",
+        "Inverter Brand": "Chint Power",
+        "Battery & BMS Brand": "Chint Power",
+        "Cable Brand": "GM Cables",
+        "Switchgear Brand": "CHINT"
+      },
+      "lines": [
+        {
+          "key": "Solar PV Modules",
+          "qty": "26040",
+          "rate": "39",
+          "amount": "1015560"
+        },
+        {
+          "key": "Structure - Elevated",
+          "qty": "26040",
+          "rate": "20",
+          "amount": "520800"
+        },
+        {
+          "key": "HYB-3P-020",
+          "qty": "1",
+          "rate": "412144",
+          "amount": "412144"
+        },
+        {
+          "key": "BAT-HV-05 KW WO BMS",
+          "qty": "4",
+          "rate": "231962",
+          "amount": "927848"
+        },
+        {
+          "key": "CH-BMS-HV",
+          "qty": "1",
+          "rate": "158996",
+          "amount": "158996"
+        },
+        {
+          "key": "Labour",
+          "qty": "26040",
+          "rate": "5",
+          "amount": "130200"
+        },
+        {
+          "key": "Earthing Bore",
+          "qty": "2",
+          "rate": "45000",
+          "amount": "90000"
+        },
+        {
+          "key": "Delivery",
+          "qty": "26040",
+          "rate": "3",
+          "amount": "78120"
+        },
+        {
+          "key": "6mm² DC Cable Red",
+          "qty": "135",
+          "rate": "420",
+          "amount": "56700"
+        },
+        {
+          "key": "6mm² DC Cable Black",
+          "qty": "135",
+          "rate": "420",
+          "amount": "56700"
+        },
+        {
+          "key": "2.5mm² Earthing Cable",
+          "qty": "15",
+          "rate": "193",
+          "amount": "2895"
+        },
+        {
+          "key": "6mm² Earthing Cable",
+          "qty": "60",
+          "rate": "380",
+          "amount": "22800"
+        },
+        {
+          "key": "10mm² Earthing Cable",
+          "qty": "60",
+          "rate": "665",
+          "amount": "39900"
+        },
+        {
+          "key": "16mm² 4C AC Cable",
+          "qty": "30",
+          "rate": "3350",
+          "amount": "100500"
+        },
+        {
+          "key": "25mm² 4C AC Cable",
+          "qty": "0",
+          "rate": "5500",
+          "amount": "0"
+        },
+        {
+          "key": "DC Breaker",
+          "qty": "6",
+          "rate": "4950",
+          "amount": "29700"
+        },
+        {
+          "key": "DC SPD",
+          "qty": "3",
+          "rate": "10500",
+          "amount": "31500"
+        },
+        {
+          "key": "DC Fuse with Holder",
+          "qty": "3",
+          "rate": "2900",
+          "amount": "8700"
+        },
+        {
+          "key": "63A 4P MCB",
+          "qty": "2",
+          "rate": "2640",
+          "amount": "5280"
+        },
+        {
+          "key": "100A 4P MCCB",
+          "qty": "0",
+          "rate": "8800",
+          "amount": "0"
+        },
+        {
+          "key": "100A Rotary Changeover with Box",
+          "qty": "1",
+          "rate": "25150",
+          "amount": "25150"
+        },
+        {
+          "key": "AC SPD",
+          "qty": "1",
+          "rate": "11000",
+          "amount": "11000"
+        },
+        {
+          "key": "AC & DC Boxes",
+          "qty": "2",
+          "rate": "50000",
+          "amount": "100000"
+        },
+        {
+          "key": "Misc. Accessories",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        },
+        {
+          "key": "Extra Smart Meter",
+          "qty": "0",
+          "rate": "50000",
+          "amount": "0"
+        },
+        {
+          "key": "Genset Synchronisation with Battery SOC",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        }
+      ],
+      "summary": {
+        "Solar Panels": "1015560.0",
+        "Structure": "520800.0",
+        "BESS": "1498988.0",
+        "EPC": "889145.0",
+        "TOTAL PROJECT COST": "3924493.0"
+      },
+      "epc": {
+        "Electrical Labour": "130200.0",
+        "Earthing Cost": "90000.0",
+        "Deliveries": "78120.0",
+        "Installation Cost": "590825.0"
+      }
+    },
+    {
+      "number": "BAFL-5850-001-R0",
+      "survey": {
+        "customerId": 3,
+        "siteName": "jatli 5850",
+        "siteCode": "5850",
+        "location": "Historical reference workbook",
+        "panelQty": 60,
+        "panelWattage": "645",
+        "structure": "Elevated",
+        "dcMetres": "360",
+        "earth25": "20",
+        "earth6": "90",
+        "earth10": "90",
+        "inverter": "2×15 kW",
+        "batteryKwh": 40,
+        "smartMeter": true,
+        "genset": true,
+        "preparedBy": "Abu Bakar",
+        "acInverter16": "15",
+        "acInverter25": "0",
+        "acPanel16": "0",
+        "acPanel25": "20"
+      },
+      "historicalBrands": {
+        "Solar Panel Brand": "Any of the Above",
+        "Inverter Brand": "Chint Power",
+        "Battery & BMS Brand": "Chint Power",
+        "Cable Brand": "Newage Cables",
+        "Switchgear Brand": "CHINT"
+      },
+      "lines": [
+        {
+          "key": "Solar PV Modules",
+          "qty": "38700",
+          "rate": "39",
+          "amount": "1509300"
+        },
+        {
+          "key": "Structure - Elevated",
+          "qty": "38700",
+          "rate": "20",
+          "amount": "774000"
+        },
+        {
+          "key": "HYB-3P-015",
+          "qty": "2",
+          "rate": "380014",
+          "amount": "760028"
+        },
+        {
+          "key": "BAT-HV-05 KW WO BMS",
+          "qty": "8",
+          "rate": "231962",
+          "amount": "1855696"
+        },
+        {
+          "key": "CH-BMS-HV",
+          "qty": "2",
+          "rate": "158996",
+          "amount": "317992"
+        },
+        {
+          "key": "Labour",
+          "qty": "38700",
+          "rate": "5",
+          "amount": "193500"
+        },
+        {
+          "key": "Earthing Bore",
+          "qty": "2",
+          "rate": "45000",
+          "amount": "90000"
+        },
+        {
+          "key": "Delivery",
+          "qty": "38700",
+          "rate": "3",
+          "amount": "116100"
+        },
+        {
+          "key": "6mm² DC Cable Red",
+          "qty": "180",
+          "rate": "420",
+          "amount": "75600"
+        },
+        {
+          "key": "6mm² DC Cable Black",
+          "qty": "180",
+          "rate": "420",
+          "amount": "75600"
+        },
+        {
+          "key": "2.5mm² Earthing Cable",
+          "qty": "20",
+          "rate": "193",
+          "amount": "3860"
+        },
+        {
+          "key": "6mm² Earthing Cable",
+          "qty": "90",
+          "rate": "380",
+          "amount": "34200"
+        },
+        {
+          "key": "10mm² Earthing Cable",
+          "qty": "90",
+          "rate": "665",
+          "amount": "59850"
+        },
+        {
+          "key": "16mm² 4C AC Cable",
+          "qty": "15",
+          "rate": "3350",
+          "amount": "50250"
+        },
+        {
+          "key": "25mm² 4C AC Cable",
+          "qty": "20",
+          "rate": "5500",
+          "amount": "110000"
+        },
+        {
+          "key": "DC Breaker",
+          "qty": "10",
+          "rate": "4950",
+          "amount": "49500"
+        },
+        {
+          "key": "DC SPD",
+          "qty": "5",
+          "rate": "10500",
+          "amount": "52500"
+        },
+        {
+          "key": "DC Fuse with Holder",
+          "qty": "5",
+          "rate": "2900",
+          "amount": "14500"
+        },
+        {
+          "key": "63A 4P MCB",
+          "qty": "4",
+          "rate": "2640",
+          "amount": "10560"
+        },
+        {
+          "key": "100A 4P MCCB",
+          "qty": "2",
+          "rate": "8800",
+          "amount": "17600"
+        },
+        {
+          "key": "100A Rotary Changeover with Box",
+          "qty": "1",
+          "rate": "25150",
+          "amount": "25150"
+        },
+        {
+          "key": "AC SPD",
+          "qty": "1",
+          "rate": "11000",
+          "amount": "11000"
+        },
+        {
+          "key": "AC & DC Boxes",
+          "qty": "2",
+          "rate": "50000",
+          "amount": "100000"
+        },
+        {
+          "key": "Misc. Accessories",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        },
+        {
+          "key": "Extra Smart Meter",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        },
+        {
+          "key": "Genset Synchronisation with Battery SOC",
+          "qty": "1",
+          "rate": "50000",
+          "amount": "50000"
+        }
+      ],
+      "summary": {
+        "Solar Panels": "1509300.0",
+        "Structure": "774000.0",
+        "BESS": "2933716.0",
+        "EPC": "1239770.0",
+        "TOTAL PROJECT COST": "6456786.0"
+      },
+      "epc": {
+        "Electrical Labour": "193500.0",
+        "Earthing Cost": "90000.0",
+        "Deliveries": "116100.0",
+        "Installation Cost": "840170.0"
+      }
+    }
+  ]
+}

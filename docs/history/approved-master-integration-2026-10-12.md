@@ -1,0 +1,13 @@
+# Approved inventory and engineering integration — 12 October 2026
+
+The owner-reviewed PT inventory catalogue is now the stock identity source for future BOQs. It contains 126 items with technical and commercial descriptions, stock brand, item group, clubbed costing category and unit. Existing rate keys remain stable compatibility aliases; PT IDs and previous stock IDs resolve to their linked rate histories.
+
+Cable brand variants remain separate stock items, while matching specifications share one buying-rate source. Specific brands select exact stock identities. General/Any of the Above selects the All Other Brands identity. A missing exact stock mapping produces a review warning rather than silently substituting a brand. Red and black remain separate document rows against the approved combined stock identity.
+
+Approved future standard scope includes single/dual three-phase profiles, the 63A 4P breaker-type single-inverter changeover, site-level enclosure and miscellaneous packages, and the confirmed SP accessory scope. Future UBL 6-10 and MBL 6-5/6-10 UPS profiles use one inverter, the relevant LV battery quantity, one LV BMS, 2P VPD, four total conductor metres, one metre of 2.5mm² earth cable, one 5-way box and the approved approximate labour/delivery budgets. Bank order quantities and fixed selling values are reference history, not new orders or changes to commercial totals.
+
+Rates without a software mapping use the authorized Last Unit Cost from the supplied PT file. Missing/zero or conflicting source rates stay flagged. No quantities on hand are imported. The new catalogue and engineering profiles are immutable versioned tables; rate revisions retain existing version history. Customer-specific UBL solar scope is recorded without recalculating any saved UBL budget, site, IPO, PT, IRR or closure.
+
+Validation: production build and type checking pass; the catalogue browser test passes; the stock/brand/rate alias and bank UPS scope tests pass, including all three quotation presentations. The broader suite passed 161 of 163 checks before the final commercial fixture correction; its affected 22-check suite then passed. The remaining archive-cleanup failure also reproduces against the pre-integration schema and concerns a pre-existing test-only truncate allowlist, not this migration. Backup/restore, role privacy, Accounts closure, historical UBL and immutable-document checks pass.
+
+Release scope excludes the separate unfinished shared-document-registry work. Migration 057 adds catalogue/rules and appends approved master versions only; it does not update historical project financial records.

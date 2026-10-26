@@ -1,6 +1,6 @@
 # Power Zone Operations V2
 
-Milestone 1 implements one-time administrator setup, login, an authenticated application shell, logout and repeat login. It uses React/TypeScript, Express 5 and PostgreSQL. No customer import, BOQ, costing, commercial pricing or quotation implementation is included.
+Operations system for Power Zone Engineering & Services: master data, design surveys, BOQ and costing, commercial pricing, quotations, customer purchase orders, IPOs, store issuance, Accounts and department dashboards. It uses React/TypeScript, Express 5 and PostgreSQL, deployed on Render in Singapore. See "Current milestone checkpoint" below for what is implemented.
 
 ## Boundaries
 
@@ -51,6 +51,6 @@ Future saved BOQ revisions and issued quotation versions must capture inputs, ra
 
 ## Current milestone checkpoint
 
-Reviewed master data, employee account lifecycle (email activation pending), survey drafts, authenticated uploads, browser OCR review, New BOQ and immutable R0 costing are implemented. See docs/milestone-accounts.md, docs/milestone-3-survey-boq.md and docs/owner-next-steps.md. Costing submission, executive approval, requested changes and immutable BOQ revision history are implemented; see docs/milestone-4-boq-review.md. Commercial pricing and quotations remain later milestones.
+Reviewed master data, employee account lifecycle (email activation pending), survey drafts, authenticated uploads, browser OCR review, New BOQ and immutable R0 costing are implemented. See docs/milestone-accounts.md, docs/milestone-3-survey-boq.md and docs/owner-next-steps.md. Costing submission, executive approval, requested changes and immutable BOQ revision history are implemented; see docs/milestone-4-boq-review.md. Commercial pricing and immutable quotation versions/PDF export are implemented; see docs/milestone-5-commercial-quotations.md. Customer approval, PO/IPO, coordination buckets and Operations delivery planning/Store issuance are implemented. Director budget reporting, general quotations without survey and evidence-backed external costing approvals are documented in [milestone 10](docs/milestone-10-operations-director-general.md). Procurement, physical inventory, Accounts actual costing and job closing are later milestones.
 
 The build bundles OCR worker, runtime and English language assets from locked npm dependencies; no OCR credentials or external OCR service are required. Email settings are optional until activation. Tests always use isolated PostgreSQL, never production credentials.

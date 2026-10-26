@@ -8,7 +8,7 @@ import { migrate } from "../server/db/migrate.js";
 import { PGlite } from "@electric-sql/pglite";
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
 
-export async function testDatabase() {
+export async function testDatabase(options:{skipMigrations?:boolean}={}) {
   // Refuse to use production credentials: tests always own an isolated disposable cluster.
   const directory = await mkdtemp(join(tmpdir(), "pz-v2-test-"));
   const socket = createServer();
@@ -35,7 +35,7 @@ export async function testDatabase() {
       if ((error as Error & { code?: string }).code !== "57P01")
         console.error("Isolated database connection interrupted.");
     });
-    await migrate(pool);
+    if(!options.skipMigrations)await migrate(pool);
     return {
       pool,
       url,
@@ -76,7 +76,7 @@ export async function testDatabase() {
       if ((error as Error & { code?: string }).code !== "57P01")
         console.error("Isolated database connection interrupted.");
     });
-    await migrate(pool);
+    if(!options.skipMigrations)await migrate(pool);
     return {
       pool,
       url,

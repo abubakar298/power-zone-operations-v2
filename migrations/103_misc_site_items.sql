@@ -1,0 +1,266 @@
+-- Misc site items (Moaz, 24 Oct 2026). Design fills a misc items BOQ with the survey report; Procurement (Hamza)
+-- buys the items and Store (Shaigan) sends them to site. They are kept out of the rate master, so they never appear
+-- on BOQs, quotations, costing or customer documents. Seeded from "BOQ(20or25-20-30&30or35-30-40).xlsx".
+CREATE TABLE misc_items (
+ key text PRIMARY KEY CHECK (key ~ '^MSC-[0-9]{3,}$'),
+ name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 200),
+ unit text NOT NULL CHECK (length(btrim(unit)) BETWEEN 1 AND 30),
+ active boolean NOT NULL DEFAULT true,
+ sort integer NOT NULL,
+ created_by uuid REFERENCES users(id),
+ created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX misc_items_name ON misc_items (lower(btrim(name)));
+CREATE SEQUENCE misc_item_number START 39;
+
+-- The four system sizes from the sheet; Design picks one and adjusts it on the spot.
+CREATE TABLE misc_boq_options (
+ key text PRIMARY KEY,
+ label text NOT NULL,
+ pv_kw numeric(10,2) NOT NULL,
+ inverter_kw numeric(10,2) NOT NULL,
+ battery_kwh numeric(10,2) NOT NULL,
+ sort integer NOT NULL,
+ active boolean NOT NULL DEFAULT true
+);
+CREATE TABLE misc_boq_option_items (
+ option_key text NOT NULL REFERENCES misc_boq_options(key),
+ item_key text NOT NULL REFERENCES misc_items(key),
+ quantity numeric(20,6) NOT NULL CHECK (quantity > 0),
+ PRIMARY KEY (option_key, item_key)
+);
+
+-- One misc items BOQ per site (project workflow record).
+CREATE TABLE site_misc_boqs (
+ record_id uuid PRIMARY KEY REFERENCES project_workflow_records(id),
+ option_key text REFERENCES misc_boq_options(key),
+ version integer NOT NULL DEFAULT 1 CHECK (version > 0),
+ note text NOT NULL DEFAULT '',
+ updated_by uuid NOT NULL REFERENCES users(id),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ sent_by uuid REFERENCES users(id),
+ sent_at timestamptz,
+ sent_note text NOT NULL DEFAULT ''
+);
+CREATE TABLE site_misc_boq_lines (
+ record_id uuid NOT NULL REFERENCES site_misc_boqs(record_id),
+ item_key text NOT NULL REFERENCES misc_items(key),
+ quantity numeric(20,6) NOT NULL CHECK (quantity > 0),
+ PRIMARY KEY (record_id, item_key)
+);
+CREATE TABLE site_misc_boq_events (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ record_id uuid NOT NULL REFERENCES site_misc_boqs(record_id),
+ kind text NOT NULL CHECK (kind IN ('saved','sent')),
+ version integer NOT NULL,
+ snapshot jsonb NOT NULL,
+ note text NOT NULL DEFAULT '',
+ created_by uuid NOT NULL REFERENCES users(id),
+ created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX site_misc_boq_events_record ON site_misc_boq_events(record_id, created_at);
+CREATE TRIGGER immutable_site_misc_boq_events BEFORE UPDATE OR DELETE ON site_misc_boq_events
+ FOR EACH ROW EXECUTE FUNCTION prevent_master_version_mutation();
+
+-- Procurement and Store work with rate master items and misc items alike.
+ALTER TABLE purchase_request_lines DROP CONSTRAINT purchase_request_lines_item_key_fkey;
+ALTER TABLE stock_on_hand_entries DROP CONSTRAINT stock_on_hand_entries_item_key_fkey;
+CREATE FUNCTION procurement_item_exists() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM item_master WHERE key = NEW.item_key) AND NOT EXISTS (SELECT 1 FROM misc_items WHERE key = NEW.item_key) THEN
+    RAISE EXCEPTION 'Item % is not in the rate master or the misc items list', NEW.item_key USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER purchase_request_lines_item_exists BEFORE INSERT OR UPDATE OF item_key ON purchase_request_lines
+ FOR EACH ROW EXECUTE FUNCTION procurement_item_exists();
+CREATE TRIGGER stock_on_hand_entries_item_exists BEFORE INSERT ON stock_on_hand_entries
+ FOR EACH ROW EXECUTE FUNCTION procurement_item_exists();
+
+INSERT INTO misc_items(key, name, unit, sort) VALUES
+ ('MSC-001', 'Changeover Box', 'Nos', 1),
+ ('MSC-002', 'AC DB BOX 30*36 Inch', 'Nos', 2),
+ ('MSC-003', 'AC DB BOX 18*24 Inch', 'Nos', 3),
+ ('MSC-004', 'AC SPD BOX 8 Way', 'Nos', 4),
+ ('MSC-005', 'DC ROOF DB 14*20 Inch', 'Nos', 5),
+ ('MSC-006', 'DC DB 18 Way', 'Nos', 6),
+ ('MSC-007', 'Self Screw 1/2 Inch', 'Nos', 7),
+ ('MSC-008', 'Earthing Thmible 2.5 mm O-Type', 'Nos', 8),
+ ('MSC-009', 'Breaker Strip Feet', 'Feet', 9),
+ ('MSC-010', 'Flex Pipe 1.5 Inch', 'Mtr', 10),
+ ('MSC-011', 'PVC Pipe 1.5 Inch', 'Mtr', 11),
+ ('MSC-012', 'Bend 1.5 Inch', 'Nos', 12),
+ ('MSC-013', 'Elbow 1.5Inch', 'Nos', 13),
+ ('MSC-014', 'Socket 1.5 Inch', 'Nos', 14),
+ ('MSC-015', 'T type 1.5 Inch', 'Nos', 15),
+ ('MSC-016', 'Clamp 1.5 Inch', 'Nos', 16),
+ ('MSC-017', 'Flex Pipe 1 Inch', 'Mtr', 17),
+ ('MSC-018', 'PVC Pipe 1 Inch', 'Mtr', 18),
+ ('MSC-019', 'Bend 1 Inch', 'Nos', 19),
+ ('MSC-020', 'Elbow 1 Inch', 'Nos', 20),
+ ('MSC-021', 'Socket 1 Inch', 'Nos', 21),
+ ('MSC-022', 'T type 1 Inch', 'Nos', 22),
+ ('MSC-023', 'Clamp 1 Inch', 'Nos', 23),
+ ('MSC-024', 'Cable Tie 12 Inch', 'Nos', 24),
+ ('MSC-025', 'Black Screw 1.5 Inch', 'Nos', 25),
+ ('MSC-026', 'Black Screw Washel', 'Nos', 26),
+ ('MSC-027', 'Gatti', 'Nos', 27),
+ ('MSC-028', 'Duct Patti Sloted 100*100', 'Nos', 28),
+ ('MSC-029', 'Duct Patti Sloted 60*60', 'Nos', 29),
+ ('MSC-030', 'PVC( Red Yellow Blue Black)', 'Nos', 30),
+ ('MSC-031', 'MC4 (1500V)', 'Nos', 31),
+ ('MSC-032', 'Thmible 25mm', 'Nos', 32),
+ ('MSC-033', 'Thmible 16mm', 'Nos', 33),
+ ('MSC-034', 'Rawal Bolt 3 Sooter', 'Nos', 34),
+ ('MSC-035', 'Steel Nails Pcs', 'Nos', 35),
+ ('MSC-036', 'Cat 6 Cable Mtr', 'Mtr', 36),
+ ('MSC-037', 'Genset 2Core Cable Mtr', 'Mtr', 37),
+ ('MSC-038', 'RJ45 Connector', 'Nos', 38);
+INSERT INTO misc_boq_options(key, label, pv_kw, inverter_kw, battery_kwh, sort) VALUES
+ ('30-30-40', '30 kW PV · 30 kW inverter · 40 kWh battery', 30, 30, 40, 1),
+ ('35-30-40', '35 kW PV · 30 kW inverter · 40 kWh battery', 35, 30, 40, 2),
+ ('20-20-30', '20 kW PV · 20 kW inverter · 30 kWh battery', 20, 20, 30, 3),
+ ('25-20-30', '25 kW PV · 20 kW inverter · 30 kWh battery', 25, 20, 30, 4);
+INSERT INTO misc_boq_option_items(option_key, item_key, quantity) VALUES
+ ('30-30-40', 'MSC-001', 1),
+ ('35-30-40', 'MSC-001', 1),
+ ('30-30-40', 'MSC-002', 1),
+ ('35-30-40', 'MSC-002', 1),
+ ('20-20-30', 'MSC-003', 1),
+ ('25-20-30', 'MSC-003', 1),
+ ('30-30-40', 'MSC-004', 1),
+ ('35-30-40', 'MSC-004', 1),
+ ('20-20-30', 'MSC-004', 1),
+ ('25-20-30', 'MSC-004', 1),
+ ('30-30-40', 'MSC-005', 1),
+ ('35-30-40', 'MSC-005', 1),
+ ('20-20-30', 'MSC-005', 1),
+ ('25-20-30', 'MSC-005', 1),
+ ('30-30-40', 'MSC-006', 1),
+ ('35-30-40', 'MSC-006', 1),
+ ('20-20-30', 'MSC-006', 1),
+ ('25-20-30', 'MSC-006', 1),
+ ('30-30-40', 'MSC-007', 160),
+ ('35-30-40', 'MSC-007', 160),
+ ('20-20-30', 'MSC-007', 130),
+ ('25-20-30', 'MSC-007', 130),
+ ('30-30-40', 'MSC-008', 150),
+ ('35-30-40', 'MSC-008', 150),
+ ('20-20-30', 'MSC-008', 120),
+ ('25-20-30', 'MSC-008', 120),
+ ('30-30-40', 'MSC-009', 5),
+ ('35-30-40', 'MSC-009', 5),
+ ('20-20-30', 'MSC-009', 10),
+ ('25-20-30', 'MSC-009', 10),
+ ('30-30-40', 'MSC-010', 30),
+ ('35-30-40', 'MSC-010', 30),
+ ('20-20-30', 'MSC-010', 20),
+ ('25-20-30', 'MSC-010', 20),
+ ('30-30-40', 'MSC-011', 10),
+ ('35-30-40', 'MSC-011', 10),
+ ('20-20-30', 'MSC-011', 8),
+ ('25-20-30', 'MSC-011', 8),
+ ('30-30-40', 'MSC-012', 10),
+ ('35-30-40', 'MSC-012', 10),
+ ('20-20-30', 'MSC-012', 8),
+ ('25-20-30', 'MSC-012', 8),
+ ('30-30-40', 'MSC-013', 10),
+ ('35-30-40', 'MSC-013', 10),
+ ('20-20-30', 'MSC-013', 8),
+ ('25-20-30', 'MSC-013', 8),
+ ('30-30-40', 'MSC-014', 10),
+ ('35-30-40', 'MSC-014', 10),
+ ('20-20-30', 'MSC-014', 8),
+ ('25-20-30', 'MSC-014', 8),
+ ('30-30-40', 'MSC-015', 5),
+ ('35-30-40', 'MSC-015', 5),
+ ('20-20-30', 'MSC-015', 4),
+ ('25-20-30', 'MSC-015', 4),
+ ('30-30-40', 'MSC-016', 15),
+ ('35-30-40', 'MSC-016', 15),
+ ('20-20-30', 'MSC-016', 12),
+ ('25-20-30', 'MSC-016', 12),
+ ('30-30-40', 'MSC-017', 30),
+ ('35-30-40', 'MSC-017', 30),
+ ('20-20-30', 'MSC-017', 20),
+ ('25-20-30', 'MSC-017', 20),
+ ('30-30-40', 'MSC-018', 6),
+ ('35-30-40', 'MSC-018', 6),
+ ('20-20-30', 'MSC-018', 4),
+ ('25-20-30', 'MSC-018', 4),
+ ('30-30-40', 'MSC-019', 6),
+ ('35-30-40', 'MSC-019', 6),
+ ('20-20-30', 'MSC-019', 4),
+ ('25-20-30', 'MSC-019', 4),
+ ('30-30-40', 'MSC-020', 6),
+ ('35-30-40', 'MSC-020', 6),
+ ('20-20-30', 'MSC-020', 4),
+ ('25-20-30', 'MSC-020', 4),
+ ('30-30-40', 'MSC-021', 6),
+ ('35-30-40', 'MSC-021', 6),
+ ('20-20-30', 'MSC-021', 4),
+ ('25-20-30', 'MSC-021', 4),
+ ('30-30-40', 'MSC-022', 4),
+ ('35-30-40', 'MSC-022', 4),
+ ('20-20-30', 'MSC-022', 3),
+ ('25-20-30', 'MSC-022', 3),
+ ('30-30-40', 'MSC-023', 10),
+ ('35-30-40', 'MSC-023', 10),
+ ('20-20-30', 'MSC-023', 8),
+ ('25-20-30', 'MSC-023', 8),
+ ('30-30-40', 'MSC-024', 4),
+ ('35-30-40', 'MSC-024', 4),
+ ('20-20-30', 'MSC-024', 3),
+ ('25-20-30', 'MSC-024', 3),
+ ('30-30-40', 'MSC-025', 80),
+ ('35-30-40', 'MSC-025', 80),
+ ('20-20-30', 'MSC-025', 60),
+ ('25-20-30', 'MSC-025', 60),
+ ('30-30-40', 'MSC-026', 80),
+ ('35-30-40', 'MSC-026', 80),
+ ('20-20-30', 'MSC-026', 60),
+ ('25-20-30', 'MSC-026', 60),
+ ('30-30-40', 'MSC-027', 2),
+ ('35-30-40', 'MSC-027', 2),
+ ('20-20-30', 'MSC-027', 1),
+ ('25-20-30', 'MSC-027', 1),
+ ('30-30-40', 'MSC-028', 4),
+ ('35-30-40', 'MSC-028', 4),
+ ('30-30-40', 'MSC-029', 2),
+ ('35-30-40', 'MSC-029', 2),
+ ('20-20-30', 'MSC-029', 4),
+ ('25-20-30', 'MSC-029', 4),
+ ('30-30-40', 'MSC-030', 12),
+ ('35-30-40', 'MSC-030', 12),
+ ('20-20-30', 'MSC-030', 8),
+ ('25-20-30', 'MSC-030', 8),
+ ('30-30-40', 'MSC-031', 12),
+ ('35-30-40', 'MSC-031', 12),
+ ('20-20-30', 'MSC-031', 10),
+ ('25-20-30', 'MSC-031', 10),
+ ('30-30-40', 'MSC-032', 30),
+ ('35-30-40', 'MSC-032', 30),
+ ('30-30-40', 'MSC-033', 64),
+ ('35-30-40', 'MSC-033', 64),
+ ('20-20-30', 'MSC-033', 30),
+ ('25-20-30', 'MSC-033', 30),
+ ('30-30-40', 'MSC-034', 12),
+ ('35-30-40', 'MSC-034', 12),
+ ('20-20-30', 'MSC-034', 12),
+ ('25-20-30', 'MSC-034', 12),
+ ('30-30-40', 'MSC-035', 36),
+ ('35-30-40', 'MSC-035', 36),
+ ('20-20-30', 'MSC-035', 36),
+ ('25-20-30', 'MSC-035', 36),
+ ('30-30-40', 'MSC-036', 10),
+ ('35-30-40', 'MSC-036', 10),
+ ('20-20-30', 'MSC-036', 10),
+ ('25-20-30', 'MSC-036', 10),
+ ('30-30-40', 'MSC-037', 12),
+ ('35-30-40', 'MSC-037', 12),
+ ('20-20-30', 'MSC-037', 12),
+ ('25-20-30', 'MSC-037', 12),
+ ('30-30-40', 'MSC-038', 6),
+ ('35-30-40', 'MSC-038', 6),
+ ('20-20-30', 'MSC-038', 6),
+ ('25-20-30', 'MSC-038', 6);

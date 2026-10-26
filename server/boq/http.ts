@@ -1,3 +1,5 @@
+import { canSeeBessCost, restrictedCostView } from "../http/cost-visibility.js";
+import { instructionsSchema, externalApprovalSchema } from "./instructions.js";
 import { buildCostingPdf } from "./report.js";
 import { Router, type RequestHandler } from "express";
 import { z } from "zod";
@@ -12,6 +14,19 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
   r.use((req, _res, next) => {
     if (
       req.method !== "GET" &&
+      ["Operations", "Inventory", "Accounts"].includes(
+        req.authSession!.user.role,
+      )
+    )
+      throw new HttpError(
+        403,
+        "Department accounts cannot change costing, quotations or IPO approvals.",
+      );
+    next();
+  });
+  r.use((req, _res, next) => {
+    if (
+      req.method !== "GET" &&
       !equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken)
     )
       throw new HttpError(403, "Refresh and try again.");
@@ -20,7 +35,9 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
   r.get("/drafts", async (req, res) =>
     res.json({ drafts: await repo.drafts(req.authSession!.user.id) }),
   );
-  r.get("/", async (_req, res) => res.json({ boqs: await repo.list() }));
+  r.get("/", async (req, res) =>
+    res.json({ boqs: await repo.list(req.authSession!.user.id) }),
+  );
   r.post("/drafts", async (req, res) => {
     const v = z
       .object({
@@ -29,6 +46,9 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         inputs: surveyDraftSchema,
         baseRevisionId: z.uuid().optional(),
         revisionReason: z.string().trim().max(2000).default(""),
+        revisionOrigin: z.enum(["Internal management", "Customer"]).optional(),
+        workflowId:z.uuid().optional(),
+        surveyDeviationConfirmed:z.boolean().optional(),
       })
       .strict()
       .safeParse(req.body);
@@ -45,17 +65,20 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         v.data.inputs,
         v.data.baseRevisionId,
         v.data.revisionReason,
+        v.data.revisionOrigin,
+        v.data.workflowId,
+        v.data.surveyDeviationConfirmed,
       ),
     );
   });
   r.post("/preview", async (req, res) => {
-    const v = surveySchema.safeParse(req.body);
+    const v = surveySchema.extend({baseRevisionId:z.uuid().optional()}).safeParse(req.body);
     if (!v.success)
       throw new HttpError(
         400,
         "Check all required survey fields and non-negative quantities.",
       );
-    res.json(await repo.preview(v.data));
+    const {baseRevisionId,...survey}=v.data;res.json(await repo.preview(survey,baseRevisionId));
   });
   r.post("/save", async (req, res) => {
     const v = z
@@ -107,6 +130,34 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         ),
       );
   });
+  r.get("/:id/instructions", async (req, res) => {
+    if (!z.uuid().safeParse(req.params.id).success)
+      throw new HttpError(400, "Invalid BOQ.");
+    res.json(
+      await reviews.instructions(
+        req.authSession!.user.id,
+        String(req.params.id),
+      ),
+    );
+  });
+  r.post("/reviews/:id/external-approval", async (req, res) => {
+    const v = externalApprovalSchema.safeParse(req.body);
+    if (!v.success || !z.uuid().safeParse(req.params.id).success)
+      throw new HttpError(
+        400,
+        "Record the approver, margins, quotation settings and approval screenshots.",
+      );
+    res.json(
+      await reviews.decide(
+        req.authSession!.user.id,
+        String(req.params.id),
+        "Approved",
+        v.data.comments,
+        v.data.instructions,
+        { approver: v.data.approver, evidenceIds: v.data.evidenceIds },
+      ),
+    );
+  });
   r.get("/reviews/:id", async (req, res) => {
     if (!z.uuid().safeParse(req.params.id).success)
       throw new HttpError(400, "Invalid review.");
@@ -117,6 +168,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
   r.post("/reviews/:id/decision", async (req, res) => {
     const v = z
       .object({
+        instructions: instructionsSchema.optional(),
         outcome: z.enum(["Approved", "Changes requested"]),
         comments: z.string().trim().max(2000).default(""),
       })
@@ -130,6 +182,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         String(req.params.id),
         v.data.outcome,
         v.data.comments,
+        v.data.instructions,
       ),
     );
   });
@@ -152,7 +205,13 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         "Cache-Control": "private, no-store",
       })
       .send(
-        Buffer.from(buildCostingPdf(review.snapshot).output("arraybuffer")),
+        Buffer.from(
+          buildCostingPdf(
+            canSeeBessCost(req.authSession!.user)
+              ? review.snapshot
+              : restrictedCostView(review.snapshot),
+          ).output("arraybuffer"),
+        ),
       );
   });
   r.get("/:id/history", async (req, res) => {
@@ -194,7 +253,15 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Cache-Control": "private, no-store",
       })
-      .send(Buffer.from(buildCostingPdf(snapshot).output("arraybuffer")));
+      .send(
+        Buffer.from(
+          buildCostingPdf(
+            canSeeBessCost(req.authSession!.user)
+              ? snapshot
+              : restrictedCostView(snapshot),
+          ).output("arraybuffer"),
+        ),
+      );
   });
   r.get("/:id/costing.pdf", async (req, res) => {
     if (!z.uuid().safeParse(req.params.id).success)
@@ -213,7 +280,9 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
       .send(
         Buffer.from(
           buildCostingPdf(
-            record.snapshot,
+            canSeeBessCost(req.authSession!.user)
+              ? record.snapshot
+              : restrictedCostView(record.snapshot),
             record.number,
             record.created_at,
           ).output("arraybuffer"),
@@ -264,6 +333,7 @@ export function uploadHttp(
           "image/jpeg",
           "application/pdf",
           "text/plain",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ]),
         base64: z
           .string()
@@ -276,7 +346,7 @@ export function uploadHttp(
     if (!v.success)
       throw new HttpError(
         400,
-        "Upload a PNG, JPEG, PDF or text file up to 8 MB.",
+        "Upload an Excel (.xlsx), PNG, JPEG, PDF or text file up to 8 MB.",
       );
     const { filename, mime, base64 } = v.data,
       bytes = Buffer.from(base64, "base64");
@@ -291,7 +361,9 @@ export function uploadHttp(
           ? bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
           : mime === "application/pdf"
             ? bytes.subarray(0, 5).toString() === "%PDF-"
-            : !bytes.includes(0);
+            : mime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              ? bytes.subarray(0,4).equals(Buffer.from([80,75,3,4]))
+              : !bytes.includes(0);
     if (!valid)
       throw new HttpError(
         400,

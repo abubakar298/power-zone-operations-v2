@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "documentLayoutVersion": 4,
+  "fingerprint": "04127436be5062524a517359b8a7502eb80bbd580c7f009f7b8e98aa8919931b",
+  "files": {
+    "server/orders/report-v4.ts": "381d4eafbec4a3d60473449d9412b04fd2750a65cc65b7b7bfc75a0a5e537df1",
+    "server/orders/peachtree-report-v4.ts": "720a5f7e287d4487fa878aad9a941ea979158d02b438d86598feca232bb8a460",
+    "server/orders/document-renderers.ts": "511e21e6d976229b1b02f676704c204ce11488aaa1c3fcb03673b08750ff6539"
+  }
+}

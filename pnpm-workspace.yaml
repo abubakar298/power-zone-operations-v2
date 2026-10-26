@@ -1,5 +1,8 @@
 packages:
   - .
+overrides:
+  dompurify: 3.4.17
+  body-parser: 2.4.0
 allowBuilds:
   esbuild: true
   embedded-postgres: true

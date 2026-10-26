@@ -71,6 +71,34 @@ export class AccountsRepository {
       WHERE t.purpose='invite' AND t.used_at IS NULL AND t.revoked_at IS NULL ORDER BY t.created_at DESC`);
     return { users: users.rows, invitations: invitations.rows };
   }
+  async createDirect(input: {
+    email: string;
+    displayName: string;
+    role: User["role"];
+    passwordHash: string;
+    actorId: string;
+    actorHash: string;
+  }) {
+    return transaction(this.pool, async (c) => {
+      await this.lock(c);
+      await this.actor(c, input.actorId, input.actorHash);
+      if (
+        (await c.query("SELECT id FROM users WHERE email=$1", [input.email]))
+          .rowCount
+      )
+        throw new HttpError(409, "An account already exists for this email.");
+      await this.cancelTokens(c, "email=$1 AND purpose='invite'", [
+        input.email,
+      ]);
+      const id = randomUUID();
+      await c.query(
+        "INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)",
+        [id, input.email, input.displayName, input.role, input.passwordHash],
+      );
+      await this.audit(c, input.actorId, "account.created.by_admin", id);
+      return { id, email: input.email, role: input.role };
+    });
+  }
   async issue(input: {
     hash: string;
     purpose: Purpose;

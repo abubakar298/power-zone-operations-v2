@@ -1,9 +1,7 @@
+import { displayUnit } from "../../server/boq/unit.js";
+import { decimalDisplay as format } from "../numbers.js";
+import { SharePdf } from "../components/SharePdf.js";
 import type { BoqSnapshot } from "../../server/boq/engine.js";
-const format = (v: string | number, decimals = 0) =>
-  new Intl.NumberFormat("en-PK", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(Number(v));
 export function BoqCosting({
   snapshot: s,
   number,
@@ -15,6 +13,8 @@ export function BoqCosting({
   createdAt?: string;
   pdfUrl: string;
 }) {
+  const direct=s.survey.family === "direct-product";
+  const bessOnly=direct || s.survey.family === "bess-only";
   return (
     <section className="boq-costing">
       <div className="panel-heading">
@@ -22,6 +22,7 @@ export function BoqCosting({
         <a className="dark-button" href={pdfUrl} download>
           Download costing PDF
         </a>
+        <SharePdf url={pdfUrl} filename={`${number ?? "BOQ"}-costing.pdf`} />
       </div>
       <p>
         {s.customer.name} · {s.survey.siteName} · Site code {s.survey.siteCode}{" "}
@@ -29,24 +30,31 @@ export function BoqCosting({
       </p>
       <div className="summary-grid">
         <div className="summary-card">
-          <span>PV capacity</span>
-          <strong>{format(s.engineering.pvKwp, 2)} kWp</strong>
+          <span>{bessOnly ? "Solution family" : "PV capacity"}</span>
+          <strong>{bessOnly ? direct ? "Direct Product Sale" : "BESS Only · UPS with Installation" : `${format(s.engineering.pvKwp,2)} kWp`}</strong>
         </div>
         <div className="summary-card">
           <span>Solution ID</span>
           <strong>{s.engineering.solutionId}</strong>
-          <p>
-            {format(s.engineering.batteryModules)} battery modules ·{" "}
-            {format(s.engineering.bms)} BMS · {format(s.engineering.strings)}{" "}
-            strings
-          </p>
+          {!direct && <p>
+            {format(s.engineering.batteryModules, 0)} battery modules ·{" "}
+            {format(s.engineering.bms, 0)} BMS {!bessOnly && <>· {format(s.engineering.strings,0)} strings</>}
+          </p>}
         </div>
         <div className="summary-card">
-          <span>Budgeted project cost</span>
-          <strong>PKR {format(s.total)}</strong>
-          <p>PKR {format(s.perWatt, 2)} / W</p>
+          <span>{(s as any).costVisibility ? "Project cost excluding BESS" : "Budgeted project cost"}</span>
+          <strong>PKR {format(s.total, 2)}</strong>
+          {!bessOnly && <p>PKR {format(s.perWatt, 2)} / W</p>}
         </div>
       </div>
+      {s.engineering.singlePhaseScope && !bessOnly && (
+        <section className="detail-panel">
+          <h3>Single-phase calculation basis</h3>
+          <p>10mm² single-core AC cable: {s.engineering.singlePhaseScope.cable.fixedTotalMetres} m fixed termination + {s.engineering.singlePhaseScope.cable.loadPanelConductorMetres} m load-panel conductors. Route: {s.engineering.singlePhaseScope.cable.loadPanelRunMetres} m × line and neutral ({s.engineering.singlePhaseScope.cable.loadPanelBasis}).</p>
+          <p>DC protection: {s.engineering.singlePhaseScope.dc.roomBreakers} inverter-room + {s.engineering.singlePhaseScope.dc.rooftopBreakers} rooftop 500 V, 2-pole breakers. VPD inside the AC protection box; no external AC SPD.</p>
+          <p>Provisional costs requiring review: DC breaker PKR 4,950 each; AC box/accessories bundle PKR 5,000; DC enclosure bundle PKR 5,000. Current Rate Master values take precedence. Electrical verification remains pending. Commercial preparation is enabled; this is not an installation clearance.</p>
+        </section>
+      )}
       {s.warnings.length > 0 && (
         <details className="rate-notice">
           <summary>{s.warnings.length} rate statuses require review</summary>
@@ -56,7 +64,7 @@ export function BoqCosting({
         </details>
       )}
       <h3>Project Costing Summary</h3>
-      <table>
+      <div className="table-scroll"><table>
         <thead>
           <tr>
             <th>Item</th>
@@ -68,19 +76,19 @@ export function BoqCosting({
           {s.summary.map((x) => (
             <tr key={x.name}>
               <td>{x.name}</td>
-              <td className="numeric">{format(x.cost)}</td>
-              <td className="numeric">{format(x.perWatt, 2)}</td>
+              <td className="numeric">{format(x.cost, 2)}</td>
+              <td className="numeric">{bessOnly ? "—" : format(x.perWatt, 2)}</td>
             </tr>
           ))}
           <tr>
-            <th>TOTAL PROJECT COST</th>
-            <th className="numeric">{format(s.total)}</th>
-            <th className="numeric">{format(s.perWatt, 2)}</th>
+            <th>{(s as any).costVisibility ? "PROJECT COST EXCLUDING BESS" : "TOTAL PROJECT COST"}</th>
+            <th className="numeric">{format(s.total, 2)}</th>
+            <th className="numeric">{bessOnly ? "—" : format(s.perWatt, 2)}</th>
           </tr>
         </tbody>
-      </table>
-      <h3>EPC Costing Breakup</h3>
-      <table>
+      </table></div>
+      {!direct && <><h3>EPC Costing Breakup</h3>
+      <div className="table-scroll"><table>
         <thead>
           <tr>
             <th>Item</th>
@@ -92,15 +100,16 @@ export function BoqCosting({
           {s.epc.map((x) => (
             <tr key={x.name}>
               <td>{x.name}</td>
-              <td className="numeric">{format(x.cost)}</td>
-              <td className="numeric">{format(x.perWatt, 2)}</td>
+              <td className="numeric">{format(x.cost, 2)}</td>
+              <td className="numeric">{bessOnly ? "—" : format(x.perWatt, 2)}</td>
             </tr>
           ))}
         </tbody>
-      </table>
-      <h3>Project Costing Detailed Breakup</h3>
+      </table></div>
+      </>}
+      <h3>{direct ? "Product Costing Detailed Breakup" : "Project Costing Detailed Breakup"}</h3>
       <div className="table-scroll">
-        <table>
+        <div className="table-scroll"><table>
           <thead>
             <tr>
               {[
@@ -132,15 +141,15 @@ export function BoqCosting({
                 <td className="numeric">
                   {format(l.qty, Number(l.qty) % 1 ? 2 : 0)}
                 </td>
-                <td>{l.unit}</td>
+                <td>{displayUnit(l.unit,l.qty)}</td>
                 <td className="numeric">
-                  {format(l.rate, Number(l.rate) % 1 ? 4 : 0)}
+                  {(l as any).costRestricted ? "Restricted" : format(l.rate, Number(l.rate) % 1 ? 4 : 0)}
                 </td>
-                <td className="numeric">{format(l.total)}</td>
+                <td className="numeric">{(l as any).costRestricted ? "Restricted" : format(l.total, 2)}</td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
       <p>
         Prepared by {s.survey.preparedBy}.{" "}

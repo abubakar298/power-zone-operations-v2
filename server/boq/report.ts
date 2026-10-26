@@ -1,8 +1,14 @@
+import { displayUnit } from "./unit.js";
+import {
+  drawReportLogo,
+  drawReportFooter,
+  reportBottomMargin,
+} from "../reports/branding.js";
 import type { BoqSnapshot } from "./engine.js";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 
-const money = (v: string | number, d = 0) =>
+const money = (v: string | number, d = 0) => v == null ? "Restricted" :
   new Intl.NumberFormat("en-PK", {
     minimumFractionDigits: d,
     maximumFractionDigits: d,
@@ -19,10 +25,10 @@ export function buildCostingPdf(
   number?: string,
   createdAt?: string,
 ) {
-  const pdf = new jsPDF({ unit: "mm", format: "a4" });
+  const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
   const width = pdf.internal.pageSize.getWidth(),
     margin = 14;
-  const title = number || "Costing preview";
+  const title = `${number || "Costing preview"}${(s as any).costVisibility ? " - Excluding BESS costs" : ""}`;
   pdf.setProperties({
     title: `${title} - ${s.survey.siteName}`,
     author: "Power Zone Engineering & Services",
@@ -31,10 +37,11 @@ export function buildCostingPdf(
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(19);
   pdf.setTextColor(57, 50, 83);
-  pdf.text("POWER ZONE", margin, 21);
+  drawReportLogo(pdf);
   pdf.setFontSize(9);
   pdf.setFont("helvetica", "normal");
-  pdf.text("ENGINEERING & SERVICES | INTERNAL PROJECT COSTING", margin, 28);
+  pdf.text("ENGINEERING & SERVICES", 60, 19);
+  pdf.text("INTERNAL PROJECT COSTING", 60, 25);
   pdf.setTextColor(35, 35, 40);
   pdf.setFontSize(13);
   pdf.setFont("helvetica", "bold");
@@ -44,10 +51,15 @@ export function buildCostingPdf(
   const metadata = [
     `Customer: ${s.customer.name}`,
     `Site: ${s.survey.siteName} | Code: ${s.survey.siteCode} | Location: ${s.survey.location}`,
-    `PV: ${money(s.engineering.pvKwp, 3)} kWp | Inverter: ${s.survey.inverter} | Battery: ${s.survey.batteryKwh} kWh`,
+    s.survey.family === "direct-product" ? "Direct Product Sale" : `${s.survey.family === "bess-only" ? "BESS Only (UPS with Installation)" : `PV: ${money(s.engineering.pvKwp,3)} kWp`} | Inverter: ${s.survey.inverter} | Battery: ${s.survey.batteryKwh} kWh`,
+    ...(s.generalAllowances
+      ? [
+          `Source: General quotation without survey | Allowances: ${s.generalAllowances.version}`,
+        ]
+      : []),
     `Prepared by: ${s.survey.preparedBy}${createdAt ? " | Saved: " + new Date(createdAt).toISOString().slice(0, 10) : ""}`,
     number
-      ? "Saved R0 costing. This report uses the preserved snapshot."
+      ? "Saved BOQ costing. This report uses the preserved snapshot."
       : "DRAFT PREVIEW - No BOQ number has been issued.",
   ];
   let y = 47;
@@ -72,7 +84,12 @@ export function buildCostingPdf(
     y += 5;
     autoTable(pdf, {
       startY: y,
-      margin: { left: margin, right: margin, top: 18, bottom: 18 },
+      margin: {
+        left: margin,
+        right: margin,
+        top: 18,
+        bottom: reportBottomMargin,
+      },
       head: [head],
       body,
       theme: "striped",
@@ -123,14 +140,14 @@ export function buildCostingPdf(
     "Project Costing Summary",
     ["Item", "Budgeted Cost (PKR)", "Cost/W"],
     [
-      ...s.summary.map((x) => [x.name, money(x.cost), money(x.perWatt, 2)]),
-      ["TOTAL PROJECT COST", money(s.total), money(s.perWatt, 2)],
+      ...s.summary.map((x) => [x.name, money(x.cost), s.survey.family !== "solar-hybrid" && s.survey.family ? "-" : money(x.perWatt, 2)]),
+      [(s as any).costVisibility ? "PROJECT COST EXCLUDING BESS" : "TOTAL PROJECT COST", money(s.total), s.survey.family !== "solar-hybrid" && s.survey.family ? "-" : money(s.perWatt, 2)],
     ],
   );
-  section(
+  if (s.epc.length) section(
     "EPC Costing Breakup",
     ["Item", "Budgeted Cost (PKR)", "Cost/W"],
-    s.epc.map((x) => [x.name, money(x.cost), money(x.perWatt, 2)]),
+    s.epc.map((x) => [x.name, money(x.cost), s.survey.family !== "solar-hybrid" && s.survey.family ? "-" : money(x.perWatt, 2)]),
   );
   if (s.warnings.length)
     section(
@@ -153,30 +170,19 @@ export function buildCostingPdf(
       "Total Cost (PKR)",
     ],
     s.lines.map((l) => [
-      label(l.description),
+      label(l.itemId ? `${l.itemId}\n${l.description}` : l.description),
       label([l.brand || "-", ...l.brandAlternatives].join("\n")),
       label(l.specification || "-"),
       money(l.qty, Number(l.qty) % 1 ? 2 : 0),
-      label(l.unit),
+      label(displayUnit(l.unit,l.qty)),
       money(l.rate, Number(l.rate) % 1 ? 4 : 0),
       money(l.total),
     ]),
     true,
   );
-  const pages = pdf.getNumberOfPages();
-  for (let page = 1; page <= pages; page++) {
-    pdf.setPage(page);
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(8);
-    pdf.setTextColor(110, 110, 120);
-    pdf.text(
-      label(`${title} | ${s.survey.siteCode} | Internal costing`),
-      margin,
-      287,
-    );
-    pdf.text(`Page ${page} of ${pages}`, width - margin, 287, {
-      align: "right",
-    });
-  }
+  drawReportFooter(
+    pdf,
+    label(`${title} | ${s.survey.siteCode} | Internal costing`),
+  );
   return pdf;
 }

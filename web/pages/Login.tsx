@@ -12,6 +12,11 @@ export function Login({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  // Why the last session ended, e.g. after 30 minutes without activity (set by App on a 401).
+  const [notice] = useState(() => {
+    try { const m = sessionStorage.getItem("pz:signed-out") ?? ""; sessionStorage.removeItem("pz:signed-out"); return m; } catch { return ""; }
+  });
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
@@ -38,6 +43,11 @@ export function Login({
       <span className="eyebrow">YOUR OPERATIONS WORKSPACE</span>
       <h1 id="login-title">Welcome back.</h1>
       <p className="intro">Sign in to continue to Power Zone.</p>
+      {notice && (
+        <p className="success" role="status">
+          {notice}
+        </p>
+      )}
       {setupComplete && (
         <p className="success" role="status">
           Administrator created. You can now sign in.
@@ -59,11 +69,21 @@ export function Login({
         <input
           id="password"
           name="password"
-          type="password"
+          type={showPassword ? "text" : "password"}
           autoComplete="current-password"
           maxLength={128}
           required
         />
+        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input
+            type="checkbox"
+            checked={showPassword}
+            onChange={(event) => setShowPassword(event.target.checked)}
+            aria-controls="password"
+            style={{ width: "auto", margin: 0 }}
+          />
+          Show password
+        </label>
         {error && (
           <p className="form-error" role="alert">
             {error}

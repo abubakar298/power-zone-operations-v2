@@ -1,0 +1,149 @@
+import { useEffect, useMemo, useState } from "react";
+import { api, ApiError } from "../api.js";
+import { StatusBadge } from "../ui/StatusBadge.js";
+import "./advance-boq-search.css";
+
+interface Row {
+  reference: string; recordId: string; customer: string; site: string; siteCode: string; region: string;
+  stage: string; stageKey: string; received: string; expected: string | null; items: number; status: string; final: boolean;
+}
+const OPERATIONS_STAGES: Record<string, string> = {
+  ipo_received: "IPO received", material_planning: "Material planning", procurement: "Procurement", delivery_scheduled: "Delivery scheduled",
+  dispatched: "Dispatched", installation: "Installation", commissioning: "Commissioning", documents: "Documents", closed: "Closed",
+};
+const WORKFLOW_STAGES: Record<string, string> = {
+  request_review: "Survey request", survey_requested: "Survey requested", survey_scheduled: "Survey scheduled", report_received: "Report received",
+  technical_review: "Technical review", design_handed_off: "Design review", management_review: "Management review", commercial_revision: "Revisions",
+  approved_dispatch: "Ready to send", customer_tracking: "Customer follow-up", advance_pending: "Advance planning", po_receipt: "PO receipt",
+  order_exception: "Order exception", issued: "Issued", deferred: "Deferred", declined: "Declined",
+};
+const stageLabel = (operations: string | null, workflow: string | null) =>
+  operations ? `Operations: ${OPERATIONS_STAGES[operations] ?? operations}` : WORKFLOW_STAGES[workflow ?? ""] ?? (workflow ?? "").replace(/_/g, " ") ?? "—";
+const day = (v: string | null | undefined) => (v ? String(v).slice(0, 10) : "");
+const fmtDay = (v: string | null | undefined) => (v ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(v.length === 10 ? `${v}T00:00:00` : v)) : "—");
+
+/**
+ * Every advance (heads-up) BOQ received, with stage tabs and filters by customer, site, region and received date.
+ */
+export function AdvanceBoqSearch({ onOpen, regionScope = "" }: { onOpen: (reference: string) => void; regionScope?: string }) {
+  const [rows, setRows] = useState<Row[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [customer, setCustomer] = useState("");
+  const [site, setSite] = useState("");
+  const [region, setRegion] = useState("");
+  const [stage, setStage] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    api<{ requests: any[] }>("/project-workflow/advance-inbox")
+      .then((result) => {
+        if (!active) return;
+        setRows(result.requests.map((r: any) => ({
+          reference: r.snapshot?.headsupGroup ?? r.number,
+          recordId: r.record_id,
+          customer: r.customer_name ?? "—",
+          site: r.site_name ?? r.snapshot?.site ?? "—",
+          siteCode: r.site_code ?? r.snapshot?.siteCode ?? "",
+          region: r.region || "—",
+          stageKey: r.operations_stage ? `ops:${r.operations_stage}` : `wf:${r.workflow_stage ?? ""}`,
+          stage: stageLabel(r.operations_stage ?? null, r.workflow_stage ?? null),
+          received: r.updated_at,
+          expected: r.snapshot?.expectedDate ?? null,
+          items: Array.isArray(r.snapshot?.items) ? r.snapshot.items.length : 0,
+          status: r.mode,
+          final: Boolean(r.confirmed_issuance_id),
+        })));
+        setError("");
+      })
+      .catch((e) => { if (active) setError(e instanceof ApiError ? e.message : "Unable to load advance BOQs."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const pool = useMemo(() => (regionScope ? rows.filter((r) => r.region === regionScope) : rows), [rows, regionScope]);
+  const unique = (pick: (r: Row) => string) => [...new Set(pool.map(pick).filter((v) => v && v !== "—"))].sort((a, b) => a.localeCompare(b));
+  const customers = useMemo(() => unique((r) => r.customer), [pool]);
+  const sites = useMemo(() => unique((r) => r.site), [pool]);
+  const regions = useMemo(() => unique((r) => r.region), [pool]);
+  const stages = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of pool) seen.set(r.stageKey, r.stage);
+    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [pool]);
+
+  const visible = useMemo(() => {
+    return pool.filter((r) =>
+      (!customer || r.customer === customer) &&
+      (!site || r.site === site) &&
+      (!region || r.region === region) &&
+      (!stage || r.stageKey === stage) &&
+      (!from || day(r.received) >= from) &&
+      (!to || day(r.received) <= to));
+  }, [pool, customer, site, region, stage, from, to]);
+  const stageCounts = useMemo(() => { const m = new Map<string, number>(); for (const r of pool) m.set(r.stageKey, (m.get(r.stageKey) ?? 0) + 1); return m; }, [pool]);
+  const clear = () => { setCustomer(""); setSite(""); setRegion(""); setStage(""); setFrom(""); setTo(""); };
+  const filtered = Boolean(customer || site || region || stage || from || to);
+
+  return (
+    <section className="pz-panel pz-stack" aria-label="Advance BOQ search">
+      <div className="abq-head">
+        <h2>Advance BOQs</h2>
+        <p className="pz-caption">Heads-up material forecasts received from Coordination, before and after the IPO.</p>
+      </div>
+      <div className="abq-tabs" role="tablist" aria-label="Stage">
+        <button type="button" role="tab" className="abq-tab" aria-selected={!stage} onClick={() => setStage("")}>All <span className="abq-count">{pool.length}</span></button>
+        {stages.map(([key, label]) => (
+          <button type="button" role="tab" key={key} className="abq-tab" aria-selected={stage === key} onClick={() => setStage(stage === key ? "" : key)}>
+            {label} <span className="abq-count">{stageCounts.get(key) ?? 0}</span>
+          </button>
+        ))}
+      </div>
+      <div className="abq-filters">
+        <select aria-label="Customer" value={customer} onChange={(e) => setCustomer(e.target.value)}>
+          <option value="">All customers</option>{customers.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select aria-label="Site" value={site} onChange={(e) => setSite(e.target.value)}>
+          <option value="">All sites</option>{sites.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        {!regionScope && <select aria-label="Region" value={region} onChange={(e) => setRegion(e.target.value)}>
+          <option value="">All regions</option>{regions.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>}
+        <span className="abq-date">
+          <span>Received</span>
+          <input type="date" aria-label="Received from" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <span aria-hidden="true">–</span>
+          <input type="date" aria-label="Received to" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+        </span>
+        <span className="abq-summary">{loading ? "Loading…" : `${visible.length} of ${pool.length} advance BOQ${pool.length === 1 ? "" : "s"}`}</span>
+        {filtered && <button type="button" className="abq-clear" onClick={clear}>Clear</button>}
+      </div>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {!loading && !error && (
+        <div className="pz-table-scroll">
+          <table className="pz-table abq-table">
+            <thead><tr><th>Site</th><th>Customer</th><th>Region</th><th>Stage</th><th>Received · PO expected</th><th>Items</th><th>Status</th></tr></thead>
+            <tbody>
+              {visible.length === 0 ? (
+                <tr><td colSpan={7}>{pool.length === 0 ? "No advance BOQs received yet." : "No advance BOQs match these filters."}</td></tr>
+              ) : visible.map((r) => (
+                <tr key={`${r.reference}-${r.recordId}`} data-clickable tabIndex={0} onClick={() => onOpen(r.reference)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(r.reference); }}>
+                  <td><strong>{r.site}</strong>{r.siteCode ? ` (${r.siteCode})` : ""}<br /><small>{r.reference}</small></td>
+                  <td>{r.customer}</td>
+                  <td>{r.region}</td>
+                  <td>{r.stage}</td>
+                  <td className="abq-nowrap">{fmtDay(r.received)}<br /><small>PO {fmtDay(r.expected)}</small></td>
+                  <td>{r.items}</td>
+                  <td><StatusBadge tone={r.final ? "success" : "pending"}>{r.final ? "Final received" : r.status}</StatusBadge></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="pz-caption">Click a row to open its heads-up.</p>
+        </div>
+      )}
+    </section>
+  );
+}

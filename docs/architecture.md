@@ -40,3 +40,5 @@ The owner supplied a dashboard reference during implementation. The shell adopts
 Account lifecycle and immutable survey/BOQ R0 persistence now extend this foundation through separate service/repository/HTTP modules. See milestone-accounts.md and milestone-3-survey-boq.md for current behavior and validation.
 
 Costing review and revision workflows are documented in milestone-4-boq-review.md. PostgreSQL append-only review submissions/decisions and BOQ revisions preserve the exact approved costing; current master changes do not rewrite it.
+
+Commercial pricing and customer quotation snapshots are separate append-only tables referencing the exact approved BOQ revision. The customer snapshot deliberately contains no internal cost, rate or markup fields; quotation descriptions originate from the Quotation Print reference rather than BOQ technical specifications. See milestone-5-commercial-quotations.md.
