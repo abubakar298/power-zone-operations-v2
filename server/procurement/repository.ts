@@ -147,7 +147,7 @@ export class ProcurementRepository {
       [direct],
     )).rows.map((r) => ({
       id: r.id as string, number: r.number as string, title: r.title as string, status: r.status as RequestStatus, statusLabel: STATUS_LABELS[r.status as RequestStatus],
-      lines: r.line_count as number, total: fixed(num(r.total)), vendors: (r.vendors ?? "") as string, createdBy: r.created_by_name as string,
+      lines: r.line_count as number, total: fixed(num(r.total)), selfApproved: r.self_approved === true, vendors: (r.vendors ?? "") as string, createdBy: r.created_by_name as string,
       createdAt: r.created_at as string, updatedAt: r.updated_at as string, submittedAt: r.submitted_at as string | null, decidedAt: r.decided_at as string | null,
       orderedAt: r.ordered_at as string | null, receivedAt: r.received_at as string | null, neededBy: r.needed_by ? toDay(r.needed_by) : null,
     }));
@@ -204,13 +204,14 @@ export class ProcurementRepository {
       createdBy: r.created_by_name as string, createdAt: r.created_at as string, submittedAt: r.submitted_at as string | null,
       decidedBy: (r.decided_by_name ?? null) as string | null, decidedAt: r.decided_at as string | null, decisionNote: r.decision_note as string,
       orderedBy: (r.ordered_by_name ?? null) as string | null, orderedAt: r.ordered_at as string | null, orderReference: r.order_reference as string,
-      receivedBy: (r.received_by_name ?? null) as string | null, receivedAt: r.received_at as string | null,
+      receivedBy: (r.received_by_name ?? null) as string | null, receivedAt: r.received_at as string | null, selfApproved: r.self_approved === true,
       lines, events,
       totals: { atChosen: fixed(atChosen), lastComparable: fixed(lastComparable), chosenComparable: fixed(chosenComparable), saving: fixed(lastComparable - chosenComparable), firstPurchases },
       can: {
         edit: me.buyer && status === "draft",
         submit: me.buyer && status === "draft",
         decide: me.approver && status === "pending_approval",
+        selfApprove: me.buyer && (status === "pending_approval" || (status === "draft" && lines.length > 0 && lines.every((l) => l.chosen))),
         order: me.buyer && status === "approved",
         receive: me.role === "Inventory" && status === "ordered",
         cancel: me.buyer && ["draft", "pending_approval", "approved"].includes(status),
@@ -395,15 +396,62 @@ export class ProcurementRepository {
       if (!lines.length) throw new HttpError(422, "Add at least one item before sending the request.");
       const missing = lines.filter((l) => !l.chosen_quote_id).map((l) => l.item_key);
       if (missing.length) throw new HttpError(422, `Add a quotation for: ${missing.join(", ")}.`);
-      // Freeze the last buying rate the approver compares against.
-      const last = await lastRates(c, lines.map((l) => l.item_key));
-      for (const l of lines) {
-        const r = last(l.item_key);
-        await c.query("UPDATE purchase_request_lines SET last_rate=$2, last_rate_unit=$3, last_rate_source=$4 WHERE id=$1", [l.id, r?.rate ?? null, r?.unit ?? "", r?.source ?? ""]);
-      }
+      await this.freezeRates(c, lines);
       await c.query("UPDATE purchase_requests SET status='pending_approval', submitted_at=now(), updated_at=now() WHERE id=$1", [id]);
       await this.event(c, id, actor, "submitted", "draft", "pending_approval");
       return this.getRequest(actor, id, c);
+    });
+  }
+  /** Freeze the last buying rate the approver compares against. */
+  private async freezeRates(c: PoolClient, lines: { id: string; item_key: string }[]) {
+    const last = await lastRates(c, lines.map((l) => l.item_key));
+    for (const l of lines) {
+      const r = last(l.item_key);
+      await c.query("UPDATE purchase_request_lines SET last_rate=$2, last_rate_unit=$3, last_rate_source=$4 WHERE id=$1", [l.id, r?.rate ?? null, r?.unit ?? "", r?.source ?? ""]);
+    }
+  }
+
+  /**
+   * The buyer approves a request himself (Moaz, 26 Oct 2026), from a draft or while it waits for Abu Bakar. It is
+   * marked self-approved and kept in the history, and every approver and everyone Admin marks "notify" is told.
+   */
+  async selfApprove(actor: string, id: string, input: { note: string }) {
+    return transaction(this.pool, async (c) => {
+      const me = await this.buyer(actor, c);
+      const status = await this.lock(c, id);
+      if (status !== "draft" && status !== "pending_approval") throw new HttpError(422, "Only a draft or a request waiting for approval can be approved.");
+      if (status === "draft") {
+        const lines = (await c.query("SELECT id, item_key, chosen_quote_id FROM purchase_request_lines WHERE request_id=$1", [id])).rows;
+        if (!lines.length) throw new HttpError(422, "Add at least one item before approving the request.");
+        const missing = lines.filter((l) => !l.chosen_quote_id).map((l) => l.item_key);
+        if (missing.length) throw new HttpError(422, `Add a quotation for: ${missing.join(", ")}.`);
+        await this.freezeRates(c, lines);
+        await c.query("UPDATE purchase_requests SET submitted_at=now() WHERE id=$1", [id]);
+      }
+      await c.query(
+        "UPDATE purchase_requests SET status='approved', self_approved=true, decided_by=$2, decided_at=now(), decision_note=$3, updated_at=now() WHERE id=$1",
+        [id, actor, input.note],
+      );
+      await this.event(c, id, actor, "self_approved", status, "approved", input.note);
+      const r = await this.getRequest(actor, id, c);
+      const reference = `${r.number} · ${r.title}: PKR ${Number(r.totals.atChosen).toLocaleString("en-US", { maximumFractionDigits: 0 })} for ${r.lines.length} item${r.lines.length === 1 ? "" : "s"}, self-approved by ${me.displayName}${input.note ? ` · ${input.note}` : ""}`.slice(0, 500);
+      const people = (await c.query(
+        "SELECT DISTINCT a.user_id FROM procurement_access a JOIN users u ON u.id=a.user_id AND u.active WHERE a.capability IN ('approver','notify') AND a.user_id<>$1",
+        [actor],
+      )).rows;
+      for (const p of people) {
+        const n = (await c.query(
+          "INSERT INTO procurement_notices(kind,user_id,request_id,reference) VALUES('self_approved',$1,$2,$3) ON CONFLICT DO NOTHING RETURNING id, created_at",
+          [p.user_id, id, reference],
+        )).rows[0];
+        if (n)
+          await c.query(
+            `INSERT INTO notifications(id,user_id,source_key,entity_key,kind,title,reference,actor_id,target,actionable,created_at)
+             VALUES(gen_random_uuid(),$1,$2,$3,'Purchase self-approved','Purchase self-approved by the buyer',$4,NULL,$5,false,$6) ON CONFLICT DO NOTHING`,
+            [p.user_id, `procurement-notice:${n.id}`, `purchase-request:${id}`, reference, JSON.stringify({ target: "purchase-approvals", requestId: id }), n.created_at],
+          );
+      }
+      return r;
     });
   }
 

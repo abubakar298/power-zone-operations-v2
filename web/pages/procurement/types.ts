@@ -4,6 +4,8 @@ export interface ReceivedPo {
   issuanceId: string; ipoNumber: string; customer: string | null; siteName: string | null; siteCode: string | null; region: string | null;
   poDate: string | null; stage: string | null; deliveredOn: string | null; expectedDelivery: string | null;
   items: number; pending: boolean; shortItems: string[]; material: "delivered" | "short" | "ready";
+  poNumber: string | null; poDeliveryDate: string | null; deliveryAddress: string | null;
+  lines: { itemKey: string; name: string; unit: string; quantity: string; short: boolean; misc: boolean }[];
 }
 export interface UpcomingPo {
   recordId: string; reference: string; customer: string | null; siteName: string | null; siteCode: string | null; region: string | null;
@@ -17,6 +19,7 @@ export type RequestStatus = "draft" | "pending_approval" | "approved" | "rejecte
 export interface RequestRow {
   id: string; number: string; title: string; status: RequestStatus; statusLabel: string; lines: number; total: string; vendors: string; createdBy: string;
   createdAt: string; updatedAt: string; submittedAt: string | null; decidedAt: string | null; orderedAt: string | null; receivedAt: string | null; neededBy: string | null;
+  selfApproved: boolean;
 }
 export interface Quote { id: string; vendor: string; rate: string; note: string; createdAt: string }
 export interface RequestLine {
@@ -29,7 +32,8 @@ export interface RequestDetail {
   orderedBy: string | null; orderedAt: string | null; orderReference: string; receivedBy: string | null; receivedAt: string | null;
   lines: RequestLine[]; events: { id: string; kind: string; fromStatus: string | null; toStatus: string | null; note: string; actor: string; at: string }[];
   totals: { atChosen: string; lastComparable: string; chosenComparable: string; saving: string; firstPurchases: number };
-  can: { edit: boolean; submit: boolean; decide: boolean; order: boolean; receive: boolean; cancel: boolean };
+  can: { edit: boolean; submit: boolean; decide: boolean; selfApprove: boolean; order: boolean; receive: boolean; cancel: boolean };
+  selfApproved: boolean;
 }
 export interface Overview { me: Me; inventory: InventoryRow[]; receivedPOs: ReceivedPo[]; upcoming: UpcomingPo[]; requests: RequestRow[] }
 

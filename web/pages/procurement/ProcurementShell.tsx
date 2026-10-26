@@ -299,21 +299,47 @@ function Home({ session, data, region, onGo, onOpenRequest }: { session: Session
 }
 
 function ReceivedTable({ rows }: { rows: Overview["receivedPOs"] }) {
+  // Each PO opens to show its details and every item that has to go to the site (Moaz, 26 Oct 2026).
+  const [open, setOpen] = useState<string | null>(null);
   return (
     <div className="pz-table-scroll">
       <table className="ops-table">
         <thead><tr><th>Site</th><th>Customer</th><th>Region</th><th>PO date</th><th className="num">Items</th><th>Delivery</th><th>Material</th></tr></thead>
         <tbody>
-          {rows.length === 0 ? <tr><td colSpan={7} className="ops-empty">No POs received.</td></tr> : rows.map((p) => (
+          {rows.length === 0 ? <tr><td colSpan={7} className="ops-empty">No POs received.</td></tr> : rows.flatMap((p) => [
             <tr key={p.issuanceId}>
-              <td className="site"><b>{siteLabel(p.siteName, p.siteCode)}</b><small>IPO {p.ipoNumber}</small></td>
+              <td className="site"><b>{siteLabel(p.siteName, p.siteCode)}</b><small>IPO {p.ipoNumber}{p.poNumber ? ` · PO ${p.poNumber}` : ""} · <button type="button" className="sw-link" aria-expanded={open === p.issuanceId} onClick={() => setOpen(open === p.issuanceId ? null : p.issuanceId)}>{open === p.issuanceId ? "Hide items" : `Items (${p.lines.length})`}</button></small></td>
               <td>{p.customer ?? "—"}</td><td>{p.region ?? "—"}</td><td className="date">{fmtDay(p.poDate)}</td><td className="num">{p.items}</td>
               <td className="date">{p.deliveredOn ? `delivered ${fmtShort(p.deliveredOn)}` : p.expectedDelivery ? `expected ${fmtShort(p.expectedDelivery)}` : "not planned"}</td>
               <td>{p.material === "delivered" ? <span className="sw-chip sw-chip--ok">Delivered</span>
                 : p.material === "short" ? <span className="sw-chip sw-chip--warning" title={p.shortItems.join(", ")}>Short: {p.shortItems.slice(0, 2).join(", ")}{p.shortItems.length > 2 ? ` +${p.shortItems.length - 2}` : ""}</span>
                 : <span className="sw-chip">Ready to deliver</span>}</td>
-            </tr>
-          ))}
+            </tr>,
+            ...(open === p.issuanceId ? [
+              <tr key={`${p.issuanceId}-items`} className="sw-open">
+                <td colSpan={7}>
+                  <div className="pr-po">
+                    <div className="ops-kv">
+                      <div><span>Customer PO</span><b>{p.poNumber ?? "not recorded"}</b></div>
+                      <div><span>PO date</span><b>{fmtDay(p.poDate)}</b></div>
+                      <div><span>Delivery wanted</span><b>{p.poDeliveryDate ? fmtDay(p.poDeliveryDate) : "not given"}</b></div>
+                      <div><span>Deliver to</span><b>{p.deliveryAddress ?? "not given"}</b></div>
+                    </div>
+                    <table className="ops-table">
+                      <thead><tr><th>Item</th><th className="num">Quantity</th><th>Material</th></tr></thead>
+                      <tbody>{p.lines.length === 0 ? <tr><td colSpan={3} className="ops-empty">No material lines on this PO.</td></tr> : p.lines.map((l) => (
+                        <tr key={l.itemKey}>
+                          <td className="site"><b>{l.name}</b><small>{l.itemKey}{l.misc ? " · misc item" : ""}</small></td>
+                          <td className="num">{qty(l.quantity)} {l.unit}</td>
+                          <td>{!p.pending ? <span className="sw-chip sw-chip--ok">Delivered</span> : l.short ? <span className="sw-chip sw-chip--warning">Short</span> : <span className="sw-chip">In stock</span>}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </td>
+              </tr>,
+            ] : []),
+          ])}
         </tbody>
       </table>
     </div>

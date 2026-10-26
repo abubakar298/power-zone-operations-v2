@@ -59,6 +59,12 @@ export function procurementHttp(repo: ProcurementRepository, requireSession: Req
     if (input.decision === "approve") requireRecentPassword(req);
     res.json(await repo.decide(actor(req), id(req.params.id), input));
   });
+  // The buyer approves a request himself; it needs the password again and every approver and "notify" person is told.
+  r.post("/requests/:id/self-approve", async (req, res) => {
+    const input = parse(noteSchema, req.body);
+    requireRecentPassword(req);
+    res.json(await repo.selfApprove(actor(req), id(req.params.id), input));
+  });
   r.post("/requests/:id/ordered", async (req, res) => res.json(await repo.markOrdered(actor(req), id(req.params.id), parse(orderedSchema, req.body))));
   r.post("/requests/:id/received", async (req, res) => res.json(await repo.markReceived(actor(req), id(req.params.id), parse(receiveSchema, req.body))));
   r.post("/requests/:id/cancel", async (req, res) => res.json(await repo.cancel(actor(req), id(req.params.id), parse(noteSchema, req.body))));

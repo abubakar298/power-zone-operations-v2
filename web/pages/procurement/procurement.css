@@ -98,3 +98,8 @@
 /* Password re-entry before approving (24 Oct 2026). */
 .pr-password{display:grid;gap:4px;max-width:22rem}
 .pr-password input{height:38px}
+/* Buyer self-approval (26 Oct 2026). */
+.pr-self{display:grid;gap:8px;margin-top:12px;padding:12px;border:1px solid var(--ops-warn-line,#f3d19c);border-radius:12px;background:var(--ops-warn-soft,#fff8eb)}
+/* PO details for the buyer (26 Oct 2026). */
+.pr-po{display:grid;gap:10px;padding:6px 0}
+.pr-po .ops-kv{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}

@@ -21,7 +21,7 @@ const STEPS: { key: RequestStatus | "quotes"; label: string }[] = [
 ];
 const EVENT_TEXT: Record<string, string> = {
   created: "Created", submitted: "Sent to Abu Bakar", approved: "Approved", sent_back: "Sent back for changes", rejected: "Rejected",
-  rfq_sent: "Quotations requested", ordered: "Marked ordered", part_received: "Part received into Store", received: "Received into Store", cancelled: "Cancelled",
+  rfq_sent: "Quotations requested", self_approved: "Self-approved by the buyer", ordered: "Marked ordered", part_received: "Part received into Store", received: "Received into Store", cancelled: "Cancelled",
 };
 
 /**
@@ -89,7 +89,7 @@ export function PurchaseRequests({ session, mode, openId, onOpened, onChanged }:
                   <td className="num">{r.lines}</td>
                   <td className="num">{Number(r.total) ? pkr(r.total) : "—"}</td>
                   <td className="pr-muted">{r.vendors || "no quotation yet"}</td>
-                  <td><span className={STATUS_CHIP[r.status]}>{r.statusLabel}</span></td>
+                  <td><span className={STATUS_CHIP[r.status]}>{r.statusLabel}</span>{r.selfApproved && <> <span className="sw-chip sw-chip--warning">Self-approved</span></>}</td>
                   <td>{r.createdBy}</td>
                   <td className="date">{fmtAt(r.updatedAt)}</td>
                 </tr>
@@ -175,7 +175,7 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
           <h2>{d.number} · {d.title}</h2>
           <p>Raised by {d.createdBy} · {fmtDay(d.createdAt)}{d.neededBy ? ` · needed by ${fmtDay(d.neededBy)}` : ""}{d.submittedAt ? ` · sent to Abu Bakar ${fmtAt(d.submittedAt)}` : ""}</p>
         </div>
-        <span className={STATUS_CHIP[d.status]}>{d.statusLabel}</span>
+        <span className={STATUS_CHIP[d.status]}>{d.statusLabel}</span>{d.selfApproved && <> <span className="sw-chip sw-chip--warning">Self-approved</span></>}
       </div>
       {error && <p className="ops-feedback" role="alert">{error}</p>}
       {notice && !error && <p className="pr-notice" role="status">{notice}</p>}
@@ -315,9 +315,23 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
             </>
           )}
           {d.status === "pending_approval" && !d.can.decide && <p className="pr-muted">Waiting for Abu Bakar. He can approve, send it back with a note, or reject it.</p>}
+          {d.can.selfApprove && (d.status === "pending_approval" || hasQuotes) && (
+            // The buyer may approve himself (Moaz, 26 Oct 2026); Abu Bakar and Moaz are told every time.
+            <div className="pr-self">
+              <b>Approve it yourself</b>
+              <p className="pr-muted">Use this when it cannot wait for Abu Bakar. It is marked self-approved, and Abu Bakar and Moaz are told straight away.</p>
+              <textarea className="pr-note" placeholder="Why it is approved now (optional)" value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} />
+              <label className="pr-muted pr-password">Your password (asked again after 5 minutes)
+                <input type="password" autoComplete="current-password" maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} />
+              </label>
+              <div className="pr-actions">
+                <Button variant="warning" loading={busy} onClick={async () => { if ((await confirmPassword()) && (await post("/self-approve", { note }, "Approved by you. Abu Bakar and Moaz have been told."))) setNote(""); }}>Approve it myself</Button>
+              </div>
+            </div>
+          )}
           {d.can.order && (
             <>
-              <p className="pr-muted">Approved by {d.decidedBy} {fmtAt(d.decidedAt)}. Place the orders with the chosen vendors, then record the vendor order number(s).</p>
+              <p className="pr-muted">{d.selfApproved ? "Self-approved" : "Approved"} by {d.decidedBy} {fmtAt(d.decidedAt)}. Place the orders with the chosen vendors, then record the vendor order number(s).</p>
               <Field id="pr-order" label="Vendor order number(s)"><input id="pr-order" value={orderRef} maxLength={500} onChange={(e) => setOrderRef(e.target.value)} placeholder="e.g. Chint SO-4471, Powerline 2210" /></Field>
               <div className="pr-actions">
                 <Button variant="primary" loading={busy} disabled={!orderRef.trim()} onClick={async () => { if (await post("/ordered", { orderReference: orderRef.trim() }, "Marked ordered.")) setOrderRef(""); }}>Mark ordered</Button>

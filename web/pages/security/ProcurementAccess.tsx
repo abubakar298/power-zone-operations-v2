@@ -6,16 +6,17 @@ import "../procurement/procurement.css";
 import { fmtAt } from "../procurement/types.js";
 
 interface Access {
-  grants: { capability: "buyer" | "approver"; reason: string; since: string; email: string; name: string; role: string; active: boolean }[];
+  grants: { capability: "buyer" | "approver" | "notify"; reason: string; since: string; email: string; name: string; role: string; active: boolean }[];
   events: { capability: string; action: string; reason: string; ip: string; device: string; at: string; email: string; name: string; actor: string }[];
   people: { email: string; name: string; role: string }[];
 }
-const LABEL = { buyer: "Buyer (buys and asks for quotations)", approver: "Approver (approves purchase requests)" } as const;
+const LABEL = { buyer: "Buyer (buys and asks for quotations)", approver: "Approver (approves purchase requests)", notify: "Told when the buyer approves himself" } as const;
+const SHORT = { buyer: "Buyer", approver: "Approver", notify: "Told about self-approvals" } as const;
 
 /** Admin grants or removes Procurement buyer and approver by exact email; every change is kept (Moaz, 24 Oct 2026). */
 export function ProcurementAccess({ session }: { session: Session }) {
   const [data, setData] = useState<Access | null>(null);
-  const [form, setForm] = useState({ email: "", capability: "buyer" as "buyer" | "approver", reason: "" });
+  const [form, setForm] = useState({ email: "", capability: "buyer" as "buyer" | "approver" | "notify", reason: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -24,7 +25,7 @@ export function ProcurementAccess({ session }: { session: Session }) {
     catch (e) { setError(e instanceof ApiError ? e.message : "Procurement access could not be loaded."); }
   }, []);
   useEffect(() => { void load(); }, [load]);
-  const change = async (body: { email: string; capability: "buyer" | "approver"; action: "grant" | "remove"; reason: string }, done: string) => {
+  const change = async (body: { email: string; capability: "buyer" | "approver" | "notify"; action: "grant" | "remove"; reason: string }, done: string) => {
     setBusy(true);
     try { setData(await api<Access>("/procurement/access/change", { body, csrf: session.csrfToken })); setNotice(done); setError(""); return true; }
     catch (e) { setError(e instanceof ApiError ? e.message : "Not saved."); setNotice(""); return false; }
@@ -37,7 +38,7 @@ export function ProcurementAccess({ session }: { session: Session }) {
         {error && <p className="ops-feedback" role="alert">{error}</p>}
         {notice && !error && <p className="pr-notice" role="status">{notice}</p>}
         <section className="ops-card">
-          <div className="ops-tc-h"><h3>Who has Procurement access</h3><span className="pr-muted">the buyer is an Operations login; the approver is Admin or Management</span></div>
+          <div className="ops-tc-h"><h3>Who has Procurement access</h3><span className="pr-muted">the buyer is an Operations login; the approver is Admin or Management; anyone can be told about self-approvals</span></div>
           <div className="pz-table-scroll">
             <table className="ops-table">
               <thead><tr><th>Person</th><th>Access</th><th>Since</th><th>Reason</th><th></th></tr></thead>
@@ -45,7 +46,7 @@ export function ProcurementAccess({ session }: { session: Session }) {
                 {!data ? <tr><td colSpan={5} className="ops-empty">Loading…</td></tr> : data.grants.length === 0 ? <tr><td colSpan={5} className="ops-empty">Nobody has Procurement access.</td></tr> : data.grants.map((g) => (
                   <tr key={`${g.email}-${g.capability}`}>
                     <td className="site"><b>{g.name}</b><small>{g.email} · {g.role}{g.active ? "" : " · login switched off"}</small></td>
-                    <td>{g.capability === "buyer" ? "Buyer" : "Approver"}</td>
+                    <td>{SHORT[g.capability]}</td>
                     <td className="date">{fmtAt(g.since)}</td>
                     <td>{g.reason}</td>
                     <td><button type="button" className="sw-link" disabled={busy} onClick={() => {
@@ -62,8 +63,8 @@ export function ProcurementAccess({ session }: { session: Session }) {
             <datalist id="pa-people">{data?.people.map((p) => <option key={p.email} value={p.email}>{p.name} · {p.role}</option>)}</datalist>
             <div className="pr-addrow">
               <input aria-label="Exact email" list="pa-people" placeholder="Exact email of the login" value={form.email} maxLength={254} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-              <select aria-label="Access" value={form.capability} onChange={(e) => setForm({ ...form, capability: e.target.value as "buyer" | "approver" })}>
-                <option value="buyer">{LABEL.buyer}</option><option value="approver">{LABEL.approver}</option>
+              <select aria-label="Access" value={form.capability} onChange={(e) => setForm({ ...form, capability: e.target.value as "buyer" | "approver" | "notify" })}>
+                <option value="buyer">{LABEL.buyer}</option><option value="approver">{LABEL.approver}</option><option value="notify">{LABEL.notify}</option>
               </select>
             </div>
             <input aria-label="Reason" placeholder="Reason, e.g. new buyer from 1 November" value={form.reason} maxLength={500} onChange={(e) => setForm({ ...form, reason: e.target.value })} />

@@ -36,6 +36,9 @@ export interface ReceivedPo {
   issuanceId: string; ipoNumber: string; customer: string | null; siteName: string | null; siteCode: string | null; region: string | null;
   poDate: string | null; stage: string | null; deliveredOn: string | null; expectedDelivery: string | null;
   items: number; pending: boolean; shortItems: string[]; material: "delivered" | "short" | "ready";
+  /** PO details and every item that has to go to the site, for the buyer (Moaz, 26 Oct 2026). No prices. */
+  poNumber: string | null; poDeliveryDate: string | null; deliveryAddress: string | null;
+  lines: { itemKey: string; name: string; unit: string; quantity: string; short: boolean; misc: boolean }[];
 }
 export interface UpcomingPo {
   recordId: string; reference: string; customer: string | null; siteName: string | null; siteCode: string | null; region: string | null;
@@ -91,6 +94,8 @@ export async function computeSupply(pool: Pool, c: Db) {
   const pos = (await c.query(
     `SELECT o.id AS issuance_id, i.number AS ipo_number, i.snapshot->'customer'->>'name' AS customer, i.snapshot->>'siteName' AS site_name,
       i.snapshot->>'siteCode' AS site_code, i.snapshot->'input'->>'orderDate' AS po_date, s.region, w.stage,
+      NULLIF(i.snapshot->'input'->>'poNumber','') AS po_number, NULLIF(i.snapshot->'input'->>'deliveryDate','') AS po_delivery_date,
+      NULLIF(i.snapshot->'input'->>'deliveryAddress','') AS delivery_address,
       to_char(w.delivered_on,'YYYY-MM-DD') AS delivered_on, to_char(w.expected_delivery,'YYYY-MM-DD') AS expected_delivery
      FROM operations_boq_issuances o JOIN internal_purchase_orders i ON i.id=o.ipo_id
      LEFT JOIN site_workflow w ON w.issuance_id=o.id LEFT JOIN sites s ON s.id=w.site_id
@@ -208,15 +213,24 @@ export async function computeSupply(pool: Pool, c: Db) {
     const mine = linesBy.get(p.issuance_id) ?? [];
     const isPending = pending.has(p.issuance_id);
     const shortItems: string[] = [];
-    if (isPending) for (const l of mine) {
-      const left = avail.get(l.item_key) ?? 0;
-      if (left + 1e-9 < num(l.qty)) shortItems.push(master.get(l.item_key)?.name ?? l.item_key);
-      avail.set(l.item_key, left - num(l.qty));
+    const poLines: ReceivedPo["lines"] = [];
+    for (const l of mine) {
+      const name = master.get(l.item_key)?.name ?? l.item_key;
+      let short = false;
+      if (isPending) {
+        const left = avail.get(l.item_key) ?? 0;
+        short = left + 1e-9 < num(l.qty);
+        if (short) shortItems.push(name);
+        avail.set(l.item_key, left - num(l.qty));
+      }
+      poLines.push({ itemKey: l.item_key, name, unit: String(l.unit ?? ""), quantity: fixed(num(l.qty)), short, misc: isMiscItem(l.item_key) });
     }
     return {
       issuanceId: p.issuance_id, ipoNumber: p.ipo_number, customer: p.customer ?? null, siteName: p.site_name ?? null, siteCode: p.site_code ?? null,
       region: p.region || null, poDate: p.po_date ?? null, stage: p.stage ?? null, deliveredOn: p.delivered_on, expectedDelivery: p.expected_delivery,
       items: mine.length, pending: isPending, shortItems, material: !isPending ? "delivered" : shortItems.length ? "short" : "ready",
+      poNumber: p.po_number ?? null, poDeliveryDate: p.po_delivery_date ?? null, deliveryAddress: p.delivery_address ?? null,
+      lines: poLines.sort((a, b) => Number(a.misc) - Number(b.misc) || a.name.localeCompare(b.name)),
     };
   }).reverse();
 

@@ -100,7 +100,7 @@ export const importQuotesSchema = z
 export const accessChangeSchema = z
   .object({
     email: z.email("Enter the user's exact email.").max(254).transform((s) => s.trim().toLowerCase()),
-    capability: z.enum(["buyer", "approver"]),
+    capability: z.enum(["buyer", "approver", "notify"]),
     action: z.enum(["grant", "remove"]),
     reason: z.string().trim().min(3, "Write why (at least 3 characters).").max(500),
   })
