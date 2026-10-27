@@ -126,6 +126,14 @@ function saleInput(basis: any, received: any) {
   };
 }
 const note = (v: any) => z.string().trim().min(1).max(4000).parse(v);
+// Imported snapshots retain their historical source ID while framework_id is
+// remapped to the live FK. Both IDs select this record's same frozen approval.
+function savedFrameworkSelected(r: any, selectedId: unknown): boolean {
+  return typeof r.framework_id === "string" &&
+    r.data?.basis?.source?.type === "framework" &&
+    typeof selectedId === "string" &&
+    (selectedId === r.framework_id || selectedId === r.data.basis.source.id);
+}
 export class ProjectWorkflowRepository {
   constructor(private pool: Pool) {}
   async user(actor: string, c: Pool | PoolClient = this.pool) {
@@ -2794,8 +2802,9 @@ export class ProjectWorkflowRepository {
               422,
               "The selected route requires a quotation.",
             );
+          const useSavedFramework = savedFrameworkSelected(r, received.frameworkId);
           basis =
-            data.basis?.source?.id === received.frameworkId
+            useSavedFramework
               ? structuredClone(data.basis)
               : await frameworkBasis(
                   this.pool,
@@ -2812,7 +2821,8 @@ export class ProjectWorkflowRepository {
             customerNtn: received.customerNtn,
             customerStrn: received.customerStrn,
           };
-          r.framework_id = basis.source.id;
+          // Keep the live FK; the frozen snapshot retains its historical ID.
+          if (!useSavedFramework) r.framework_id = basis.source.id;
         }
         await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
           `project-po:${r.customer_id}:${received.reference.toLowerCase()}`,
@@ -3552,9 +3562,7 @@ export class ProjectWorkflowRepository {
             {},
             true,
           )
-        : r.data.basis &&
-            String(received.frameworkId ?? r.framework_id) ===
-              String(r.framework_id)
+        : savedFrameworkSelected(r, received.frameworkId ?? r.framework_id)
           ? structuredClone(r.data.basis)
           : await frameworkBasis(
               this.pool,
@@ -3782,8 +3790,7 @@ export class ProjectWorkflowRepository {
     }
     const basis =
       input.kind !== "quotation" &&
-      r.data.basis &&
-      String(input.frameworkId ?? r.framework_id) === String(r.framework_id)
+      savedFrameworkSelected(r, input.frameworkId ?? r.framework_id)
         ? r.data.basis
         : input.kind === "quotation"
           ? await quotationBasis(
@@ -4068,3 +4075,4 @@ export class ProjectWorkflowRepository {
     return [...headsups, ...existing];
   }
 }
+
