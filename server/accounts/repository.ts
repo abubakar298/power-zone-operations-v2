@@ -72,7 +72,7 @@ export function financialSummary(
   };
 }
 export class AccountsRepository {
-  constructor(private pool: Pool) {}
+  constructor(readonly pool: Pool) {}
   async access(
     actor: string,
     c: Pool | PoolClient = this.pool,

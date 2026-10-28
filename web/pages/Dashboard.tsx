@@ -96,6 +96,8 @@ const Masters = lazy(() =>
   import("./Masters.js").then((module) => ({ default: module.Masters })),
 );
 
+const CurrentProcurementShell = lazy(() => import("./procurement/ProcurementShell.js").then(m => ({default:m.ProcurementShell})));
+
 function currentOperationsArea(user:User):OperationsArea {
   const area=new URLSearchParams(window.location.hash.slice(1)).get('operationsArea');
   if(area==='procurement'||area==='operations')return area;
@@ -110,6 +112,7 @@ export function Dashboard({
   onLogout: () => void;
 }) {
   const [departmentUser,setDepartmentUser]=useState<User|undefined>(()=>savedDepartmentUser(principalSession.user));
+  const [managementProcurement,setManagementProcurement]=useState(()=>canViewDepartments(principalSession.user.role)&&sessionStorage.getItem("pz:management-procurement")===principalSession.user.id);
   const session=departmentUser?{...principalSession,user:departmentUser}:principalSession;
   const [operationsArea,setOperationsArea]=useState<OperationsArea>(()=>currentOperationsArea(session.user));
   const [accountsPage,setAccountsPage]=useState(()=>new URLSearchParams(location.hash.slice(1)).get('accountsTab')||({'/accounts/sites':'Project Sites','/accounts/ipos':'IPOs Received','/accounts/inventory':'Approved Documents','/accounts/closures':'Job Closure','/accounts/closure-review':'Awaiting Management','/accounts/documents':'Physical Documents','/accounts/invoicing':'Invoicing','/accounts/receivables':'Receivables','/accounts/checkpoints':'Project checkpoints'} as Record<string,string>)[location.pathname]||'My Workspace');
@@ -329,6 +332,13 @@ export function Dashboard({
     if(switchingDepartment||!confirmLeaveWorkspace())return false;
     setSwitchingDepartment(true);setDepartmentError('');
     try{
+      if(destination==='operations'&&area==='procurement'){
+        await api('/auth/department-view',{csrf:principalSession.csrfToken,body:{userId:null}});
+        clearDepartmentUser();setDepartmentUser(undefined);
+        sessionStorage.setItem('pz:management-procurement',principalSession.user.id);setManagementProcurement(true);
+        history.replaceState(null,'','/dashboard#workspace=dashboard');return true;
+      }
+      sessionStorage.removeItem('pz:management-procurement');setManagementProcurement(false);
       if(destination==='inventory'){clearDepartmentUser();window.location.assign('/inventory');return true;}
       let selected:User|undefined;
       if(destination!=='dashboard'){
@@ -455,6 +465,7 @@ export function Dashboard({
     const t = setInterval(check, 120_000);
     return () => { live = false; clearInterval(t); };
   }, [session.user.id, isManagerRole]);
+  if(managementProcurement&&canViewDepartments(principalSession.user.role))return <Suspense fallback={null}><CurrentProcurementShell session={principalSession} onLogout={onLogout} viewingAs={principalSession.user.displayName} onReturn={()=>void selectDepartment("dashboard")}/></Suspense>;
   // The Operations login has its own shell (Moaz, 19 Oct 2026); every other role keeps this one unchanged.
   if ((session.user.role as string) === "Operations")
     return (
