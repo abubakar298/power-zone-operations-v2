@@ -8,7 +8,6 @@ import { createPool } from "./db/pool.js";
 import { createApp } from "./app.js";
 import { AuthRepository } from "./auth/repository.js";
 import { runRequestedDashboardSamples } from "./coordinator/samples.js";
-import { startStockWatch } from "./procurement/stock-watch.js";
 
 const config = readConfig();
 const pool = createPool(config);
@@ -51,8 +50,7 @@ const notifications=new NotificationsRepository(pool);
 let syncing=false;
 const notificationTimer=setInterval(()=>{if(syncing)return;syncing=true;void notifications.sync().then(()=>notifications.deliverOne(delivery,config.origin)).catch(()=>console.error("Notification processing interrupted.")).finally(()=>{syncing=false;});},10000);
 notificationTimer.unref();
-// Inverter, battery and BMS watch: alerts Abu Bakar when the coming sites need more than Store has.
-const stopStockWatch = startStockWatch(pool);
+// Owner paused stock-shortage alerts; retain the stock-watch page and saved history.
 let delivering = false;
 const emails = setInterval(() => {
   if (delivering || !delivery.configured) return;
@@ -73,7 +71,6 @@ function shutdown() {
   clearInterval(cleanup);
   clearInterval(emails);
   clearInterval(notificationTimer);
-  stopStockWatch();
   const timeout = setTimeout(() => {
     console.error("Shutdown timed out.");
     process.exit(1);

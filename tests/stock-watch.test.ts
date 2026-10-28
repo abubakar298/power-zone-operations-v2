@@ -60,10 +60,10 @@ test("Inverter, battery and BMS watch: shortages alert Abu Bakar once, his order
     assert.ok(battery && ["urgent", "plan"].includes(battery.level));
     assert.ok(rows.every((r) => !/cable|panel/i.test(r.name)), "only inverters, batteries and BMS are watched");
 
-    // The alert is in his bell, through the same notification list as everything else.
+    // Historical stock alerts remain saved but are suppressed from the bell.
     const notifications = new NotificationsRepository(db.pool);
     let inbox = await notifications.list({ id: u.approver, role: "Management" } as any);
-    assert.equal(inbox.filter((n: any) => n.kind === "Stock shortage").length, 1);
+    assert.equal(inbox.filter((n: any) => n.kind === "Stock shortage").length, 0);
     assert.equal((await notifications.list({ id: u.admin, role: "Admin" } as any)).filter((n: any) => n.kind === "Stock shortage").length, 0, "only Abu Bakar is alerted");
 
     // A morning summary once a day from 9:00, while anything is short.
@@ -106,14 +106,20 @@ test("Inverter, battery and BMS watch: shortages alert Abu Bakar once, his order
     assert.equal(after.onOrder, "0");
     assert.equal(Number(after.inStock), Number(battery.inStock) + Number(kept.short));
 
-    // Email goes through the existing queue when email is on.
+    // Even with general email enabled, stock-shortage messages remain suppressed.
     await db.pool.query("UPDATE notification_settings SET email_enabled=true");
     await notifications.sync();
     const sent: { to: string; subject: string }[] = [];
     const delivery = { configured: true, send: async (m: any) => { sent.push(m); return "provider-id"; } };
     for (let i = 0; i < 10; i++) await notifications.deliverOne(delivery as any, "http://127.0.0.1:3000");
     const shortageMail = sent.filter((m) => /Inverter, battery & BMS shortage/.test(m.subject));
-    assert.ok(shortageMail.length >= 1 && shortageMail.every((m) => m.to === `${u.approver}@example.test`), JSON.stringify(sent.map((m) => m.subject)));
+    assert.equal(shortageMail.length,0);
+    assert.equal((await notifications.settings()).types.find(t=>t.kind==='Stock shortage').email_enabled,false);
+    const prior=(await db.pool.query("SELECT id FROM notifications WHERE kind='Stock shortage' LIMIT 1")).rows[0];
+    await db.pool.query("INSERT INTO notification_email_queue(id) VALUES($1) ON CONFLICT(id) DO UPDATE SET state='queued'",[prior.id]);
+    await notifications.deliverOne(delivery as any,"http://127.0.0.1:3000");
+    assert.equal((await db.pool.query("SELECT state FROM notification_email_queue WHERE id=$1",[prior.id])).rows[0].state,'cancelled');
+    assert.equal(sent.filter(m=>/Inverter, battery & BMS shortage/.test(m.subject)).length,0);
     await assert.rejects(db.pool.query("DELETE FROM stock_watch_alerts"), /immutable/);
 
     // HTTP.
