@@ -1,3 +1,4 @@
+import {showOperationsSite} from '../../../shared/operations-site-visibility.js';
 import {useEffect,useState} from 'react';
 import {api,type Session} from '../../api.js';
 import {Button} from '../../ui/Button.js';
@@ -18,7 +19,7 @@ function BatchForm({batch,sites,vendors,access,session,onCancel,onSaved}:{batch:
  const [team,setTeam]=useState(batch?.team??access.team??''),[vehicle,setVehicle]=useState(batch?.vehicle??''),[driver,setDriver]=useState(batch?.driver??''),[labour,setLabour]=useState(batch?.labourTeam??''),[reference,setReference]=useState(batch?.inventoryReference??''),[reason,setReason]=useState(''),[search,setSearch]=useState(''),[stops,setStops]=useState<Stop[]>(batch?.stops.map(stop=>({...stop,kind:stop.kind??batch.kind}))??[]),[dirty,setDirty]=useState(false),post=useSave(session);
  const hasDelivery=stops.some(stop=>stop.kind!=='labour'),hasLabour=stops.some(stop=>stop.kind!=='delivery');
  const kind:VisitKind=hasDelivery?(hasLabour?'both':'delivery'):'labour';
- const eligibleForVisit=sites.filter(s=>(!s.operationsTeam||s.operationsTeam===team)&&!s.scopePending&&s.installation!==null&&bucket(s)!=='completed');
+ const eligibleForVisit=sites.filter(s=>showOperationsSite(s)&&(!s.operationsTeam||s.operationsTeam===team)&&!s.scopePending&&s.installation!==null&&bucket(s)!=='completed');
  const eligible=eligibleForVisit.filter(s=>`${s.name} ${s.ipo}`.toLowerCase().includes(search.toLowerCase()));
  const edit=(id:string,key:keyof Stop,value:string|number)=>{setStops(old=>old.map(s=>s.siteId===id?{...s,[key]:value}:s));setDirty(true);};
  async function save(){if(stops.length<2){post.setError('Choose at least two sites for a shared visit.');return;}if(stops.some(stop=>!batch?.stops.some(saved=>saved.siteId===stop.siteId)&&!eligibleForVisit.some(site=>site.id===stop.siteId))){post.setError('Remove sites that are not eligible for this team and visit type, or change the selection.');return;}await post.save('/operations-board/batches',{id:batch?.id,version:batch?.version??0,edit:!!batch,team,kind,vehicle:kind==='labour'?'':vehicle,driver:kind==='labour'?'':driver,labourTeam:kind==='delivery'?undefined:labour||undefined,inventoryReference:reference,reason,stops:stops.map(s=>({...s,start:'',end:'',siteVersion:sites.find(site=>site.id===s.siteId)?.version??s.siteVersion}))},onSaved);}

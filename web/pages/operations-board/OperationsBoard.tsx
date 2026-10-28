@@ -1,3 +1,4 @@
+import {showOperationsSite} from '../../../shared/operations-site-visibility.js';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {api,type Session} from '../../api.js';
 import {Brand} from '../../components/Brand.js';
@@ -26,7 +27,7 @@ export function OperationsBoard({session,onLogout}:{session:Session;onLogout:()=
  function saved(value:Site){setData(old=>old?{...old,sites:old.sites.map(s=>s.id===value.id?normalise(value):s)}:old);setNotice(`Saved ${value.ipo} · version ${value.version}`);}
  async function logout(){if(!confirmLeaveWorkspace())return;try{await api('/auth/logout',{csrf:session.csrfToken,body:{}});onLogout();}catch(e){setError((e as Error).message);}}
  const access=data?.access,supervisor=access?.kind==='owner'||access?.kind==='head';
- const scoped=(data?.sites??[]).filter(s=>(!team||s.operationsTeam===team)&&(!type||(type==='solar'?['solar','solar-bess'].includes(s.projectType??''):type==='ups'?s.projectType==='ups':s.installation===false)));
+ const scoped=(data?.sites??[]).filter(s=>showOperationsSite(s)&&(!team||s.operationsTeam===team)&&(!type||(type==='solar'?['solar','solar-bess'].includes(s.projectType??''):type==='ups'?s.projectType==='ups':s.installation===false)));
  const visible=scoped.filter(s=>(!stage||bucket(s)===stage)&&`${s.name} ${s.ipo} ${s.customer??''} ${s.customerPo??''}`.toLowerCase().includes(search.toLowerCase()));
  const restricted=access?.kind==='qc'&&['vendors','batches'].includes(where.page)||!supervisor&&where.page==='targets';
  const selected=where.id?data?.sites.find(s=>s.id===where.id):undefined;
