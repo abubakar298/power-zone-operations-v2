@@ -588,7 +588,7 @@ export function Dashboard({
             <>
               <div className="nav-label">WORKSPACE</div>{(session.user.role==='Inventory'&&inventoryDispatcher)&&<nav aria-label="Inventory material workflow">{[['Material issuance','/inventory/materials'],['Parent DOs','/inventory/parent-dos'],['Reconciliations','/inventory/reconciliations'],['Gate passes','/inventory/gate-passes'],['Warehouse transfers','/inventory/transfers'],['Replacements','/inventory/replacements']].map(([title,path])=><button key={path} onClick={()=>location.assign(path)}><Icon name="file"/><span>{title}</span></button>)}</nav>}
               <nav aria-label="Main navigation">
-                {session.user.role==='Accounts'&&[['Dashboard','My Workspace'],['Project Sites','Project Sites'],['IPOs Received','IPOs Received'],['Inventory & PT','Approved Documents'],['Job Closure','Job Closure'],['Physical Documents','Physical Documents'],['Invoicing','Invoicing'],['Receivables','Receivables'],['Project checkpoints','Project checkpoints']].map(([title,page])=><button key={page} className={(accountsContext||accountsPage)===page?'nav-active':''} onClick={()=>openAccountsPage(page)}><Icon name={page==='My Workspace'?'dashboard':'file'}/><span>{title}</span></button>)}
+                {session.user.role==='Accounts'&&[['Dashboard','My Workspace'],['Project Sites','Project Sites'],['IPOs Received','IPOs Received'],['Inventory & PT','Approved Documents'],['Job Closure','Job Closure'],['Physical Documents','Physical Documents'],['Invoicing','Invoicing'],['Receivables','Receivables']].map(([title,page])=><button key={page} className={(accountsContext||accountsPage)===page?'nav-active':''} onClick={()=>openAccountsPage(page)}><Icon name={page==='My Workspace'?'dashboard':'file'}/><span>{title}</span></button>)}
                 {session.user.role!=='Accounts'&&<button
                   className={view === "dashboard" ? "nav-active" : ""}
                   aria-current={view === "dashboard" ? "page" : undefined}
@@ -598,9 +598,6 @@ export function Dashboard({
                   Dashboard
                 </button>}
                 {["Accounts"].includes(session.user.role) && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
-                {/* Accounts reads purchase requests and their prices; nothing to approve (Moaz, 24 Oct 2026). */}
-                {session.user.role === "Accounts" && <button className={view === "purchase-requests" ? "nav-active" : ""} aria-current={view === "purchase-requests" ? "page" : undefined} onClick={() => navigate("purchase-requests")}><Icon name="file" /><span>Purchase requests</span></button>}
-
                 {["Admin", "Management", "Coordinator"].includes(
                   session.user.role,
                 ) && (
@@ -647,7 +644,6 @@ export function Dashboard({
                 "Management",
                 "Coordinator",
                 "Design",
-                "Accounts",
               ].includes(session.user.role) && (
                 <button
                   className={view === "ubl-workflow" ? "nav-active" : ""}
@@ -658,6 +654,7 @@ export function Dashboard({
                   <span>UBL Site Workflow</span>
                 </button>
               )}
+              {session.user.role !== "Accounts" && <>
               <div className="nav-divider" />
               <div className="nav-label">PROJECT OPERATIONS</div>
               <div className="upcoming-nav" aria-label="Project workspaces">
@@ -827,6 +824,7 @@ export function Dashboard({
                 <br />
                 each milestone is verified.
               </p>
+              </>}
             </>
           )}
         </div>
