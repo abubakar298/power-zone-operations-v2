@@ -9,6 +9,9 @@ export function createPool(config: Config) {
       rejectUnauthorized: true,
       ...(config.databaseCaFile ? { ca: readFileSync(config.databaseCaFile, 'utf8') } : {}),
     } : false,
+    // Bound avoidable per-query memory on the small production database.
+    // Startup options apply to every newly opened pooled connection.
+    options: '-c jit=off -c work_mem=1MB -c max_parallel_workers_per_gather=0',
     max: 10, connectionTimeoutMillis: 5000, idleTimeoutMillis: 30000,
     statement_timeout: 10000, application_name: 'power-zone-v2',
   });
