@@ -1,3 +1,4 @@
+import {MaterialDraftRepository} from '../server/inventory/material-drafts.js';
 import test from 'node:test';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';
 import {testDatabase} from './database.js';import {materialStockFixture} from './material-stock-fixture.js';import {MinimumStockRepository} from '../server/inventory/minimum-stock.js';
 test('minimum closing settings preserve warehouse/UOM scope, immutable versions, optimistic edits and idempotent retry without stock posting',async()=>{
@@ -5,6 +6,7 @@ test('minimum closing settings preserve warehouse/UOM scope, immutable versions,
   const f=await materialStockFixture(db.pool),repo=new MinimumStockRepository(db.pool),keeper=randomUUID(),outsider=randomUUID();
   for(const id of [keeper,outsider])await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,'SIMULATION','Inventory','isolated')",[id,id+'@example.test']);
   for(const [id,warehouse,capability]of [[f.reviewer,'Lahore warehouse','dispatcher'],[keeper,'Lahore warehouse','storekeeper'],[outsider,'Karachi warehouse','dispatcher']])await db.pool.query('INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,$2,$3,$4)',[id,warehouse,capability,f.owner]);
+  const drafts=new MaterialDraftRepository(db.pool);assert.deepEqual((await drafts.warehouses(f.owner)).warehouses,['Lahore warehouse']);assert.deepEqual((await drafts.warehouses(f.reviewer)).warehouses,['Lahore warehouse']);await assert.rejects(drafts.warehouses(keeper),/not assigned/);assert.deepEqual((await drafts.warehouses(outsider)).warehouses,[]);
   const stock=async()=>({movements:(await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements')).rows[0].n,balances:(await db.pool.query("SELECT md5(string_agg(payload::text,'' ORDER BY ledger_key)) sha FROM inventory_warehouse_source_balances")).rows[0].sha});const before=await stock();
   assert.deepEqual((await repo.read(f.reviewer,'Lahore warehouse')).settings,[],'Unconfigured is distinct from a zero setting');
   const input={warehouse:'Lahore warehouse',itemId:'FINAL',unit:'m',minimum:'12.500',version:0,requestKey:randomUUID(),reason:'Reviewed local minimum closing setting'};

@@ -69,6 +69,7 @@ export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:Re
  }
  r.get('/minimum-stock',async(req,res)=>res.json(await repo.minimumStock(req.authSession!.user.id,req.query.warehouse)));
  r.post('/minimum-stock',async(req,res)=>res.json(await repo.saveMinimumStock(req.authSession!.user.id,req.body)));
+ r.get('/warehouses',async(req,res)=>res.json(await repo.warehouses(req.authSession!.user.id)));
  r.get('/intake',async(req,res)=>res.json(await repo.intake(req.authSession!.user.id)));
  r.get('/drafts',async(req,res)=>res.json(await repo.list(req.authSession!.user.id)));
  r.get('/drafts/:id',async(req,res)=>{const id=z.uuid().safeParse(req.params.id);if(!id.success)throw new HttpError(400,'Invalid material draft.');res.json(await repo.detail(req.authSession!.user.id,id.data));});
