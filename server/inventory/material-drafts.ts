@@ -1,3 +1,4 @@
+import {inventoryOperationsBatches} from './operations-batches.js';
 import {plannedInventoryDelivery} from '../operations-board/batch-delivery.js';
 import {MinimumStockRepository} from './minimum-stock.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
@@ -101,10 +102,13 @@ export class MaterialDraftRepository{
   // Imported Accounts/Operations positioning is visible without pretending that
   // an IPO label establishes an approved, executable BOQ identity.
   const sources=await this.sources();
-  const registeredPending=(await this.pool.query(`SELECT DISTINCT ON(site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC`)).rows
+  const boardRows=(await this.pool.query(`SELECT DISTINCT ON(site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC`)).rows;
+  const batches=(await this.pool.query('SELECT DISTINCT ON(batch_id) version,snapshot FROM operations_board_batch_versions ORDER BY batch_id,version DESC')).rows;
+  const operationsBatches=inventoryOperationsBatches(batches,boardRows,sources);
+  const registeredPending=boardRows
    .filter(r=>!r.snapshot.completed&&['received','awaiting'].includes(r.snapshot.stage)&&r.snapshot.sample!==true&&!sources.some(s=>s.registeredSiteId===r.site_id))
    .map(r=>({siteId:r.site_id,ipo:r.snapshot.ipo,siteName:r.snapshot.name,customer:r.snapshot.customer??'',installation:r.snapshot.installation,dispatchDate:plannedInventoryDelivery({...r.snapshot,id:r.site_id}),linkStatus:'approved-boq-link-required' as const}));
-  return {access,sources,registeredPending,catalogue:stock.catalogue,aliases:stock.aliases,warehouses:access.owner?stock.warehouses:access.warehouses,stockPosting:false};
+  return {access,sources,registeredPending,operationsBatches,catalogue:stock.catalogue,aliases:stock.aliases,warehouses:access.owner?stock.warehouses:access.warehouses,stockPosting:false};
  }
  /** Issuance revalidates pending source identity while locking the same rows
   * that Operations uses for delivery updates. Draft preparation alone does not. */
