@@ -1,3 +1,4 @@
+import {InventoryNavigation} from '../components/InventoryNavigation.js';
 import {useEffect,useRef,useState} from 'react';
 import {Decimal} from 'decimal.js';
 import {api,ApiError,type Session} from '../api.js';
@@ -72,7 +73,7 @@ export function WarehouseTransfers({session,onLogout}:{session:Session;onLogout:
  async function logout(){if(busy||!confirmLeaveWorkspace())return;try{await api('/auth/logout',{csrf:session.csrfToken,body:{}});onLogout();}catch(e){setError((e as Error).message);}}
  const errorBlock=error?<p role="alert" className="form-error">{error}</p>:null;
  return <div className="ob-shell"><header className="ob-header"><Button className="ob-mobile-toggle" aria-label="Open navigation" onClick={()=>setMobile(!mobile)}><Icon name="menu"/></Button><Brand compact/><div className="ob-header-identity"><strong>{session.user.displayName}</strong><small>{session.user.role}</small></div><Button disabled={busy} onClick={()=>void logout()}>Sign out</Button></header>
-  <aside className={'ob-sidebar'+(mobile?' is-open':'')}><nav><Button className="is-active" onClick={()=>go(base)}><Icon name="file"/>Warehouse transfers</Button><Button onClick={()=>{if(!busy)location.assign('/inventory/gate-passes');}}><Icon name="file"/>Gate passes</Button>{access?.kind!=='storekeeper'&&<Button onClick={()=>{if(!busy)location.assign('/dashboard');}}><Icon name="dashboard"/>Dashboard</Button>}</nav></aside>
+  <InventoryNavigation mode="dispatcher" mobile={mobile}/>
   <main className="ob-main"><div className="ob-page-title"><div><h1>Warehouse transfers</h1><p>Source dispatch and counted destination receipt</p></div>{!creating&&!selectedId&&access?.sourceWarehouses.length!==0&&<Button variant="primary" disabled={locked||!access?.enabled} onClick={()=>go(base+'/new')}>Create transfer</Button>}</div>
    {notice&&<p role="status" className="ob-success">{notice}</p>}{loading&&<p role="status">Loading warehouse transfer records…</p>}{access&&!access.enabled&&<p>Warehouse transfers will be available after the verified release migration.</p>}
    {recoveryInvalid&&<p role="alert" className="form-error">The saved posting request needs local recovery review. Do not issue or receive the same goods again until its saved reference is checked.</p>}

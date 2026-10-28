@@ -1,3 +1,4 @@
+import {InventoryNavigation} from '../components/InventoryNavigation.js';
 import {useEffect,useRef,useState} from 'react';
 import {api,type Session} from '../api.js';
 import {Brand} from '../components/Brand.js';
@@ -32,7 +33,7 @@ export function ParentDos({session,onLogout}:{session:Session;onLogout:()=>void}
  const requested=new URLSearchParams(path.split('?')[1]??'').get('sites')?.split(',')??[];
  async function logout(){if(!confirmLeaveWorkspace())return;try{await api('/auth/logout',{csrf:session.csrfToken,body:{}});onLogout();}catch(e){setError((e as Error).message);}}
  return <div className="ob-shell"><header className="ob-header"><Button className="ob-mobile-toggle" aria-label="Open navigation" onClick={()=>setMobile(!mobile)}><Icon name="menu"/></Button><Brand compact/><div className="ob-header-identity"><strong>{session.user.displayName}</strong><small>{session.user.role}</small></div><Button onClick={()=>void logout()}>Sign out</Button></header>
-  <aside className={`ob-sidebar ${mobile?'is-open':''}`}><nav><Button className="is-active" onClick={()=>go(base)}><Icon name="file"/>Parent DOs</Button><Button onClick={()=>{location.assign('/inventory/reconciliations');}}><Icon name="shield"/>Inventory reconciliations</Button><Button onClick={()=>{location.assign('/dashboard');}}><Icon name="dashboard"/>Dashboard</Button></nav></aside>
+  <InventoryNavigation mode="dispatcher" mobile={mobile}/>
   <main className="ob-main">{error&&<section className="pz-panel pz-stack"><p role="alert" className="form-error">{error}</p><Button onClick={()=>void load()}>Try again</Button></section>}
    {!intake&&!error&&<p role="status">Loading material requests…</p>}
    {notice&&<p role="status" className="ob-success">{notice}</p>}{intake&&(editing?<ParentEditor key={draftId} id={draftId} requested={requested} intake={intake} session={session} onBack={()=>go(base)} onDirty={()=>setNotice('')} onSaved={async(id)=>{await load();setNotice('Draft saved. Stock balances are unchanged.');go(base+'/'+id,false);}}/>:<>

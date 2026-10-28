@@ -40,6 +40,7 @@ export function accountsHttp(
       throw new HttpError(403, "Refresh and try again.");
     next();
   });
+  r.get("/access-options",async(req,res)=>res.json(await service.accessOptions(req.authSession!.user)));
   r.get("/", async (_req, res) =>
     res.json({
       ...(await service.repository.list()),

@@ -23,7 +23,7 @@ type State =
   | { kind: "login" }
   | { kind: "authenticated"; session: Session };
 export function App() {
-  const [oiaEntry]=useState(()=>/^\/(?:operations(?:\/|$)|inventory\/(?:materials|parent-dos|reconciliations|gate-passes|transfers|replacements)(?:\/|$)|accounts(?:\/|$))/.test(window.location.pathname)?window.location.pathname+window.location.search:'');
+  const [oiaEntry]=useState(()=>/^\/(?:operations(?:\/|$)|inventory(?:\/|$)|accounts(?:\/|$))/.test(window.location.pathname)?window.location.pathname+window.location.search:'');
   const [pricingCarryLink]=useState(()=>{const token=new URLSearchParams(window.location.search).get('pricingPreviewToken');return token&&/^[0-9a-f-]{36}$/i.test(token)?`?pricingPreviewToken=${token}#workspace=pricing`:'';});
   const [notificationLink] = useState(()=>{
     const hash=window.location.hash,params=new URLSearchParams(hash.slice(1));
@@ -112,7 +112,7 @@ export function App() {
     const props={session:state.session,onLogout:signedOut};
     if(["Coordinator","Design","Employee"].includes(state.session.user.role))return <Dashboard {...props}/>;
     if(oiaEntry.startsWith('/operations'))return <Suspense fallback={<p role="status">Opening Operations…</p>}><OperationsBoard {...props}/></Suspense>;
-    if(oiaEntry.startsWith('/inventory/'))return <Suspense fallback={<p role="status">Opening Inventory…</p>}>{oiaEntry.startsWith('/inventory/materials')&&(location.pathname.split('/').filter(Boolean).length>2||new URLSearchParams(location.search).has('site'))?<SiteMaterials {...props}/>:(oiaEntry.startsWith('/inventory/parent-dos')||oiaEntry.split('?')[0].replace(/\/$/,'')==='/inventory/materials')?<ParentDos {...props}/>:oiaEntry.startsWith('/inventory/gate-passes')?<GatePasses {...props}/>:oiaEntry.startsWith('/inventory/transfers')?<WarehouseTransfers {...props}/>:oiaEntry.startsWith('/inventory/replacements')?<MaterialReplacements {...props}/>:<InventoryReviews {...props}/>}</Suspense>;
+    if(oiaEntry==='/inventory'||oiaEntry.startsWith('/inventory/'))return <Suspense fallback={<p role="status">Opening Inventory…</p>}><InventoryRoleGate {...props}/></Suspense>;
     if(state.session.user.role==='Inventory')return <Suspense fallback={<p role="status">Opening assigned Inventory…</p>}><InventoryRoleGate {...props}/></Suspense>;
     return <Dashboard {...props}/>;
   }
@@ -164,3 +164,4 @@ export function App() {
     </AuthLayout>
   );
 }
+

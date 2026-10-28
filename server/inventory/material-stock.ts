@@ -32,7 +32,7 @@ export class MaterialStockRepository{
   await this.scope(actor,warehouse);
   const authority=(await this.pool.query('SELECT warehouse,version,source_sha256,state FROM inventory_warehouse_authority_current WHERE warehouse=$1',[warehouse])).rows[0];
   if(!authority)return {authority:null,positions:[]};
-  const positions=(await warehousePositions(this.pool,authority.source_sha256,warehouse)).map(p=>({ledgerKey:p.ledgerKey,itemId:p.baseline.itemId,description:p.baseline.description,unit:p.baseline.unit,currentClosing:p.currentClosing,ledgerRevision:p.ledgerRevision,unknown:p.currentClosing===null,negative:p.currentClosing!==null&&new Decimal(p.currentClosing).lt(0)}));
+  const positions=(await warehousePositions(this.pool,authority.source_sha256,warehouse)).map(p=>({ledgerKey:p.ledgerKey,itemId:p.baseline.itemId,description:p.baseline.description,unit:p.baseline.unit,opening:p.baseline.opening,totalIn:p.totalIn,totalOut:p.totalOut,currentClosing:p.currentClosing,ledgerRevision:p.ledgerRevision,unknown:p.currentClosing===null,negative:p.currentClosing!==null&&new Decimal(p.currentClosing).lt(0)}));
   return {authority,positions};
  }
  async movements(actor:string,draftId:string){

@@ -1,3 +1,4 @@
+import {teamAccessProfileSchema,teamProfileRole} from '../../shared/team-access-profile.js';
 import {accountMessage} from '../email/templates.js';
 import { z } from "zod";
 import { AccountsRepository } from "./repository.js";
@@ -52,6 +53,7 @@ export class AccountsService {
         password: z.string().max(128),
         newPassword: z.string().min(12).max(128),
         confirmPassword: z.string().max(128),
+        scopedAccess: teamAccessProfileSchema.optional(),
       })
       .strict()
       .safeParse(body);
@@ -61,6 +63,7 @@ export class AccountsService {
         "Enter a name, email, role and password of at least 12 characters.",
       );
     const v = parsed.data;
+    if(v.scopedAccess&&teamProfileRole(v.scopedAccess)!==v.role)throw new HttpError(422,"The access profile does not match the base role.");
     if (v.newPassword !== v.confirmPassword)
       throw new HttpError(400, "New passwords do not match.");
     const a = await this.auth.findUser(actor.email);
@@ -70,12 +73,18 @@ export class AccountsService {
       email: v.email,
       displayName: v.displayName,
       role: v.role,
+      scopedAccess:v.scopedAccess,
       passwordHash: await hashPassword(v.newPassword),
       actorId: a.id,
       actorHash: a.password_hash,
     });
   }
+  async accessOptions(actor:User){
+    if(actor.role!=="Admin")throw new HttpError(403,"Administrator access required.");
+    return this.repository.accessOptions(actor.id);
+  }
   async invite(body: unknown, actor: User, ip: string) {
+    if(body&&typeof body==="object"&&"scopedAccess" in body)throw new HttpError(422,"Create an account with a password to assign scoped access. Ordinary invitations do not retain scoped profiles.");
     await this.throttle(ip, "invite");
     this.available();
     const v = z

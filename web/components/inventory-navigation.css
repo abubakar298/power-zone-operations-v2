@@ -1,0 +1,15 @@
+.inventory-sidebar{overflow-y:auto;overscroll-behavior:contain}
+.inventory-sidebar nav .pz-button{display:grid;grid-template-columns:19px minmax(0,1fr);align-items:start;line-height:22px;min-height:44px;padding:11px 12px;gap:10px}
+.inventory-sidebar nav .pz-button svg{margin-top:1px;flex:none}
+.inventory-sidebar nav .pz-button span{min-width:0;overflow-wrap:break-word}
+.inventory-sidebar .ob-sidebar-foot{padding-top:24px}
+.storekeeper-summary{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}
+.storekeeper-summary>div{display:grid;gap:6px;align-content:start}
+.storekeeper-summary .pz-button{align-self:start}
+.storekeeper-scope{display:flex;flex-wrap:wrap;gap:6px}
+.storekeeper-scope span{font-size:12px;color:var(--pz-muted);background:var(--pz-canvas);border:1px solid var(--pz-border);border-radius:var(--pz-radius-control);padding:4px 8px}
+.storekeeper-document-title{display:grid;gap:6px;align-content:start}
+@media(max-width:760px){.storekeeper-summary{grid-template-columns:minmax(0,1fr)}}
+
+.inventory-sidebar nav>div>.pz-button{width:100%}
+.inventory-nav-group{border-top:1px solid var(--pz-border);padding-top:18px;margin-top:10px;margin-bottom:10px!important}

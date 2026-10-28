@@ -67,6 +67,8 @@ export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:Re
   r.post('/purchase-receipts',async(req,res)=>{const input=purchaseReceiptInputSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Check the receiving warehouse, final item IDs, quantities and evidence.');res.json(await purchases.receive(req.authSession!.user.id,input.data));});
   r.get('/purchase-receipts/:id/document.pdf',async(req,res)=>{const record=await purchases.receipt(req.authSession!.user.id,id(req.params.id)),model=purchaseReceiptPrintModel(record);res.locals.downloadContext={documentType:model.title,identity:`purchase-receipt:${record.id}`,revision:1};res.type('pdf').set('Content-Disposition',`inline; filename="${record.number}.pdf"`).send(materialDocumentPdf(model));});
  }
+ r.get('/minimum-stock',async(req,res)=>res.json(await repo.minimumStock(req.authSession!.user.id,req.query.warehouse)));
+ r.post('/minimum-stock',async(req,res)=>res.json(await repo.saveMinimumStock(req.authSession!.user.id,req.body)));
  r.get('/intake',async(req,res)=>res.json(await repo.intake(req.authSession!.user.id)));
  r.get('/drafts',async(req,res)=>res.json(await repo.list(req.authSession!.user.id)));
  r.get('/drafts/:id',async(req,res)=>{const id=z.uuid().safeParse(req.params.id);if(!id.success)throw new HttpError(400,'Invalid material draft.');res.json(await repo.detail(req.authSession!.user.id,id.data));});

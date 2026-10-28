@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, type Session } from "../api.js";
+import type {TeamAccessProfile} from "../../shared/team-access-profile.js";
 import { Backups } from "./Backups.js";
 type Person = {
   id: string;
@@ -8,6 +9,8 @@ type Person = {
   role: string;
   active: boolean;
   email_verified_at: string | null;
+  operations_access?:{kind:"qc"|"lead"|"head";team:"central"|"south"|null}|null;
+  warehouse_access?:{warehouse:string;capability:"dispatcher"|"storekeeper"}[];
 };
 type Invitation = {
   id: string;
@@ -23,6 +26,11 @@ export function Team({
   session: Session;
   onLogout: () => void;
 }) {
+  const [selectedRole,setSelectedRole]=useState("Employee");
+  const [region,setRegion]=useState<"central"|"south">("central");
+  const [warehouses,setWarehouses]=useState<string[]>([]);
+  const [knownWarehouses,setKnownWarehouses]=useState<string[]>([]);
+  const scoped=["QC","Operations Lead","Storekeeper"].includes(selectedRole);
   const [creationMode, setCreationMode] = useState<"invite" | "direct">(
     "invite",
   );
@@ -51,10 +59,12 @@ export function Team({
   }
   useEffect(() => {
     void load();
+    if(session.user.role==="Admin")void api<{warehouses:string[]}>("/accounts/access-options").then(v=>setKnownWarehouses(v.warehouses)).catch(e=>setError(e instanceof Error?e.message:"Unable to load warehouse assignments."));
   }, []);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (busy) return;
+    if(!action&&scoped&&creationMode==="invite"){setError("Use Create account with password to assign this scoped profile. Email invitations do not retain these assignments.");return;}
     const form = e.currentTarget,
       f = new FormData(form);
     setBusy(true);
@@ -80,13 +90,15 @@ export function Team({
                     }
                   : {}),
                 email: f.get("email"),
-                role: f.get("role"),
+                role:scoped?(selectedRole==='Storekeeper'?'Inventory':'Operations'):f.get("role"),
+                ...(scoped?{scopedAccess:selectedRole==='Storekeeper'?{kind:'Storekeeper',warehouses}:{kind:selectedRole as "QC"|"Operations Lead",region} satisfies TeamAccessProfile}:{}),
                 password: f.get("password"),
               },
         },
       );
       setMessage(result.message);
       form.reset();
+      if(!action){setSelectedRole("Employee");setWarehouses([]);}
       setAction(undefined);
       await load();
     } catch (e) {
@@ -195,11 +207,15 @@ export function Team({
                   <select
                     aria-label="Employee role"
                     name="role"
-                    defaultValue="Employee"
+                    value={selectedRole}
+                    onChange={e=>{setSelectedRole(e.target.value);setWarehouses([]);}}
                   >
                     <option>Employee</option>
                     <option>Coordinator</option>
                     <option>Operations</option>
+                    <option>QC</option>
+                    <option>Operations Lead</option>
+                    <option>Storekeeper</option>
                     <option>Inventory</option>
                     <option>Accounts</option>
                     <option>Design</option>
@@ -207,6 +223,9 @@ export function Team({
                     <option>Admin</option>
                   </select>
                 </label>
+                {scoped&&selectedRole!=='Storekeeper'&&<label>Region<select aria-label="Assigned Operations region" value={region} onChange={e=>setRegion(e.target.value as 'central'|'south')}><option value="central">Central</option><option value="south">South</option></select><span className="form-note">{selectedRole==='QC'?'Progress dates, evidence and document tracking for assigned sites.':'Operations planning and oversight for the assigned region.'}</span></label>}
+                {selectedRole==='Storekeeper'&&<fieldset><legend>Assigned warehouses</legend>{knownWarehouses.length?knownWarehouses.map(w=><label key={w}><input type="checkbox" checked={warehouses.includes(w)} onChange={e=>setWarehouses(old=>e.target.checked?[...old,w]:old.filter(v=>v!==w))}/>{w}</label>):<p className="form-note">No warehouses are available in the current register.</p>}<p className="form-note">Print gate passes and upload signed copies for selected warehouses. No material issuance or reconciliation decisions.</p></fieldset>}
+                {scoped&&creationMode==='invite'&&<p role="status" className="form-note">Use Create account with password for scoped access. Email invitations create only the selected base role and cannot retain these assignments.</p>}
               </>
             )}
             <label>
@@ -223,7 +242,7 @@ export function Team({
             <button
               className="primary"
               disabled={
-                busy ||
+                busy || (!action&&scoped&&(creationMode==="invite"||(selectedRole==="Storekeeper"&&!warehouses.length))) ||
                 (!action && creationMode === "invite" && !data.emailConfigured)
               }
             >
@@ -254,13 +273,17 @@ export function Team({
               </thead>
               <tbody>
                 {data.users.map((u) => (
-                  <tr key={u.id}>
+                  <tr key={u.id} style={{verticalAlign:"top"}}>
                     <td>
                       {u.display_name}
                       <br />
                       {u.email}
                     </td>
-                    <td>{u.role}</td>
+                    <td style={{verticalAlign:'top'}}>
+                      <div>{u.role==='Operations'&&u.operations_access?u.operations_access.kind==='qc'?'QC':u.operations_access.kind==='lead'?'Operations Lead':'Operations Head':u.role==='Inventory'&&u.warehouse_access?.length&&u.warehouse_access.every(w=>w.capability==='storekeeper')?'Storekeeper':u.role}</div>
+                      {u.role==='Operations'&&u.operations_access?.team&&<div className="form-note">{u.operations_access.team==='central'?'Central':'South'}</div>}
+                      {u.role==='Inventory'&&!!u.warehouse_access?.length&&<div className="form-note">{u.warehouse_access.map(w=>w.warehouse).join(', ')}</div>}
+                    </td>
                     <td>{u.active ? "Active" : "Disabled"}</td>
                     <td>
                       {u.email_verified_at

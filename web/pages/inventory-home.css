@@ -1,0 +1,17 @@
+.inventory-home-main{gap:22px}
+.inventory-dashboard-buckets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.inventory-dashboard-buckets>.pz-button{display:grid;grid-template-columns:minmax(0,1fr);justify-content:stretch;grid-template-rows:38px minmax(42px,auto) minmax(24px,auto);align-items:start;align-content:start;justify-items:start;gap:12px;min-height:160px;padding:22px;border:1px solid var(--pz-border);border-radius:12px;background:var(--pz-surface);text-align:left;color:var(--pz-text);box-shadow:0 2px 6px #19244705}
+.inventory-dashboard-buckets>.pz-button>strong{font-size:32px;line-height:38px;font-weight:650;color:var(--pz-primary)}
+.inventory-dashboard-buckets>.pz-button>span{font-size:14px;line-height:21px;font-weight:550;max-width:230px}
+.inventory-dashboard-buckets>.pz-button.selected{border-color:var(--pz-primary);background:var(--pz-selected-bg);box-shadow:0 0 0 1px var(--pz-primary)}
+.inventory-schedule-split{display:flex;flex-wrap:wrap;gap:8px 14px;border-top:1px solid var(--pz-border);padding-top:10px;width:100%;align-self:start}
+.inventory-schedule-split small{font-size:11px;font-weight:550;color:var(--pz-muted)}
+.inventory-dashboard-tools{display:grid;grid-template-columns:minmax(240px,1fr) minmax(180px,260px);gap:16px;align-items:start}
+.inventory-home-main label{display:grid;gap:8px;align-content:start;font-size:13px;font-weight:550;min-width:0}
+.inventory-home-main .inventory-search{max-width:520px}
+.inventory-dashboard-list>.ob-section-title>span{font-size:13px;color:var(--pz-muted);line-height:24px}
+.inventory-stock-matrix{min-width:900px}.inventory-stock-matrix th:not(:first-child),.inventory-stock-matrix td:not(:first-child){text-align:right;min-width:75px}.inventory-stock-matrix thead tr:first-child th{text-align:center}.inventory-stock-matrix thead tr:first-child th:first-child{text-align:left;min-width:250px}
+.inventory-negative{color:var(--pz-danger,#a92f44);font-weight:600}
+.inventory-document-links{display:grid;gap:12px;align-content:start}
+@media(max-width:1000px){.inventory-dashboard-buckets{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.inventory-dashboard-tools{grid-template-columns:1fr}.inventory-dashboard-buckets{gap:10px}.inventory-dashboard-buckets>.pz-button{padding:15px;min-height:150px}.inventory-dashboard-buckets>.pz-button>span{font-size:13px}}

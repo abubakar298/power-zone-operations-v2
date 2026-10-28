@@ -292,6 +292,7 @@ export function Dashboard({
     asDepartment = false,
   ) {
     if (!confirmLeaveWorkspace()) return false;
+    if(next==='inventory'&&['Admin','Management','Inventory'].includes(principalSession.user.role)){clearDepartmentUser();location.assign('/inventory');return true;}
     const department=asDepartment&&canViewDepartments(session.user.role)?managementDepartment(next)?.view:undefined;
     if(!departmentUser)setDepartmentView(department);
     if(department){sessionStorage.removeItem('pz:department-page');sessionStorage.removeItem('pz:workflow-open');setDepartmentPage('Workspace');setWorkspaceVisit(visit=>visit+1);}
@@ -328,6 +329,7 @@ export function Dashboard({
     if(switchingDepartment||!confirmLeaveWorkspace())return false;
     setSwitchingDepartment(true);setDepartmentError('');
     try{
+      if(destination==='inventory'){await api('/auth/department-view',{csrf:principalSession.csrfToken,body:{userId:null}});clearDepartmentUser();window.location.assign('/inventory');return true;}
       let selected:User|undefined;
       if(destination!=='dashboard'){
         const role=managementDepartment(destination)!.role;
@@ -475,7 +477,11 @@ export function Dashboard({
           </button>
         </div>
         <div className="sidebar-navigation">
-          {["Admin", "Management"].includes(session.user.role) ? (
+          {String(session.user.role) === "Admin" ? (
+            <nav aria-label="Administration">
+              {([["security-log","Security log","shield"],["procurement-access","Procurement access","file"],["team","Team access","file"],["masters","Databases","rates"]] as const).map(([destination,label,icon])=><button key={destination} className={view===destination?"nav-active":""} aria-current={view===destination?"page":undefined} onClick={()=>navigate(destination)}><Icon name={icon}/><span>{label}</span></button>)}
+            </nav>
+          ) : String(session.user.role) === "Management" ? (
             <nav aria-label="Customer workspaces"><button onClick={()=>location.assign('/operations/sites')}><Icon name="file"/><span>Operations sites</span></button><button onClick={()=>location.assign('/inventory/reconciliations')}><Icon name="shield"/><span>Inventory reconciliations</span></button><button onClick={()=>location.assign('/inventory/materials')}><Icon name="file"/><span>Inventory material issuance</span></button>
               <button className={view === "dashboard" ? "nav-active" : ""} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard", undefined, true)}><Icon name="dashboard"/><span>Dashboard</span></button>
               {([
@@ -1566,3 +1572,4 @@ export function PasswordChange({
     </form>
   );
 }
+

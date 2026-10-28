@@ -1,3 +1,4 @@
+import {teamAccessProfileSchema,teamProfileRole,type TeamAccessProfile} from '../../shared/team-access-profile.js';
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { transaction } from "../db/transaction.js";
@@ -62,9 +63,18 @@ export class AccountsRepository {
         [r.rows.map((t) => t.id)],
       );
   }
+  async accessOptions(actorId:string){
+    const actor=(await this.pool.query("SELECT role,active FROM users WHERE id=$1",[actorId])).rows[0];
+    if(!actor?.active||actor.role!=="Admin")throw new HttpError(403,"Administrator access required.");
+    return {warehouses:await this.knownWarehouses(this.pool)};
+  }
+  private async knownWarehouses(c:Pool|PoolClient){return (await c.query("SELECT warehouse FROM inventory_warehouse_authority_current UNION SELECT warehouse FROM inventory_material_access UNION SELECT payload->>'warehouse' AS warehouse FROM inventory_warehouse_source_balances WHERE payload->>'warehouse' IS NOT NULL ORDER BY warehouse")).rows.map(r=>r.warehouse as string);}
   async list() {
     const users = await this.pool.query(
-      "SELECT id,email,display_name,role,active,email_verified_at,created_at FROM users ORDER BY created_at,id",
+      `SELECT u.id,u.email,u.display_name,u.role,u.active,u.email_verified_at,u.created_at,
+        (SELECT jsonb_build_object('kind',b.kind,'team',b.team) FROM operations_board_access b WHERE b.user_id=u.id) AS operations_access,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('warehouse',w.warehouse,'capability',w.capability) ORDER BY w.warehouse) FROM inventory_material_access w WHERE w.user_id=u.id),'[]'::jsonb) AS warehouse_access
+       FROM users u ORDER BY u.created_at,u.id`,
     );
     const invitations = await this.pool
       .query(`SELECT t.id,t.email,t.role,t.expires_at,o.status AS delivery_status FROM account_tokens t JOIN email_outbox o ON o.id=t.id
@@ -78,10 +88,14 @@ export class AccountsRepository {
     passwordHash: string;
     actorId: string;
     actorHash: string;
+    scopedAccess?:TeamAccessProfile;
   }) {
     return transaction(this.pool, async (c) => {
       await this.lock(c);
       await this.actor(c, input.actorId, input.actorHash);
+      const profile=input.scopedAccess?teamAccessProfileSchema.parse(input.scopedAccess):undefined;
+      if(profile&&teamProfileRole(profile)!==input.role)throw new HttpError(422,"The access profile does not match the base role.");
+      if(profile?.kind==="Storekeeper"){const known=await this.knownWarehouses(c);if(profile.warehouses.some(w=>!known.includes(w)))throw new HttpError(422,"Select warehouses from the current warehouse register.");}
       if (
         (await c.query("SELECT id FROM users WHERE email=$1", [input.email]))
           .rowCount
@@ -95,6 +109,11 @@ export class AccountsRepository {
         "INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)",
         [id, input.email, input.displayName, input.role, input.passwordHash],
       );
+      if(profile){
+        if(profile.kind==='Storekeeper')for(const warehouse of [...profile.warehouses].sort())await c.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,$2,'storekeeper',$3)",[id,warehouse,input.actorId]);
+        else await c.query('INSERT INTO operations_board_access(user_id,kind,team,granted_by) VALUES($1,$2,$3,$4)',[id,profile.kind==='QC'?'qc':'lead',profile.region,input.actorId]);
+        await this.audit(c,input.actorId,'account.scoped_access.created:'+JSON.stringify(profile),id);
+      }
       await this.audit(c, input.actorId, "account.created.by_admin", id);
       return { id, email: input.email, role: input.role };
     });
