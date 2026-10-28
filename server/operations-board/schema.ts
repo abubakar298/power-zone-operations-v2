@@ -40,7 +40,7 @@ export const commandSchema=z.discriminatedUnion('action',[
  commandBase.extend({action:z.literal('resolve-blocker'),blockerId:z.string().min(1).max(200),resolution:z.string().trim().min(1).max(2000)}).strict(),
 ]);
 export type BoardCommand=z.infer<typeof commandSchema>;
-export const vendorSchema=z.object({id:z.uuid().optional(),version:z.number().int().nonnegative(),requestKey:z.uuid(),team:teamSchema.nullable().optional(),kind:z.enum(['vendor','member','vehicle']).default('vendor'),name:z.string().trim().min(1).max(200),phone:z.string().trim().max(100).default(''),roles:z.array(z.enum(['structure','electrical','earthing','delivery'])).min(1).max(4),active:z.boolean().default(true),reason:z.string().trim().max(2000).default('')}).strict();
+export const vendorSchema=z.object({id:z.uuid().optional(),version:z.number().int().nonnegative(),requestKey:z.uuid(),team:teamSchema.nullable().optional(),kind:z.enum(['vendor','member','vehicle']).default('vendor'),name:z.string().trim().min(1).max(200),phone:z.string().trim().max(100).default(''),roles:z.array(z.enum(['structure','electrical','earthing','delivery'])).min(1).max(4),active:z.boolean().default(true),deleted:z.boolean().optional(),reason:z.string().trim().max(2000).default('')}).strict();
 const target=z.object({amount:z.number().finite().positive().max(Number.MAX_SAFE_INTEGER/86400000),unit:z.enum(['hours','days'])}).strict().nullable();
 export const targetsSchema=z.object({version:z.number().int().nonnegative(),requestKey:z.uuid(),reason:z.string().trim().max(2000).default(''),values:z.record(z.enum(targetStageIds),target)}).strict();
 const time=z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);

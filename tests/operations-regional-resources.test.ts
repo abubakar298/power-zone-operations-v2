@@ -28,6 +28,16 @@ test('regional vendor/member/vehicle directories enforce scope and retain multip
  const saved=await plan({teamMemberIds:[m1.id,m2.id]});assert.deepEqual(saved.teamMembers?.map(m=>m.id),[m1.id,m2.id]);assert.equal(saved.assignments?.electrical,c.id);
  const edited=await plan({edit:true,reason:'Member Two not deployed',teamMemberIds:[m1.id]});assert.deepEqual(edited.teamMembers?.map(m=>m.id),[m1.id]);
  const old=(await db.pool.query('SELECT snapshot FROM operations_board_versions WHERE site_id=$1 AND version=$2',['regional-site',saved.version])).rows[0];assert.equal(old.snapshot.teamMembers.length,2);
+ for(const entry of [c,m1,vehicle]){
+  const payload={...entry,requestKey:randomUUID(),reason:'Remove unused resource',deleted:true,active:false} as any;
+  await assert.rejects(repo.saveVendor(ids.central,payload),/Only the Operations head/);
+  const removed=await repo.saveVendor(ids.head,payload);assert.equal(removed.deleted,true);assert.equal(removed.active,false);
+  const list=entry.kind==='vendor'?(await repo.vendors(ids.central)).vendors:(await repo.resources(ids.central,entry.kind as 'member'|'vehicle')).resources;
+  assert.ok(!list.some(r=>r.id===entry.id));
+  await assert.rejects(repo.saveVendor(ids.central,{...removed,requestKey:randomUUID(),reason:'Unauthorized restore',deleted:false}),/not found/);
+  const restored=await repo.saveVendor(ids.head,{...removed,requestKey:randomUUID(),reason:'Restore saved resource',deleted:false,active:true});assert.equal(restored.deleted,false);assert.equal(restored.active,true);
+ }
+ const unchanged=await repo.site(ids.owner,'regional-site');assert.deepEqual(unchanged.teamMembers?.map(m=>m.id),[m1.id]);assert.equal(unchanged.assignments?.electrical,c.id);
  for(const table of ['stock_on_hand_entries','accounts_job_closures'])assert.equal((await db.pool.query('SELECT count(*)::int n FROM '+table)).rows[0].n,0);
  }finally{await db.close();}
 });

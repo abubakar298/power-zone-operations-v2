@@ -10,6 +10,17 @@ test('regional resource directories keep the Operations shell and save distinct 
  await page.getByLabel('Region',{exact:true}).first().selectOption('central');
  await page.getByRole('button',{name:'Save',exact:true}).click();
  await expect(page.getByRole('cell',{name:'Central electrician Available'})).toBeVisible();
+ await page.getByRole('button',{name:'Delete',exact:true}).click();
+ await page.getByLabel('Reason for this change').fill('Disposable browser removal');
+ await page.locator('form').getByRole('button',{name:'Delete',exact:true}).click();
+ await expect(page.getByText('Central electrician',{exact:true})).toHaveCount(0);
+ await page.getByLabel('Show deleted entries').check();
+ await expect(page.getByText('Central electrician',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Restore',exact:true}).click();
+ await page.getByLabel('Reason for this change').fill('Disposable browser restore');
+ await page.getByRole('button',{name:'Save',exact:true}).click();
+ await page.getByLabel('Show deleted entries').uncheck();
+ await expect(page.getByText('Central electrician',{exact:true})).toBeVisible();
  await page.getByRole('navigation').getByRole('button',{name:'Vehicles',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Vehicles',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Add vehicle',exact:true}).click();

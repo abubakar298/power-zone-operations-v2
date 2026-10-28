@@ -191,12 +191,12 @@ export class OperationsBoardRepository{
  }
  private async vendorList(c:Pool|PoolClient){
   const rows=(await c.query('SELECT DISTINCT ON (vendor_id) vendor_id,version,snapshot FROM operations_board_vendor_versions ORDER BY vendor_id,version DESC')).rows;
-  return [{id:'pz-team',version:1,name:'Power Zone team',phone:'',roles:['electrical'],active:true,internal:true,team:null as string|null,kind:'vendor'},...rows.map(r=>({...r.snapshot,id:r.vendor_id,version:r.version,internal:false,team:r.snapshot.team??null,kind:r.snapshot.kind??'vendor'}))];
+  return [{id:'pz-team',version:1,name:'Power Zone team',phone:'',roles:['electrical'],active:true,internal:true,deleted:false,team:null as string|null,kind:'vendor'},...rows.map(r=>({...r.snapshot,id:r.vendor_id,version:r.version,internal:false,deleted:r.snapshot.deleted===true,team:r.snapshot.team??null,kind:r.snapshot.kind??'vendor'}))];
  }
- async vendors(actor:string){const a=await this.access(actor);if(!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Vendor management belongs to the Operations lead.');return {vendors:(await this.vendorList(this.pool)).filter(v=>(v.internal||(v.kind??'vendor')==='vendor')&&(a.kind!=='lead'||v.internal||v.team===a.team))};}
+ async vendors(actor:string){const a=await this.access(actor);if(!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Vendor management belongs to the Operations lead.');return {vendors:(await this.vendorList(this.pool)).filter(v=>(v.internal||(v.kind??'vendor')==='vendor')&&(a.kind!=='lead'||v.internal||!v.deleted&&v.team===a.team))};}
  async resources(actor:string,kind:'member'|'vehicle'){
   const a=await this.access(actor);if(!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Resource management belongs to the Operations lead.');
-  return {resources:(await this.vendorList(this.pool)).filter(v=>!v.internal&&v.kind===kind&&(a.kind!=='lead'||v.team===a.team))};
+  return {resources:(await this.vendorList(this.pool)).filter(v=>!v.internal&&v.kind===kind&&(a.kind!=='lead'||!v.deleted&&v.team===a.team))};
  }
  async saveVendor(actor:string,input:z.infer<typeof vendorSchema>){
   const v=vendorSchema.parse(input),fingerprint=createHash('sha256').update(JSON.stringify(v)).digest('hex');
@@ -205,16 +205,19 @@ export class OperationsBoardRepository{
    const a=await this.access(actor,c);if(!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Vendor management belongs to the Operations lead.');
    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('operations.board.vendors',0))");
    const replay=(await c.query('SELECT vendor_id,version,snapshot,request_sha256 FROM operations_board_vendor_versions WHERE request_key=$1',[v.requestKey])).rows[0];
-   if(replay){if(a.kind==='lead'&&replay.snapshot.team!==a.team)throw new HttpError(404,'Vendor not found.');if(replay.request_sha256!==fingerprint)throw new HttpError(409,'This request key was used for another vendor update.');return {...replay.snapshot,id:replay.vendor_id,version:replay.version};}
+   if(replay){if(a.kind==='lead'&&(replay.snapshot.deleted||replay.snapshot.team!==a.team))throw new HttpError(404,'Vendor not found.');if(replay.request_sha256!==fingerprint)throw new HttpError(409,'This request key was used for another vendor update.');return {...replay.snapshot,id:replay.vendor_id,version:replay.version};}
    const vendors=await this.vendorList(c),old=v.id?vendors.find(r=>r.id===v.id):undefined;
-   if(v.id&&(!old||a.kind==='lead'&&old.team!==a.team))throw new HttpError(404,'Vendor not found.');
+   if(v.id&&(!old||a.kind==='lead'&&(old.deleted||old.team!==a.team)))throw new HttpError(404,'Vendor not found.');
+   if(a.kind==='lead'&&v.deleted!==undefined)throw new HttpError(403,'Only the Operations head can delete or restore resources.');
+   if(v.deleted!==undefined&&!old)throw new HttpError(422,'Save the resource before deleting it.');
    if(old&&(old.kind??'vendor')!==v.kind)throw new HttpError(422,'The saved resource type cannot change.');
    if(a.kind==='lead'&&v.team&&v.team!==a.team)throw new HttpError(403,'Use your assigned region.');
    const team=a.kind==='lead'?a.team:v.team??old?.team??null;
    if((old?.version??0)!==v.version)throw new HttpError(409,'The vendor was updated. Reload before saving.');
    if(old&&!v.reason)throw new HttpError(422,'Give a reason for changing the saved vendor.');
    if(vendors.some(r=>r.id!==v.id&&r.team===team&&(r.kind??'vendor')===v.kind&&r.name.toLowerCase()===v.name.toLowerCase()))throw new HttpError(409,'This vendor is already saved. Edit the existing record.');
-   const id=v.id??randomUUID(),snapshot={name:v.name,phone:v.phone,roles:[...new Set(v.roles)],active:v.active,team,kind:v.kind};
+   const deleted=v.deleted??old?.deleted??false;
+   const id=v.id??randomUUID(),snapshot={name:v.name,phone:v.phone,roles:[...new Set(v.roles)],active:deleted?false:v.active,team,kind:v.kind,deleted};
    await c.query('INSERT INTO operations_board_vendor_versions(vendor_id,version,snapshot,request_key,request_sha256,reason,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[id,v.version+1,snapshot,v.requestKey,fingerprint,v.reason||'Initial vendor',actor]);
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`operations.board.vendor:${id}:${v.version+1}`]);return {...snapshot,id,version:v.version+1};
   });
