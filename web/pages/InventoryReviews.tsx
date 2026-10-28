@@ -1,5 +1,5 @@
-import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
 import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
+import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
 import {StandaloneClosingReviews} from '../components/StandaloneClosingReviews.js';
 import {InventoryNavigation} from '../components/InventoryNavigation.js';
 import {useEffect,useState,useRef} from 'react';

@@ -2,7 +2,7 @@ import {jsPDF} from 'jspdf';
 import {autoTable} from 'jspdf-autotable';
 import {drawReportLogo,drawReportFooter,reportBottomMargin} from '../reports/branding.js';
 export function surveyDispatchPdf(plan:any,kind:'dispatch'|'forms'){
- const pdf=new jsPDF({format:'a4'});
+ const pdf=new jsPDF({format:'a4',compress:true});
  const title=kind==='dispatch'?'Survey Dispatch Order':'Site Survey Form';
  const header=(site?:any)=>{
   drawReportLogo(pdf);pdf.setFontSize(15);pdf.text(title,14,39);pdf.setFontSize(9);

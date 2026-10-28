@@ -1,3 +1,4 @@
+import {ApprovedMaterialPreview,isApprovedMaterialDocument} from '../inventory-approved/ApprovedMaterialPreview.js';
 import {departmentFetch} from '../department-view.js';
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/Button.js";
@@ -5,7 +6,7 @@ import {downloadName,filenameFromDisposition} from '../../shared/download-name.j
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 /** Read-only authenticated document preview. Existing endpoints enforce access. */
-export function DocumentPreview({
+function NativeDocumentPreview({
   url,
   title,
   mime = "application/pdf",
@@ -202,3 +203,5 @@ export function DocumentDownload({
     </div>
   );
 }
+
+export function DocumentPreview(props:Parameters<typeof NativeDocumentPreview>[0]){return !props.data&&isApprovedMaterialDocument(props.url)?<ApprovedMaterialPreview url={props.url} title={props.title} onReady={props.onReady}/>:<NativeDocumentPreview {...props}/>;}

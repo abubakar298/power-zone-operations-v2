@@ -7,7 +7,7 @@ import {WarehouseTransferRepository,warehouseTransferIssueSchema,warehouseTransf
 import {GatePassRepository} from './gate-passes.js';
 import {requireWarehouseAccess} from './warehouse-access.js';
 import {warehouseTransferPrintModel,warehouseTransferReceiptPrintModel} from './warehouse-transfer-documents.js';
-import {materialDocumentPdf} from './material-document-pdf.js';
+import {materialDocumentPdf,warehouseDoCopies} from './material-document-pdf.js';
 /** Mount at /api/warehouse-transfers. Existing session and repository scopes remain authoritative. */
 export function warehouseTransferHttp(pool:Pool,requireSession:RequestHandler){
  const r=Router(),repo=new WarehouseTransferRepository(pool),gates=new GatePassRepository(pool);
@@ -32,6 +32,6 @@ export function warehouseTransferHttp(pool:Pool,requireSession:RequestHandler){
  r.get('/receipts/:id',async(req,res)=>res.json(await repo.receipt(req.authSession!.user.id,id(req.params.id))));
  r.get('/receipts/:id/document.pdf',async(req,res)=>{const row=await repo.receipt(req.authSession!.user.id,id(req.params.id)),model=warehouseTransferReceiptPrintModel(row);res.locals.downloadContext={documentType:model.title,identity:'warehouse-transfer-receipt:'+row.id,revision:1};res.type('pdf').set('Content-Disposition',`inline; filename="${row.number}.pdf"`).send(materialDocumentPdf(model));});
  r.get('/:id',async(req,res)=>res.json(await repo.detail(req.authSession!.user.id,id(req.params.id))));
- r.get('/:id/document.pdf',async(req,res)=>{const row=await repo.detail(req.authSession!.user.id,id(req.params.id));await requireWarehouseAccess(req.authSession!.user.id,row.sourceWarehouse,pool,true);const model=warehouseTransferPrintModel(row);res.locals.downloadContext={documentType:model.title,identity:'warehouse-transfer:'+row.id,revision:1};res.type('pdf').set('Content-Disposition',`inline; filename="${row.number}.pdf"`).send(materialDocumentPdf(model));});
+ r.get('/:id/document.pdf',async(req,res)=>{const row=await repo.detail(req.authSession!.user.id,id(req.params.id));await requireWarehouseAccess(req.authSession!.user.id,row.sourceWarehouse,pool,true);const model=warehouseTransferPrintModel(row);res.locals.downloadContext={documentType:model.title,identity:'warehouse-transfer:'+row.id,revision:1};res.type('pdf').set('Content-Disposition',`inline; filename="${row.number}.pdf"`).send(materialDocumentPdf(model,warehouseDoCopies));});
  return r;
 }

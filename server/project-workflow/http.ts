@@ -254,7 +254,7 @@ export function projectWorkflowHttp(
         id(req),
         z.uuid().parse(req.params.document),
       ),
-      pdf = new jsPDF(),
+      pdf = new jsPDF({compress:true}),
       s = d.snapshot;
     if (
       ["Survey dispatch", "Survey form"].includes(d.kind) &&

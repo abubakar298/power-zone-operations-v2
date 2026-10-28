@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tsx watch server/main.ts",
     "dev:web": "vite --host 127.0.0.1",
-    "build": "node scripts/verify-document-formats.mjs && tsc -p tsconfig.app.json --noEmit && vite build && node scripts/ocr-assets.mjs && tsc -p tsconfig.server.json",
+    "build": "node scripts/verify-document-formats.mjs && node scripts/verify-pdf-compression.mjs && tsc -p tsconfig.app.json --noEmit && vite build && node scripts/ocr-assets.mjs && tsc -p tsconfig.server.json",
     "start": "node dist/server/main.js",
     "migrate": "tsx server/db/migrate-cli.ts",
     "migrate:production": "node dist/server/db/migrate-cli.js",
@@ -35,7 +35,8 @@
     "tesseract.js": "^6.0.1",
     "tesseract.js-core": "^6.1.2",
     "zod": "^4.6.6",
-    "fflate": "^0.8.3"
+    "fflate": "^0.8.3",
+    "html2canvas": "1.4.1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

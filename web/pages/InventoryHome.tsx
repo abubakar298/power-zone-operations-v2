@@ -1,5 +1,6 @@
-import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
 import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
+import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
+import {navigateInventory} from '../inventory-approved/navigation.js';
 import finalStockIds from '../../data/final-stock-item-ids.json' with {type:'json'};
 import {stockSection,compareStockItems} from '../../shared/warehouse-stock-order.mjs';
 import {decimalDisplay} from '../numbers.js';
@@ -55,7 +56,7 @@ export function InventoryHome({session,onLogout}:{session:Session;onLogout:()=>v
   }
  }catch(e){setErrors({access:(e as Error).message});}finally{setLoading(false);}}
  useEffect(()=>{void load();},[revision]);
- function go(path:string){if(confirmLeaveWorkspace())location.assign(path);}
+ function go(path:string){if(confirmLeaveWorkspace())navigateInventory(path);}
  async function logout(){if(!confirmLeaveWorkspace())return;try{await api('/auth/logout',{csrf:session.csrfToken,body:{}});onLogout();}catch(e){setErrors({...errors,logout:(e as Error).message});}}
  const headsup=intake?.sources.filter(s=>s.authorization==='forecast-only');
  const ipoRows=intake?[...intake.sources.filter(s=>s.authorization!=='forecast-only'),...(intake.registeredPending??[])]:undefined;

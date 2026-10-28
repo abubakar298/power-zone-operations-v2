@@ -1,3 +1,8 @@
+import {warehouseNumber} from './warehouse-access.js';
+import {ParentReconciliationRepository} from './parent-reconciliation.js';
+import approvedParentLedger from './approved-parent-ledger.json' with {type:'json'};
+import {requireOpenParent} from './parent-open.js';
+import approvedSiteLedger from './approved-site-ledger.json' with {type:'json'};
 import {inventoryOperationsBatches} from './operations-batches.js';
 import {plannedInventoryDelivery} from '../operations-board/batch-delivery.js';
 import {MinimumStockRepository} from './minimum-stock.js';
@@ -26,7 +31,7 @@ export const materialDraftInputSchema=z.object({
 export type MaterialDraftInput=z.infer<typeof materialDraftInputSchema>;
 export type MaterialSource={sourceKind:'store-boq'|'headsup'|'linked-ipo';registeredSiteId?:string;storeHandoffId?:string;basisId:string;basisVersion:1;siteId:string;ipo:string|null;orderNumber?:string;customerPo?:string;dispatchDate?:string|null;siteName:string;customer:string;installation:boolean|null;authorization:'approved-store-boq'|'approved-ipo-boq'|'forecast-only';items:unknown[]};
 type Source=MaterialSource;
-const latest=`SELECT d.id,v.version,v.snapshot,v.created_at FROM inventory_material_drafts d JOIN LATERAL(SELECT * FROM inventory_material_draft_versions WHERE draft_id=d.id ORDER BY version DESC LIMIT 1)v ON true`;
+const latest=`SELECT d.id,v.version,v.snapshot,v.created_at,(SELECT number FROM inventory_parent_preparation_references WHERE draft_id=d.id) AS number FROM inventory_material_drafts d JOIN LATERAL(SELECT * FROM inventory_material_draft_versions WHERE draft_id=d.id ORDER BY version DESC LIMIT 1)v ON true`;
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 export class MaterialDraftRepository{
  constructor(private pool:Pool){}
@@ -90,6 +95,58 @@ export class MaterialDraftRepository{
   const aliases=Object.fromEntries([...candidates].filter(([,targets])=>targets.size===1&&map.has([...targets][0])).map(([alias,targets])=>[alias,[...targets][0]]));
   return {catalogue:[...map.values()].sort((a,b)=>a.itemId.localeCompare(b.itemId)),aliases,warehouses:[...warehouses].sort()};
  }
+ parentReconciliation(actor:string,id:string){return new ParentReconciliationRepository(this.pool).read(actor,id);}
+ changeParentReconciliation(actor:string,input:unknown){return new ParentReconciliationRepository(this.pool).change(actor,input);}
+ async reviewedPools(actor:string){const access=await this.access(actor);return {version:approvedParentLedger.version,preparedAt:approvedParentLedger.preparedAt,groups:approvedParentLedger.groups.filter(g=>access.owner||access.warehouses.includes(g.warehouse+' warehouse'))};}
+ async siteLedger(actor:string){
+  const access=await this.access(actor),data=structuredClone(approvedSiteLedger) as any;
+  const normal=(w:string)=>w.toLowerCase().replace(/ warehouse$/,'');
+  const warehouses=new Set(access.warehouses.map(normal));
+  if(!access.owner){const sites=new Set(data.events.filter((e:any)=>warehouses.has(normal(e.warehouse))).map((e:any)=>e.siteId));data.events=data.events.filter((e:any)=>warehouses.has(normal(e.warehouse))||sites.has(e.siteId)&&e.kind==='local_purchase');data.unmappedReturns=data.unmappedReturns.filter((e:any)=>warehouses.has(normal(e.warehouse)));data.sites=data.sites.filter((s:any)=>sites.has(s.id));}
+  const records=(await this.pool.query(`SELECT d.id,d.number,d.warehouse,d.created_at,d.snapshot FROM inventory_material_dispatches d WHERE NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_pending p WHERE p.document_kind='dispatch' AND p.document_id=d.id AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_postings z WHERE z.document_kind=p.document_kind AND z.document_id=p.document_id)) ORDER BY d.created_at`)).rows;
+  for(const r of records){if(!access.owner&&!access.warehouses.includes(r.warehouse))continue;const sources=r.snapshot.sites??[];if(sources.length!==1)continue;const site=sources[0],id=site.siteId,ipo=[site.ipo,site.orderNumber].filter(Boolean).join(' · ');if(!data.sites.some((s:any)=>s.id===id))data.sites.push({id,site:site.siteName,customer:site.customer,ipo});for(const [index,line]of(r.snapshot.lines??[]).entries()){const eventId=r.id+':'+index;if(data.events.some((e:any)=>e.document===r.number&&e.itemId===line.itemId&&e.warehouse===r.warehouse))continue;data.events.push({id:eventId,siteId:id,site:site.siteName,customer:site.customer,ipo,itemId:line.itemId,description:line.description??line.itemId,unit:line.unit,date:new Date(r.created_at).toISOString().slice(0,10),document:r.number,documentType:'DO',kind:'issue',quantity:line.quantity??line.out,warehouse:r.warehouse,reference:'',notes:'Issued warehouse document',condition:'',evidence:'',sourceSheet:'',sourceType:'Saved warehouse issuance',status:'Issued',replacement:false,faulty:false});}}
+  const receipts=(await this.pool.query(`SELECT r.id,r.number,r.snapshot->>'warehouse' AS warehouse,r.created_at,r.snapshot,v.snapshot AS preparation FROM inventory_material_receipts r JOIN LATERAL(SELECT snapshot FROM inventory_material_draft_versions WHERE draft_id=r.draft_id ORDER BY version DESC LIMIT 1)v ON true ORDER BY r.created_at`)).rows;
+  for(const r of receipts){if(!access.owner&&!access.warehouses.includes(r.warehouse))continue;const sites=r.preparation.sites??[];if(sites.length!==1)continue;const site=sites[0];for(const [i,line]of(r.snapshot.lines??[]).entries()){if(data.events.some((e:any)=>e.document===r.number&&e.itemId===line.itemId&&e.warehouse===r.warehouse))continue;data.events.push({id:r.id+':'+i,siteId:site.siteId,site:site.siteName,customer:site.customer,ipo:[site.ipo,site.orderNumber].filter(Boolean).join(' · '),itemId:line.itemId,description:line.itemId,unit:line.unit,date:new Date(r.created_at).toISOString().slice(0,10),document:r.number,documentType:'IGP',kind:'return',quantity:line.quantity,warehouse:r.warehouse,reference:'',notes:r.snapshot.reason,condition:'',evidence:'/api/material-dispatches/evidence/'+r.snapshot.evidence.id,sourceSheet:'',sourceType:'Verified warehouse return',status:'Credited',replacement:false,faulty:false});}}
+  data.nativeSites=(await this.pool.query(`${latest} ORDER BY v.created_at DESC`)).rows.filter((r:any)=>access.owner||access.warehouses.includes(r.snapshot.warehouse)).flatMap((r:any)=>r.snapshot.sites.map((s:any)=>({id:s.siteId,site:s.siteName,customer:s.customer,ipo:s.ipo??'',draftId:r.id,parent:r.snapshot.parent})));
+  data.coverage.importedEvents=data.events.length;return data;
+ }
+ async transportChoices(actor:string,warehouse:string){
+  const access=await this.access(actor);this.scope(access,warehouse);
+  const choices=(await this.pool.query('SELECT kind,value,details FROM inventory_transport_choices WHERE warehouse=$1 ORDER BY kind,value',[warehouse])).rows;
+  const versions=(await this.pool.query("SELECT DISTINCT v.snapshot->'transport' AS transport FROM inventory_material_draft_versions v WHERE v.snapshot->>'warehouse'=$1",[warehouse])).rows;
+  const result=new Map(choices.map(r=>[r.kind+'|'+r.value,r]));
+  for(const {transport:t} of versions)for(const kind of ['issuedTo','vehicle','driver'])if(t?.[kind]){const key=kind+'|'+t[kind];if(!result.has(key))result.set(key,{kind,value:t[kind],details:kind==='driver'?t.driverIdentity??'':''});}
+  return {choices:[...result.values()]};
+ }
+ async saveTransportChoice(actor:string,value:unknown){
+  const parsed=z.object({warehouse:z.string().trim().min(1).max(200),kind:z.enum(['issuedTo','vehicle','driver']),value:z.string().trim().min(1).max(200),details:z.string().max(100)}).strict().safeParse(value);
+  if(!parsed.success)throw new HttpError(422,'Enter the warehouse and transport details.');const v=parsed.data;
+  return transaction(this.pool,async c=>{await lockActiveActor(c,actor);const access=await this.access(actor,c);this.scope(access,v.warehouse);await c.query('INSERT INTO inventory_transport_choices(warehouse,kind,value,details,actor_id)VALUES($1,$2,$3,$4,$5) ON CONFLICT(warehouse,kind,value)DO NOTHING',[v.warehouse,v.kind,v.value,v.kind==='driver'?v.details:'',actor]);return {saved:true};});
+ }
+ async temporaryDocuments(actor:string){
+  const access=await this.access(actor),catalogue=await this.stockCatalogue();
+  const rows=await this.pool.query('SELECT snapshot FROM inventory_temporary_documents WHERE ($1 OR warehouse=ANY($2::text[])) ORDER BY created_at DESC',[access.owner,access.warehouses]);
+  return {documents:rows.rows.map(r=>r.snapshot),warehouses:catalogue.warehouses.filter(w=>access.owner||access.warehouses.includes(w)),items:catalogue.catalogue.map(r=>({id:r.itemId,description:r.description,unit:r.units[0]??''}))};
+ }
+ async saveTemporaryDocument(actor:string,value:unknown){
+  const input=z.object({requestKey:z.uuid(),id:z.union([z.uuid(),z.literal('')]),version:z.number().int().nonnegative(),type:z.enum(['IGP','OGP','TRF','IRR','OTHER']),date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),warehouse:z.string().trim().min(1).max(200),party:z.string().max(500),sourceReference:z.string().max(500),actualReference:z.string().max(500),notes:z.string().max(5000),detailsConfirmed:z.boolean(),lines:z.array(z.object({itemId:z.string().max(200),description:z.string().max(1000),quantity:z.union([z.literal(''),z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/)]),unit:z.string().max(40),remarks:z.string().max(2000)}).strict()).min(1).max(500)}).strict().safeParse(value);
+  if(!input.success)throw new HttpError(422,'Check the temporary document, quantities and warehouse.');
+  const v=input.data;if(v.detailsConfirmed&&!v.actualReference.trim())throw new HttpError(422,'Enter the actual reference before confirming details.');
+  return transaction(this.pool,async c=>{await lockActiveActor(c,actor);const access=await this.access(actor,c);this.scope(access,v.warehouse);
+   await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[v.requestKey]);
+   const replay=(await c.query('SELECT input,snapshot FROM inventory_temporary_document_versions WHERE request_key=$1',[v.requestKey])).rows[0];
+   if(replay){this.scope(access,replay.snapshot.warehouse);if(!isDeepStrictEqual(replay.input,v))throw new HttpError(409,'This save request was already used for different details.');return replay.snapshot;}
+   const id=v.id||randomUUID(),old=v.id?(await c.query('SELECT * FROM inventory_temporary_documents WHERE id=$1 FOR UPDATE',[id])).rows[0]:undefined;
+   if(v.id&&!old)throw new HttpError(404,'Temporary document not found.');
+   if(old){this.scope(access,old.warehouse);if(old.version!==v.version)throw new HttpError(409,'This document changed. Reopen it before saving.');if(old.snapshot.type!==v.type)throw new HttpError(422,'The saved document type cannot change.');}
+   else if(v.version!==0)throw new HttpError(409,'Create a new temporary document first.');
+   const version=(old?.version??0)+1,sequence=old?null:(await c.query("SELECT nextval('inventory_temporary_document_number_seq') AS number")).rows[0].number;
+   const snapshot={...v,id,version,number:old?.number??`TMP-${v.type}-${v.date.replaceAll('-','')}-${String(sequence).padStart(4,'0')}`,createdAt:old?.snapshot.createdAt??new Date().toISOString()};
+   if(old)await c.query('UPDATE inventory_temporary_documents SET version=$2,warehouse=$3,snapshot=$4,updated_at=now() WHERE id=$1',[id,version,v.warehouse,snapshot]);
+   else await c.query('INSERT INTO inventory_temporary_documents(id,version,number,warehouse,snapshot,created_by)VALUES($1,$2,$3,$4,$5,$6)',[id,version,snapshot.number,v.warehouse,snapshot,actor]);
+   await c.query('INSERT INTO inventory_temporary_document_versions(document_id,version,snapshot,request_key,input,actor_id)VALUES($1,$2,$3,$4,$5,$6)',[id,version,snapshot,v.requestKey,v,actor]);return snapshot;
+  });
+ }
  minimumStock(actor:string,warehouse:unknown){return new MinimumStockRepository(this.pool).read(actor,warehouse);}
  saveMinimumStock(actor:string,input:unknown){return new MinimumStockRepository(this.pool).save(actor,input);}
  async warehouses(actor:string){
@@ -126,6 +183,7 @@ export class MaterialDraftRepository{
    if(current.installation===null||current.installation!==saved.installation)throw new HttpError(409,'Confirm the approved installation or delivery-only scope before issuing material.');
   }
  }
+ async history(actor:string,id:string){const access=await this.access(actor);await this.detail(actor,id);const versions=(await this.pool.query('SELECT version,created_at,snapshot FROM inventory_material_draft_versions WHERE draft_id=$1 ORDER BY version DESC',[id])).rows;return {versions:versions.filter(r=>access.owner||access.warehouses.includes(r.snapshot.warehouse)).map(r=>({version:r.version,at:r.created_at,reason:r.snapshot.revisionReason??'Preparation saved',warehouse:r.snapshot.warehouse}))};}
  async list(actor:string){const access=await this.access(actor);const rows=(await this.pool.query(latest+' ORDER BY v.created_at DESC')).rows;return {access,drafts:rows.filter(r=>access.owner||access.warehouses.includes(r.snapshot.warehouse)),stockPosting:false};}
  async detail(actor:string,id:string,c:Pool|PoolClient=this.pool){const access=await this.access(actor,c),row=(await c.query(latest+' WHERE d.id=$1',[id])).rows[0];if(!row)throw new HttpError(404,'Material draft not found.');this.scope(access,row.snapshot.warehouse);return {...row,stockPosting:false};}
  async save(actor:string,raw:MaterialDraftInput,client?:PoolClient){
@@ -189,8 +247,10 @@ export class MaterialDraftRepository{
     if(selected.every(s=>s.installation===true)&&policy.variableDispatch!==(input.kind==='variable'))throw new HttpError(422,'This item belongs in the other material module. Keep the BOQ row and correct its selection.');
    }
    const snapshot={kind:input.kind,parent:input.parent,warehouse:input.warehouse,sites:selected,lines:input.lines,transport:input.transport,...(input.revisionReason?{revisionReason:input.revisionReason}:{}),status:'draft',stockPosting:false};
+   if(input.id)await requireOpenParent(c,input.id);
    if(!input.id)await c.query('INSERT INTO inventory_material_drafts(id,created_by) VALUES($1,$2)',[id,actor]);
    await c.query('INSERT INTO inventory_material_draft_versions(draft_id,version,snapshot,request_key,request_fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6)',[id,input.version+1,snapshot,input.requestKey,hash(input),actor]);
+   if(input.parent&&!(await c.query('SELECT 1 FROM inventory_parent_preparation_references WHERE draft_id=$1',[id])).rowCount){const first=(await c.query('SELECT number FROM inventory_material_dispatches WHERE draft_id=$1 ORDER BY created_at,id LIMIT 1',[id])).rows[0];const number=first?.number??await warehouseNumber(c,'PDO',id);await c.query('INSERT INTO inventory_parent_preparation_references(draft_id,number)VALUES($1,$2)',[id,number]);}
    return {id,version:input.version+1,stockPosting:false};
   };
   return client?execute(client):transaction(this.pool,execute);

@@ -1,3 +1,5 @@
+import {signDispatch} from './signed-dispatch-fixture.js';
+import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomBytes,randomUUID} from 'node:crypto';
@@ -27,7 +29,7 @@ import {WarehouseAuthorityRepository,warehousePosition} from '../server/inventor
 import {MaterialStockRepository} from '../server/inventory/material-stock.js';
 import {WarehouseTransferRepository} from '../server/inventory/warehouse-transfers.js';
 
-async function stagedDirectory(staged=true){const dir=await mkdtemp(join(tmpdir(),'pz-transfer-migrations-'));for(const name of await readdir(resolve('migrations')))if(/^\d+_[a-z_]+\.sql$/.test(name)&&Number(name.split('_')[0])<=130)await copyFile(resolve('migrations',name),join(dir,name));if(staged)for(const name of ['131_inventory_warehouse_transfers.sql','133_inventory_transfer_gate_copies.sql'])await copyFile(resolve('migrations',name),join(dir,name));return dir;}
+async function stagedDirectory(staged=true){const dir=await mkdtemp(join(tmpdir(),'pz-transfer-migrations-'));for(const name of await readdir(resolve('migrations')))if(/^\d+_[a-z_]+\.sql$/.test(name)&&Number(name.split('_')[0])<=130)await copyFile(resolve('migrations',name),join(dir,name));if(staged)for(const name of ['131_inventory_warehouse_transfers.sql','133_inventory_transfer_gate_copies.sql','142_inventory_signed_dispatch_posting.sql'])await copyFile(resolve('migrations',name),join(dir,name));return dir;}
 async function tableSnapshot(pool:any,names?:string[]){const tables=names??(await pool.query("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename<>'schema_migrations' ORDER BY tablename")).rows.map((r:any)=>r.tablename);const result:Record<string,unknown>={};for(const name of tables){const q='"'+name.replaceAll('"','""')+'"';result[name]=(await pool.query(`SELECT count(*)::text rows,md5(coalesce(string_agg(md5(to_jsonb(t)::text),'' ORDER BY md5(to_jsonb(t)::text)),'')) digest FROM ${q} t`)).rows[0];}return result;}
 
 test('warehouse transfers post source OUT once, destination counted partial IN once, preserve history and enforce scoped authority',async()=>{
@@ -48,19 +50,21 @@ test('warehouse transfers post source OUT once, destination counted partial IN o
   const repo=new WarehouseTransferRepository(db.pool),stock=new MaterialStockRepository(db.pool),fromKey=warehouseLedgerKey(item,'Lahore warehouse','m'),toKey=warehouseLedgerKey(item,'Karachi warehouse','m');
   const original=(await db.pool.query('SELECT * FROM inventory_warehouse_source_balances ORDER BY ledger_key')).rows;
   const intake=await repo.intake(ids.source,'Lahore warehouse','Karachi warehouse');assert.equal(intake.source.positions[0].currentClosing,'100');assert.ok(intake.destination.positions.every(p=>!('currentClosing' in p)),'Source-only dispatcher gets reviewed destination identities, not its stock totals.');await assert.rejects(repo.intake(ids.sourceKeeper,'Lahore warehouse','Karachi warehouse'),/dispatcher/);
+  const issueSigned=async(actor:string,command:Parameters<WarehouseTransferRepository['issue']>[1])=>{const r=await repo.issue(actor,command);if(!r.stockPosted)await signDispatch(db.pool,actor,'transfer-out',r.id,command.source.warehouse);return {...r,stockPosted:true,awaitingSignedGate:false};};
   const input={requestKey:randomUUID(),source:{warehouse:'Lahore warehouse',sourceSha256:sourceSha,authorityVersion:1},destination:{warehouse:'Karachi warehouse',sourceSha256:sourceSha,authorityVersion:1},reason:'Fictional dispatch between warehouses',transport:{vehicle:'TEST-000',driver:'Fictional driver',reference:'TEST ONLY'},lines:[{lineKey:randomUUID(),itemId:item,sourceLedgerKey:fromKey,destinationLedgerKey:toKey,quantity:'8',sourceLedgerRevision:0,destinationLedgerRevision:0}]};
-  await assert.rejects(repo.issue(ids.sourceKeeper,input),/dispatcher/);await assert.rejects(repo.issue(ids.destination,input),/dispatcher/);await assert.rejects(repo.list(ids.unassigned),/document access/);
-  await assert.rejects(repo.issue(ids.source,{...input,lines:[{...input.lines[0],quantity:'101'}]}),/insufficient/);
-  await assert.rejects(repo.issue(ids.source,{...input,lines:[{...input.lines[0],itemId:'OLD-CABLE-ID'}]}),/exact final/);
-  await assert.rejects(repo.issue(ids.source,{...input,lines:[{...input.lines[0],destinationLedgerKey:warehouseLedgerKey(item,'Karachi warehouse','coil')}]}),/reviewed conversion/);
-  await assert.rejects(repo.issue(ids.source,{...input,destination:{...input.destination,warehouse:'Multan warehouse'},lines:[{...input.lines[0],destinationLedgerKey:warehouseLedgerKey(item,'Multan warehouse','m')}]}),/Verify the existing/);
-  await assert.rejects(repo.issue(ids.source,{...input,destination:{...input.destination,warehouse:'Islamabad warehouse'},lines:[{...input.lines[0],destinationLedgerKey:warehouseLedgerKey(item,'Islamabad warehouse','m')}]}),/Verify the existing/);
-  await assert.rejects(repo.issue(ids.source,{...input,lines:[{...input.lines[0],destinationLedgerKey:'f'.repeat(64)}]}),/Verify the existing/);
-  const [first,retry]=await Promise.all([repo.issue(ids.source,input),repo.issue(ids.source,input)]);assert.deepEqual(first,retry);assert.match(first.number,/^CPZ-TRF-\d{2}-\d{4}$/);
+  await assert.rejects(issueSigned(ids.sourceKeeper,input),/dispatcher/);await assert.rejects(issueSigned(ids.destination,input),/dispatcher/);await assert.rejects(repo.list(ids.unassigned),/document access/);
+  await assert.rejects(issueSigned(ids.source,{...input,lines:[{...input.lines[0],quantity:'101'}]}),/insufficient/);
+  await assert.rejects(issueSigned(ids.source,{...input,lines:[{...input.lines[0],itemId:'OLD-CABLE-ID'}]}),/exact final/);
+  await assert.rejects(issueSigned(ids.source,{...input,lines:[{...input.lines[0],destinationLedgerKey:warehouseLedgerKey(item,'Karachi warehouse','coil')}]}),/reviewed conversion/);
+  await assert.rejects(issueSigned(ids.source,{...input,destination:{...input.destination,warehouse:'Multan warehouse'},lines:[{...input.lines[0],destinationLedgerKey:warehouseLedgerKey(item,'Multan warehouse','m')}]}),/Verify the existing/);
+  await assert.rejects(issueSigned(ids.source,{...input,destination:{...input.destination,warehouse:'Islamabad warehouse'},lines:[{...input.lines[0],destinationLedgerKey:warehouseLedgerKey(item,'Islamabad warehouse','m')}]}),/Verify the existing/);
+  await assert.rejects(issueSigned(ids.source,{...input,lines:[{...input.lines[0],destinationLedgerKey:'f'.repeat(64)}]}),/Verify the existing/);
+  const pending=await repo.issue(ids.source,input);assert.equal(pending.stockPosted,false);assert.equal((await warehousePosition(db.pool,sourceSha,fromKey))?.currentClosing,'100');
+  const [first,retry]=await Promise.all([issueSigned(ids.source,input),issueSigned(ids.source,input)]);assert.deepEqual(first,retry);assert.match(first.number,/^CPZ-TRF-\d{2}-\d{4}$/);
   assert.equal((await warehousePosition(db.pool,sourceSha,fromKey))?.currentClosing,'92');assert.equal((await warehousePosition(db.pool,sourceSha,toKey))?.currentClosing,'10','Issue/print must not credit destination.');
-  await assert.rejects(repo.issue(ids.source,{...input,requestKey:randomUUID()}),/balance changed/);
+  await assert.rejects(issueSigned(ids.source,{...input,requestKey:randomUUID()}),/balance changed/);
   assert.equal((await repo.detail(ids.sourceKeeper,first.id)).lines[0].inTransit,'8');await repo.detail(ids.destinationKeeper,first.id);await assert.rejects(repo.detail(ids.foreignKeeper,first.id),/outside your scope/);assert.equal((await repo.list(ids.foreignKeeper)).length,0);
-  await assert.rejects(repo.issue(ids.source,{...input,reason:'Different retry'}),/another transfer/);
+  await assert.rejects(issueSigned(ids.source,{...input,reason:'Different retry'}),/another transfer/);
   const upload=async(user:string,warehouse:string,suffix:string)=>stock.uploadEvidence(user,{warehouse,filename:'FICTIONAL-'+suffix+'.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7 FICTIONAL TRANSFER COUNT '+suffix).toString('base64')});
   const evidence=await upload(ids.destinationKeeper,'Karachi warehouse','FIRST');
   const receipt={transferId:first.id,requestKey:randomUUID(),destinationSourceSha256:sourceSha,authorityVersion:1,evidenceId:evidence.id,reason:'Counted fictional destination receipt',lines:[{lineKey:input.lines[0].lineKey,quantity:'3.25',ledgerRevision:0}]};
@@ -79,7 +83,7 @@ test('warehouse transfers post source OUT once, destination counted partial IN o
   await request(app).get('/api/warehouse-transfers/access').set('Cookie',sessions.sourceKeeper.cookie).expect(200).then(r=>assert.equal(r.body.sourceWarehouses.length,0));
   await request(app).get('/api/warehouse-transfers').set('Cookie',sessions.foreignKeeper.cookie).expect(200).then(r=>assert.equal(r.body.records.length,0));
   await request(app).get('/api/warehouse-transfers/'+first.id).set('Cookie',sessions.foreignKeeper.cookie).expect(403);
-  const transferPdf=await request(app).get('/api/warehouse-transfers/'+first.id+'/document.pdf').set('Cookie',sessions.sourceKeeper.cookie).expect(200);assert.match(transferPdf.headers['content-type'],/pdf/);assert.match(transferPdf.headers['cache-control'],/no-store/);assert.equal(transferPdf.headers['x-content-type-options'],'nosniff');
+  const transferPdf=await request(app).get('/api/warehouse-transfers/'+first.id+'/document.pdf').set('Cookie',sessions.sourceKeeper.cookie).expect(200);const job=getDocument({data:new Uint8Array(transferPdf.body),useSystemFonts:true});try{const pdf=await job.promise;assert.equal(pdf.numPages,4,'One signed dispatch page for each DO copy');for(let page=1;page<=4;page++){const text=(await(await pdf.getPage(page)).getTextContent()).items.map((v:any)=>v.str??'').join(' ');assert.match(text,/Name:.*Date:/);}}finally{await job.destroy();}assert.match(transferPdf.headers['content-type'],/pdf/);assert.match(transferPdf.headers['cache-control'],/no-store/);assert.equal(transferPdf.headers['x-content-type-options'],'nosniff');
   await request(app).get('/api/warehouse-transfers/'+first.id+'/document.pdf').set('Cookie',sessions.destinationKeeper.cookie).expect(403);
   await request(app).get('/api/warehouse-transfers/receipts/'+received.id+'/document.pdf').set('Cookie',sessions.destinationKeeper.cookie).expect(200);
   await request(app).get('/api/warehouse-transfers/receipts/'+received.id+'/document.pdf').set('Cookie',sessions.sourceKeeper.cookie).expect(403);
@@ -112,9 +116,9 @@ test('warehouse transfers post source OUT once, destination counted partial IN o
   // Two opposite-direction dispatches compete for shared positions in sorted order.
   const reverse={...input,requestKey:randomUUID(),source:input.destination,destination:input.source,lines:[{...input.lines[0],lineKey:randomUUID(),sourceLedgerKey:toKey,destinationLedgerKey:fromKey,quantity:'1',sourceLedgerRevision:2,destinationLedgerRevision:1}]};
   const forward={...input,requestKey:randomUUID(),lines:[{...input.lines[0],lineKey:randomUUID(),quantity:'1',sourceLedgerRevision:1,destinationLedgerRevision:2}]};
-  const competition=await Promise.allSettled([repo.issue(ids.source,forward),repo.issue(ids.destination,reverse)]);assert.equal(competition.filter(r=>r.status==='fulfilled').length,1);assert.match(String((competition.find(r=>r.status==='rejected') as PromiseRejectedResult).reason),/balance changed/);
+  const competition=await Promise.allSettled([issueSigned(ids.source,forward),issueSigned(ids.destination,reverse)]);assert.equal(competition.filter(r=>r.status==='fulfilled').length,2,'Opposite signed transfers use fresh locked stock balances and each post exactly once.');
   await authority.command(ids.owner,{warehouse:'Karachi warehouse',version:1,sourceSha256:sourceSha,state:'suspended',reason:'Fictional pause for review',requestKey:randomUUID()});
-  await assert.rejects(repo.issue(ids.source,{...input,requestKey:randomUUID()}),/activate this warehouse/);
+  await assert.rejects(issueSigned(ids.source,{...input,requestKey:randomUUID()}),/activate this warehouse/);
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_material_dispatches')).rows[0].n,0,'Transfers are distinct from customer/site dispatches.');
  }finally{await db.close();await rm(directory,{recursive:true,force:true});await rm(legacy,{recursive:true,force:true});}
 });

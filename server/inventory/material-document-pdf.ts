@@ -8,18 +8,21 @@ const printable=(value:unknown)=>String(value??'').replace(/[\u2010-\u2015\u2212
 const quantity=(value:string|null)=>value===null?'':new Decimal(value).toDecimalPlaces(2).toFixed();
 /** Render-only: whitelisted document fields, never prices or arbitrary source
  * snapshots. Long rows paginate with repeated headers and top-aligned cells. */
-export function materialDocumentPdf(model:MaterialPrintModel){
- const pdf=new jsPDF({format:'a4'}),status=model.status==='received'?'RECEIVED - WAREHOUSE IN':model.status==='site-record'?'SITE USAGE - NOT A WAREHOUSE RECEIPT':model.status==='issued'?'ISSUED - WAREHOUSE DISPATCH':model.status==='simulation'?'SIMULATION - NOT AN ISSUED DOCUMENT':'DRAFT - NOT ISSUED';
+export const warehouseDoCopies=['Customer copy','Gate copy','Handover evidence','Storekeeper copy'];
+export function materialDocumentPdf(model:MaterialPrintModel,copies:string[]=['']){
+ const pdf=new jsPDF({format:'a4',compress:true}),status=model.status==='received'?'RECEIVED - WAREHOUSE IN':model.status==='site-record'?'SITE USAGE - NOT A WAREHOUSE RECEIPT':model.status==='issued'?'ISSUED - WAREHOUSE DISPATCH':model.status==='simulation'?'SIMULATION - NOT AN ISSUED DOCUMENT':'DRAFT - NOT ISSUED';
+ let copyLabel='';
  const top=70,headed=new Set<number>();
  const header=()=>{
   const page=pdf.getCurrentPageInfo().pageNumber;if(headed.has(page))return;headed.add(page);
   drawReportLogo(pdf);pdf.setTextColor(30,32,45);pdf.setFont('helvetica','bold');pdf.setFontSize(15);pdf.text(model.title,14,39);
-  pdf.setTextColor(88,67,176);pdf.setFontSize(9);pdf.text(status,14,46);
+  pdf.setTextColor(88,67,176);pdf.setFontSize(9);pdf.text(printable(status+(copyLabel?' · '+copyLabel:'')),14,46);
   pdf.setFont('helvetica','normal');pdf.setTextColor(65,65,75);pdf.setFontSize(8);
   pdf.text(printable(model.reference),14,53);pdf.text(pdf.splitTextToSize(printable(`Warehouse: ${model.warehouse}`),150),14,59);
   if(model.sites.length)pdf.text(model.sites.length===1?'1 site':`${model.sites.length} sites`,196,59,{align:'right'});
  };
  const table=(options:any)=>autoTable(pdf,{margin:{left:14,right:14,top,bottom:65},styles:{font:'helvetica',fontSize:7.5,cellPadding:2.5,valign:'top',overflow:'linebreak',lineWidth:.15,lineColor:[224,224,234]},headStyles:{fillColor:[240,239,248],textColor:[40,40,60],fontStyle:'bold'},alternateRowStyles:{fillColor:[250,250,253]},theme:'grid',rowPageBreak:'avoid',didDrawPage:header,...options});
+ for(const [copyIndex,label]of copies.entries()){if(copyIndex)pdf.addPage();copyLabel=label;
  table({startY:top,head:[model.context?.columns??['Site / customer','Customer PO','IPO / order']],body:model.context?.rows??model.sites.map(s=>[printable(s.name+(s.customer?'\n'+s.customer:'')),printable(s.customerPo||'Not recorded'),printable(s.ipo+(s.orderNumber?' / Order '+s.orderNumber:''))]),columnStyles:{0:{cellWidth:80},1:{cellWidth:42},2:{cellWidth:60}}});
  let y=(pdf as any).lastAutoTable.finalY+8;
  const usage=model.kind==='customer-signoff',internal=model.kind==='irr';
@@ -36,6 +39,7 @@ export function materialDocumentPdf(model:MaterialPrintModel){
  const note=pdf.splitTextToSize(printable(model.note),182);
  if(y+note.length*4>237){pdf.addPage();header();y=top;}
  pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(75,75,85);pdf.text(note,14,y);
+ }
  // Reserve a signature area on every sheet, including partial return forms.
  for(let page=1;page<=pdf.getNumberOfPages();page++){
   pdf.setPage(page);pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(75,75,85);

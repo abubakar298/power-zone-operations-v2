@@ -1,3 +1,4 @@
+import {requireOpenParent} from './parent-open.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {requireQcMaterialSite} from './qc-material-access.js';
 import {createHash} from 'node:crypto';
@@ -59,7 +60,7 @@ export class MaterialUsageRepository{
  async read(actor:string,draftId:string,client:Pool|PoolClient=this.pool,siteId?:string){
   const draft=await this.usageDraft(actor,draftId,client,siteId),s=draft.snapshot;
   const reports=(await client.query(latestUsage,[draftId])).rows;
-  const issued=(await client.query(`SELECT l.line_key,sum(l.quantity)::text out FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 GROUP BY l.line_key`,[draftId])).rows;
+  const issued=(await client.query(`SELECT l.line_key,sum(l.quantity)::text out FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_pending p WHERE p.document_kind='dispatch' AND p.document_id=d.id AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_postings z WHERE z.document_kind=p.document_kind AND z.document_id=p.document_id)) GROUP BY l.line_key`,[draftId])).rows;
   const references=(await client.query('SELECT number FROM inventory_material_dispatches WHERE draft_id=$1 ORDER BY created_at,id',[draftId])).rows.map(r=>r.number as string);
   const receipts=(await client.query('SELECT id,number,evidence_id,snapshot FROM inventory_material_receipts WHERE draft_id=$1 ORDER BY created_at,id',[draftId])).rows;
   const workLines=s.kind==='fixed'?s.lines.filter((r:any)=>r.itemId&&r.unit&&r.out!==''&&materialDocumentPolicy(r).approvedQuantityLocked):[];
@@ -80,7 +81,7 @@ export class MaterialUsageRepository{
    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.material.usage.request.'||$1,0))",[input.requestKey]);
    const replay=(await c.query('SELECT draft_id,site_id,version,request_fingerprint,created_by FROM inventory_material_site_usage_versions WHERE request_key=$1',[input.requestKey])).rows[0];
    if(replay){await this.usageDraft(actor,replay.draft_id,c,replay.site_id,true);if(replay.created_by!==actor||replay.request_fingerprint!==hash(input))throw new HttpError(409,'This request belongs to another site usage record.');return {draftId:replay.draft_id,siteId:replay.site_id,version:replay.version,stockPosting:false};}
-   await c.query('SELECT id FROM inventory_material_drafts WHERE id=$1 FOR UPDATE',[input.draftId]);
+   await c.query('SELECT id FROM inventory_material_drafts WHERE id=$1 FOR UPDATE',[input.draftId]);await requireOpenParent(c,input.draftId);
    const data=await this.read(actor,input.draftId,c,input.siteId),s=data.draft.snapshot,site=s.sites.find((v:any)=>v.siteId===input.siteId);
    if(!site)throw new HttpError(404,'The selected site is outside this material dispatch.');
    if((await c.query('SELECT role FROM users WHERE id=$1',[actor])).rows[0]?.role==='Operations')await requireQcMaterialSite(actor,site.registeredSiteId,c,true);

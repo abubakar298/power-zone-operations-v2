@@ -1,3 +1,5 @@
+import {deferDispatch,dispatchPosted} from './signed-dispatch.js';
+import {requireOpenParent} from './parent-open.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -40,14 +42,14 @@ export class MaterialStockRepository{
  }
  async movements(actor:string,draftId:string){
   const draft=await this.drafts.detail(actor,draftId);await this.scope(actor,draft.snapshot.warehouse);
-  const dispatches=(await this.pool.query('SELECT id,number,draft_version,created_at FROM inventory_material_dispatches WHERE draft_id=$1 ORDER BY created_at,id',[draftId])).rows;
+  const dispatches=(await this.pool.query('SELECT id,number,draft_version,created_at FROM inventory_material_dispatches WHERE draft_id=$1 ORDER BY created_at,id',[draftId])).rows;for(const d of dispatches)d.stockPosted=await dispatchPosted(this.pool,'dispatch',d.id);
   const receipts=(await this.pool.query('SELECT id,number,evidence_id,reason,created_at FROM inventory_material_receipts WHERE draft_id=$1 ORDER BY created_at,id',[draftId])).rows;
-  const lines=(await this.pool.query(`SELECT l.line_key,l.item_id,l.unit,sum(l.quantity)::text issued,coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.draft_id=$1 AND r.line_key=l.line_key),0)::text returned FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 GROUP BY l.line_key,l.item_id,l.unit`,[draftId])).rows;
+  const lines=(await this.pool.query(`SELECT l.line_key,l.item_id,l.unit,sum(l.quantity)::text prepared,sum(CASE WHEN EXISTS(SELECT 1 FROM inventory_signed_dispatch_pending p WHERE p.document_kind='dispatch' AND p.document_id=d.id AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_postings z WHERE z.document_kind=p.document_kind AND z.document_id=p.document_id)) THEN 0 ELSE l.quantity END)::text issued,coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.draft_id=$1 AND r.line_key=l.line_key),0)::text returned FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 GROUP BY l.line_key,l.item_id,l.unit`,[draftId])).rows;
   return {dispatches,receipts,lines:lines.map(r=>({...r,issued:new Decimal(r.issued).toString(),returned:new Decimal(r.returned).toString(),outstanding:new Decimal(r.issued).minus(r.returned).toString(),used:null})),siteUseStatus:'Not yet recorded; outstanding includes site use and material still in custody.'};
  }
  async dispatch(actor:string,id:string){
   const row=(await this.pool.query('SELECT id,number,draft_id,draft_version,warehouse,snapshot,created_at FROM inventory_material_dispatches WHERE id=$1',[id])).rows[0];
-  if(!row)throw new HttpError(404,'Issued material dispatch not found.');await this.scope(actor,row.warehouse,this.pool,true);return {...row,snapshot:{...row.snapshot,sites:row.snapshot.sites.map(({items,...site}:any)=>site)}};
+  if(!row)throw new HttpError(404,'Issued material dispatch not found.');await this.scope(actor,row.warehouse,this.pool,true);const posted=await dispatchPosted(this.pool,'dispatch',id);return {...row,stockPosted:posted,snapshot:{...row.snapshot,stockPosting:posted,sites:row.snapshot.sites.map(({items,...site}:any)=>site)}};
  }
  async uploadEvidence(actor:string,raw:z.infer<typeof materialEvidenceInputSchema>){
   const input=materialEvidenceInputSchema.parse(raw);await this.scope(actor,input.warehouse,this.pool,true);
@@ -75,7 +77,7 @@ export class MaterialStockRepository{
    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.material.receipt.request.'||$1,0))",[input.requestKey]);
    const replay=(await c.query('SELECT r.id,r.number,r.request_fingerprint,r.verified_by,d.snapshot FROM inventory_material_receipts r JOIN LATERAL(SELECT snapshot FROM inventory_material_draft_versions WHERE draft_id=r.draft_id ORDER BY version DESC LIMIT 1)d ON true WHERE r.request_key=$1',[input.requestKey])).rows[0];
    if(replay){await this.scope(actor,replay.snapshot.warehouse,c);if(replay.verified_by!==actor||replay.request_fingerprint!==fingerprint(input))throw new HttpError(409,'This request belongs to a different warehouse receipt.');return {id:replay.id,number:replay.number,stockPosted:true};}
-   await c.query('SELECT id FROM inventory_material_drafts WHERE id=$1 FOR UPDATE',[input.draftId]);
+   await c.query('SELECT id FROM inventory_material_drafts WHERE id=$1 FOR UPDATE',[input.draftId]);await requireOpenParent(c,input.draftId);
    const draft=await this.drafts.detail(actor,input.draftId,c),warehouse=draft.snapshot.warehouse;
    await this.scope(actor,warehouse,c);await this.authority(c,warehouse,input.sourceSha256,input.authorityVersion);
    const evidence=(await c.query('SELECT id,warehouse,sha256 FROM inventory_material_evidence WHERE id=$1',[input.evidenceId])).rows[0];
@@ -88,7 +90,7 @@ export class MaterialStockRepository{
    await c.query('SELECT l.line_key FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 AND l.line_key=ANY($2::uuid[]) ORDER BY l.dispatch_id,l.line_key FOR UPDATE OF l',[input.draftId,input.lines.map(r=>r.lineKey)]);
    const replacementsInstalled=(await c.query("SELECT to_regclass('public.inventory_material_replacement_returns') IS NOT NULL AS installed")).rows[0].installed;
    const faultyReturned=replacementsInstalled?"+coalesce((SELECT sum(r.quantity) FROM inventory_material_replacement_returns r JOIN inventory_material_replacement_cases c ON c.id=r.case_id WHERE c.original_dispatch_id=l.dispatch_id AND c.original_line_key=l.line_key),0)":'';
-   const sent=(await c.query(`SELECT l.*,d.created_at,d.warehouse,(coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.dispatch_id=l.dispatch_id AND r.line_key=l.line_key),0)${faultyReturned})::text returned FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 ORDER BY d.created_at,d.id,l.line_key`,[input.draftId])).rows;
+   const sent=(await c.query(`SELECT l.*,d.created_at,d.warehouse,(coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.dispatch_id=l.dispatch_id AND r.line_key=l.line_key),0)${faultyReturned})::text returned FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_pending p WHERE p.document_kind='dispatch' AND p.document_id=d.id AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_postings z WHERE z.document_kind=p.document_kind AND z.document_id=p.document_id)) ORDER BY d.created_at,d.id,l.line_key`,[input.draftId])).rows;
    const allocations:any[]=[];
    for(const request of input.lines){
     let remaining=new Decimal(request.quantity);
@@ -122,8 +124,8 @@ export class MaterialStockRepository{
    await lockActiveActor(c,actor);
    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.material.issue.request.'||$1,0))",[input.requestKey]);
    const replay=(await c.query('SELECT id,number,warehouse,request_fingerprint,created_by FROM inventory_material_dispatches WHERE request_key=$1',[input.requestKey])).rows[0];
-   if(replay){await this.scope(actor,replay.warehouse,c);if(replay.created_by!==actor||replay.request_fingerprint!==fingerprint(input))throw new HttpError(409,'This request belongs to a different warehouse dispatch.');return {id:replay.id,number:replay.number,stockPosted:true};}
-   await c.query('SELECT id FROM inventory_material_drafts WHERE id=$1 FOR UPDATE',[input.draftId]);
+   if(replay){await this.scope(actor,replay.warehouse,c);if(replay.created_by!==actor||replay.request_fingerprint!==fingerprint(input))throw new HttpError(409,'This request belongs to a different warehouse dispatch.');return {id:replay.id,number:replay.number,stockPosted:await dispatchPosted(c,'dispatch',replay.id)};}
+   await c.query('SELECT id FROM inventory_material_drafts WHERE id=$1 FOR UPDATE',[input.draftId]);await requireOpenParent(c,input.draftId);
    const draft=await this.drafts.detail(actor,input.draftId,c),s=draft.snapshot;
    await this.scope(actor,s.warehouse,c);
    if(draft.version!==input.version)throw new HttpError(409,'This preparation changed. Refresh before issuing material.');
@@ -154,16 +156,15 @@ export class MaterialStockRepository{
     if(position.currentClosing===null||new Decimal(position.currentClosing).lt(total))throw new HttpError(409,'Verified warehouse stock is insufficient or its closing balance is unresolved.');
     positions.set(key,position);
    }
-   const id=randomUUID(),number=await warehouseNumber(c,s.parent?'PDO':'DO',id);
-   const lines=prepared.map(p=>({...p.row,out:p.request.quantity})),snapshot={...s,lines,transport:input.transport,reason:input.reason,status:'issued',sourceSha256:input.sourceSha256,authorityVersion:input.authorityVersion,stockPosting:true};
+   const id=randomUUID(),reserved=s.parent&&!(await c.query('SELECT 1 FROM inventory_material_dispatches WHERE draft_id=$1 LIMIT 1',[input.draftId])).rowCount?(await c.query('SELECT number FROM inventory_parent_preparation_references WHERE draft_id=$1',[input.draftId])).rows[0]?.number:undefined,number=reserved??await warehouseNumber(c,s.parent?'PDO':'DO',id);
+   const lines=prepared.map(p=>({...p.row,out:p.request.quantity})),snapshot={...s,lines,transport:input.transport,reason:input.reason,status:'issued',requiresSignedGate:true,sourceSha256:input.sourceSha256,authorityVersion:input.authorityVersion,stockPosting:false};
    await c.query('INSERT INTO inventory_material_dispatches(id,number,draft_id,draft_version,source_sha256,warehouse,snapshot,request_key,request_fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[id,number,input.draftId,input.version,input.sourceSha256,s.warehouse,snapshot,input.requestKey,fingerprint(input),actor]);
    for(const p of prepared){
     await c.query('INSERT INTO inventory_material_dispatch_lines(dispatch_id,line_key,source_sha256,ledger_key,item_id,unit,description,quantity) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,p.row.key,input.sourceSha256,p.ledgerKey,p.row.itemId,p.row.unit,p.row.description,p.request.quantity]);
-    const position=positions.get(p.ledgerKey)!,before=position.currentClosing!,after=new Decimal(before).minus(p.request.quantity).toString();
-    await c.query("INSERT INTO inventory_warehouse_operational_movements(id,source_sha256,ledger_key,ledger_revision,kind,draft_id,dispatch_id,line_key,in_delta,out_delta,closing_before,closing_after,created_by) VALUES($1,$2,$3,$4,'dispatch-out',$5,$6,$7,0,$8,$9,$10,$11)",[randomUUID(),input.sourceSha256,p.ledgerKey,position.ledgerRevision+1,input.draftId,id,p.row.key,p.request.quantity,before,after,actor]);
-    position.currentClosing=after;position.ledgerRevision++;
    }
-   return {id,number,stockPosted:true};
+   await deferDispatch(c,actor,'dispatch',id,s.warehouse,input.sourceSha256,input.authorityVersion,prepared.map(p=>({ledgerKey:p.ledgerKey,quantity:p.request.quantity,kind:'dispatch-out',draftId:input.draftId,dispatchId:id,lineKey:p.row.key})));
+
+   return {id,number,stockPosted:false,awaitingSignedGate:true};
   });
  }
 }

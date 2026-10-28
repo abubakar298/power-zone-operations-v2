@@ -5,8 +5,8 @@ import {materialSiteDocuments,reconcileMaterialDispatch} from './material-dispat
 
 export type MaterialPrintKind='fixed-do'|'variable-do'|'customer-signoff'|'irr';
 export type MaterialPrintRow={documentPolicyVersion?:2;itemId:string;description:string;unit:string;issued:string|null;used:string|null;returned:string|null;group?:string;remark?:string;expectedReturn?:string|null;verifiedReturn?:string|null;remainingReturn?:string|null};
-export type MaterialPrintModel={kind:MaterialPrintKind;status:'draft'|'simulation'|'issued'|'site-record'|'received';context?:{columns:[string,string,string];rows:[string,string,string][]};title:string;reference:string;warehouse:string;sites:{name:string;ipo:string;orderNumber?:string;customer?:string;customerPo?:string}[];rows:MaterialPrintRow[];note:string;issuedLabel:string;omitIssued?:boolean;customerReturnColumn?:boolean;returnWorksheet?:boolean;signatures:string[];stockPosting:boolean};
-type Draft={id:string;version:number;snapshot:{warehouse:string;parent:boolean;kind:'fixed'|'variable';sites:any[];lines:any[]}};
+export type MaterialPrintModel={kind:MaterialPrintKind;status:'draft'|'simulation'|'issued'|'site-record'|'received';context?:{columns:[string,string,string];rows:[string,string,string][]};title:string;reference:string;warehouse:string;sites:{name:string;ipo:string;orderNumber?:string;customer?:string;customerPo?:string}[];rows:MaterialPrintRow[];note:string;issuedLabel:string;omitIssued?:boolean;customerReturnColumn?:boolean;returnWorksheet?:boolean;signatures:string[];stockPosting:boolean;parentDispatch?:boolean;date?:string;transport?:{issuedTo:string;vehicle:string;driver:string;driverIdentity?:string}};
+type Draft={number?:string;id:string;version:number;snapshot:{warehouse:string;parent:boolean;kind:'fixed'|'variable';sites:any[];lines:any[];transport?:{issuedTo:string;vehicle:string;driver:string;driverIdentity?:string}}};
 const titles={ 'fixed-do':'Fixed Material Delivery Order','variable-do':'Variable Material Dispatch Order','customer-signoff':'Cable, Pipe and Duct Sign-off',irr:'Installation Reconciliation Report'};
 const signatures={ 'fixed-do':['Warehouse issued by','Customer received by'],'variable-do':['Warehouse issued by','Site team received by'],'customer-signoff':['Site engineer','Customer representative'],irr:['Site engineer','Warehouse return verified by']};
 const present=(v:unknown)=>typeof v==='string'&&v!==''?v:null;
@@ -21,13 +21,14 @@ function document(kind:MaterialPrintKind,reference:string,warehouse:string,sourc
 export function sitePlanPrintModel(plan:{id:string;version:number;variableSupply:string;fixed:Draft;variable:Draft|null},kind:MaterialPrintKind){
  const fixed=plan.fixed,variable=plan.variable,source=fixed.snapshot.sites;
  const reference=`Preparation ${plan.id} / v${plan.version}`;
+ const presentation={transport:fixed.snapshot.transport};
  const physicalFixed=draftRows(fixed,'Fixed').filter(r=>!materialDocumentPolicy(r).approvedQuantityLocked);
  const variableRows=variable?draftRows(variable,'Variable'):[];
- if(kind==='fixed-do')return document(kind,reference,fixed.snapshot.warehouse,source,physicalFixed);
+ if(kind==='fixed-do')return document(kind,reference,fixed.snapshot.warehouse,source,physicalFixed,presentation);
  if(source[0]?.installation===false)throw new HttpError(422,'Delivery-only product sales do not have installation sign-off or reconciliation documents.');
  if(kind==='variable-do'){
   if(plan.variableSupply==='parent-do')throw new HttpError(409,'Variable materials are assigned to a Parent DO. Preview that dispatch instead.');
-  return document(kind,reference,fixed.snapshot.warehouse,source,variableRows);
+  return document(kind,reference,fixed.snapshot.warehouse,source,variableRows,presentation);
  }
  const fromParent=plan.variableSupply==='parent-do';
  if(kind==='customer-signoff')return document(kind,reference,fixed.snapshot.warehouse,source,variableRows.filter(r=>materialDocumentPolicy(r).customerUsageSignoff).map(r=>({...r,issued:fromParent?null:r.issued})),{
@@ -39,8 +40,8 @@ export function sitePlanPrintModel(plan:{id:string;version:number;variableSupply
 
 export function parentDraftPrintModel(draft:Draft,kind:MaterialPrintKind='variable-do',siteId?:string){
  if(!draft.snapshot.parent||draft.snapshot.kind!=='variable')throw new HttpError(422,'Select a variable Parent DO draft.');
- const reference=`Parent preparation ${draft.id} / v${draft.version}`;
- if(kind==='variable-do')return document(kind,reference,draft.snapshot.warehouse,draft.snapshot.sites,draftRows(draft,'Variable'),{note:'Parent dispatch preparation for the listed sites. Site usage and warehouse returns will reconcile to one warehouse OUT; no stock has been issued by this preview.'});
+ const reference=draft.number??`Parent preparation ${draft.id} / v${draft.version}`;
+ if(kind==='variable-do')return document(kind,reference,draft.snapshot.warehouse,draft.snapshot.sites,draftRows(draft,'Variable'),{parentDispatch:true,transport:draft.snapshot.transport,note:'Parent dispatch preparation for the listed sites. Site usage and warehouse returns will reconcile to one warehouse OUT; no stock has been issued by this preview.'});
  if(kind==='fixed-do')throw new HttpError(422,'Fixed materials use their individual site delivery order.');
  const selected=draft.snapshot.sites.find(s=>s.siteId===siteId);
  if(!selected)throw new HttpError(404,'This site does not belong to the Parent DO draft.');
@@ -70,11 +71,11 @@ export function simulatedMaterialPrintModel(input:unknown,kind:MaterialPrintKind
 
 /** Only committed repository dispatch records reach this projection. No caller
  * quantities, current draft edits or inferred usage can alter the issued copy. */
-export function issuedDispatchPrintModel(record:{id:string;number:string;created_at:Date|string;snapshot:Draft['snapshot']&{status:string;stockPosting:boolean;transport?:{issuedTo:string;vehicle:string;driver:string}}}):MaterialPrintModel{
+export function issuedDispatchPrintModel(record:{id:string;number:string;created_at:Date|string;snapshot:Draft['snapshot']&{status:string;stockPosting:boolean;requiresSignedGate?:boolean;transport?:{issuedTo:string;vehicle:string;driver:string}}}):MaterialPrintModel{
  const s=record.snapshot;
- if(s.status!=='issued'||s.stockPosting!==true)throw new HttpError(409,'Only a committed warehouse dispatch has an issued document.');
+ if(s.status!=='issued'||s.stockPosting!==true&&!s.requiresSignedGate)throw new HttpError(409,'Only a committed warehouse dispatch has an issued document.');
  const kind=s.kind==='fixed'?'fixed-do':'variable-do',transport=s.transport;
- return document(kind,record.number,s.warehouse,s.sites,draftRows({id:record.id,version:1,snapshot:s},s.kind==='fixed'?'Fixed':'Variable'),{status:'issued',stockPosting:true,issuedLabel:'Issued',note:`Warehouse OUT recorded once on ${new Date(record.created_at).toISOString().slice(0,10)}. Custody received by: ${transport?.issuedTo||'Not recorded'}. Vehicle: ${transport?.vehicle||'Not recorded'}. Driver: ${transport?.driver||'Not recorded'}. This copy does not create another stock movement. Site usage and counted warehouse returns are recorded separately.`});
+ return document(kind,record.number,s.warehouse,s.sites,draftRows({id:record.id,version:1,snapshot:s},s.kind==='fixed'?'Fixed':'Variable'),{parentDispatch:s.parent,status:s.stockPosting?'issued':'draft',stockPosting:s.stockPosting,date:new Date(record.created_at).toISOString().slice(0,10),transport,issuedLabel:'Issued',note:!s.stockPosting?'Awaiting signed gate copy. Document creation and printing do not post warehouse OUT.':`Warehouse OUT recorded once on ${new Date(record.created_at).toISOString().slice(0,10)}. Custody received by: ${transport?.issuedTo||'Not recorded'}. Vehicle: ${transport?.vehicle||'Not recorded'}. Driver: ${transport?.driver||'Not recorded'}. This copy does not create another stock movement. Site usage and counted warehouse returns are recorded separately.`});
 }
 
 /** Site sign-off/internal report from immutable measured-use versions. Uploaded

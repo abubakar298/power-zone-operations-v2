@@ -1,3 +1,4 @@
+import {postSignedDispatch,dispatchPosted} from './signed-dispatch.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -36,7 +37,7 @@ export class GatePassRepository{
    const table=kind==='dispatch'?'inventory_material_dispatches':kind==='return'?'inventory_material_receipts':'inventory_material_purchase_receipts';
    row=(await c.query(`SELECT id,number,snapshot,created_at,${kind==='return'?"snapshot->>'warehouse'":'warehouse'} warehouse FROM ${table} WHERE id=$1`,[id])).rows[0];
   }
-  if(!row)throw new HttpError(404,'Warehouse document not found.');await requireWarehouseAccess(actor,row.warehouse,c,true);return row;
+  if(!row)throw new HttpError(404,'Warehouse document not found.');await requireWarehouseAccess(actor,row.warehouse,c,true);if(['dispatch','transfer-out','replacement-out','replacement-in'].includes(kind))row.snapshot={...row.snapshot,stockPosting:await dispatchPosted(c,kind as 'dispatch'|'transfer-out'|'replacement-out'|'replacement-in',id)};return row;
  }
  async detail(actor:string,kind:Kind,id:string){const record=await this.record(actor,kind,id);return {id:record.id,number:record.number,warehouse:record.warehouse,created_at:record.created_at,kind,copies:(await this.pool.query('SELECT id,copy_kind,evidence_id,note,created_at FROM inventory_gate_pass_copies WHERE document_kind=$1 AND document_id=$2 ORDER BY created_at,id',[kind,id])).rows};}
  async attach(actor:string,raw:z.infer<typeof gatePassCopySchema>){const input=gatePassCopySchema.parse(raw),fingerprint=createHash('sha256').update(JSON.stringify(input)).digest('hex');return transaction(this.pool,async c=>{
@@ -47,6 +48,7 @@ export class GatePassRepository{
   const evidence=(await c.query('SELECT warehouse FROM inventory_material_evidence WHERE id=$1',[input.evidenceId])).rows[0];if(!evidence||evidence.warehouse!==record.warehouse)throw new HttpError(422,'Upload the signed copy for this warehouse.');
   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.gate.copy.document.'||$1,0))",[input.kind+':'+input.documentId+':'+input.copyKind+':'+input.evidenceId]);
   const existing=(await c.query('SELECT id FROM inventory_gate_pass_copies WHERE document_kind=$1 AND document_id=$2 AND copy_kind=$3 AND evidence_id=$4',[input.kind,input.documentId,input.copyKind,input.evidenceId])).rows[0];if(existing)return {id:existing.id,stockPosted:false};
-  const id=randomUUID();await c.query('INSERT INTO inventory_gate_pass_copies(id,document_kind,document_id,warehouse,copy_kind,evidence_id,note,request_key,fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[id,input.kind,input.documentId,record.warehouse,input.copyKind,input.evidenceId,input.note,input.requestKey,fingerprint,actor]);await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`inventory.gate_copy.${input.copyKind}:${input.kind}:${input.documentId}`]);return {id,stockPosted:false};
+  const stockPosted=await postSignedDispatch(c,actor,input.kind,input.documentId,input.copyKind,input.evidenceId);
+  const id=randomUUID();await c.query('INSERT INTO inventory_gate_pass_copies(id,document_kind,document_id,warehouse,copy_kind,evidence_id,note,request_key,fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[id,input.kind,input.documentId,record.warehouse,input.copyKind,input.evidenceId,input.note,input.requestKey,fingerprint,actor]);await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`inventory.gate_copy.${input.copyKind}:${input.kind}:${input.documentId}`]);return {id,stockPosted};
  });}
 }
