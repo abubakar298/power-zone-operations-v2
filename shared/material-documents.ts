@@ -2,7 +2,7 @@
  * customers confirm measured cables/pipes/ducts, while consumables remain on the
  * internal installation reconciliation. This is not stock-availability authority. */
 export type MaterialDocumentGroup='fixed'|'customer-variable'|'internal-variable'|'non-stock'|'unclassified';
-export type MaterialDocumentLine={itemId:string;description:string};
+export type MaterialDocumentLine={itemId:string;description:string;documentPolicyVersion?:2};
 
 const customerIds=new Set([
  'CH-FLEX PIPE 1','CH-PVC PIPE 1.5 INCH',
@@ -32,8 +32,8 @@ export function materialDocumentPolicy(line:MaterialDocumentLine){
  return {
   group,
   variableDispatch:group==='customer-variable'||group==='internal-variable',
-  customerUsageSignoff:group==='customer-variable',
-  installationReconciliation:group==='fixed'||group==='internal-variable',
+  customerUsageSignoff:group==='customer-variable'||(line.documentPolicyVersion===2&&group==='internal-variable'),
+  installationReconciliation:group==='fixed'||(line.documentPolicyVersion!==2&&group==='internal-variable'),
   approvedQuantityLocked:id==='CH-EARTHING',
   classificationRequired:group==='unclassified',
  };

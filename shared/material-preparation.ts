@@ -2,7 +2,7 @@ import {materialDocumentPolicy} from './material-documents.js';
 
 type Basis={siteId:string;installation:boolean|null;items:unknown[];customer:string};
 type CatalogueItem={itemId:string;description:string;units:string[]};
-export type PreparationRow={key:string;itemId:string;description:string;unit:string;out:string;sites:string[];basisLine?:number;fixedGroup?:'bess'|'panels'|'other';section?:'customer'|'internal'};
+export type PreparationRow={key:string;itemId:string;description:string;unit:string;out:string;sites:string[];basisLine?:number;fixedGroup?:'bess'|'panels'|'other';section?:'customer'|'internal';documentPolicyVersion?:2};
 const qty=(v:unknown)=>/^\d{1,14}(?:\.\d{1,6})?$/.test(String(v??''))?String(v):'';
 const countUnit=(value:string)=>/^(?:no\.?|nos\.?|each|pcs\.?|pieces?|units?)$/i.test(value.trim());
 export function approvedEarthingBasis(value:any){return String(value.key??'').toUpperCase()==='CH-EARTHING'||/^Earthing Bore$/i.test(String(value.key??''))||/\bearthing bore\b/i.test(String(value.description??''));}
@@ -29,4 +29,27 @@ export function fixedPreparationRows(source:Basis,catalogue:CatalogueItem[],key:
   const physicalCountUnknown=/^(?:kW|kWh|kWp|W|Wp|Watt|Watts)$/i.test(unit);
   return [{key:key(),itemId:stock||locked?itemId:'',description,unit:locked?unit:recognisedUnit??'',out:physicalCountUnknown&&!locked?'':qty(raw.qty),sites:[source.siteId],fixedGroup,basisLine}];
  });
+}
+
+/** Prefill only explicitly approved variable materials. The quantity to dispatch
+ * stays blank: approved allowance is not evidence that stock left a warehouse.
+ * Different variants remain separate; matching pool rows share exact site IDs. */
+export function variablePreparationRows(sources:Basis[],catalogue:CatalogueItem[],key:()=>string,aliases:Record<string,string>={}):PreparationRow[]{
+ const grouped=new Map<string,PreparationRow>();
+ for(const source of sources){
+  if(source.installation===false)continue;
+  source.items.forEach((raw:any,basisLine:number)=>{
+   const sourceKey=String(raw.key??''),approvedId=catalogue.some(i=>i.itemId===sourceKey)?sourceKey:aliases[sourceKey]??sourceKey;
+   const description=String(raw.description??catalogue.find(i=>i.itemId===approvedId)?.description??raw.key??'');
+   const policy=materialDocumentPolicy({itemId:approvedId,description});
+   if(!policy.variableDispatch)return;
+   const stock=catalogue.find(i=>i.itemId===approvedId),unit=String(raw.unit??'');
+   const recognised=stock?.units.find(u=>u.toLowerCase()===unit.toLowerCase())??(countUnit(unit)?stock?.units.find(countUnit):undefined);
+   const row:PreparationRow={documentPolicyVersion:2,key:key(),itemId:stock?approvedId:'',description,unit:recognised??(stock?.units.length===1?stock.units[0]:''),out:'',sites:[source.siteId],...{section:policy.group==='internal-variable'?'internal':'customer'}};
+   const identity=JSON.stringify([row.itemId||sourceKey,row.description,row.unit]);
+   const prior=grouped.get(identity);
+   if(prior){prior.sites=[...new Set([...prior.sites,source.siteId])];delete prior.basisLine;}else grouped.set(identity,row);
+  });
+ }
+ return [...grouped.values()];
 }

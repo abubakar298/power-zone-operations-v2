@@ -19,7 +19,7 @@ export const materialDraftInputSchema=z.object({
  revisionReason:z.string().trim().min(3).max(2000).optional(),
  kind:z.enum(['fixed','variable']),parent:z.boolean(),warehouse:z.string().trim().min(1).max(200),
  sites:z.array(z.object({sourceKind:z.enum(['store-boq','headsup','linked-ipo']),basisId:z.uuid(),basisVersion:z.literal(1),siteId:z.uuid()}).strict()).min(1).max(1000),
- lines:z.array(z.object({key:z.uuid(),itemId:z.string().trim().max(200),description:z.string().trim().max(1000),unit:z.string().trim().max(40),out:quantity,sites:z.array(z.uuid()).min(1).max(1000),section:z.enum(['customer','internal']).optional(),fixedGroup:z.enum(['bess','panels','other']).optional(),basisLine:z.number().int().nonnegative().max(2000).optional()}).strict()).max(2000),
+ lines:z.array(z.object({documentPolicyVersion:z.literal(2).optional(),key:z.uuid(),itemId:z.string().trim().max(200),description:z.string().trim().max(1000),unit:z.string().trim().max(40),out:quantity,sites:z.array(z.uuid()).min(1).max(1000),section:z.enum(['customer','internal']).optional(),fixedGroup:z.enum(['bess','panels','other']).optional(),basisLine:z.number().int().nonnegative().max(2000).optional()}).strict()).max(2000),
  transport:z.object({issuedTo:z.string().trim().max(200),vehicle:z.string().trim().max(100),driver:z.string().trim().max(200),driverIdentity:z.string().trim().max(100)}).strict(),
 }).strict();
 export type MaterialDraftInput=z.infer<typeof materialDraftInputSchema>;
@@ -172,7 +172,7 @@ export class MaterialDraftRepository{
     if(!row.itemId)continue;
     if(input.kind==='variable'&&row.fixedGroup)throw new HttpError(422,'Fixed BOQ rows belong in fixed material preparation.');
     const policy=materialDocumentPolicy(row);
-    if(row.section&&policy.variableDispatch&&(policy.customerUsageSignoff?'customer':'internal')!==row.section)throw new HttpError(422,'Keep the item in its matching variable-material module.');
+    if(row.section&&policy.variableDispatch&&(policy.group==='internal-variable'?'internal':'customer')!==row.section)throw new HttpError(422,'Keep the item in its matching variable-material module.');
     if(policy.group==='non-stock')throw new HttpError(422,'Genset synchronisation is not a stock issuance item.');
     if(policy.approvedQuantityLocked){
      const approved=selected.flatMap(s=>s.items as any[]).filter(approvedEarthingBasis);

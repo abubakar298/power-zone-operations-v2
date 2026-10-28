@@ -1,3 +1,4 @@
+import {variablePreparationRows} from '../shared/material-preparation.js';
 import {approvedMaterialIpo,materialInstallationFixture} from './approved-material-ipo-fixture.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -35,7 +36,7 @@ test('server-owned Parent DO drafts retain blank variable quantities and stable 
   }
   const registered=await repo.intake(users.inventory);assert.equal(registered.registeredPending.length,1);assert.equal(registered.registeredPending[0].siteId,'registered-pending');assert.equal(registered.registeredPending[0].dispatchDate,'2026-11-03');assert.equal(registered.sources.length,1,'Imported positioning must not fabricate approved source BOQs.');
   const stockBefore=(await db.pool.query('SELECT count(*)::int n FROM stock_on_hand_entries')).rows[0].n;
-  const input={version:0,requestKey:randomUUID(),kind:'variable' as const,parent:true,warehouse:'Lahore warehouse',sites:[{sourceKind:basis.sourceKind,basisId:basis.basisId,basisVersion:1 as const,siteId:source.ipoId}],lines:[] as any[],transport:{issuedTo:'',vehicle:'',driver:'',driverIdentity:''}};
+  const input={version:0,requestKey:randomUUID(),kind:'variable' as const,parent:true,warehouse:'Lahore warehouse',sites:[{sourceKind:basis.sourceKind,basisId:basis.basisId,basisVersion:1 as const,siteId:source.ipoId}],lines:variablePreparationRows([basis],intake.catalogue,()=>randomUUID(),intake.aliases??{}),transport:{issuedTo:'',vehicle:'',driver:'',driverIdentity:''}};
   const saved=await repo.save(users.inventory,input);assert.equal(saved.version,1);assert.equal(saved.stockPosting,false);assert.deepEqual(await repo.save(users.inventory,input),saved);
   const key=randomUUID(),row={key,itemId:'CH-CBL-AC-16MM/4C-PK',description:'16mm AC cable',unit:'m',out:'',sites:[source.ipoId]};
   const second=await repo.save(users.inventory,{...input,id:saved.id,version:1,requestKey:randomUUID(),lines:[row]});
@@ -51,6 +52,10 @@ test('server-owned Parent DO drafts retain blank variable quantities and stable 
   await assert.rejects(repo.list(users.storekeeper),/not assigned/);await assert.rejects(repo.detail(users.storekeeper,saved.id),/not assigned/);
   await assert.rejects(repo.save(users.inventory,{...input,requestKey:randomUUID(),sites:[{...input.sites[0],siteId:randomUUID()}]}),/no longer pending/);
   const changes=await Promise.allSettled([repo.save(users.inventory,{...input,id:saved.id,version:3,requestKey:randomUUID(),lines:[row]}),repo.save(users.inventory,{...input,id:saved.id,version:3,requestKey:randomUUID(),lines:[row]})]);assert.equal(changes.filter(r=>r.status==='fulfilled').length,1);
+  const mixed=(await repo.intake(users.owner)).catalogue.find(r=>r.itemId==='CH-Mix Items All')!;assert.ok(mixed);
+  const current=await repo.detail(users.owner,otherWarehouse.id);
+  const versioned=await repo.save(users.owner,{...input,warehouse:'Karachi warehouse',id:otherWarehouse.id,version:current.version,requestKey:randomUUID(),lines:[{...row,documentPolicyVersion:2,section:'internal',itemId:mixed.itemId,description:'Reviewed screws',unit:mixed.units[0]}]});
+  assert.equal((await repo.detail(users.owner,otherWarehouse.id)).snapshot.lines[0].documentPolicyVersion,2);assert.equal(versioned.stockPosting,false);
   await db.pool.query("UPDATE site_workflow SET delivered_on='2026-10-27' WHERE issuance_id=$1",[issued.id]);
   const delivered=(await db.pool.query('SELECT version,snapshot FROM operations_board_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1',['live-ipo:'+source.ipoId])).rows[0];
   await db.pool.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',['live-ipo:'+source.ipoId,delivered.version+1,{...delivered.snapshot,stage:'delivered',deliveryDate:'2026-10-27'},'SIMULATION delivery fixture','Draft eligibility test; actual delivery evidence is tested separately.',randomUUID(),users.owner]);

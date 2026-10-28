@@ -123,6 +123,11 @@ test('physical warehouse dispatch posts once, supports partial trips, protects s
   const reportPath='/api/material-dispatches/drafts/'+draft.id+'/sites/'+siteId+'/documents/customer-signoff.pdf';
   await request(app).get(reportPath+'?version=3').set('Cookie',sessions.dispatcher.cookie).expect(409);
   const sitePdf=await request(app).get(reportPath+'?version=4').set('Cookie',sessions.dispatcher.cookie).expect(200);assert.match(sitePdf.headers['content-type'],/pdf/);
+  const worksheet='/api/material-dispatches/drafts/'+draft.id+'/return-worksheet.pdf';
+  await request(app).get(worksheet+'?version='+continuation.version).expect(401);
+  await request(app).get(worksheet+'?version='+continuation.version).set('Cookie',sessions.keeper.cookie).expect(403);
+  await request(app).get(worksheet+'?version=999').set('Cookie',sessions.dispatcher.cookie).expect(409);
+  const countSheet=await request(app).get(worksheet+'?version='+continuation.version).set('Cookie',sessions.dispatcher.cookie).expect(200);assert.match(countSheet.headers['content-type'],/pdf/);
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements')).rows[0].n,6,'Printing, evidence download and retry do not post stock again.');
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_source_events')).rows[0].n,2);
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM stock_on_hand_entries')).rows[0].n,0);
