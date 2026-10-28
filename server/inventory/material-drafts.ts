@@ -1,3 +1,4 @@
+import {plannedInventoryDelivery} from '../operations-board/batch-delivery.js';
 import {MinimumStockRepository} from './minimum-stock.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {createHash,randomUUID} from 'node:crypto';
@@ -54,7 +55,6 @@ export class MaterialDraftRepository{
    JOIN LATERAL(SELECT snapshot FROM operations_board_versions WHERE site_id=l.board_site_id ORDER BY version DESC LIMIT 1)v ON true
    JOIN boq_revisions b ON b.id=l.boq_revision_id`)).rows;
   const registered=(await c.query('SELECT DISTINCT ON(site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC')).rows;
-  const dispatchDate=(value:unknown)=>{const parsed=z.iso.date().safeParse(value);return parsed.success?parsed.data:null;};
   const reference=(number:string,order:string)=>`${number}${order?' · '+order:''}`.trim().replace(/\s+/g,' ').toLowerCase();
   for(const source of confirmed){
    const known=registered.some(r=>reference(r.snapshot.ipo??'','')===reference(source.ipo_number,source.order_number??''));
@@ -67,9 +67,9 @@ export class MaterialDraftRepository{
    if(identity.status!=='eligible'||hash(s)!==link.ipo_sha256||hash(link.boq)!==link.boq_sha256){heldIpos.add(ipo.id);continue;}
    const existing=confirmed.find(r=>r.ipo_id===ipo.id);
    if(existing)heldIpos.add(ipo.id); // Preserve the stable link basis when a later Store handoff arrives.
-   linked.push({sourceKind:'linked-ipo',storeHandoffId:existing?.id,registeredSiteId:link.board_site_id,basisId:link.id,basisVersion:1,siteId:ipo.id,ipo:ipo.number,orderNumber:String(s.input?.orderNumber??''),customerPo:String(s.input?.poNumber??''),siteName:s.siteName,customer:String(s.customer?.name??''),installation:link.board.installation===true?true:link.board.installation===false?false:null,dispatchDate:dispatchDate(link.board.dispatchDate),authorization:'approved-ipo-boq',items:items(link.boq.lines)});
+   linked.push({sourceKind:'linked-ipo',storeHandoffId:existing?.id,registeredSiteId:link.board_site_id,basisId:link.id,basisVersion:1,siteId:ipo.id,ipo:ipo.number,orderNumber:String(s.input?.orderNumber??''),customerPo:String(s.input?.poNumber??''),siteName:s.siteName,customer:String(s.customer?.name??''),installation:link.board.installation===true?true:link.board.installation===false?false:null,dispatchDate:plannedInventoryDelivery({...link.board,id:link.board_site_id}),authorization:'approved-ipo-boq',items:items(link.boq.lines)});
   }
-  return [...confirmed.filter(r=>!heldIpos.has(r.ipo_id)).map(r=>({sourceKind:'store-boq' as const,registeredSiteId:r.registeredSiteId,basisId:r.id,basisVersion:1 as const,siteId:r.ipo_id,ipo:r.ipo_number,dispatchDate:(()=>{const matches=registered.filter(b=>b.snapshot.origin?.ipoId===r.ipo_id&&b.snapshot.origin?.operationsIssuanceId===r.operations_issuance_id);return matches.length===1?dispatchDate(matches[0].snapshot.dispatchDate):null;})(),orderNumber:r.order_number??'',customerPo:r.po_number??'',siteName:String(r.snapshot.siteName),customer:String(r.snapshot.customer?.name??''),installation:r.registeredSiteId?(r.registeredInstallation===true?true:r.registeredInstallation===false?false:null):r.scope==='installation'?true:r.scope==='delivery_only'?false:null,authorization:'approved-store-boq' as const,items:items(r.snapshot.items)})),
+  return [...confirmed.filter(r=>!heldIpos.has(r.ipo_id)).map(r=>({sourceKind:'store-boq' as const,registeredSiteId:r.registeredSiteId,basisId:r.id,basisVersion:1 as const,siteId:r.ipo_id,ipo:r.ipo_number,dispatchDate:(()=>{const matches=registered.filter(b=>b.snapshot.origin?.ipoId===r.ipo_id&&b.snapshot.origin?.operationsIssuanceId===r.operations_issuance_id);return matches.length===1?plannedInventoryDelivery({...matches[0].snapshot,id:matches[0].site_id}):null;})(),orderNumber:r.order_number??'',customerPo:r.po_number??'',siteName:String(r.snapshot.siteName),customer:String(r.snapshot.customer?.name??''),installation:r.registeredSiteId?(r.registeredInstallation===true?true:r.registeredInstallation===false?false:null):r.scope==='installation'?true:r.scope==='delivery_only'?false:null,authorization:'approved-store-boq' as const,items:items(r.snapshot.items)})),
    ...linked,...advance.map(r=>({sourceKind:'headsup' as const,basisId:r.id,basisVersion:1 as const,siteId:r.record_id,ipo:null,dispatchDate:null,siteName:r.site_name,customer:String(r.site.customer??''),installation:null,authorization:'forecast-only' as const,items:items(r.site.items)}))];
  }
  private async stockCatalogue(c:Pool|PoolClient=this.pool){
@@ -103,7 +103,7 @@ export class MaterialDraftRepository{
   const sources=await this.sources();
   const registeredPending=(await this.pool.query(`SELECT DISTINCT ON(site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC`)).rows
    .filter(r=>!r.snapshot.completed&&['received','awaiting'].includes(r.snapshot.stage)&&r.snapshot.sample!==true&&!sources.some(s=>s.registeredSiteId===r.site_id))
-   .map(r=>({siteId:r.site_id,ipo:r.snapshot.ipo,siteName:r.snapshot.name,customer:r.snapshot.customer??'',installation:r.snapshot.installation,dispatchDate:z.iso.date().safeParse(r.snapshot.dispatchDate).success?r.snapshot.dispatchDate:null,linkStatus:'approved-boq-link-required' as const}));
+   .map(r=>({siteId:r.site_id,ipo:r.snapshot.ipo,siteName:r.snapshot.name,customer:r.snapshot.customer??'',installation:r.snapshot.installation,dispatchDate:plannedInventoryDelivery({...r.snapshot,id:r.site_id}),linkStatus:'approved-boq-link-required' as const}));
   return {access,sources,registeredPending,catalogue:stock.catalogue,aliases:stock.aliases,warehouses:access.owner?stock.warehouses:access.warehouses,stockPosting:false};
  }
  /** Issuance revalidates pending source identity while locking the same rows

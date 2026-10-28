@@ -30,7 +30,7 @@ export function siteDelays(site:WorkflowSite,values:StageTargets,now:string):Del
   const start=stamp({date:doc.createdDate??doc.date,recordedAt:typeof doc.createdAt==='string'?doc.createdAt:undefined}),target=values.documents;
   if(start&&target)add(`document:${doc.id}`,`${doc.label} · originals pending`,start.at+target.amount*(target.unit==='days'?86400000:3600000),'Original document dispatch target');
  }
- for(const batch of site.planningBatches){const stop=batch.stops.find(s=>s.siteId===site.id);if(!stop)continue;const pending=batch.kind==='delivery'?['received','awaiting'].includes(site.stage):siteBucket(site)!=='completed';if(pending)add(`batch:${batch.id}`,`${batch.number??batch.id} · ${batch.kind} slot passed`,Date.parse(`${stop.plannedDate}T${stop.end}:00+05:00`),'Saved batch schedule');}
+ for(const batch of site.planningBatches){const stop=batch.stops.find(s=>s.siteId===site.id);if(!stop)continue;const kind=stop.kind??batch.kind;const pending=kind==='delivery'?['received','awaiting'].includes(site.stage):siteBucket(site)!=='completed';if(pending)add(`batch:${batch.id}`,`${batch.number??batch.id} · ${kind} visit date passed`,stop.end?Date.parse(`${stop.plannedDate}T${stop.end}:00+05:00`):dayEnd(stop.plannedDate),'Saved batch schedule');}
  return delays;
 }
 /** A blocker enriches the overdue site's existing case instead of adding another card. */
