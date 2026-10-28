@@ -1,3 +1,6 @@
+import {OperationsIncidentProjector} from './operations-incidents.js';
+import {OperationsNotificationProjector,operationsNotificationRecipientAllowed} from './operations-projector.js';
+import {notificationRecipientAllowed} from './recipient.js';
 import {quotationApprovalAttachments} from './quotation-attachment.js';
 import type { Pool } from "pg";
 import { transaction } from "../db/transaction.js";
@@ -18,6 +21,9 @@ export class NotificationsRepository {
   async sync() {
     return transaction(this.pool, async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(742019032)");
+      const operationsClock=new Date().toISOString();
+      await new OperationsNotificationProjector().sync(c,operationsClock);
+      await new OperationsIncidentProjector().sync(c,operationsClock);
       await c.query(`INSERT INTO notifications(id,user_id,source_key,entity_key,kind,title,reference,actor_id,target,actionable,created_at)
    SELECT gen_random_uuid(),u.id,e.source_key,e.entity_key,e.kind,
     CASE WHEN e.kind IN('Submitted','Approval requested') THEN 'Quotation approval required' WHEN e.kind='Approved' THEN 'Quotation approved' WHEN e.kind='Changes requested' THEN 'Revision requested' ELSE e.kind END,
@@ -27,17 +33,18 @@ export class NotificationsRepository {
     (e.audience='owner' AND u.id=e.owner_id AND u.role IN('Admin','Management','Coordinator')) OR (e.audience IN('security','assigned') AND u.id=e.owner_id) OR u.role=e.audience)
    WHERE e.created_at>=s.activated_at AND (u.id<>e.actor_id OR e.kind='Security')
    ON CONFLICT(user_id,source_key) DO NOTHING`);
+      await c.query(`UPDATE notifications n SET resolved_at=now() WHERE n.resolved_at IS NULL AND n.source_key LIKE 'operations-notice:%' AND NOT EXISTS(SELECT 1 FROM notification_events e WHERE e.source_key=n.source_key)`);
       await c.query(`UPDATE notifications n SET resolved_at=now() WHERE n.resolved_at IS NULL AND n.actionable AND (
-   NOT EXISTS(SELECT 1 FROM notification_events e WHERE e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1)) OR EXISTS(SELECT 1 FROM notification_events e WHERE e.entity_key=n.entity_key AND e.created_at>n.created_at)
+   NOT EXISTS(SELECT 1 FROM notification_events e WHERE e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1)) OR (n.source_key NOT LIKE 'operations-notice:%' AND EXISTS(SELECT 1 FROM notification_events e WHERE e.entity_key=n.entity_key AND e.created_at>n.created_at))
    OR (n.kind='Revision requested' AND EXISTS(SELECT 1 FROM quotation_revision_links l WHERE l.request_id::text=n.target->>'request_id'))
    OR (n.kind='Work assigned' AND EXISTS(SELECT 1 FROM boq_draft_finalizations f WHERE f.draft_id::text=n.target->>'draft_id')))`);
       await c.query(`INSERT INTO notifications(id,user_id,source_key,entity_key,kind,title,reference,actor_id,target,actionable,created_at,parent_id)
    SELECT gen_random_uuid(),n.user_id,n.source_key||'/reminder',n.entity_key,'Reminder','Action overdue',n.reference,NULL,n.target,true,now(),n.id
-   FROM notifications n CROSS JOIN notification_settings s WHERE s.reminders_enabled AND n.actionable AND n.resolved_at IS NULL AND n.parent_id IS NULL AND n.created_at<now()-make_interval(hours=>s.reminder_hours) ON CONFLICT DO NOTHING`);
+   FROM notifications n CROSS JOIN notification_settings s WHERE n.source_key NOT LIKE 'operations-notice:%' AND s.reminders_enabled AND n.actionable AND n.resolved_at IS NULL AND n.parent_id IS NULL AND n.created_at<now()-make_interval(hours=>s.reminder_hours) ON CONFLICT DO NOTHING`);
       await c.query(`INSERT INTO notifications(id,user_id,source_key,entity_key,kind,title,reference,actor_id,target,actionable,created_at,parent_id)
    SELECT gen_random_uuid(),u.id,n.source_key||'/escalation',n.entity_key,'Escalation','Overdue work requires attention',n.reference,NULL,n.target,true,now(),n.id
    FROM notifications n CROSS JOIN notification_settings s JOIN users u ON u.active AND u.role IN('Admin','Management')
-   WHERE s.reminders_enabled AND n.actionable AND n.resolved_at IS NULL AND n.parent_id IS NULL AND n.created_at<now()-make_interval(hours=>s.reminder_hours*2) AND n.user_id<>u.id ON CONFLICT DO NOTHING`);
+   WHERE n.source_key NOT LIKE 'operations-notice:%' AND s.reminders_enabled AND n.actionable AND n.resolved_at IS NULL AND n.parent_id IS NULL AND n.created_at<now()-make_interval(hours=>s.reminder_hours*2) AND n.user_id<>u.id ON CONFLICT DO NOTHING`);
       await c.query(
         `UPDATE notifications n SET resolved_at=now() FROM notifications p WHERE n.parent_id=p.id AND p.resolved_at IS NOT NULL AND n.resolved_at IS NULL`,
       );
@@ -146,16 +153,8 @@ export class NotificationsRepository {
       ).rows[0];
       if (!row) return;
       if (!row.enabled) return;
-      const authorized =
-        (row.audience === "management" &&
-          ["Admin", "Management"].includes(row.role)) ||
-        (row.audience === "owner" &&
-          row.owner_id === row.user_id &&
-          ["Admin", "Management", "Coordinator"].includes(row.role)) ||
-        (row.audience === "security" && row.owner_id === row.user_id) ||
-        row.audience === row.role ||
-        (row.kind === "Escalation" &&
-          ["Admin", "Management"].includes(row.role));
+      const authorized = notificationRecipientAllowed(row) &&
+        (!row.event_source_key.startsWith('operations-notice:') || await operationsNotificationRecipientAllowed(c,row.event_source_key,row.user_id));
       if (
         !authorized ||
         !row.active ||

@@ -1,4 +1,6 @@
+import {lockActiveActor} from '../auth/actor-lock.js';
 import { phaseCostComparison } from "./phase-comparison.js";
+import {recordPtEntry,ptEntrySchema} from './pt-entries.js';
 import { cableInvoiceAdjustment } from "../inventory/reconciliation.js";
 import { createHash, randomUUID } from "node:crypto";
 import { Decimal } from "decimal.js";
@@ -11,6 +13,7 @@ import { phaseBudgets } from "../director/repository.js";
 import { InventoryRepository } from "../inventory/repository.js";
 import { ublIpoSample } from "../ubl/ipo-sample.js";
 import { DepartmentRepository } from "../departments/repository.js";
+import {projectOperationsClosureEvidence,operationsClosureEvidenceFile} from './operations-evidence.js';
 export const phases = [
   "Solar Panels",
   "Structure",
@@ -40,6 +43,7 @@ export const closureSchema = z
     photos: z.string().trim().max(1000),
     ptReference: z.string().trim().max(1000),
     ptAttachmentId: z.uuid().nullable().optional(),
+    operationsEvidenceSignature: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(),
     requestKey: z.uuid(),
   })
   .strict();
@@ -88,6 +92,7 @@ export class AccountsRepository {
       throw new HttpError(403, "Accounts access required.");
     return u.role as string;
   }
+  async recordPtEntry(actor:string,input:z.infer<typeof ptEntrySchema>){return recordPtEntry(this.pool,actor,input);}
   async overview(actor: string) {
     await this.access(actor);
     const ipo = (
@@ -110,6 +115,7 @@ export class AccountsRepository {
           "SELECT DISTINCT ON(r.id) d.id,d.version,d.created_at,r.id AS request_id,r.version AS request_version,r.stage,r.site_name,r.branch_code,r.data->>'configuration' AS configuration,r.data->>'sampleReviewDecision' AS review_decision,d.kind FROM ubl_workflow_documents d JOIN ubl_workflow_requests r ON r.id=d.request_id WHERE (d.kind='IPO / PT review sample' AND r.data->>'accountsReviewSample'='true') OR (d.kind='IPO / PT' AND r.stage IN('IPO Submitted—Awaiting Accounts','Accounts Accepted—BOQ Issuance Pending')) ORDER BY r.id,CASE WHEN d.kind='IPO / PT' THEN 0 ELSE 1 END,d.created_at DESC",
         )
       ).rows,
+      ptEntries: (await this.pool.query('SELECT p.*,p.entry_date::text AS entry_date,u.display_name AS recorded_by FROM accounts_pt_entries p JOIN users u ON u.id=p.created_by ORDER BY p.created_at DESC')).rows,
       ipos: ipo.map((i) => ({
         ...i,
         accountsReview: reviews.find((r) => r.ipo_id === i.id),
@@ -122,6 +128,14 @@ export class AccountsRepository {
         },
       })),
     };
+  }
+  async managementClosureQueue(actor:string){
+    await this.access(actor,this.pool,true);
+    return (await this.pool.query(`SELECT id,job_key,version,stage,created_at,
+      jsonb_build_object('identity',snapshot->'identity','source',snapshot->'source','jobId',snapshot->'jobId','title',snapshot->'title',
+        'summary',jsonb_build_object('selling',snapshot->'summary'->'selling','actual',snapshot->'summary'->'actual')) AS snapshot
+      FROM (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures ORDER BY job_key,version DESC) latest
+      WHERE stage='Awaiting Management' ORDER BY created_at DESC,id`)).rows;
   }
   async comparison(actor: string, id: string) {
     await this.access(actor);
@@ -231,6 +245,7 @@ export class AccountsRepository {
         "IPO and " + comp.approvedBasisLabel + " do not reconcile. Return for revision.",
       );
     return transaction(this.pool, async (c) => {
+      await lockActiveActor(c,actor);
       await this.access(actor, c);
       await c.query(
         "SELECT id FROM internal_purchase_orders WHERE id=$1 FOR UPDATE",
@@ -476,6 +491,9 @@ export class AccountsRepository {
         AND COALESCE(j.snapshot->'identity'->>'configuration_id',o.configuration_id,i.snapshot->>'solutionId')=$2
         AND COALESCE(j.snapshot->'identity'->>'customer_code',CASE WHEN o.site_id IS NOT NULL THEN 'UBL' ELSE i.snapshot->'customer'->>'shortCode' END)=$3
     `,[key,comparisonIdentity.configuration_id,comparisonIdentity.customer_code])).rows : [];
+    const currentEvidence=await this.evidenceBundle(actor,key);
+    const frozenEvidence=history[0]&&['Awaiting Management','Closed'].includes(history[0].stage)
+      &&Array.isArray(history[0].snapshot.evidence)?history[0].snapshot:undefined;
     return {
       configurationComparison,
       phaseCostComparison: phaseCostComparison(phasePeers.map(r=>r.snapshot)),
@@ -487,7 +505,10 @@ export class AccountsRepository {
       entry: irr.snapshot.entry,
       reconciliation: irr.snapshot.reconciliation,
       invoiceAdjustment: cableInvoiceAdjustment(irr.snapshot.reconciliation),
-      evidence: await this.evidence(actor, key),
+      evidence: frozenEvidence?.evidence??currentEvidence.evidence,
+      operationsEvidenceSignature: frozenEvidence?frozenEvidence.operationsEvidenceSignature??null:currentEvidence.operationsEvidenceSignature,
+      operationsEvidenceSource: frozenEvidence?frozenEvidence.operationsEvidenceSource??null:currentEvidence.operationsEvidenceSource,
+      operationsEvidenceHold: currentEvidence.operationsEvidenceHold,
       selling,
       phaseSelling,
       budget,
@@ -497,13 +518,37 @@ export class AccountsRepository {
     };
   }
   async evidence(actor: string, key: string) {
-    await this.access(actor);
-    return (
-      await this.pool.query(
+    return (await this.evidenceBundle(actor,key)).evidence;
+  }
+  private async evidenceBundle(actor:string,key:string,c:Pool|PoolClient=this.pool,lock=false){
+    await this.access(actor,c);
+    const local=(
+      await c.query(
         "SELECT id,job_key,kind,filename,media_type,sha256,created_at,created_by FROM job_closure_evidence WHERE job_key=$1 ORDER BY created_at",
         [key],
       )
     ).rows;
+    const operations=await projectOperationsClosureEvidence(c,key,{lock});
+    return {evidence:[...local,...operations.evidence],operationsEvidenceSignature:operations.signature,
+      operationsEvidenceSource:operations.source,operationsEvidenceHold:operations.hold??null};
+  }
+  async operationsEvidenceFile(actor:string,key:string,version:number,id:string){
+    await this.access(actor);
+    if(!/^ipo:[0-9a-f-]{36}$/.test(key))throw new HttpError(404,'Evidence not found.');
+    // Receiving this exact job's approved Inventory report establishes Accounts scope.
+    if(!(await this.pool.query("SELECT 1 FROM inventory_reports r JOIN LATERAL(SELECT stage FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true WHERE r.job_key=$1 AND v.stage='Sent to Accounts'",[key])).rowCount)throw new HttpError(404,'Evidence not found.');
+    const projection=await projectOperationsClosureEvidence(this.pool,key);
+    let reference=projection.evidence.find(file=>file.source.version===version&&file.id===id)?.source;
+    if(!reference){
+      // An immutable submitted/closed/returned snapshot may retain superseded evidence.
+      const closures=(await this.pool.query("SELECT snapshot->'evidence' evidence FROM accounts_active_job_closures WHERE job_key=$1 AND stage IN('Awaiting Management','Closed','Returned for Revision') ORDER BY version DESC",[key])).rows;
+      for(const closure of closures){
+        const source=Array.isArray(closure.evidence)?closure.evidence.find((file:any)=>file.id===id&&file.source?.kind==='Operations'&&file.source.version===version)?.source:undefined;
+        if(source){reference=source;break;}
+      }
+    }
+    if(!reference)throw new HttpError(404,'Evidence not found.');
+    return operationsClosureEvidenceFile(this.pool,key,reference);
   }
   async uploadEvidence(
     actor: string,
@@ -528,12 +573,19 @@ export class AccountsRepository {
     const signature =
       mime === "image/png"
         ? bytes.subarray(0, 8).toString("hex") === "89504e470d0a1a0a"
+        : mime === "application/pdf" ? bytes.subarray(0,5).toString() === "%PDF-"
         : mime === "image/jpeg" &&
           bytes.subarray(0, 3).toString("hex") === "ffd8ff";
     if (!signature || bytes.length < 1 || bytes.length > 8388608)
-      throw new HttpError(400, "Attach a PNG or JPEG screenshot up to 8 MB.");
-    const id = randomUUID();
-    await this.pool.query(
+      throw new HttpError(400, "Attach a PDF, PNG or JPEG PT report up to 8 MB.");
+    return transaction(this.pool,async c=>{
+      await lockActiveActor(c,actor);
+      await this.access(actor,c);
+      await c.query("SELECT pg_advisory_xact_lock(hashtext($1))",['closure:'+key]);
+      const current=(await c.query('SELECT stage FROM accounts_active_job_closures WHERE job_key=$1 ORDER BY version DESC LIMIT 1',[key])).rows[0];
+      if(['Awaiting Management','Closed'].includes(current?.stage))throw new HttpError(409,'Submitted closure evidence is read-only.');
+      const id = randomUUID();
+    await c.query(
       "INSERT INTO job_closure_evidence(id,job_key,kind,filename,media_type,content,sha256,created_by) VALUES($1,$2,'PT costing screenshot',$3,$4,$5,$6,$7)",
       [
         id,
@@ -545,11 +597,12 @@ export class AccountsRepository {
         actor,
       ],
     );
-    await this.pool.query(
+    await c.query(
       "INSERT INTO audit_log(user_id,action) VALUES($1,$2)",
       [actor, "accounts.pt-screenshot:" + id],
     );
     return { id };
+    });
   }
   async evidenceFile(actor: string, id: string) {
     await this.access(actor);
@@ -564,6 +617,10 @@ export class AccountsRepository {
   async saveClosure(actor: string, input: z.infer<typeof closureSchema>) {
     await this.access(actor);
     const job = await this.job(actor, input.jobKey);
+    if(input.stage==='Awaiting Management'&&job.operationsEvidenceSource&&!job.operationsEvidenceSignature)
+      throw new HttpError(409,'The linked Operations QC handover is incomplete. Complete the customer sign-offs and site photograph evidence before submitting closure.');
+    if(input.stage==='Awaiting Management'&&(input.operationsEvidenceSignature??null)!==(job.operationsEvidenceSignature??null))
+      throw new HttpError(409,'QC handover evidence changed. Reload and review it before submitting closure.');
     const keys = [...phases.slice(0, 5), ...epcNames];
     if (
       Object.keys(input.actual).some((k) => !phases.slice(0, 5).includes(k)) ||
@@ -638,6 +695,7 @@ export class AccountsRepository {
       ),
     };
     return transaction(this.pool, async (c) => {
+      await lockActiveActor(c,actor);
       await this.access(actor, c);
       await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
         "closure:" + input.jobKey,
@@ -657,6 +715,13 @@ export class AccountsRepository {
         return old;
       }
       await this.currentReport(c, input.jobKey, job.reportVersionId);
+      if(input.stage==='Awaiting Management'){
+        const currentEvidence=await this.evidenceBundle(actor,input.jobKey,c,true);
+        if(currentEvidence.operationsEvidenceSource&&!currentEvidence.operationsEvidenceSignature||currentEvidence.operationsEvidenceSignature!==job.operationsEvidenceSignature)
+          throw new HttpError(409,'QC handover evidence changed. Reload and review it before submitting closure.');
+        const entered=(await c.query("SELECT p.id FROM accounts_pt_entries p JOIN inventory_report_versions v ON v.report_id=p.source_id AND v.version=p.source_version WHERE p.source_kind='Inventory' AND v.id=$1",[job.reportVersionId])).rows[0];
+        if(!entered)throw new HttpError(409,'Record the current approved IRR and variable items in PT before submitting job closure.');
+      }
       const latest = (
         await c.query(
           "SELECT * FROM accounts_active_job_closures WHERE job_key=$1 ORDER BY version DESC LIMIT 1",
@@ -699,6 +764,7 @@ export class AccountsRepository {
     input: { id: string; version: number; notes: string; requestKey: string },
   ) {
     return transaction(this.pool, async (c) => {
+      await lockActiveActor(c,actor);
       await this.access(actor, c);
       const r = (
         await c.query("SELECT * FROM inventory_reports WHERE id=$1", [input.id])
@@ -791,6 +857,7 @@ export class AccountsRepository {
     },
   ) {
     return transaction(this.pool, async (c) => {
+      await lockActiveActor(c,actor);
       await this.access(actor, c, true);
       const source = (
         await c.query(
@@ -832,6 +899,11 @@ export class AccountsRepository {
           "Only the current submitted closure can be decided.",
         );
       await this.currentReport(c, source.job_key, source.report_version_id);
+      if(input.decision==='Closed'&&source.snapshot.operationsEvidenceSignature){
+        const evidence=await this.evidenceBundle(actor,source.job_key,c,true);
+        if(evidence.operationsEvidenceSignature!==source.snapshot.operationsEvidenceSignature)
+          throw new HttpError(409,'QC handover evidence changed after submission. Return this closure for review before approval.');
+      }
       if (input.decision === "Closed" && !source.snapshot.complete)
         throw new HttpError(409, "Actual costs are incomplete.");
       const row = (

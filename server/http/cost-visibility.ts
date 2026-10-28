@@ -24,6 +24,13 @@ export function restrictedCostView(value: any, commercial = false): any {
     return value.map((v) => restrictedCostView(v, commercial));
   if (!value || typeof value !== "object") return value;
   const result: any = {};
+  // A discount comparison contains aggregate equipment costs even when its
+  // item-level pricing has already been projected. Profit also reveals cost
+  // by subtraction from the public selling price.
+  const discountReview = commercial && "maximumDiscount" in value &&
+    value.original && value.proposed && "cost" in value;
+  const cniReview = "costVersion" in value && "unitCostBeforeTax" in value &&
+    "recommendedDiscount" in value && value.original && value.proposed;
   const boq = Array.isArray(value.lines) && value.engineering && value.survey;
   for (const [key, v] of Object.entries(value)) {
     if(key==='discountStrategy')continue; // Frozen internal per-item costs/allowances stay server-side.
@@ -32,6 +39,14 @@ export function restrictedCostView(value: any, commercial = false): any {
     if(commercial && key==='discountAuthorization' && v){const {preapprovedBeforeTax,...safe}=v as any;result[key]=safe;continue;}
     if (key === "budgeted_cost") {
       result[key] = null;
+      continue;
+    }
+    // Accounts closure snapshots store costs as phase-keyed maps rather than
+    // priced rows. Redact those same equipment phases at every history depth.
+    if (["budget", "actual"].includes(key) && v && typeof v === "object" && !Array.isArray(v)) {
+      result[key] = Object.fromEntries(Object.entries(v).map(([phase, amount]) => [
+        phase, isBessEquipment({name: phase}) ? null : restrictedCostView(amount, commercial),
+      ]));
       continue;
     }
     if (commercial && ["profit", "margin", "marginOnSales"].includes(key))
@@ -61,6 +76,22 @@ export function restrictedCostView(value: any, commercial = false): any {
     )
       delete result[key].cost;
   }
+  if (discountReview) {
+    result.cost = null;
+    result.costRestricted = true;
+    for (const metrics of [result.original, result.proposed])
+      for (const key of ["profit", "profitPercent", "marginPercent"])
+        metrics[key] = null;
+    result.targetMarkup = null;
+    result.targetMargin = null;
+  }
+  if (cniReview) {
+    result.unitCostBeforeTax = null;
+    result.costRestricted = true;
+    for (const metrics of [result.original, result.proposed])
+      for (const key of ["cost", "profit", "markup"])
+        metrics[key] = null;
+  }
   if (
     value.key === "bess" ||
     value.category === "bess" ||
@@ -89,16 +120,19 @@ export function restrictedCostView(value: any, commercial = false): any {
   if (
     !boq &&
     "selling" in value &&
-    ("actual" in value || "budgeted" in value)
+    ["actual", "budgeted", "budget"].some(key => key in value && (value[key] === null || typeof value[key] !== "object"))
   ) {
     for (const k of [
       "actual",
+      "budget",
       "budgeted",
       "variance",
       "actualMarkupAmount",
       "budgetedMarkupAmount",
+      "actualMarkupPercent",
+      "budgetedMarkupPercent",
     ])
-      if (k in result) result[k] = null;
+      if (k in result && (result[k] === null || typeof result[k] !== "object")) result[k] = null;
   }
   if (!boq) {
     for (const k of [
@@ -111,8 +145,19 @@ export function restrictedCostView(value: any, commercial = false): any {
       "markupAmount",
       "markupPercent",
       "installationMarkupPercent",
+      "averageActualMarkupPercent",
     ])
       if (k in result) result[k] = null;
+  }
+  // Comparing a mixed-configuration average with selling value also reveals
+  // restricted equipment cost. Preserve sample counts and non-BESS peers.
+  if (value.phases && typeof value.phases === "object" && !Array.isArray(value.phases) && value.total && typeof value.total === "object" && "averageActualCost" in value.total) {
+    result.phases = Object.fromEntries(Object.entries(value.phases).map(([phase, metrics]) => [phase,
+      isBessEquipment({name: phase}) && metrics && typeof metrics === "object"
+        ? {...restrictedCostView(metrics, commercial), averageActualCost: null}
+        : restrictedCostView(metrics, commercial),
+    ]));
+    result.total = {...restrictedCostView(value.total, commercial), averageActualCost: null};
   }
   if (
     commercial &&

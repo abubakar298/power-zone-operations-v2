@@ -69,3 +69,34 @@ test('restricted financial projection preserves database timestamps including ne
  const date=new Date('2026-10-08T18:20:00.000Z');const result=restrictedCostView({created_at:date,accounts_handoff:{created_at:date,sent_by:'Atif'}});
  assert.equal(result.created_at,date.toISOString());assert.equal(result.accounts_handoff.created_at,date.toISOString());assert.ok(Number.isFinite(new Date(result.accounts_handoff.created_at).getTime()));assert.equal(date.toISOString(),'2026-10-08T18:20:00.000Z');
 });
+
+test('Accounts closure projection hides phase maps and derived mixed-cost averages at every history depth',()=>{
+ const snapshot={selling:'1200.00',budget:{'Solar Panels':'0.00',Structure:'150.00',Inverter:'400.00',Batteries:'500.00',BMS:'50.00',EPC:'100.00'},
+  input:{actual:{'Solar Panels':'0.00',Structure:'150.00',Inverter:'401.00',Batteries:'499.00',BMS:'50.00'},epcAggregate:'100.00'},
+  summary:{selling:'1200.00',actual:'1200.00',budget:'1200.00',budgetedMarkup:'0.00',actualMarkup:'0.00',budgetedMarkupPercent:'0.00',actualMarkupPercent:'0.00'},
+  configurationComparison:{closedJobs:2,averageActualMarkupPercent:'20.00'},phaseCostComparison:{total:{jobs:2,averageActualCost:'1200.00'},phases:{Inverter:{jobs:2,averageActualCost:'400.00'},BMS:{jobs:1,averageActualCost:'0.00'},Structure:{jobs:2,averageActualCost:'150.00'},'Solar Panels':{jobs:0,averageActualCost:null}}}};
+ const before=JSON.stringify(snapshot),result=restrictedCostView({...snapshot,history:[{snapshot}]});
+ for(const value of [result,result.history[0].snapshot]){
+  for(const phase of ['Inverter','Batteries','BMS']){assert.equal(value.budget[phase],null);assert.equal(value.input.actual[phase],null);}
+  assert.equal(value.budget['Solar Panels'],'0.00');assert.equal(value.input.actual.Structure,'150.00');assert.equal(value.input.epcAggregate,'100.00');
+  for(const key of ['actual','budget','actualMarkup','budgetedMarkup','actualMarkupPercent','budgetedMarkupPercent'])assert.equal(value.summary[key],null,key);
+  assert.equal(value.summary.selling,'1200.00');assert.equal(value.configurationComparison.closedJobs,2);assert.equal(value.configurationComparison.averageActualMarkupPercent,null);
+  assert.equal(value.phaseCostComparison.total.averageActualCost,null);assert.equal(value.phaseCostComparison.phases.Inverter.averageActualCost,null);assert.equal(value.phaseCostComparison.phases.BMS.averageActualCost,null);
+  assert.equal(value.phaseCostComparison.phases.Structure.averageActualCost,'150.00');assert.equal(value.phaseCostComparison.phases['Solar Panels'].averageActualCost,null);
+ }
+ assert.equal(JSON.stringify(snapshot),before,'Redaction never alters authoritative cost snapshots.');
+});
+
+test('Accounts detail and compact queue apply the same named cost capability without role exemptions',async()=>{
+ const app=express();app.use(financialVisibility);app.use((req,_res,next)=>{(req as any).authSession={user:{role:req.get('X-Role'),restrictedCostAccess:req.get('X-Cost')==='yes'}};next();});
+ const snapshot={budget:{Inverter:'800.00',Structure:'100.00'},input:{actual:{Inverter:'0.00',Structure:'100.00'}},summary:{selling:'1200.00',actual:'900.00',budget:'1000.00',actualMarkupPercent:'33.33'}};
+ app.get('/api/accounts-workspace/job',(_req,res)=>res.json({...snapshot,history:[{snapshot}]}));app.get('/api/accounts-workspace/closure-queue',(_req,res)=>res.json({closures:[{snapshot:{summary:snapshot.summary}}]}));
+ for(const role of ['Admin','Management','Accounts']){
+  const denied=(await request(app).get('/api/accounts-workspace/job').set('X-Role',role)).body;
+  assert.equal(denied.budget.Inverter,null);assert.equal(denied.input.actual.Inverter,null);assert.equal(denied.budget.Structure,'100.00');assert.equal(denied.history[0].snapshot.summary.actualMarkupPercent,null);
+  assert.equal((await request(app).get('/api/accounts-workspace/closure-queue').set('X-Role',role)).body.closures[0].snapshot.summary.actual,null);
+  const allowed=(await request(app).get('/api/accounts-workspace/job').set('X-Role',role).set('X-Cost','yes')).body;
+  assert.deepEqual(allowed.input.actual,snapshot.input.actual);assert.equal(allowed.budget.Inverter,'800.00');assert.equal(allowed.summary.actual,'900.00');assert.equal(allowed.summary.actualMarkupPercent,'33.33');
+  assert.equal((await request(app).get('/api/accounts-workspace/closure-queue').set('X-Role',role).set('X-Cost','yes')).body.closures[0].snapshot.summary.actual,'900.00');
+ }
+});

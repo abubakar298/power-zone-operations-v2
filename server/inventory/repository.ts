@@ -1,5 +1,6 @@
+import {lockActiveActor} from '../auth/actor-lock.js';
 import { fingerprint } from "../boq/repository.js";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { randomUUID } from "node:crypto";
 import { transaction } from "../db/transaction.js";
 import { HttpError } from "../http/errors.js";
@@ -12,9 +13,9 @@ import {
 import { bulkEntry, verifiedGroups, BULK_IRR_ID } from "./bulk-irr.js";
 export class InventoryRepository {
   constructor(private pool: Pool) {}
-  async access(actor: string, write = false) {
+  async access(actor: string, write = false, c:Pool|PoolClient=this.pool) {
     const u = (
-      await this.pool.query("SELECT role,active FROM users WHERE id=$1", [
+      await c.query("SELECT role,active FROM users WHERE id=$1", [
         actor,
       ])
     ).rows[0];
@@ -27,6 +28,7 @@ export class InventoryRepository {
       ).includes(u.role)
     )
       throw new HttpError(403, "Inventory or Accounts access required.");
+    if(u.role==='Inventory'&&!(await c.query("SELECT 1 FROM inventory_material_access WHERE user_id=$1 AND capability='dispatcher' LIMIT 1",[actor])).rowCount)throw new HttpError(403,'Inventory dispatcher access is required. Storekeepers use Gate passes for printing and signed copies.');
     return u.role as string;
   }
   async jobs(actor: string) {
@@ -171,8 +173,8 @@ export class InventoryRepository {
         if(existing.stage!=='IRR Received'){result.push({jobId:job.jobId,stage:existing.stage,unchanged:true});continue;}
       }
       let version=existing?.version??0;
-      if(!existing){await this.save(actor,{jobKey:key,version:0,stage:'IRR Received',entry:job.bulkEntry!,requestKey:randomUUID()});version=1;}
-      const saved=await this.save(actor,{jobKey:key,version,stage:'Draft Reconciliation',entry:job.bulkEntry!,requestKey:randomUUID()});
+      if(!existing){await this.save(actor,{jobKey:key,version:0,stage:'IRR Received',entry:job.bulkEntry!,requestKey:randomUUID()},true);version=1;}
+      const saved=await this.save(actor,{jobKey:key,version,stage:'Draft Reconciliation',entry:job.bulkEntry!,requestKey:randomUUID()},true);
       result.push({jobId:job.jobId,...saved});
     }
     return {reports:result,reference:'Given in bulk by Abu Bakar — 11 October 2026',sentToAccounts:false};
@@ -191,7 +193,7 @@ export class InventoryRepository {
       for(const l of job.lines)if(/^(HYB-|HV 5kWh battery$|HV BMS$|UBL genset synchronization$)/.test(l.key))entry.usage[l.key]=l.approved;
       entry.panelCount=job.bulkEntry!.panelCount;entry.panelWattage=job.bulkEntry!.panelWattage;
       entry.remarks=entry.remarks.split('\n').filter((line:string)=>!line.startsWith('Unconfirmed items / IRR evidence needed:')).join('\n')+'\n'+job.source.bulkIrr.flags.filter((f:string)=>f.startsWith('Panel count and watts')||f.startsWith('Inverter, battery')||f.startsWith('Unconfirmed items / IRR evidence needed:')).join('\n');
-      results.push({jobId:r.job_id,...await this.save(actor,{jobKey:r.job_key,version:latest.version,stage:'Draft Reconciliation',entry,requestKey:randomUUID()})});
+      results.push({jobId:r.job_id,...await this.save(actor,{jobKey:r.job_key,version:latest.version,stage:'Draft Reconciliation',entry,requestKey:randomUUID()},true)});
     }
     return {reports:results,sentToAccounts:false};
   }
@@ -232,8 +234,10 @@ export class InventoryRepository {
       requestKey: string;
       reason?: string;
     },
+    requireManagement = false,
   ) {
     const role = await this.access(actor, true);
+    if(requireManagement&&!['Admin','Management'].includes(role))throw new HttpError(403,'Management access required for this bulk source update.');
     if (role === "Operations" && input.stage !== "IRR Received")
       throw new HttpError(
         403,
@@ -243,6 +247,10 @@ export class InventoryRepository {
     if (input.stage === "Sent to Accounts")
       validateSubmission(input.entry, job.lines);
     return transaction(this.pool, async (c) => {
+      await lockActiveActor(c,actor);
+      const role=await this.access(actor,true,c);
+      if(requireManagement&&!['Admin','Management'].includes(role))throw new HttpError(403,'Management access required for this bulk source update.');
+      if(role==='Operations'&&input.stage!=='IRR Received')throw new HttpError(403,'Operations can upload an IRR; Inventory prepares the reconciliation.');
       await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
         "irr:" + input.jobKey,
       ]);
@@ -359,6 +367,8 @@ export class InventoryRepository {
     if (!signature || content.length < 1 || content.length > 8388608)
       throw new HttpError(400, "Upload a PDF, PNG or JPEG up to 8 MB.");
     return transaction(this.pool, async (c) => {
+      await lockActiveActor(c,actor);
+      const role=await this.access(actor,true,c);
       const report = (
         await c.query(
           "SELECT * FROM inventory_reports WHERE id=$1 FOR UPDATE",

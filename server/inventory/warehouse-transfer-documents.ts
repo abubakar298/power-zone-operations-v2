@@ -1,0 +1,12 @@
+import type {MaterialPrintModel} from './material-document-model.js';
+import {HttpError} from '../http/errors.js';
+/** Whitelisted committed quantities only: no price, baseline, revision or private source data. */
+export function warehouseTransferPrintModel(record:{number:string;created_at?:Date|string;createdAt?:Date|string;snapshot:any}):MaterialPrintModel{
+ const s=record.snapshot;if(s?.status!=='issued'||s.stockPosting!==true||!Array.isArray(s.lines))throw new HttpError(409,'Only an issued warehouse transfer can be printed.');
+ const date=new Date(record.created_at??record.createdAt!).toISOString().slice(0,10);
+ return {kind:'variable-do',status:'issued',title:'Warehouse Transfer · Outwards Gate Pass',reference:record.number,warehouse:s.sourceWarehouse,sites:[],context:{columns:['Transfer to','Transport','Dispatch date'],rows:[[s.destinationWarehouse,[s.transport?.vehicle,s.transport?.driver,s.transport?.reference].filter(Boolean).join(' / ')||'Not recorded',date]]},rows:s.lines.map((l:any)=>({itemId:l.itemId,description:l.description,unit:l.unit,issued:l.quantity,used:null,returned:null})),issuedLabel:'Transferred OUT',signatures:['Source warehouse issued by','Driver / carrier received by'],stockPosting:true,note:'Warehouse OUT recorded once. This transfer remains in transit until counted and verified at the destination. Printing or signing this pass does not credit destination stock.'};
+}
+export function warehouseTransferReceiptPrintModel(record:{number:string;created_at:Date|string;warehouse?:string;snapshot:any}):MaterialPrintModel{
+ const s=record.snapshot;if(s?.stockPosting!==true||!s.transferId||!Array.isArray(s.lines))throw new HttpError(409,'Only a verified counted transfer receipt can be printed.');
+ return {kind:'fixed-do',status:'received',title:'Warehouse Transfer · Inwards Gate Pass',reference:record.number,warehouse:record.warehouse??s.warehouse,sites:[],context:{columns:['Source warehouse','Original transfer','Receipt date'],rows:[[s.sourceWarehouse,s.transferNumber,new Date(record.created_at).toISOString().slice(0,10)]]},rows:s.lines.map((l:any)=>({itemId:l.itemId,description:l.description,unit:l.unit,issued:l.quantity,used:null,returned:null})),issuedLabel:'Counted IN',signatures:['Destination storekeeper received by','Inventory counted / verified by'],stockPosting:true,note:'Only these counted quantities were credited at the destination, once against the original transfer. Any remainder stays in transit. Reprinting or uploading a signed copy does not post stock.'};
+}

@@ -34,6 +34,7 @@ test("Security: price access, no self-approval, Admin-managed access, idle sign-
       "INSERT INTO procurement_access(user_id,capability,granted_reason) VALUES($1,'buyer','test'),($2,'approver','test'),($3,'buyer','test'),($3,'approver','test')",
       [u.buyer, u.approver, u.both],
     );
+    await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$2)",[u.store,u.admin]);
     const records = await createDashboardSamples(db.pool, u.owner, u.admin);
     const ops = new OperationsRepository(db.pool);
     for (const r of records.filter((x: any) => x.ipoId).slice(0, 1)) await ops.issue(u.owner, { ipoId: r.ipoId, notes: "test", requestKey: randomUUID() });

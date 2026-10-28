@@ -515,7 +515,7 @@ export class OrdersRepository {
   async list(actor?: string) {
     const rows = (
       await this.pool.query(
-        `SELECT i.id,i.number,i.created_at,i.snapshot->>'quotationNumber' AS quotation_number,i.snapshot->'input'->>'poNumber' AS po_number,i.snapshot->'customer'->>'name' AS customer,i.snapshot->'allocation'->>'total' AS total,(SELECT jsonb_build_object('decision',r.decision,'notes',r.notes) FROM accounts_ipo_reviews r WHERE r.ipo_id=i.id ORDER BY r.version DESC LIMIT 1) AS accounts_review FROM internal_purchase_orders i ${actor ? `WHERE ${ownedCondition("ipo", "i.id", "$1")}` : "WHERE true"} AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? i.id::text) ORDER BY i.created_at DESC LIMIT 200`,
+        `SELECT i.id,i.number,i.created_at,i.snapshot->>'quotationNumber' AS quotation_number,i.snapshot->'input'->>'poNumber' AS po_number,i.snapshot->'customer'->>'name' AS customer,i.snapshot->'allocation'->>'total' AS total,(SELECT jsonb_build_object('decision',r.decision,'notes',r.notes) FROM accounts_ipo_reviews r WHERE r.ipo_id=i.id ORDER BY r.version DESC LIMIT 1) AS accounts_review FROM internal_purchase_orders i ${actor ? `WHERE ${ownedCondition("ipo", "i.id", "$1")}` : "WHERE true"} AND i.snapshot#>>'{historicalImport,hideFromIpoShared}' IS DISTINCT FROM 'true' AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? i.id::text) ORDER BY i.created_at DESC LIMIT 200`,
         actor ? [actor] : [],
       )
     ).rows;

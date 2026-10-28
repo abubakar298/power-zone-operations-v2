@@ -25,6 +25,7 @@ test("Misc items BOQ: Design fills it per site, Hamza buys the items, Store send
       await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$5)", [id, `${id}@example.test`, name, hash, role]);
     await db.pool.query("INSERT INTO procurement_access(user_id,capability,granted_reason) VALUES($1,'buyer','test')", [u.buyer]);
 
+    await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$2)",[u.store,u.admin]);
     const records = await createDashboardSamples(db.pool, u.owner, u.admin);
     const ops = new OperationsRepository(db.pool);
     const sample = records.find((x: any) => x.ipoId)!;

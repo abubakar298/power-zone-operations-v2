@@ -96,6 +96,7 @@ test("IRR records enforce departmental roles, stale saves, immutable handoff and
         [id, id + "@example.test", role, "not-a-login", role],
       );
     }
+    await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$2)",[users.Inventory,users.Admin]);
     const repo = new InventoryRepository(db.pool),
       jobs = await repo.jobs(users.Inventory);
     const job = jobs.find((j) => j.job_id === "CHP-320");

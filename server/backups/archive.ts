@@ -101,6 +101,7 @@ export async function exportBackup(pool: Pool, passphrase: string) {
         migrations,
         sequences,
         omitted: [...omitted],
+        sanitisedLinks: ["staff_profile_intents.token_id"],
       }) + "\n";
       for (const table of tables) {
         if (omitted.has(table)) continue;
@@ -119,7 +120,10 @@ export async function exportBackup(pool: Pool, passphrase: string) {
           if (!batch.rowCount) break;
           const chunks=[`{"table":${JSON.stringify(table)},"row":{`];
           for(const [index,field] of batch.fields.entries()){
-            const value=batch.rows[0][index];
+            // Authentication tokens are deliberately omitted. Keep immutable intent
+            // history and its nonsecret issued reference, but never restore a live link.
+            const value=table==='staff_profile_intents'&&field.name==='token_id'
+              ? null : batch.rows[0][index];
             const raw=value===null?'null':field.dataTypeID===114||field.dataTypeID===3802
               ? value : JSON.stringify(Buffer.isBuffer(value)?'\\x'+value.toString('hex'):value);
             chunks.push(`${index?',':''}${JSON.stringify(field.name)}:`,raw);
@@ -232,6 +236,14 @@ export async function restoreBackup(
         `ALTER TABLE ${fk.relation} ALTER CONSTRAINT ${quote(fk.conname)} DEFERRABLE INITIALLY DEFERRED`,
       );
     await client.query("SET CONSTRAINTS ALL DEFERRED");
+    // Rehydrate immutable historical states without replaying application-side
+    // draft guards or audit triggers. Foreign-key triggers stay active/deferred.
+    // Target emptiness was verified above; all changes remain transactional.
+    const userTriggers = (await client.query(
+      "SELECT c.relname AS relation,t.tgname AS name,t.tgenabled AS enabled FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND NOT t.tgisinternal ORDER BY c.relname,t.tgname",
+    )).rows;
+    for (const trigger of userTriggers)
+      await client.query(`ALTER TABLE public.${quote(trigger.relation)} DISABLE TRIGGER ${quote(trigger.name)}`);
     await client.query(
       `TRUNCATE ${tables.map((t) => "public." + quote(t)).join(",")}`,
     );
@@ -249,6 +261,11 @@ export async function restoreBackup(
       );
     }
     await client.query("SET CONSTRAINTS ALL IMMEDIATE");
+    for (const trigger of userTriggers) {
+      const state = ({O:"ENABLE",A:"ENABLE ALWAYS",R:"ENABLE REPLICA",D:"DISABLE"} as Record<string,string>)[trigger.enabled];
+      if (!state) throw new Error("Invalid restored trigger state.");
+      await client.query(`ALTER TABLE public.${quote(trigger.relation)} ${state} TRIGGER ${quote(trigger.name)}`);
+    }
     for (const fk of fks)
       await client.query(
         `ALTER TABLE ${fk.relation} ALTER CONSTRAINT ${quote(fk.conname)} ${fk.condeferrable ? "DEFERRABLE" : "NOT DEFERRABLE"} ${fk.condeferred ? "INITIALLY DEFERRED" : "INITIALLY IMMEDIATE"}`,

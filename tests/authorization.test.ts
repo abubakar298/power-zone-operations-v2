@@ -159,6 +159,7 @@ test("owned documents remain usable; other coordinators and unhanded departments
       operations = await account("Operations"),
       inventory = await account("Inventory"),
       accounts = await account("Accounts");
+    await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$2)",[inventory.id,admin.id]);
     const records = await createDashboardSamples(db.pool, owner.id, admin.id);
     const sample = records.find((r: any) => r.ipoId);
     assert.ok(sample);

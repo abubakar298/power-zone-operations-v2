@@ -1,3 +1,6 @@
+import {linkCreatedOperationsMaterialSource} from '../inventory/source-links.js';
+import {syncCreatedOperationsHandoff} from '../operations-board/live-ipo-sync.js';
+import {SiteWorkflowRepository} from '../site-workflow/repository.js';
 import {loadDocumentListMetadata,snapshotListMetadata} from '../documents/list-metadata.js';
 import {directPoFields,directPoSiteMatches,directPoChanges,validOrderPosition,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
 import {manualIpoAvailable,ipoNumberConflict,requireDirectUps,requireEditableIpoRoute} from "../documents/manual-ipo.js";
@@ -594,7 +597,7 @@ export class ProjectWorkflowRepository {
       throw new HttpError(403, "Team Tasks require Management permission.");
     const rows = (
       await this.pool.query(
-        `SELECT r.*,c.name AS customer,c.short_code,s.code AS canonical_site_code,p.display_name AS planner,t.display_name AS technical_owner,k.display_name AS coordinator FROM project_workflow_records r JOIN customers c ON c.id=r.customer_id LEFT JOIN sites s ON s.id=r.site_id LEFT JOIN users p ON p.id=r.planning_owner_id LEFT JOIN users t ON t.id=r.technical_owner_id JOIN users k ON k.id=r.coordinator_id WHERE r.legacy_type IS DISTINCT FROM 'ubl' AND (r.data->>'localPreviewArchived') IS DISTINCT FROM 'true' AND ($3<>'design' OR r.stage<>'request_review') AND ($2 OR CASE WHEN $3='design' THEN $4 OR r.planning_owner_id=$1 OR r.technical_owner_id=$1 OR r.data->'surveyTeam' ? $1::text ELSE r.coordinator_id=$1 END) ORDER BY r.updated_at DESC`,
+        `SELECT r.*,c.name AS customer,c.short_code,s.code AS canonical_site_code,p.display_name AS planner,t.display_name AS technical_owner,k.display_name AS coordinator FROM project_workflow_records r JOIN customers c ON c.id=r.customer_id LEFT JOIN sites s ON s.id=r.site_id LEFT JOIN users p ON p.id=r.planning_owner_id LEFT JOIN users t ON t.id=r.technical_owner_id JOIN users k ON k.id=r.coordinator_id WHERE r.legacy_type IS DISTINCT FROM 'ubl' AND r.data->>'bulkHistoricalImport' IS DISTINCT FROM 'true' AND (r.data->>'localPreviewArchived') IS DISTINCT FROM 'true' AND ($3<>'design' OR r.stage<>'request_review') AND ($2 OR CASE WHEN $3='design' THEN $4 OR r.planning_owner_id=$1 OR r.technical_owner_id=$1 OR r.data->'surveyTeam' ? $1::text ELSE r.coordinator_id=$1 END) ORDER BY r.updated_at DESC`,
         [
           actor,
           scope === "team" && management(u.role),
@@ -1109,9 +1112,9 @@ export class ProjectWorkflowRepository {
       return row;
     });
   }
-  async create(actor: string, raw: unknown) {
+  async create(actor: string, raw: unknown, client?:PoolClient) {
     const input = createSchema.parse(raw);
-    return transaction(this.pool, async (c) => {
+    const execute=async(c:PoolClient)=>{
       const u = await this.user(actor, c);
       this.requireRole(u, ["Coordinator"]);
       if(input.route==='direct-framework'&&input.frameworkId&&process.env.ENABLE_DEFERRED_UPS_WORKFLOW!=='true'){
@@ -1374,8 +1377,10 @@ export class ProjectWorkflowRepository {
         ],
       );
       return { id: r.id, repeated: false };
-    });
+    };
+    return client?execute(client):transaction(this.pool,execute);
   }
+
   async document(
     c: PoolClient,
     r: any,
@@ -3146,7 +3151,9 @@ export class ProjectWorkflowRepository {
     basis: any,
     receipt: any,
     decisionId: string,
+    historical?:{kind:'verified-register-import';sourceId:string;sourceVersion:number;sourceSha256:string;sourceKey:string;importedBy:string;reason:string;hideFromIpoShared:true},
   ) {
+    if(historical){const importer=(await c.query('SELECT active,role FROM users WHERE id=$1',[historical.importedBy])).rows[0];if(!importer?.active||!['Admin','Management'].includes(importer.role))throw new HttpError(403,'Historical IPO import requires active Management authorisation.');}
     const prior = (
       await c.query(
         "SELECT * FROM project_workflow_issuances WHERE record_id=$1",
@@ -3303,16 +3310,17 @@ export class ProjectWorkflowRepository {
     const input = {
       ...basis.order.input,
       poNumber:
-        receipt.input.confirmationType && receipt.input.confirmationType !== "Customer PO"
+        !historical && receipt.input.confirmationType && receipt.input.confirmationType !== "Customer PO"
           ? ""
           : receipt.input.reference,
       approvalReference: receipt.input.reference,
-      evidenceType: receipt.input.confirmationType ?? "Customer PO",
+      evidenceType: historical ? "Historical source register" : receipt.input.confirmationType ?? "Customer PO",
       orderDate: receipt.input.date,
       evidenceNotes: receipt.input.notes,
     };
     const snapshot = {
       ...structuredClone(basis.order),
+      ...(historical?{historicalImport:{...historical,originalCustomerEvidenceUploaded:false}}:{}),
       directPoApproval: data.directPoDetails??null,
       siteName: data.directPoDetails?.values.siteName??r.site_name,
       siteCode: r.site_code,
@@ -3353,7 +3361,7 @@ export class ProjectWorkflowRepository {
         r.coordinator_id,
       ],
     );
-    await c.query(
+    if(!historical)await c.query(
       "INSERT INTO ipo_accounts_handoffs(id,ipo_id,created_by) VALUES($1,$2,$3)",
       [randomUUID(), ipo, r.coordinator_id],
     );
@@ -3364,6 +3372,7 @@ export class ProjectWorkflowRepository {
       )
     ).rowCount;
     const operations = {
+      ...(historical?{bulkHistoricalImport:true,historicalImport:historical}:{}),
       directPoApproval: data.directPoDetails??null,
       orderNumber: input.orderNumber??"",
       headsupStatus: headsupAdvance ? "Heads-up shared — final received" : null,
@@ -3418,6 +3427,11 @@ export class ProjectWorkflowRepository {
         "INSERT INTO headsup_advance_final_links(record_id,operations_id,created_by) VALUES($1,$2,$3) ON CONFLICT(record_id) DO NOTHING",
         [r.id, ops, r.coordinator_id],
       );
+    if(!historical){
+      await new SiteWorkflowRepository(this.pool).ensure(c,ops);
+      const receiving=await syncCreatedOperationsHandoff(c,u.id,{ipoId:ipo,operationsIssuanceId:ops});
+      for(const linked of [...receiving.created,...receiving.retained])await linkCreatedOperationsMaterialSource(c,u.id,{boardSiteId:linked.boardSiteId,ipoId:ipo,operationsIssuanceId:ops});
+    }
     return { ipo_id: ipo, operations_id: ops };
   }
   async attach(actor: string, id: string, input: any) {
@@ -4075,4 +4089,3 @@ export class ProjectWorkflowRepository {
     return [...headsups, ...existing];
   }
 }
-

@@ -30,6 +30,7 @@ test("Department queues enforce roles, ordered Inventory progress, concurrency, 
         "INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$5)",
         [id, `${id}@example.test`, role, hash, role],
       );
+    await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$2)",[inventory,admin]);
     const samples = await createDashboardSamples(db.pool, coord, admin),
       source = samples.find((r: any) => r.ipoId)!;
     const before = (

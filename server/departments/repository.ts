@@ -1,6 +1,6 @@
 import { OrdersRepository } from "../orders/repository.js";
 import { randomUUID } from "node:crypto";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { transaction } from "../db/transaction.js";
 import { HttpError } from "../http/errors.js";
@@ -23,15 +23,21 @@ export const checkpointSchema = z
   .strict();
 export class DepartmentRepository {
   constructor(private pool: Pool) {}
-  async access(actor: string, department: Department) {
+  async access(actor: string, department: Department, c: Pool | PoolClient = this.pool, lock = false) {
     const u = (
-      await this.pool.query("SELECT active,role FROM users WHERE id=$1", [
+      await c.query("SELECT active,role FROM users WHERE id=$1" + (lock ? " FOR SHARE" : ""), [
         actor,
       ])
     ).rows[0];
     if (!u?.active) throw new HttpError(401, "Your access has ended.");
     if (!["Admin", "Management", department].includes(u.role))
       throw new HttpError(403, `${department} access required.`);
+    // A storekeeper may print committed warehouse documents and upload signed
+    // copies, but cannot read BOQ snapshots or advance the Inventory queue.
+    if (department === "Inventory" && u.role === "Inventory" && !(
+      await c.query("SELECT 1 FROM inventory_material_access WHERE user_id=$1 AND capability='dispatcher' LIMIT 1" + (lock ? " FOR SHARE" : ""), [actor])
+    ).rowCount)
+      throw new HttpError(403, "Inventory dispatcher access is required. Storekeepers use Gate passes.");
   }
   async portal(actor: string, department: Department) {
     await this.access(actor, department);
@@ -62,14 +68,7 @@ export class DepartmentRepository {
     input: z.infer<typeof checkpointSchema>,
   ) {
     return transaction(this.pool, async (c) => {
-      const u = (
-        await c.query("SELECT active,role FROM users WHERE id=$1 FOR SHARE", [
-          actor,
-        ])
-      ).rows[0];
-      if (!u?.active) throw new HttpError(401, "Your access has ended.");
-      if (!["Admin", "Management", department].includes(u.role))
-        throw new HttpError(403, `${department} access required.`);
+      await this.access(actor, department, c, true);
       const inventory = department === "Inventory",
         key = inventory ? "store_issuance_id" : "ipo_id",
         table = inventory ? "store_boq_issuances" : "internal_purchase_orders";

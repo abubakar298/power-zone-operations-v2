@@ -203,7 +203,7 @@ export class SiteWorkflowRepository {
   }
 
   /** Every Operations issuance has exactly one workflow row; create the missing ones. */
-  async ensure(c: Pool | PoolClient = this.pool) {
+  async ensure(c: Pool | PoolClient = this.pool, issuanceId?: string) {
     await c.query(`INSERT INTO site_workflow (issuance_id, ipo_id, site_id, customer_id, stage, stage_entered_at, site_type, created_at)
      SELECT o.id, o.ipo_id, b.site_id, b.customer_id,
       CASE WHEN s.id IS NOT NULL THEN 'delivery' ELSE 'ipo_received' END, COALESCE(s.created_at, o.created_at),
@@ -213,7 +213,7 @@ export class SiteWorkflowRepository {
      JOIN boq_revisions r ON r.id=o.boq_revision_id
      JOIN boqs b ON b.id=r.boq_id
      LEFT JOIN store_boq_issuances s ON s.issuance_id=o.id
-     WHERE NOT EXISTS (SELECT 1 FROM site_workflow w WHERE w.issuance_id=o.id)`);
+     WHERE ($1::uuid IS NULL OR o.id=$1) AND NOT EXISTS (SELECT 1 FROM site_workflow w WHERE w.issuance_id=o.id)`, [issuanceId ?? null]);
   }
 
   async list(actor: string) {

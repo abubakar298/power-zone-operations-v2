@@ -1,3 +1,4 @@
+import {lockActiveActor} from '../auth/actor-lock.js';
 import type { Pool, PoolClient } from "pg";
 import { HttpError } from "../http/errors.js";
 import { transaction } from "../db/transaction.js";
@@ -9,7 +10,7 @@ const READ_ROLES = new Set(["Admin", "Management", "Inventory"]);
 const NEW_NUMBER = "'PR-' || to_char(now(),'YY') || '-' || lpad(nextval('purchase_request_number')::text,3,'0')";
 const NOT_FOR_BUYER = "Batteries, BMS and inverters are not bought through Procurement.";
 
-export interface Me { role: string; displayName: string; buyer: boolean; approver: boolean }
+export interface Me { role: string; displayName: string; buyer: boolean; approver: boolean; operationsBoard?:boolean }
 /** Who sees purchase prices (Moaz, 24 Oct 2026): the buyer, the approver, Admin, Management and Accounts. Never Store. */
 const PRICE_ROLES = new Set(["Admin", "Management", "Accounts"]);
 export const seesPrices = (me: Me) => me.buyer || me.approver || PRICE_ROLES.has(me.role);
@@ -22,10 +23,21 @@ export class ProcurementRepository {
     const u = (await c.query("SELECT role, display_name FROM users WHERE id=$1 AND active", [actor])).rows[0];
     if (!u) throw new HttpError(403, "Your account is not active.");
     const caps = new Set((await c.query("SELECT capability FROM procurement_access WHERE user_id=$1", [actor])).rows.map((r) => r.capability as string));
-    return { role: u.role, displayName: u.display_name, buyer: caps.has("buyer"), approver: caps.has("approver") };
+    const operationsBoard=u.role==='Operations'&&(await c.query('SELECT 1 FROM operations_board_access WHERE user_id=$1',[actor])).rowCount!==0;
+    return { role: u.role, displayName: u.display_name, buyer: caps.has("buyer"), approver: caps.has("approver"),operationsBoard };
+  }
+  private async inventoryDispatcher(actor:string,c:Db=this.pool){
+    if(!(await c.query("SELECT 1 FROM inventory_material_access WHERE user_id=$1 AND capability='dispatcher' LIMIT 1",[actor])).rowCount)
+      throw new HttpError(403,"Inventory dispatcher access is required. Storekeepers can print approved documents and upload signed copies.");
+  }
+  private async legacyStockWrite(c:Db){
+    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.warehouse.governance',0))");
+    if((await c.query('SELECT 1 FROM inventory_warehouse_authority_current LIMIT 1')).rowCount)
+      throw new HttpError(409,'Select the warehouse and final stock ID. Global counts and receipts cannot change reconciled warehouse stock.');
   }
   private async reader(actor: string, c: Db = this.pool) {
     const me = await this.me(actor, c);
+    if(me.role==="Inventory")await this.inventoryDispatcher(actor,c);
     if (!me.buyer && !me.approver && !READ_ROLES.has(me.role)) throw new HttpError(403, "Procurement is not part of your workspace.");
     return me;
   }
@@ -75,6 +87,7 @@ export class ProcurementRepository {
   async storeView(actor: string) {
     const me = await this.me(actor);
     if (me.role !== "Inventory" && !["Admin", "Management"].includes(me.role)) throw new HttpError(403, "This page belongs to Store.");
+    if(me.role==="Inventory")await this.inventoryDispatcher(actor);
     const { inventory } = await computeSupply(this.pool, this.pool);
     const ordered = (await this.pool.query(
       `SELECT r.id, r.number, r.title, r.order_reference, r.ordered_at, r.delivery_to, r.needed_by, r.vendor, r.expected_on, u.display_name AS ordered_by
@@ -121,9 +134,11 @@ export class ProcurementRepository {
 
   async setCount(actor: string, input: { itemKey: string; quantity: string; unit: string; note: string }) {
     return transaction(this.pool, async (c) => {
+      await lockActiveActor(c,actor);
       const me = await this.me(actor, c);
       // Store keeps the counts; the Procurement buyer reads them but cannot change them (Moaz, 21 Oct 2026).
       if (me.role !== "Inventory") throw new HttpError(403, "Only Store can enter stock counts.");
+      await this.inventoryDispatcher(actor,c);await this.legacyStockWrite(c);
       const item = (await c.query(`SELECT unit FROM ${PROCUREMENT_ITEMS} i WHERE key=$1`, [input.itemKey])).rows[0];
       if (!item) throw new HttpError(400, "That item is not in the rate master or the misc items list.");
       await c.query(
@@ -491,8 +506,10 @@ export class ProcurementRepository {
    */
   async markReceived(actor: string, id: string, input: { lines: { itemKey: string; quantity: string }[]; note: string }) {
     return transaction(this.pool, async (c) => {
+      await lockActiveActor(c,actor);
       const me = await this.me(actor, c);
       if (me.role !== "Inventory") throw new HttpError(403, "Only Store can receive material.");
+      await this.inventoryDispatcher(actor,c);await this.legacyStockWrite(c);
       const status = await this.lock(c, id);
       if (status !== "ordered") throw new HttpError(422, "Only an ordered request can be received.");
       const lines = (await c.query("SELECT item_key, quantity, unit FROM purchase_request_lines WHERE request_id=$1", [id])).rows;

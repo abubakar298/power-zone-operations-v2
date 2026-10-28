@@ -1,0 +1,377 @@
+/* The Accounts workspace follows the approved local Operations layout. */
+.accounts-ui .workspace-main{background:var(--pz-canvas)}
+.accounts-ui .dashboard{max-width:1450px;padding:32px;background:transparent;border:0;border-radius:0;box-shadow:none;color:var(--pz-text);font-size:13px;line-height:1.55}
+.accounts-ui .dashboard>.page-heading{margin:0 0 24px;padding:0}.accounts-ui .page-heading .eyebrow{display:none}
+.accounts-ui .dashboard>.page-heading h1{font-size:27px;line-height:1.25;font-weight:650;letter-spacing:-.6px;margin:0 0 7px}
+.accounts-ui .dashboard-intro{font-size:13px;color:var(--pz-muted);margin:0;line-height:1.6}
+.accounts-ui .pz-accounts{display:flex;flex-direction:column;gap:20px;min-width:0}.accounts-ui .pz-accounts>h2{font-size:18px;font-weight:600;margin:0}
+.accounts-ui .pz-accounts>h2:has(+.accounts-documents){display:none}.accounts-ui .pz-accounts>.pz-action-row:empty{display:none}
+.accounts-ui .pz-action-row{justify-content:flex-start;gap:8px}.accounts-ui .pz-button{font-size:12px;font-weight:550;border-radius:8px;min-height:44px;line-height:1.4}
+.accounts-ui .pz-accounts>.pz-action-row:first-child .pz-button[aria-pressed=true],.accounts-project-tabs .pz-button[aria-pressed=true]{background:var(--pz-selected-bg);border-color:var(--pz-selected-border);color:var(--pz-primary)}
+.accounts-ui .pz-field{margin:0;min-width:0}.accounts-ui .pz-field label,.accounts-ui .pz-field>span:first-child{font-size:12px;color:var(--pz-muted)}
+.accounts-ui input,.accounts-ui select,.accounts-ui textarea{font-size:13px;min-height:44px;border-radius:8px;border:1px solid var(--pz-border);background:var(--pz-surface);padding:10px 12px;color:var(--pz-text)}
+.accounts-ui .pz-accounts>p,.accounts-ui .pz-accounts>section>p{font-size:13px;color:var(--pz-muted);line-height:1.65;margin:0}
+.accounts-ui .workspace-buckets{gap:16px}
+.accounts-ui .stage-card,.accounts-bucket{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;text-align:left;gap:10px;min-height:150px;padding:22px;border:1px solid var(--pz-border);border-radius:12px;background:var(--pz-surface);box-shadow:0 2px 6px color-mix(in srgb,var(--pz-text) 2%,transparent)}
+.accounts-ui .stage-card strong,.accounts-bucket strong{order:-1;font-size:32px;font-weight:650;line-height:1;color:var(--pz-primary);margin:0}
+.accounts-ui .stage-card span,.accounts-bucket>span{font-size:13px;font-weight:550;line-height:1.5}.accounts-ui .stage-card small,.accounts-bucket small{font-size:12px;font-weight:400;line-height:1.55;color:var(--pz-muted);margin:0}
+.accounts-ui .stage-card.selected,.accounts-bucket.selected{border-color:var(--pz-primary);background:var(--pz-selected-bg);box-shadow:0 0 0 1px var(--pz-primary)}
+.accounts-ui .table-scroll,.accounts-ui .pz-table-scroll{padding:20px 24px;background:var(--pz-surface);border:1px solid var(--pz-border);border-radius:12px;overflow:auto;min-width:0}
+.accounts-ui table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;line-height:1.55}.accounts-ui table th{padding:12px 15px;text-align:left;background:var(--pz-secondary-bg);color:var(--pz-muted);font-size:11px;font-weight:600;border-top:1px solid var(--pz-border);border-bottom:1px solid var(--pz-border);white-space:nowrap}
+.accounts-ui table th:first-child{border-radius:8px 0 0 8px}.accounts-ui table th:last-child{border-radius:0 8px 8px 0}.accounts-ui table td{padding:17px 15px;vertical-align:top;border-bottom:1px solid color-mix(in srgb,var(--pz-border) 60%,transparent)}.accounts-ui table tr:last-child td{border-bottom:0}
+.accounts-ui table td>strong{font-weight:550}.accounts-ui table td small{display:block;font-size:11px;line-height:1.55;color:var(--pz-muted);margin-top:5px}.accounts-ui td .pz-button+.pz-button{margin-left:6px}
+.accounts-ui .detail-panel,.accounts-ui .pz-panel{border:1px solid var(--pz-border);border-radius:12px;padding:24px;background:var(--pz-surface);min-width:0}.accounts-ui .detail-panel h3,.accounts-ui .pz-panel h3{font-size:15px;font-weight:600;margin:0 0 16px}
+.accounts-ui .detail-panel .table-scroll,.accounts-ui .detail-panel .pz-table-scroll,.accounts-ui .pz-panel .pz-table-scroll{padding:0;border:0;border-radius:0}.accounts-ui .pz-form-grid{gap:18px 24px}
+.accounts-data-note{font-size:11px;color:var(--pz-muted);order:20;line-height:1.65}.accounts-data-note summary{cursor:pointer;padding:8px 0}.accounts-data-note p{margin:8px 0}
+.accounts-documents{display:grid;gap:24px;min-width:0}.accounts-project-tabs{display:flex;gap:8px;flex-wrap:wrap}.accounts-project-tabs .pz-button{padding:10px 20px;background:var(--pz-surface);color:var(--pz-muted)}
+.accounts-location-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px}.accounts-list-panel{background:var(--pz-surface);border:1px solid var(--pz-border);border-radius:12px;padding:24px;min-width:0}
+.accounts-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}.accounts-panel-heading h2,.accounts-panel-heading h3{font-size:18px;font-weight:600;margin:0}.accounts-panel-heading>div{display:flex;align-items:center;gap:16px}.accounts-panel-heading>div>span{font-size:12px;color:var(--pz-muted)}
+.accounts-document-toolbar{display:grid;grid-template-columns:minmax(200px,1fr) 220px auto;align-items:end;gap:16px;margin-bottom:22px}.accounts-document-toolbar .pz-field{display:flex;flex-direction:column;gap:8px}
+.accounts-documents .accounts-list-panel>.pz-table-scroll{border:0;padding:0;border-radius:0}.accounts-documents table{min-width:740px}.accounts-documents th:first-child{width:29%}.accounts-documents th:nth-child(2){width:23%}.accounts-documents td:last-child{text-align:right}.accounts-documents td .pz-status{font-size:11px;font-weight:500;white-space:normal}
+.accounts-empty{text-align:center;padding:48px 20px;color:var(--pz-muted)}.accounts-empty h3{font-size:15px;color:var(--pz-text);margin:0 0 8px}.accounts-empty p{font-size:13px;margin:0 0 16px}
+.accounts-footnote{font-size:11px;color:var(--pz-muted);margin:0}.accounts-footnote span{margin-left:8px}
+.accounts-record-dialog{padding:0;width:min(820px,calc(100vw - 32px));max-height:90dvh;border:1px solid var(--pz-border);border-radius:16px;background:var(--pz-surface);color:var(--pz-text);box-shadow:0 20px 90px color-mix(in srgb,var(--pz-text) 22%,transparent)}
+.accounts-record-dialog::backdrop{background:color-mix(in srgb,var(--pz-text) 40%,transparent);backdrop-filter:blur(2px)}
+.accounts-dialog-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:24px 28px;border-bottom:1px solid var(--pz-border)}.accounts-record-reference{font-size:10px;letter-spacing:1px;color:var(--pz-muted)}.accounts-dialog-heading h2{font-size:21px;font-weight:650;letter-spacing:-.4px;margin:6px 0}.accounts-dialog-heading p{font-size:12px;color:var(--pz-muted);margin:0}.accounts-dialog-heading>.pz-button{min-width:44px;font-size:23px;padding:0;background:var(--pz-secondary-bg);color:var(--pz-muted)}
+.accounts-dialog-body{padding:24px 28px;display:grid;gap:20px}.accounts-record-section{padding:20px;border:1px solid var(--pz-border);border-radius:12px}.accounts-record-section h3{font-size:14px;font-weight:600;margin:0 0 18px}.accounts-record-section .accounts-panel-heading{margin-bottom:18px}.accounts-record-section .accounts-panel-heading h3{margin:0}
+.accounts-facts{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:0}.accounts-facts dt{font-size:11px;color:var(--pz-muted);margin-bottom:5px}.accounts-facts dd{font-size:13px;margin:0}
+.accounts-file-list{margin:0;padding:0;list-style:none}.accounts-file-list li{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--pz-border)}.accounts-file-list li:first-child{padding-top:0}.accounts-file-list li:last-child{border-bottom:0;padding-bottom:0}.accounts-file-list li>div{min-width:0}.accounts-file-list strong{display:block;font-size:12px;font-weight:550;text-transform:capitalize}.accounts-file-list span{display:block;font-size:12px;color:var(--pz-muted);margin-top:5px;overflow-wrap:anywhere}
+.accounts-movement-list{list-style:none;padding:0 0 0 8px;margin:0}.accounts-movement-list li{padding:0 0 22px 22px;border-left:1px solid var(--pz-border);position:relative}.accounts-movement-list li:before{content:'';position:absolute;left:-4px;top:4px;width:7px;height:7px;background:var(--pz-primary);border-radius:50%}.accounts-movement-list li:last-child{padding-bottom:0}.accounts-movement-list strong{font-size:12px;font-weight:550;display:block}.accounts-movement-list span{font-size:12px;color:var(--pz-muted);display:block;margin-top:5px}.accounts-history-empty strong{font-size:13px;font-weight:550}.accounts-history-empty p{font-size:12px;color:var(--pz-muted);margin:6px 0 0}
+.accounts-dialog-footer{padding:14px 28px;border-top:1px solid var(--pz-border);background:var(--pz-canvas);font-size:11px;color:var(--pz-muted)}
+.accounts-ui .pz-accounts-billing{display:grid;gap:24px}.accounts-ui .pz-accounts-billing>p{margin:0;color:var(--pz-muted)}
+.accounts-tracking{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--pz-text);padding:0;max-width:none;background:var(--pz-canvas)}.accounts-tracking .ubl-dashboard-header{display:none}.accounts-tracking .ubl-count-cards{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.accounts-tracking .ubl-value-cards{gap:12px}
+.accounts-tracking .ubl-dashboard-panel,.accounts-tracking .ubl-dashboard-toolbar{border-color:var(--pz-border);border-radius:12px;padding:24px}.accounts-tracking .ubl-count-cards button,.accounts-tracking .ubl-value-cards button{border-color:var(--pz-border);border-radius:12px;padding:20px;font-size:13px;background:var(--pz-surface);box-shadow:none}.accounts-tracking .ubl-count-cards button.selected,.accounts-tracking .ubl-value-cards button.selected{background:var(--pz-selected-bg);border-color:var(--pz-primary)}.accounts-tracking .ubl-count-cards button>strong{color:var(--pz-primary)}
+.accounts-tracking .ubl-dashboard-toolbar input,.accounts-tracking .ubl-dashboard-toolbar select{height:44px;border-color:var(--pz-border)}.accounts-tracking .ubl-dashboard-table-scroll{border-color:var(--pz-border)}.accounts-tracking .ubl-dashboard-table-scroll th{background:var(--pz-secondary-bg);font-size:11px;font-weight:600}.accounts-tracking .ubl-dashboard-table-scroll td{padding:16px 12px;font-size:12px}.accounts-tracking .ubl-dashboard-panel h2{font-size:18px;font-weight:600}
+@media(max-width:1100px){.accounts-location-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.accounts-ui .dashboard{padding:24px}.accounts-document-toolbar{grid-template-columns:1fr 190px}.accounts-document-toolbar>.pz-button{grid-column:1/-1;justify-self:start}}
+@media(max-width:700px){.accounts-ui .dashboard{padding:20px}.accounts-ui .table-scroll,.accounts-ui .pz-table-scroll,.accounts-list-panel{padding:16px}.accounts-location-grid{gap:10px}.accounts-bucket{padding:16px;min-height:145px}.accounts-document-toolbar{grid-template-columns:1fr}.accounts-document-toolbar>.pz-button{grid-column:auto}.accounts-panel-heading>div{gap:8px}.accounts-dialog-body,.accounts-dialog-heading{padding:20px}.accounts-facts{grid-template-columns:1fr}.accounts-file-list li{align-items:flex-start;flex-wrap:wrap}.accounts-tracking .ubl-count-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.accounts-ui .accounts-location-grid>.accounts-bucket{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;min-height:150px;padding:22px;text-align:left;border-radius:12px;gap:10px}.accounts-ui .accounts-location-grid>.accounts-bucket.selected{background:var(--pz-selected-bg);border-color:var(--pz-primary);box-shadow:0 0 0 1px var(--pz-primary)}
+@media(max-width:700px){.accounts-ui .accounts-location-grid>.accounts-bucket{padding:16px;min-height:145px}}
+
+.accounts-ui .accounts-pt-panel .pz-table-scroll,.accounts-ui .accounts-list-panel>.table-scroll{padding:0;border:0;border-radius:0}.accounts-panel-help{font-size:12px;color:var(--pz-muted);margin:0 0 20px}.accounts-pt-panel>.pz-field{margin-bottom:22px}.accounts-pt-panel>.pz-field input{width:100%}.accounts-pt-panel .accounts-panel-heading>span{font-size:12px;color:var(--pz-muted)}.accounts-ui .pz-accounts>h2:has(+.accounts-list-panel),.accounts-ui .pz-accounts>h2:has(+.accounts-documents){display:none}
+
+.accounts-dialog-body>.pz-form-grid>section{padding:20px;border:1px solid var(--pz-border);border-radius:12px}.accounts-dialog-body h3{font-size:14px;font-weight:600;margin:0 0 16px}.accounts-dialog-body p{font-size:13px;line-height:1.65;color:var(--pz-muted);margin:0}.accounts-dialog-body input,.accounts-dialog-body textarea{width:100%}.accounts-dialog-body>.pz-button{justify-self:end}.accounts-dialog-body label{font-size:12px}.accounts-ui .accounts-list-panel>.pz-table-scroll{padding:0;border:0;border-radius:0}.accounts-ui .accounts-list-panel+.pz-panel{margin-top:0}
+
+.ubl-management-preview.accounts-tracking{padding:0;max-width:none}.accounts-tracking .accounts-receipt-note{padding:16px 20px}.accounts-tracking .accounts-receipt-note>summary{font-size:12px;font-weight:550;color:var(--pz-muted);cursor:pointer}.accounts-tracking .accounts-receipt-note>div{margin-top:16px}.accounts-tracking .accounts-receipt-note p{font-size:12px;line-height:1.65}
+
+/* Exact palette and type treatment from the owner's Operations reference. */
+.accounts-ui,.ubl-management-preview.accounts-tracking{--pz-primary:#514394;--pz-primary-hover:#44377f;--pz-text:#273147;--pz-muted:#718096;--pz-border:#dce0e9;--pz-canvas:#f7f7fb;--pz-surface:#fff;--pz-selected-bg:#f5f3ff;--pz-selected-border:#514394;--pz-secondary-bg:#eeebf6;--pz-secondary-text:#514394;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.accounts-imported-sites{display:grid;gap:24px;min-width:0}.accounts-ui .accounts-site-table{max-height:620px}.accounts-ui .accounts-site-table th{position:sticky;top:0;z-index:1}.accounts-site-table td:first-child{min-width:220px}.accounts-site-table td:nth-child(2){min-width:190px}.accounts-imported-sites .accounts-record-section>p+p{margin-top:10px}.accounts-ui .pz-accounts-billing>.pz-table-scroll:last-child{max-height:620px}.accounts-ui .pz-accounts-billing>.pz-table-scroll:last-child th{position:sticky;top:0;z-index:1}.accounts-ui .pz-accounts>section>p{max-width:950px}.accounts-ui .accounts-panel-heading>span{font-size:12px;color:var(--pz-muted)}.accounts-ui .accounts-record-dialog .accounts-record-section .accounts-panel-heading h3{margin:0}.accounts-ui .accounts-record-dialog .accounts-file-list a{flex-shrink:0}
+/* Layout proportions follow the Operations workspace. */
+.accounts-ui .accounts-dashboard-buckets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}.accounts-ui .accounts-dashboard-buckets .stage-card{min-height:146px}
+.accounts-site-overview{display:flex;align-items:center;gap:28px;padding:20px 24px;border:1px solid var(--pz-border);border-radius:12px;background:var(--pz-surface)}.accounts-site-overview h2{font-size:16px;font-weight:600;margin:0 0 4px}.accounts-site-overview>div>span{font-size:11px;color:var(--pz-muted)}.accounts-site-overview dl{display:flex;flex:1;justify-content:space-evenly;gap:24px;margin:0}.accounts-site-overview dl>div{display:flex;flex-direction:column;gap:5px}.accounts-site-overview dd{margin:0;font-size:22px;font-weight:600;color:var(--pz-primary)}.accounts-site-overview dt{font-size:11px;color:var(--pz-muted)}
+.accounts-ui .accounts-next-actions th:first-child{width:50%}.accounts-ui .accounts-next-actions th:nth-child(2){width:26%}.accounts-ui .accounts-next-actions td:last-child{text-align:right}.accounts-ui .accounts-next-actions th:last-child{text-align:right}
+.accounts-queue-switch{gap:0!important;padding:4px;background:var(--pz-canvas);border:1px solid var(--pz-border);border-radius:10px}.accounts-ui .accounts-queue-switch .pz-button{border-color:transparent;min-height:36px;padding:6px 14px;background:transparent;color:var(--pz-muted)}.accounts-ui .accounts-queue-switch .pz-button[aria-pressed=true]{background:white;color:var(--pz-primary);box-shadow:0 1px 4px #27314712;border-color:var(--pz-border)}
+.accounts-worklist-filters{display:grid;grid-template-columns:minmax(240px,1fr) 240px;align-items:end;gap:16px;margin-bottom:22px}.accounts-worklist-filters>.pz-field:only-child{max-width:540px}.accounts-worklist-filters input,.accounts-worklist-filters select{width:100%}.accounts-worklist-filters .pz-field,.accounts-receivable-filters .pz-field{display:flex;flex-direction:column;gap:7px}
+.accounts-ui .accounts-entry-table{table-layout:fixed;min-width:720px}.accounts-entry-table th:first-child{width:47%}.accounts-entry-table th:nth-child(2){width:19%}.accounts-entry-table th:last-child{width:34%;text-align:right}.accounts-entry-table td:last-child{text-align:right}.accounts-entry-table td:last-child .pz-button{white-space:nowrap}.accounts-ui .accounts-entry-table td{padding-top:18px;padding-bottom:18px}.accounts-entry-table+ p{text-align:center;padding:36px 16px;color:var(--pz-muted);font-size:13px}
+.accounts-invoicing{display:grid;gap:22px}.accounts-ui .accounts-invoicing .workspace-buckets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.accounts-invoicing-table{table-layout:fixed}.accounts-invoicing-table th:first-child{width:40%}.accounts-invoicing-table th:nth-child(2){width:25%}.accounts-invoicing-table th:nth-child(3){width:23%}.accounts-invoicing-table th:last-child{width:12%;text-align:right}.accounts-invoicing-table td:last-child{text-align:right}.accounts-invoicing .pz-table-scroll>p{padding:32px;text-align:center;color:var(--pz-muted);font-size:13px}.accounts-issued summary{cursor:pointer;font-size:13px;font-weight:550;color:var(--pz-primary)}.accounts-issued>p{font-size:12px;color:var(--pz-muted);margin:16px 0}.accounts-issued .pz-table-scroll{max-height:420px}.accounts-invoicing>.pz-caption{margin:0;font-size:11px;color:var(--pz-muted)}
+.accounts-receivable-overview{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:stretch}.accounts-ui .accounts-balances,.accounts-ui .accounts-ageing{padding:22px}.accounts-balances th:first-child{width:30%}.accounts-balances td{padding:16px 8px!important}.accounts-balances td:first-child .pz-button{padding:6px 10px;min-height:36px}.accounts-ui .accounts-money{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.accounts-money .pz-financial-value{font-weight:550}.accounts-missing{font-size:11px;color:var(--pz-muted);font-weight:400}.accounts-coverage{margin-top:20px;font-size:11px;color:var(--pz-muted);border-top:1px solid var(--pz-border);padding-top:14px}.accounts-coverage summary{cursor:pointer}.accounts-coverage p{line-height:1.7;margin:10px 0 0}
+.accounts-ui .accounts-ageing .pz-ups-ageing{display:grid;grid-template-columns:150px minmax(0,1fr);gap:18px;align-items:center;min-height:210px;margin-bottom:16px}.accounts-ui .accounts-ageing .pz-ups-ageing-chart{width:150px;height:150px;min-width:0;max-width:none}.accounts-ageing svg{width:100%;height:100%}.accounts-ui .accounts-ageing .pz-ups-ageing-legend{display:grid;gap:3px;min-width:0}.accounts-ui .accounts-ageing .pz-ups-ageing-legend .pz-button{display:grid;grid-template-columns:8px 1fr auto;gap:8px;width:100%;padding:8px 6px;min-height:34px;font-size:11px;border-color:transparent}.accounts-ageing .pz-ups-ageing-legend strong{font-size:11px;font-weight:550;white-space:nowrap}.accounts-ageing .pz-ups-ageing-swatch{width:8px;height:8px;border-radius:50%}.accounts-ui .accounts-ageing .pz-ups-ageing-legend .pz-button[aria-pressed=true]{background:var(--pz-selected-bg);border-color:var(--pz-primary)}
+.accounts-receivable-filters{display:grid;grid-template-columns:minmax(200px,1fr) 170px 230px auto;align-items:end;gap:14px;margin-bottom:22px}.accounts-receivable-filters input,.accounts-receivable-filters select{width:100%}.accounts-ui .accounts-invoice-table{max-height:560px}.accounts-invoice-table table{min-width:840px;table-layout:fixed}.accounts-invoice-table th{position:sticky;top:0;z-index:1}.accounts-invoice-table th:first-child{width:32%}.accounts-invoice-table th:nth-child(2){width:14%}.accounts-invoice-table th:nth-child(3),.accounts-invoice-table th:nth-child(4){width:17%}.accounts-invoice-table th:nth-child(5){width:12%}.accounts-invoice-table th:last-child{width:8%}.accounts-invoice-table td:first-child small{max-width:320px}.accounts-ui .accounts-invoice-table td{padding:14px 10px}.accounts-invoice-table td:last-child{text-align:right}
+.accounts-ui .accounts-site-table table{table-layout:fixed;min-width:900px}.accounts-site-table th:first-child{width:29%}.accounts-site-table th:nth-child(2){width:22%}.accounts-site-table th:nth-child(3){width:18%}.accounts-site-table th:nth-child(4){width:23%}.accounts-site-table th:last-child{width:8%;text-align:right}.accounts-site-table td:last-child{text-align:right}.accounts-ui .accounts-site-table td{overflow-wrap:anywhere}.accounts-site-table .pz-status{font-size:11px;white-space:normal}
+.accounts-closure-list .table-scroll:has(tbody:empty){display:none}.accounts-closure-list th:first-child{width:55%}.accounts-closure-list th:nth-child(2){width:25%}.accounts-closure-list td:last-child{text-align:right}.accounts-closure-form{display:grid;gap:18px}.accounts-closure-form>.accounts-panel-heading{margin-bottom:0}.accounts-closure-form>p{margin:0;font-size:12px;color:var(--pz-muted)}.accounts-closure-form .detail-panel{padding:20px}.accounts-closure-form table input{min-width:80px;width:100%}
+.accounts-tracking .ubl-dashboard-toolbar{display:grid;grid-template-columns:260px minmax(0,1fr);gap:20px}.accounts-tracking .ubl-dashboard-toolbar label{display:flex;flex-direction:column;gap:8px}.accounts-tracking .ubl-dashboard-table-scroll{max-height:620px}.accounts-tracking .ubl-dashboard-table-scroll table{min-width:1080px;table-layout:fixed;width:100%}.accounts-tracking .ubl-dashboard-table-scroll th{position:sticky;top:0;z-index:1;white-space:normal}.accounts-tracking .ubl-dashboard-table-scroll td{overflow-wrap:anywhere;vertical-align:top}.accounts-tracking .ubl-dashboard-table-scroll th:nth-child(1){width:12%}.accounts-tracking .ubl-dashboard-table-scroll th:nth-child(2){width:24%}.accounts-tracking .ubl-dashboard-table-scroll th:nth-child(3),.accounts-tracking .ubl-dashboard-table-scroll th:nth-child(4){width:11%}.accounts-tracking .ubl-dashboard-table-scroll th:nth-child(5),.accounts-tracking .ubl-dashboard-table-scroll th:nth-child(6){width:14%}.accounts-tracking .ubl-dashboard-table-scroll th:nth-child(7){width:14%}.accounts-tracking details summary{cursor:pointer;color:var(--pz-primary);font-size:11px}
+@media(max-width:1250px){.accounts-receivable-overview{grid-template-columns:1fr}.accounts-ui .accounts-ageing .pz-ups-ageing{grid-template-columns:170px minmax(0,1fr);max-width:650px}.accounts-receivable-filters{grid-template-columns:1fr 180px}.accounts-site-overview{flex-wrap:wrap}.accounts-site-overview dl{min-width:400px}.accounts-ui .accounts-dashboard-buckets{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.accounts-site-overview{gap:20px;padding:18px}.accounts-site-overview dl{min-width:0;flex-basis:100%;justify-content:space-between;gap:12px}.accounts-ui .accounts-dashboard-buckets{gap:10px}.accounts-ui .accounts-dashboard-buckets .stage-card{padding:16px}.accounts-worklist-filters,.accounts-receivable-filters,.accounts-tracking .ubl-dashboard-toolbar{grid-template-columns:1fr}.accounts-panel-heading{flex-wrap:wrap}.accounts-ui .accounts-invoicing .workspace-buckets{grid-template-columns:1fr}.accounts-ui .accounts-ageing .pz-ups-ageing{grid-template-columns:110px minmax(0,1fr);gap:10px}.accounts-ui .accounts-ageing .pz-ups-ageing-chart{width:110px;height:110px}}
+.accounts-ui .accounts-list-panel>.table-scroll,.accounts-ui .accounts-list-panel>.pz-table-scroll{margin-top:0}.accounts-ui .accounts-ipo-record{display:grid;gap:20px}.accounts-ipo-record>.accounts-panel-heading{margin:0}.accounts-ipo-record>.accounts-panel-heading>div{display:block}.accounts-ipo-record>.accounts-panel-heading h3{font-size:18px;margin:0 0 6px}.accounts-ipo-record>p{margin:0;font-size:12px;color:var(--pz-muted)}.accounts-ipo-record>.pz-form-grid{align-items:start}.accounts-ipo-record>.pz-form-grid>.pz-panel{margin:0}.accounts-ipo-record dl{font-size:12px;line-height:1.7}.accounts-ipo-record dl dt{font-size:11px;color:var(--pz-muted);text-transform:capitalize}.accounts-ipo-record dl dd{margin:4px 0}.accounts-ui .accounts-ipo-record textarea{width:100%;min-height:90px}.accounts-ipo-record .pz-number{text-align:right;white-space:nowrap}.accounts-ipo-record summary{font-size:12px;color:var(--pz-primary);cursor:pointer}.accounts-ui .accounts-closure-list .accounts-empty{padding:36px 16px}.accounts-ui .pz-accounts>.pz-action-row:has(+.accounts-data-note){margin:0}
+.accounts-ui .pz-field small[data-empty=true]{display:none}.accounts-ui table:has(tbody:empty){display:none}.accounts-ui .accounts-ageing .pz-ups-ageing-legend{width:100%;min-width:0;margin:0}.accounts-ui .accounts-ageing .pz-ups-ageing-legend .pz-button>span:not(.pz-ups-ageing-swatch){white-space:normal;text-align:left}.accounts-ui .accounts-ageing .pz-ups-ageing-legend strong{margin:0}.accounts-ui .accounts-ageing .pz-ups-ageing{gap:18px}.accounts-ui .accounts-invoice-table td{overflow-wrap:anywhere}.accounts-ui .accounts-invoice-table th:first-child{width:29%}.accounts-ui .accounts-invoice-table th:nth-child(2){width:16%}.accounts-ui .accounts-invoice-table th:nth-child(5){width:13%}.accounts-ui .accounts-invoice-table th:last-child{width:8%}.accounts-invoice-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid var(--pz-border);padding-top:18px}.accounts-ui .accounts-ipo-record .ipo-preview-pages{max-height:380px;overflow:auto}.accounts-ui .accounts-ipo-record .pz-panel.pz-stack{gap:14px}.accounts-ui .pz-accounts>.pz-action-row>.pz-field{width:280px}.accounts-ui .pz-accounts>.pz-action-row:has(>.pz-field){margin:0}.accounts-ui .accounts-dialog-body>.pz-form-grid:has(>section:nth-child(3)){grid-template-columns:repeat(3,minmax(0,1fr))}.accounts-ui .accounts-dialog-body>.pz-form-grid>section p+h3{margin-top:18px}.accounts-ui .accounts-closure-list .pz-table-scroll:has(tbody:empty){padding:0}.accounts-ui .accounts-panel-heading h3{margin:0}
+@media(max-width:700px){.accounts-ui .accounts-dialog-body>.pz-form-grid:has(>section:nth-child(3)){grid-template-columns:1fr}.accounts-ui .accounts-invoice-footer{align-items:start;flex-direction:column}}
+.accounts-tracking .accounts-tracking-section{background:white;border:1px solid var(--pz-border);border-radius:10px;overflow:hidden}.accounts-tracking .accounts-tracking-section>summary{padding:16px 20px;font-size:12px;font-weight:550;color:var(--pz-text)}.accounts-tracking .accounts-tracking-section>.ubl-dashboard-panel{margin:0;border:0;border-top:1px solid var(--pz-border);border-radius:0}.accounts-tracking .ubl-value-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}.accounts-tracking .ubl-dashboard-table-scroll table:not(:has(thead th:nth-child(7))){table-layout:auto;min-width:700px}.accounts-tracking .ubl-dashboard-table-scroll table:not(:has(thead th:nth-child(7))) th{width:auto}.accounts-tracking .ubl-count-cards button{min-height:140px}.accounts-tracking .ubl-count-cards button .ubl-money{font-weight:550}
+.accounts-tracking>.accounts-tracking-section{margin-bottom:12px}.accounts-tracking .ubl-dashboard-table-scroll td{min-width:0}.accounts-tracking .ubl-dashboard-table-scroll td:last-child{min-width:0}.accounts-tracking .ubl-dashboard-table-scroll td:nth-child(2){min-width:0}.accounts-tracking .ubl-value-cards button{gap:8px}.accounts-tracking .ubl-value-cards b{font-weight:600;font-size:22px}.accounts-tracking .ubl-value-cards strong{font-size:14px;font-weight:550}
+.accounts-document-filters,.accounts-site-filters{grid-template-columns:minmax(240px,1fr) 200px 210px auto}.accounts-document-toolbar select{width:100%}.accounts-dialog-heading h2{overflow-wrap:anywhere}.accounts-dialog-heading>div{min-width:0}.accounts-dialog-heading>.pz-button{flex-shrink:0}.accounts-ui .accounts-record-dialog .accounts-panel-heading{align-items:flex-start}.accounts-ui .accounts-record-dialog .accounts-panel-heading>.pz-status{max-width:55%;white-space:normal}
+@media(max-width:1100px){.accounts-document-filters,.accounts-site-filters{grid-template-columns:1fr 1fr}.accounts-document-filters>.pz-button,.accounts-site-filters>.pz-button{grid-column:auto}}@media(max-width:700px){.accounts-document-filters,.accounts-site-filters{grid-template-columns:1fr}}
+.accounts-ui .accounts-site-table th:first-child{width:28%}.accounts-ui .accounts-site-table th:nth-child(4){width:22%}.accounts-ui .accounts-site-table th:last-child{width:10%}.accounts-ui .accounts-site-table .pz-button,.accounts-ui .accounts-invoice-table .pz-button{white-space:nowrap;overflow-wrap:normal;min-width:60px}.accounts-subpage-heading{margin:0}.accounts-ui .accounts-site-table td:nth-child(2) small:last-child{font-size:10px}
+.accounts-source-details summary{font-size:12px;color:var(--pz-primary);cursor:pointer}.accounts-source-details p{margin-top:12px!important;font-size:11px!important}
+.accounts-ui .accounts-receivable-overview{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}.accounts-ui .accounts-balances table{table-layout:fixed;min-width:610px}.accounts-ui .accounts-balances th{white-space:normal;font-size:10px;padding:12px 8px}.accounts-ui .accounts-balances th:first-child{width:23%}.accounts-ui .accounts-balances th:nth-child(2){width:27%}.accounts-ui .accounts-balances th:nth-child(3),.accounts-ui .accounts-balances th:nth-child(4){width:25%}.accounts-ui .accounts-balances td{font-size:12px}.accounts-ui .accounts-balances td:first-child .pz-button{white-space:normal;text-align:left;font-size:11px;padding:6px}.accounts-ui .accounts-balances td small{white-space:normal;font-size:10px;font-weight:400}.accounts-verification-note{font-size:12px!important;line-height:1.7;padding:12px 16px;border-left:3px solid var(--pz-primary);background:var(--pz-secondary-bg);border-radius:4px}.accounts-ui .accounts-ageing .pz-ups-ageing{grid-template-columns:125px minmax(0,1fr);gap:14px}.accounts-ui .accounts-ageing .pz-ups-ageing-chart{width:125px;height:125px}@media(max-width:1450px){.accounts-ui .accounts-receivable-overview{grid-template-columns:1fr}.accounts-ui .accounts-balances table{min-width:540px}}@media(max-width:700px){.accounts-ui .accounts-ageing .pz-ups-ageing{grid-template-columns:100px minmax(0,1fr)}.accounts-ui .accounts-ageing .pz-ups-ageing-chart{width:100px;height:100px}}
+.accounts-chart-total{font-size:12px;color:var(--pz-text);font-weight:550;margin:0 0 12px;font-variant-numeric:tabular-nums}
+/* Receivables: full-width customer ledger, followed by a focused ageing panel. */
+.accounts-ui .accounts-receivables-refined { gap: 22px; }
+.accounts-customer-ledger .accounts-panel-heading { margin-bottom: 24px; }
+.accounts-customer-ledger .accounts-panel-heading > div { display: block; }
+.accounts-customer-ledger .accounts-panel-heading p { margin: 6px 0 0; font-size: 12px; color: var(--pz-muted); }
+.accounts-ledger-scroll { overflow-x: auto; }
+.accounts-ui .accounts-customer-ledger-table { table-layout: fixed; min-width: 890px; }
+.accounts-ui .accounts-customer-ledger-table th { background: transparent; border-top: 0; border-radius: 0; padding: 0 16px 14px; color: var(--pz-muted); font-size: 11px; font-weight: 500; white-space: normal; }
+.accounts-customer-ledger-table th:first-child { width: 31%; text-align: left; padding-left: 0; }
+.accounts-customer-ledger-table th:not(:first-child) { width: 23%; text-align: right; }
+.accounts-ui .accounts-customer-ledger-table td { padding: 24px 16px; border-bottom: 1px solid var(--pz-border); text-align: right; }
+.accounts-ui .accounts-customer-ledger-table td:first-child { text-align: left; padding-left: 0; }
+.accounts-ui .accounts-customer-ledger-table td:last-child, .accounts-ui .accounts-customer-ledger-table th:last-child { padding-right: 0; }
+.accounts-ui .accounts-customer-ledger-table tr:last-child td { border-bottom: 0; }
+.accounts-ui .accounts-customer-choice.pz-button { display: flex; align-items: center; justify-content: flex-start; gap: 14px; padding: 6px; margin-left: -6px; width: 100%; border: 1px solid transparent; background: transparent; text-align: left; border-radius: 10px; box-shadow: none; }
+.accounts-ui .accounts-customer-choice:hover, .accounts-ui .accounts-customer-choice[aria-pressed=true] { background: var(--pz-selected-bg); }
+.accounts-customer-monogram { display: grid; place-items: center; flex-shrink: 0; width: 42px; height: 42px; background: var(--pz-secondary-bg); color: var(--pz-primary); border-radius: 11px; font-size: 18px; font-weight: 600; }
+.accounts-customer-choice > span:last-child { min-width: 0; }
+.accounts-customer-choice strong { display: block; color: var(--pz-text); font-size: 13px; font-weight: 600; line-height: 1.45; }
+.accounts-ui .accounts-customer-choice small { font-size: 11px; font-weight: 400; margin-top: 4px; color: var(--pz-muted); }
+.accounts-ledger-value { font-size: 22px; font-weight: 550; letter-spacing: -.5px; line-height: 1.4; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.accounts-ledger-primary { color: var(--pz-primary); }
+.accounts-ledger-invoiced { font-size: 16px; font-weight: 450; color: var(--pz-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.accounts-ui .accounts-ledger-incomplete { font-size: 10px; font-weight: 400; margin-top: 5px; }
+.accounts-partial-tag { display: inline-block; background: var(--pz-secondary-bg); color: var(--pz-primary); border-radius: 4px; font-size: 9px; padding: 2px 5px; margin-left: 4px; font-weight: 500; }
+.accounts-coverage-bar { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-top: 14px; border-top: 1px solid var(--pz-border); }
+.accounts-coverage-bar > span { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--pz-muted); }
+.accounts-coverage-dot { width: 5px; height: 5px; background: #b28b4e; border-radius: 50%; flex-shrink: 0; }
+.accounts-ui .accounts-coverage-bar .pz-button { border: 0; background: transparent; color: var(--pz-primary); min-height: 36px; padding: 6px 0 6px 12px; gap: 8px; font-size: 11px; }
+.accounts-coverage-note { margin-top: 16px !important; }
+.accounts-ageing-content { display: grid; grid-template-columns: minmax(0,1fr) 180px minmax(260px,1fr); gap: 40px; align-items: center; padding: 8px 0 12px; }
+.accounts-ageing-total > span { display: block; font-size: 12px; color: var(--pz-muted); }
+.accounts-ageing-total > strong { display: block; font-size: 32px; font-weight: 600; color: var(--pz-primary); letter-spacing: -.8px; line-height: 1.4; margin: 10px 0 4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.accounts-ageing-total > small { font-size: 11px; color: var(--pz-muted); }
+.accounts-ageing-total > p { font-size: 11px; color: var(--pz-muted); margin: 20px 0 0; }
+.accounts-refined-pie { width: 180px; height: 180px; }
+.accounts-refined-pie svg { width: 100%; height: 100%; overflow: visible; }
+.accounts-refined-pie [role=button] { cursor: pointer; stroke: white; stroke-width: 1px; }
+.accounts-refined-pie [aria-pressed=true] { stroke: var(--pz-primary); stroke-width: 2px; }
+.accounts-refined-age-legend { display: grid; gap: 4px; }
+.accounts-ui .accounts-refined-age-legend .pz-button { display: grid; grid-template-columns: 7px minmax(90px,1fr) auto; align-items: center; width: 100%; gap: 12px; padding: 9px 12px; min-height: 38px; border: 1px solid transparent; background: transparent; text-align: left; font-size: 12px; color: var(--pz-muted); }
+.accounts-ui .accounts-refined-age-legend .pz-button[aria-pressed=true] { border-color: var(--pz-selected-border); background: var(--pz-selected-bg); }
+.accounts-refined-age-legend strong { color: var(--pz-text); font-weight: 550; font-size: 12px; font-variant-numeric: tabular-nums; }
+.accounts-age-dot { width: 7px; height: 7px; border-radius: 50%; }
+.accounts-ageing-basis { font-size: 11px; color: var(--pz-muted); margin: 20px 0 0; padding-top: 14px; border-top: 1px solid var(--pz-border); }
+@media (max-width: 1250px) {
+ .accounts-ageing-content { grid-template-columns: minmax(0,1fr) 150px minmax(250px,1fr); gap: 24px; }
+ .accounts-refined-pie { width: 150px; height: 150px; }
+ .accounts-ageing-total > strong { font-size: 27px; }
+ .accounts-ledger-value { font-size: 19px; }
+}
+@media (max-width: 950px) {
+ .accounts-ageing-content { grid-template-columns: 150px minmax(0,1fr); gap: 24px; }
+ .accounts-ageing-total { grid-column: 1 / -1; }
+ .accounts-ageing-total > p { margin-top: 8px; }
+}
+@media (max-width: 650px) {
+ .accounts-customer-ledger, .accounts-ageing-refined { padding: 18px; }
+ .accounts-coverage-bar { align-items: flex-start; }
+ .accounts-ageing-content { grid-template-columns: 105px minmax(0,1fr); gap: 16px; }
+ .accounts-refined-pie { width: 105px; height: 105px; }
+ .accounts-ui .accounts-refined-age-legend .pz-button { gap: 6px; padding: 7px 0; font-size: 10px; grid-template-columns: 6px 1fr auto; }
+ .accounts-refined-age-legend strong { font-size: 10px; }
+}
+/* Row descriptions occupy their own line; primary values never recenter around them. */
+.accounts-ui .accounts-customer-ledger-table td { vertical-align: top; }
+.accounts-ui .accounts-customer-choice.pz-button { align-items: flex-start; padding-top: 0; padding-bottom: 0; }
+.accounts-customer-choice strong { line-height: 32px; }
+.accounts-customer-monogram { margin-top: 0; }
+.accounts-ledger-value, .accounts-ledger-invoiced { display: block; height: 32px; line-height: 32px; }
+.accounts-ui .accounts-customer-choice small, .accounts-ui .accounts-ledger-incomplete { margin-top: 4px; line-height: 17px; }
+/* Owner rule: secondary text never changes the position of a primary item. */
+.accounts-ui table :is(td,th),
+.accounts-tracking table :is(td,th) {
+  vertical-align: top;
+}
+.accounts-ui table :is(td,th) > small,
+.accounts-tracking table :is(td,th) > small {
+  display: block;
+  margin-top: 5px;
+  line-height: 1.55;
+}
+.accounts-ui .accounts-panel-heading,
+.accounts-ui .section-heading,
+.accounts-tracking .ubl-panel-heading {
+  align-items: flex-start;
+}
+.accounts-panel-heading > div:has(> h2, > h3) {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+.accounts-panel-heading > div:has(> h2, > h3) > :is(h2,h3,p) { margin: 0; }
+.accounts-ui .accounts-file-list li,
+.accounts-ui .pz-discount-file,
+.accounts-ui .accounts-invoice-footer,
+.accounts-ui .pz-action-row {
+  align-items: flex-start;
+}
+.accounts-ui .accounts-file-list li > :is(button,a),
+.accounts-ui .accounts-panel-heading > .pz-button,
+.accounts-ui .accounts-dialog-heading > .pz-button {
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+.accounts-ui .accounts-document-toolbar,
+.accounts-ui .accounts-worklist-filters,
+.accounts-ui .accounts-receivable-filters {
+  align-items: start;
+}
+.accounts-ui :is(.accounts-document-toolbar,.accounts-worklist-filters,.accounts-receivable-filters) > .pz-button {
+  margin-top: 25px;
+}
+.accounts-ui .pz-form-grid { align-items: start; }
+.accounts-ui .accounts-facts > div { align-self: start; }
+.accounts-ui .accounts-facts dd { margin: 0; }
+.accounts-ui .accounts-facts dd > small { display: block; margin-top: 5px; }
+/* Subgrid shares each primary track across sibling cards; variable notes use the final track. */
+.accounts-ui .closure-indicators > div {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 3;
+  align-content: start;
+  row-gap: 8px;
+}
+.accounts-ui .closure-indicators strong { margin: 0; }
+.accounts-tracking .ubl-value-cards > button {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
+  align-content: start;
+  row-gap: 8px;
+}
+.accounts-tracking .ubl-value-cards > button > span { min-height: 0; }
+.accounts-tracking .ubl-value-cards > button > small { align-self: start; }
+.accounts-tracking .ubl-count-cards > button {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
+  align-content: start;
+  row-gap: 9px;
+}
+.accounts-tracking .ubl-count-cards > button > strong:first-child { grid-row: 1; }
+.accounts-tracking .ubl-count-cards > button > span { grid-row: 2; min-height: 0; }
+.accounts-tracking .ubl-count-cards > button > strong:not(:first-child) { grid-row: 3; }
+.accounts-tracking .ubl-count-cards > button > small { grid-row: 4; }
+@media (max-width:700px) {
+ .accounts-ui :is(.accounts-document-toolbar,.accounts-worklist-filters,.accounts-receivable-filters) > .pz-button { margin-top: 0; }
+}
+.accounts-ui table tbody th {
+  padding: 17px 15px;
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.55;
+  border-top: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.accounts-ui .accounts-ipo-record table tbody th { color: var(--pz-text); }
+.accounts-ui .accounts-facts > div {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 2;
+  row-gap: 5px;
+}
+.accounts-ui .accounts-facts dt { margin: 0; }
+/* Accounts navigation matches the owner's local Operations sidebar. */
+.workspace.fixed-header-layout.accounts-ui {
+  --coordination-header-height: 82px;
+  --bucket-sidebar-width: 215px;
+  margin: 82px 0 0;
+  min-height: calc(100dvh - 82px);
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.accounts-ui.fixed-header-layout > .sidebar {
+  top: 82px;
+  left: 0;
+  width: 215px;
+  height: calc(100dvh - 82px);
+  max-height: calc(100dvh - 82px);
+  margin: 0;
+  padding: 28px 16px 18px;
+  border-radius: 0;
+  background: #fff;
+  border-right: 1px solid var(--pz-border);
+  box-shadow: none;
+}
+.accounts-ui .sidebar .nav-divider,
+.accounts-ui .sidebar .nav-hint { display: none; }
+.accounts-ui .sidebar .nav-label {
+  margin: 10px 14px 16px;
+  color: #8a92a1;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 1.3px;
+}
+.accounts-ui .sidebar .upcoming-nav { display: grid; gap: 7px; }
+.accounts-ui .sidebar .upcoming-nav > button {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 13px 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #7b728d;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
+  text-align: left;
+}
+.accounts-ui .sidebar .upcoming-nav > button svg { width: 15px; height: 18px; flex-shrink: 0; }
+.accounts-ui .sidebar .upcoming-nav > button:hover { background: #f7f5fb; }
+.accounts-ui .sidebar .upcoming-nav > button.nav-active { background: #f0ecf8; color: #514394; }
+.accounts-ui .sidebar-bottom { padding: 24px 14px 0; }
+.accounts-sidebar-caption { color: #96a0ae; font-size: 11px; font-weight: 400; }
+@media (max-width:1000px) and (min-width:701px) {
+ .workspace.fixed-header-layout.accounts-ui { --bucket-sidebar-width: 200px; }
+ .accounts-ui.fixed-header-layout > .sidebar { width: 200px; }
+}
+@media (max-width:700px) {
+ .workspace.fixed-header-layout.accounts-ui { margin-top: 82px; }
+ .accounts-ui.fixed-header-layout > .sidebar { position: relative; top: auto; left: auto; width: 100%; height: auto; max-height: calc(100dvh - 82px); border-right: 0; padding: 18px 16px; }
+ .accounts-ui.fixed-header-layout > .sidebar:not(.sidebar-open) { height: 0; padding: 0; border: 0; }
+ .accounts-ui .sidebar.sidebar-open .upcoming-nav { display: grid; }
+ .accounts-ui .sidebar-bottom { display: none; }
+}
+.accounts-ui .sidebar .upcoming-nav > button { gap: 10px; padding-inline: 12px; white-space: nowrap; }
+/* IPO review: record context, working PT phases, original document, then supporting detail. */
+.accounts-ipo-review { display: grid; gap: 22px; min-width: 0; }
+.accounts-ipo-record-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+.accounts-ipo-record-heading h2 { margin: 5px 0 6px; font-size: 22px; font-weight: 600; letter-spacing: -.4px; }
+.accounts-ipo-record-heading p { margin: 0; font-size: 12px; color: var(--pz-muted); }
+.accounts-ipo-progress { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 24px; padding: 22px 24px; background: white; border: 1px solid var(--pz-border); border-radius: 12px; }
+.accounts-ipo-progress > div { min-width: 0; display: grid; align-content: start; gap: 7px; }
+.accounts-ipo-progress span { font-size: 11px; color: var(--pz-muted); }
+.accounts-ipo-progress strong { font-size: 17px; font-weight: 600; color: var(--pz-primary); font-variant-numeric: tabular-nums; }
+.accounts-ipo-progress small { font-size: 11px; font-weight: 400; color: var(--pz-muted); line-height: 1.55; }
+.accounts-ipo-next-action .pz-button { align-self: start; white-space: nowrap; }
+.accounts-ipo-columns { display: grid; grid-template-columns: minmax(0,1.05fr) minmax(0,1fr); gap: 22px; align-items: start; }
+.accounts-ui .accounts-ipo-phases > .table-scroll { margin: 0; padding: 0; border: 0; border-radius: 0; }
+.accounts-ui .accounts-ipo-phase-table { table-layout: fixed; }
+.accounts-ui .accounts-ipo-phase-table thead th:first-child { width: 72%; }
+.accounts-ui .accounts-ipo-phase-table thead th:last-child { width: 28%; text-align: right; }
+.accounts-ui .accounts-ipo-phase-table :is(td,tbody th) { padding: 13px 10px; font-size: 12px; line-height: 1.55; }
+.accounts-ui .accounts-ipo-phase-table tbody th { color: var(--pz-text); font-weight: 550; white-space: normal; }
+.accounts-ui .accounts-ipo-phase-table tbody th small { font-size: 10px; color: var(--pz-muted); font-weight: 400; }
+.accounts-ui .accounts-ipo-phase-table td { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.accounts-ipo-source-preview { min-width: 0; }
+.accounts-ipo-source-preview .ipo-document-preview { margin: 0; padding: 20px; background: white; border-color: var(--pz-border); }
+.accounts-ipo-source-preview .ipo-preview-pages { max-height: 550px; overflow: auto; }
+.accounts-ipo-source-preview .ipo-preview-heading h4 { font-size: 14px; margin: 0; font-weight: 600; }
+.accounts-ipo-review-actions { scroll-margin-top: 100px; display: grid; gap: 18px; }
+.accounts-ipo-review-actions .accounts-panel-heading { margin-bottom: 0; }
+.accounts-ipo-review-actions textarea { min-height: 80px; width: 100%; }
+.accounts-ipo-review-actions .pz-action-row { margin: 0; }
+.accounts-ipo-support { display: grid; gap: 0; }
+.accounts-ipo-support > h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.accounts-ipo-support > details { border-bottom: 1px solid var(--pz-border); padding: 15px 0; min-width: 0; }
+.accounts-ipo-support > details:last-child { border-bottom: 0; padding-bottom: 0; }
+.accounts-ipo-support summary { color: var(--pz-primary); font-size: 12px; cursor: pointer; }
+.accounts-ipo-support details > :not(summary) { margin-top: 18px; }
+.accounts-ipo-support p { font-size: 12px; color: var(--pz-muted); line-height: 1.65; }
+.accounts-ipo-support .pz-number { text-align: right; white-space: nowrap; }
+@media(max-width:1100px) { .accounts-ipo-progress { grid-template-columns: repeat(3,minmax(0,1fr)); }.accounts-ipo-next-action { grid-column:1/-1; } }
+@media(max-width:900px) { .accounts-ipo-columns { grid-template-columns: 1fr; }.accounts-ipo-source-preview .ipo-preview-pages { max-height: 450px; } }
+@media(max-width:650px) { .accounts-ipo-progress { grid-template-columns:1fr; gap:18px; }.accounts-ipo-record-heading { flex-wrap:wrap; }.accounts-ipo-progress strong { font-size:16px; } }
+
+/* Keep final decisions at a predictable right edge, with verification last visually. */
+.accounts-ipo-review .accounts-ipo-decision-buttons{justify-content:flex-end;align-items:flex-start;gap:12px}
+.accounts-ipo-review-actions .pz-field{max-width:900px}
+.accounts-ipo-review .accounts-ipo-phase-table td small{font-size:11px}
+@media(max-width:650px){.accounts-ipo-review .accounts-ipo-decision-buttons{justify-content:flex-start;flex-wrap:wrap}}
+
+.accounts-ipo-source-preview .ipo-preview-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:12px 0 16px}
+.accounts-ipo-source-preview .ipo-preview-zoom-group{display:flex;align-items:center;border:1px solid var(--pz-border);border-radius:8px;overflow:hidden;background:var(--pz-surface,#fff)}
+.accounts-ipo-source-preview .ipo-preview-zoom-group .pz-button{min-width:44px;width:44px;height:44px;min-height:44px;padding:0;border:0;border-radius:0;box-shadow:none;font-size:20px;font-weight:500;margin:0}
+.accounts-ipo-source-preview .ipo-preview-zoom-group .pz-button:focus-visible{outline-offset:-3px}
+.accounts-ipo-source-preview .ipo-preview-zoom-value{display:flex;align-items:center;justify-content:center;align-self:stretch;min-width:64px;padding:0 8px;border-inline:1px solid var(--pz-border);font-size:13px;line-height:1;font-variant-numeric:tabular-nums;color:var(--pz-text)}
+.accounts-ipo-source-preview .ipo-preview-toolbar>.pz-button{margin:0;min-height:44px}
+
+.accounts-ipo-phase-table .accounts-epc-total th,.accounts-ipo-phase-table .accounts-epc-total td{font-weight:600;border-top:1px solid var(--pz-border)}
+.accounts-ipo-phase-table .accounts-epc-part th{padding-left:24px}
+.accounts-ipo-phase-table .accounts-epc-part th small{font-weight:400;white-space:pre-line}
+
+.accounts-ui .accounts-secondary-navigation{margin:16px 0 0;color:var(--pz-muted);font-size:13px}.accounts-ui .accounts-secondary-navigation>summary{min-height:44px;align-content:center;cursor:pointer;padding:0 12px}

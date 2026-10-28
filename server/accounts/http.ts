@@ -1,4 +1,7 @@
 import { Router, type RequestHandler } from "express";
+import {ptEntrySchema} from './pt-entries.js';
+import type {AccountsSourceRegisters} from './source-registers.js';
+import type {OperationsBoardRepository} from '../operations-board/repository.js';
 import { z } from "zod";
 import { equalSecrets } from "../auth/crypto.js";
 import { HttpError } from "../http/errors.js";
@@ -6,6 +9,8 @@ import { AccountsRepository, closureSchema } from "./repository.js";
 export function accountsHttp(
   repo: AccountsRepository,
   requireSession: RequestHandler,
+  sources: AccountsSourceRegisters,
+  operationsBoard: OperationsBoardRepository,
 ) {
   const r = Router();
   r.use(requireSession);
@@ -26,16 +31,26 @@ export function accountsHttp(
       );
     return p.data;
   };
-  r.get("/", async (req, res) =>
-    res.json(await repo.overview(req.authSession!.user.id)),
-  );
+  r.get("/", async (req, res) => {
+    const actor=req.authSession!.user.id;
+    const [overview,siteImport]=await Promise.all([repo.overview(actor),sources.summary(actor)]);
+    res.json({...overview,siteImport});
+  });
+  r.get('/closure-queue',async(req,res)=>res.json({closures:await repo.managementClosureQueue(req.authSession!.user.id)}));
+  r.get('/billing',async(req,res)=>res.json(await sources.billing(req.authSession!.user.id)));
+  r.get('/sites',async(req,res)=>res.json(await sources.sites(req.authSession!.user.id)));
+  r.get('/physical-documents',async(req,res)=>{
+    await repo.access(req.authSession!.user.id);
+    res.json(await operationsBoard.physicalDocuments(req.authSession!.user.id));
+  });
+  r.post('/pt-entries',async(req,res)=>res.status(201).json(await repo.recordPtEntry(req.authSession!.user.id,parse(ptEntrySchema,req.body))));
   r.post("/evidence", async (req, res) => {
     const v = parse(
       z
         .object({
           jobKey: z.string().max(100),
           filename: z.string().trim().min(1).max(200),
-          mediaType: z.enum(["image/png", "image/jpeg"]),
+          mediaType: z.enum(["image/png", "image/jpeg", "application/pdf"]),
           base64: z.string().max(11200000),
         })
         .strict(),
@@ -65,6 +80,13 @@ export function accountsHttp(
         "X-Content-Type-Options": "nosniff",
       })
       .send(f.content);
+  });
+  r.get('/jobs/:key/operations-evidence/:version/:fileId',async(req,res)=>{
+    const file=await repo.operationsEvidenceFile(req.authSession!.user.id,
+      parse(z.string().regex(/^ipo:[0-9a-f-]{36}$/),req.params.key),
+      parse(z.coerce.number().int().positive(),req.params.version),parse(z.uuid(),req.params.fileId));
+    res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+      'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);
   });
   r.get("/ipos/:id", async (req, res) =>
     res.json(

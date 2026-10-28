@@ -1,3 +1,9 @@
+import {equalSecrets} from './auth/crypto.js';
+import {materialReplacementHttp} from './inventory/material-replacement-http.js';
+import {warehouseTransferHttp} from './inventory/warehouse-transfer-http.js';
+import {GatePassRepository} from './inventory/gate-passes.js';
+import {OperationsBoardRepository} from './operations-board/repository.js';
+import {operationsBoardHttp} from './operations-board/http.js';
 import { projectWorkflowHttp } from "./project-workflow/http.js";
 import { ProjectWorkflowRepository } from "./project-workflow/repository.js";
 import { ublWorkflowHttp } from "./ubl/workflow-http.js";
@@ -6,8 +12,17 @@ import { projectCheckpointsHttp } from "./projects/http.js";
 import { ProjectCheckpointsRepository } from "./projects/repository.js";
 import { accountsHttp as accountsWorkspaceHttp } from "./accounts/http.js";
 import { AccountsRepository as AccountsWorkspaceRepository } from "./accounts/repository.js";
+import {AccountsSourceRegisters} from './accounts/source-registers.js';
 import { inventoryHttp } from "./inventory/http.js";
 import { InventoryRepository } from "./inventory/repository.js";
+import {InventoryReviewRepository} from './inventory/review-register.js';
+import {inventoryReviewHttp} from './inventory/review-http.js';
+import {PurchaseReceivingRepository} from './inventory/purchase-receiving.js';
+import {MaterialUsageRepository} from './inventory/material-usage.js';
+import {MaterialStockRepository} from './inventory/material-stock.js';
+import {MaterialDraftRepository} from './inventory/material-drafts.js';
+import {SiteMaterialPlanRepository} from './inventory/site-material-plans.js';
+import {materialDraftHttp} from './inventory/material-http.js';
 import { ublHttp } from "./ubl/http.js";
 import { UblRepository } from "./ubl/repository.js";
 import { notificationWebhook } from "./notifications/webhook.js";
@@ -195,6 +210,19 @@ export function createApp(
     express.json({ limit: "128kb" }),
     designHttp(new DesignRepository(pool), sessionForWorkspace),
   );
+  app.use('/api/inventory-reviews',express.json({limit:'128kb'}),inventoryReviewHttp(new InventoryReviewRepository(pool),sessionForWorkspace));
+  const warehousePostingBoundary:RequestHandler=(req,_res,next)=>{
+    if(!['Admin','Management','Inventory'].includes(req.authSession!.user.role))throw new HttpError(403,'Warehouse document access is required.');
+    if(!['GET','HEAD'].includes(req.method)&&!equalSecrets(req.get('X-CSRF-Token')??'',req.authSession!.csrfToken))throw new HttpError(403,'Refresh and try again.');
+    next();
+  };
+  // Authenticate and reject forbidden roles/CSRF before accepting large evidence JSON.
+  app.use('/api/material-dispatches/evidence',sessionForWorkspace,warehousePostingBoundary,express.json({limit:'21mb'}));
+  app.use('/api/material-dispatches',express.json({limit:'1mb'}),materialDraftHttp(new MaterialDraftRepository(pool),sessionForWorkspace,new SiteMaterialPlanRepository(pool),new MaterialStockRepository(pool),new MaterialUsageRepository(pool),new PurchaseReceivingRepository(pool),new GatePassRepository(pool)));
+  app.use('/api/inventory-replacements',sessionForWorkspace,warehousePostingBoundary);
+  app.post('/api/inventory-replacements/evidence',express.json({limit:'21mb'}));
+  app.use('/api/inventory-replacements',express.json({limit:'128kb'}),materialReplacementHttp(pool,sessionForWorkspace));
+  app.use('/api/warehouse-transfers',express.json({limit:'128kb'}),warehouseTransferHttp(pool,sessionForWorkspace));
   // Customer imports are larger than ordinary forms; keep the general limit small.
   app.use("/api/masters/customer-import", express.json({ limit: "2mb" }));
   app.use(
@@ -208,8 +236,11 @@ export function createApp(
     accountsWorkspaceHttp(
       new AccountsWorkspaceRepository(pool),
       sessionForWorkspace,
+      new AccountsSourceRegisters(pool),
+      new OperationsBoardRepository(pool),
     ),
   );
+  app.use('/api/operations-board',operationsBoardHttp(new OperationsBoardRepository(pool),sessionForWorkspace));
   app.use(express.json({ limit: "8kb" }));
   app.get("/api/health", async (_req, res) => {
     try {

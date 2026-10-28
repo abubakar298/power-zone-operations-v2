@@ -1,4 +1,6 @@
 import { test } from "node:test";
+import {materialStockFixture} from "./material-stock-fixture.js";
+import {WarehouseAuthorityRepository} from "../server/inventory/warehouse-ledger.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import request from "supertest";
@@ -22,12 +24,20 @@ test("Procurement: stock against coming sites, purchase requests with quotations
     ];
     for (const [id, role, name] of people)
       await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$5)", [id, `${id}@example.test`, name, hash, role]);
+    await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$2)",[u.store,u.admin]);
     await db.pool.query("INSERT INTO procurement_access(user_id,capability,granted_reason) VALUES($1,'buyer','test'),($2,'approver','test')", [u.buyer, u.approver]);
 
     const records = await createDashboardSamples(db.pool, u.owner, u.admin);
     const ops = new OperationsRepository(db.pool);
     for (const r of records.filter((x: any) => x.ipoId).slice(0, 2)) await ops.issue(u.owner, { ipoId: r.ipoId, notes: "test", requestKey: randomUUID() });
     const repo = new ProcurementRepository(db.pool);
+    const keeper=randomUUID();await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,'Fictional storekeeper',$3,'Inventory')",[keeper,keeper+'@example.test',hash]);
+    await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','storekeeper',$2)",[keeper,u.admin]);
+    await assert.rejects(repo.overview(keeper),/dispatcher access/);
+    await assert.rejects(repo.storeView(keeper),/dispatcher access/);
+    await assert.rejects(repo.setCount(keeper,{itemKey:'test',quantity:'1',unit:'m',note:''}),/dispatcher access/);
+    await assert.rejects(repo.markReceived(keeper,randomUUID(),{lines:[],note:''}),/dispatcher access/);
+
 
     // Who sees what.
     assert.deepEqual((await repo.me(u.buyer)).buyer, true);
@@ -167,6 +177,12 @@ test("Procurement: stock against coming sites, purchase requests with quotations
     const storeLogin = await login(u.store);
     assert.equal((await get(storeLogin, "/api/procurement/store")).status, 200);
     assert.equal((await get(storeLogin, "/api/procurement/requests")).status, 403);
+    const authorityFixture=await materialStockFixture(db.pool,'CH-CBL-AC-16MM/4C-PK');
+    await new WarehouseAuthorityRepository(db.pool).command(u.admin,{warehouse:'Lahore warehouse',version:0,sourceSha256:authorityFixture.stockSha,state:'active',reason:'Fictional warehouse governance test.',requestKey:randomUUID()});
+    const beforeGuard=(await db.pool.query('SELECT count(*)::int n FROM stock_on_hand_entries')).rows[0].n;
+    await assert.rejects(repo.setCount(u.store,{itemKey:cable.itemKey,quantity:'99',unit:'m',note:'Must not bypass warehouse ledger.'}),/Global counts and receipts/);
+    await assert.rejects(repo.markReceived(u.store,r.id,{lines:[{itemKey:cable.itemKey,quantity:'1'}],note:'Must select warehouse.'}),/Global counts and receipts/);
+    assert.equal((await db.pool.query('SELECT count(*)::int n FROM stock_on_hand_entries')).rows[0].n,beforeGuard);
   } finally {
     await db.close();
   }

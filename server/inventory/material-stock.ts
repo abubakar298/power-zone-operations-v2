@@ -1,0 +1,166 @@
+import {lockActiveActor} from '../auth/actor-lock.js';
+import {createHash,randomUUID} from 'node:crypto';
+import type {Pool,PoolClient} from 'pg';
+import {Decimal} from 'decimal.js';
+import {z} from 'zod';
+import {HttpError} from '../http/errors.js';
+import {transaction} from '../db/transaction.js';
+import {MaterialDraftRepository,materialDraftInputSchema} from './material-drafts.js';
+import {warehouseLedgerKey} from './warehouse-source.js';
+import {warehouseNumber,requireWarehouseAccess,lockWarehouseAuthority} from './warehouse-access.js';
+import {warehousePosition,warehousePositions} from './warehouse-ledger.js';
+import {materialDocumentPolicy} from '../../shared/material-documents.js';
+import {approvedEarthingBasis} from '../../shared/material-preparation.js';
+
+const quantity=z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/).refine(v=>new Decimal(v).gt(0),'Enter a positive quantity.').transform(v=>new Decimal(v).toString());
+export const materialIssueInputSchema=z.object({draftId:z.uuid(),version:z.number().int().positive(),requestKey:z.uuid(),sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),authorityVersion:z.number().int().positive(),reason:z.string().trim().min(3).max(2000),transport:materialDraftInputSchema.shape.transport,
+ lines:z.array(z.object({lineKey:z.uuid(),quantity,ledgerRevision:z.number().int().nonnegative()}).strict()).min(1).max(2000),
+}).strict();
+export const materialReceiptInputSchema=z.object({draftId:z.uuid(),requestKey:z.uuid(),sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),authorityVersion:z.number().int().positive(),evidenceId:z.uuid(),reason:z.string().trim().min(3).max(2000),lines:z.array(z.object({lineKey:z.uuid(),quantity,ledgerRevision:z.number().int().nonnegative()}).strict()).min(1).max(2000)}).strict();
+export const materialEvidenceInputSchema=z.object({warehouse:z.string().trim().min(1).max(200),filename:z.string().trim().min(1).max(200),mediaType:z.enum(['application/pdf','image/png','image/jpeg']),base64:z.string().min(4).max(20971520)}).strict();
+type IssueInput=z.infer<typeof materialIssueInputSchema>;
+const fingerprint=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+/** Physical postings only. Preparation, signatures and use never call this
+ * automatically. No replay of historical DO/IRR/IGP sources is accepted. */
+export class MaterialStockRepository{
+ private drafts:MaterialDraftRepository;
+ constructor(private pool:Pool){this.drafts=new MaterialDraftRepository(pool);}
+ private async scope(actor:string,warehouse:string,c:Pool|PoolClient=this.pool,printing=false){return requireWarehouseAccess(actor,warehouse,c,printing);}
+ private async authority(c:PoolClient,warehouse:string,source:string,version:number){return lockWarehouseAuthority(c,warehouse,source,version);}
+ async positions(actor:string,warehouse:string){
+  await this.scope(actor,warehouse);
+  const authority=(await this.pool.query('SELECT warehouse,version,source_sha256,state FROM inventory_warehouse_authority_current WHERE warehouse=$1',[warehouse])).rows[0];
+  if(!authority)return {authority:null,positions:[]};
+  const positions=(await warehousePositions(this.pool,authority.source_sha256,warehouse)).map(p=>({ledgerKey:p.ledgerKey,itemId:p.baseline.itemId,description:p.baseline.description,unit:p.baseline.unit,currentClosing:p.currentClosing,ledgerRevision:p.ledgerRevision,unknown:p.currentClosing===null,negative:p.currentClosing!==null&&new Decimal(p.currentClosing).lt(0)}));
+  return {authority,positions};
+ }
+ async movements(actor:string,draftId:string){
+  const draft=await this.drafts.detail(actor,draftId);await this.scope(actor,draft.snapshot.warehouse);
+  const dispatches=(await this.pool.query('SELECT id,number,draft_version,created_at FROM inventory_material_dispatches WHERE draft_id=$1 ORDER BY created_at,id',[draftId])).rows;
+  const receipts=(await this.pool.query('SELECT id,number,evidence_id,reason,created_at FROM inventory_material_receipts WHERE draft_id=$1 ORDER BY created_at,id',[draftId])).rows;
+  const lines=(await this.pool.query(`SELECT l.line_key,l.item_id,l.unit,sum(l.quantity)::text issued,coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.draft_id=$1 AND r.line_key=l.line_key),0)::text returned FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 GROUP BY l.line_key,l.item_id,l.unit`,[draftId])).rows;
+  return {dispatches,receipts,lines:lines.map(r=>({...r,issued:new Decimal(r.issued).toString(),returned:new Decimal(r.returned).toString(),outstanding:new Decimal(r.issued).minus(r.returned).toString(),used:null})),siteUseStatus:'Not yet recorded; outstanding includes site use and material still in custody.'};
+ }
+ async dispatch(actor:string,id:string){
+  const row=(await this.pool.query('SELECT id,number,draft_id,draft_version,warehouse,snapshot,created_at FROM inventory_material_dispatches WHERE id=$1',[id])).rows[0];
+  if(!row)throw new HttpError(404,'Issued material dispatch not found.');await this.scope(actor,row.warehouse,this.pool,true);return {...row,snapshot:{...row.snapshot,sites:row.snapshot.sites.map(({items,...site}:any)=>site)}};
+ }
+ async uploadEvidence(actor:string,raw:z.infer<typeof materialEvidenceInputSchema>){
+  const input=materialEvidenceInputSchema.parse(raw);await this.scope(actor,input.warehouse,this.pool,true);
+  const content=Buffer.from(input.base64,'base64');
+  if(!content.length||content.length>15*1024*1024||content.toString('base64')!==input.base64)throw new HttpError(422,'Upload a valid file up to 15 MB.');
+  const valid=input.mediaType==='application/pdf'?content.subarray(0,5).toString()==='%PDF-':input.mediaType==='image/png'?content.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):content[0]===255&&content[1]===216&&content[2]===255;
+  if(!valid)throw new HttpError(422,'The file content does not match its PDF or image type.');
+  const name=input.filename.replace(/[\\/\x00-\x1f\x7f]/g,'_'),sha=createHash('sha256').update(content).digest('hex');
+  return transaction(this.pool,async c=>{
+   await lockActiveActor(c,actor);
+   await this.scope(actor,input.warehouse,c,true);
+  await c.query('INSERT INTO inventory_material_evidence(id,warehouse,original_name,media_type,content,sha256,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(warehouse,sha256) DO NOTHING',[randomUUID(),input.warehouse,name,input.mediaType,content,sha,actor]);
+  return (await c.query('SELECT id,original_name AS name,media_type AS "mediaType",sha256 FROM inventory_material_evidence WHERE warehouse=$1 AND sha256=$2',[input.warehouse,sha])).rows[0];
+  });
+ }
+ async evidence(actor:string,id:string){
+  const row=(await this.pool.query('SELECT * FROM inventory_material_evidence WHERE id=$1',[id])).rows[0];
+  if(!row)throw new HttpError(404,'Warehouse evidence not found.');await this.scope(actor,row.warehouse,this.pool,true);return row;
+ }
+ /** Counted warehouse receipt, never an automatic credit from site IRR/use. */
+ async receive(actor:string,raw:z.infer<typeof materialReceiptInputSchema>){
+  const input=materialReceiptInputSchema.parse(raw);
+  return transaction(this.pool,async c=>{
+   await lockActiveActor(c,actor);
+   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.material.receipt.request.'||$1,0))",[input.requestKey]);
+   const replay=(await c.query('SELECT r.id,r.number,r.request_fingerprint,r.verified_by,d.snapshot FROM inventory_material_receipts r JOIN LATERAL(SELECT snapshot FROM inventory_material_draft_versions WHERE draft_id=r.draft_id ORDER BY version DESC LIMIT 1)d ON true WHERE r.request_key=$1',[input.requestKey])).rows[0];
+   if(replay){await this.scope(actor,replay.snapshot.warehouse,c);if(replay.verified_by!==actor||replay.request_fingerprint!==fingerprint(input))throw new HttpError(409,'This request belongs to a different warehouse receipt.');return {id:replay.id,number:replay.number,stockPosted:true};}
+   await c.query('SELECT id FROM inventory_material_drafts WHERE id=$1 FOR UPDATE',[input.draftId]);
+   const draft=await this.drafts.detail(actor,input.draftId,c),warehouse=draft.snapshot.warehouse;
+   await this.scope(actor,warehouse,c);await this.authority(c,warehouse,input.sourceSha256,input.authorityVersion);
+   const evidence=(await c.query('SELECT id,warehouse,sha256 FROM inventory_material_evidence WHERE id=$1',[input.evidenceId])).rows[0];
+   if(!evidence||evidence.warehouse!==warehouse)throw new HttpError(422,'Attach the counted warehouse receipt evidence for this warehouse.');
+   if((await c.query('SELECT 1 FROM inventory_material_receipts WHERE draft_id=$1 AND evidence_id=$2',[input.draftId,input.evidenceId])).rowCount)throw new HttpError(409,'This receipt evidence has already been credited to this dispatch preparation.');
+   if(new Set(input.lines.map(r=>r.lineKey)).size!==input.lines.length)throw new HttpError(422,'Record each returned material row once.');
+   // The same physical original unit cannot arrive once through ordinary IGP
+   // and again as a faulty holding. Replacement returns take these exact line
+   // locks too; unrelated warehouse movement paths keep their ledger locks.
+   await c.query('SELECT l.line_key FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 AND l.line_key=ANY($2::uuid[]) ORDER BY l.dispatch_id,l.line_key FOR UPDATE OF l',[input.draftId,input.lines.map(r=>r.lineKey)]);
+   const replacementsInstalled=(await c.query("SELECT to_regclass('public.inventory_material_replacement_returns') IS NOT NULL AS installed")).rows[0].installed;
+   const faultyReturned=replacementsInstalled?"+coalesce((SELECT sum(r.quantity) FROM inventory_material_replacement_returns r JOIN inventory_material_replacement_cases c ON c.id=r.case_id WHERE c.original_dispatch_id=l.dispatch_id AND c.original_line_key=l.line_key),0)":'';
+   const sent=(await c.query(`SELECT l.*,d.created_at,d.warehouse,(coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.dispatch_id=l.dispatch_id AND r.line_key=l.line_key),0)${faultyReturned})::text returned FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 ORDER BY d.created_at,d.id,l.line_key`,[input.draftId])).rows;
+   const allocations:any[]=[];
+   for(const request of input.lines){
+    let remaining=new Decimal(request.quantity);
+    for(const line of sent.filter(r=>r.line_key===request.lineKey)){
+     if(line.source_sha256!==input.sourceSha256||line.warehouse!==warehouse)throw new HttpError(409,'The original dispatch warehouse baseline does not match this receipt.');
+     const outstanding=new Decimal(line.quantity).minus(line.returned);if(outstanding.lte(0))continue;
+     const value=Decimal.min(remaining,outstanding);allocations.push({...line,quantity:value.toString(),expectedRevision:request.ledgerRevision});remaining=remaining.minus(value);if(remaining.eq(0))break;
+    }
+    if(remaining.gt(0))throw new HttpError(422,'The return exceeds material actually dispatched less previous warehouse returns. Local purchase needs separate evidence and authority.');
+   }
+   const positions=new Map<string,NonNullable<Awaited<ReturnType<typeof warehousePosition>>>>();
+   for(const key of [...new Set(allocations.map(r=>r.ledger_key))].sort()){
+    const p=await warehousePosition(c,input.sourceSha256,key,true);
+    if(!p||p.currentClosing===null)throw new HttpError(409,'The warehouse closing balance needs verification before this receipt.');
+    if(allocations.some(r=>r.ledger_key===key&&r.expectedRevision!==p.ledgerRevision))throw new HttpError(409,'This warehouse balance changed. Refresh before verifying the receipt.');positions.set(key,p);
+   }
+   const id=randomUUID(),number=await warehouseNumber(c,'IGP',id);
+   const snapshot={warehouse,draftId:input.draftId,evidence:{id:evidence.id,sha256:evidence.sha256},reason:input.reason,lines:allocations.map(r=>({dispatchId:r.dispatch_id,lineKey:r.line_key,itemId:r.item_id,unit:r.unit,quantity:r.quantity})),siteUseStatus:'Not inferred from warehouse receipt'};
+   await c.query('INSERT INTO inventory_material_receipts(id,number,draft_id,evidence_id,reason,snapshot,request_key,request_fingerprint,verified_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[id,number,input.draftId,input.evidenceId,input.reason,snapshot,input.requestKey,fingerprint(input),actor]);
+   for(const row of allocations){
+    await c.query('INSERT INTO inventory_material_receipt_lines(receipt_id,draft_id,dispatch_id,line_key,quantity) VALUES($1,$2,$3,$4,$5)',[id,input.draftId,row.dispatch_id,row.line_key,row.quantity]);
+    const p=positions.get(row.ledger_key)!,before=p.currentClosing!,after=new Decimal(before).plus(row.quantity).toString();
+    await c.query("INSERT INTO inventory_warehouse_operational_movements(id,source_sha256,ledger_key,ledger_revision,kind,draft_id,dispatch_id,receipt_id,line_key,in_delta,out_delta,closing_before,closing_after,created_by) VALUES($1,$2,$3,$4,'return-in',$5,$6,$7,$8,$9,0,$10,$11,$12)",[randomUUID(),input.sourceSha256,row.ledger_key,p.ledgerRevision+1,input.draftId,row.dispatch_id,id,row.line_key,row.quantity,before,after,actor]);p.currentClosing=after;p.ledgerRevision++;
+   }
+   return {id,number,stockPosted:true};
+  });
+ }
+ async issue(actor:string,raw:IssueInput){
+  const input=materialIssueInputSchema.parse(raw);
+  return transaction(this.pool,async c=>{
+   await lockActiveActor(c,actor);
+   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.material.issue.request.'||$1,0))",[input.requestKey]);
+   const replay=(await c.query('SELECT id,number,warehouse,request_fingerprint,created_by FROM inventory_material_dispatches WHERE request_key=$1',[input.requestKey])).rows[0];
+   if(replay){await this.scope(actor,replay.warehouse,c);if(replay.created_by!==actor||replay.request_fingerprint!==fingerprint(input))throw new HttpError(409,'This request belongs to a different warehouse dispatch.');return {id:replay.id,number:replay.number,stockPosted:true};}
+   await c.query('SELECT id FROM inventory_material_drafts WHERE id=$1 FOR UPDATE',[input.draftId]);
+   const draft=await this.drafts.detail(actor,input.draftId,c),s=draft.snapshot;
+   await this.scope(actor,s.warehouse,c);
+   if(draft.version!==input.version)throw new HttpError(409,'This preparation changed. Refresh before issuing material.');
+   await this.drafts.requirePendingSources(s.sites,c,input.draftId);
+   if(s.kind==='variable'&&!s.parent){
+    const deferred=(await c.query(`SELECT 1 FROM (SELECT DISTINCT ON(plan_id) * FROM inventory_site_material_plan_versions ORDER BY plan_id,version DESC)v WHERE variable_draft_id=$1 AND variable_supply='parent-do'`,[input.draftId])).rowCount;
+    if(deferred)throw new HttpError(409,'These variable materials are assigned to a Parent DO; do not issue them again as a standalone dispatch.');
+   }
+   if(!input.transport.issuedTo.trim())throw new HttpError(422,'Record who is receiving custody of this material.');
+   await this.authority(c,s.warehouse,input.sourceSha256,input.authorityVersion);
+   const keys=new Set(input.lines.map(r=>r.lineKey));if(keys.size!==input.lines.length)throw new HttpError(422,'Select each material row once.');
+   const prepared=input.lines.map(request=>{
+    const row=s.lines.find((r:any)=>r.key===request.lineKey);if(!row?.itemId||!row.unit||!row.description?.trim())throw new HttpError(422,'Select the final stock ID and recorded unit before issuing this row.');
+    const policy=materialDocumentPolicy(row),basis=row.basisLine===undefined?null:s.sites[0]?.items[row.basisLine];
+    if(policy.group==='non-stock'||policy.approvedQuantityLocked||basis&&(approvedEarthingBasis(basis)||/^(?:labou?r|delivery|transport|installation|commissioning|civil|misc)/i.test(String(basis.key??basis.description??''))))throw new HttpError(422,'Service or aggregate BOQ allowances are not physical warehouse stock.');
+    if(s.sites.every((site:any)=>site.installation===true)&&policy.variableDispatch!==(s.kind==='variable'))throw new HttpError(422,'Keep fixed and variable items on their matching dispatches.');
+    if(!row.out||new Decimal(request.quantity).gt(row.out))throw new HttpError(422,'The selected quantity exceeds this prepared row. Update the preparation before issuing extra material.');
+    return {request,row,ledgerKey:warehouseLedgerKey(row.itemId,s.warehouse,row.unit)};
+   });
+   const already=(await c.query(`SELECT l.line_key,sum(l.quantity)::text issued FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 GROUP BY l.line_key`,[input.draftId])).rows;
+   for(const p of prepared)if(new Decimal(p.request.quantity).plus(already.find(r=>r.line_key===p.row.key)?.issued??0).gt(p.row.out))throw new HttpError(409,'This prepared quantity has already been dispatched, including partial trips. Refresh the remaining quantity.');
+   const positions=new Map<string,NonNullable<Awaited<ReturnType<typeof warehousePosition>>>>();
+   for(const key of [...new Set(prepared.map(p=>p.ledgerKey))].sort()){
+    const position=await warehousePosition(c,input.sourceSha256,key,true);if(!position)throw new HttpError(409,'No reviewed opening/closing stock exists for this item, warehouse and unit. Do not assume zero or convert units.');
+    const matching=prepared.filter(p=>p.ledgerKey===key);
+    if(matching.some(p=>p.request.ledgerRevision!==position.ledgerRevision))throw new HttpError(409,'This warehouse balance changed. Refresh before issuing material.');
+    const total=matching.reduce((n,p)=>n.plus(p.request.quantity),new Decimal(0));
+    if(position.currentClosing===null||new Decimal(position.currentClosing).lt(total))throw new HttpError(409,'Verified warehouse stock is insufficient or its closing balance is unresolved.');
+    positions.set(key,position);
+   }
+   const id=randomUUID(),number=await warehouseNumber(c,s.parent?'PDO':'DO',id);
+   const lines=prepared.map(p=>({...p.row,out:p.request.quantity})),snapshot={...s,lines,transport:input.transport,reason:input.reason,status:'issued',sourceSha256:input.sourceSha256,authorityVersion:input.authorityVersion,stockPosting:true};
+   await c.query('INSERT INTO inventory_material_dispatches(id,number,draft_id,draft_version,source_sha256,warehouse,snapshot,request_key,request_fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[id,number,input.draftId,input.version,input.sourceSha256,s.warehouse,snapshot,input.requestKey,fingerprint(input),actor]);
+   for(const p of prepared){
+    await c.query('INSERT INTO inventory_material_dispatch_lines(dispatch_id,line_key,source_sha256,ledger_key,item_id,unit,description,quantity) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,p.row.key,input.sourceSha256,p.ledgerKey,p.row.itemId,p.row.unit,p.row.description,p.request.quantity]);
+    const position=positions.get(p.ledgerKey)!,before=position.currentClosing!,after=new Decimal(before).minus(p.request.quantity).toString();
+    await c.query("INSERT INTO inventory_warehouse_operational_movements(id,source_sha256,ledger_key,ledger_revision,kind,draft_id,dispatch_id,line_key,in_delta,out_delta,closing_before,closing_after,created_by) VALUES($1,$2,$3,$4,'dispatch-out',$5,$6,$7,0,$8,$9,$10,$11)",[randomUUID(),input.sourceSha256,p.ledgerKey,position.ledgerRevision+1,input.draftId,id,p.row.key,p.request.quantity,before,after,actor]);
+    position.currentClosing=after;position.ledgerRevision++;
+   }
+   return {id,number,stockPosted:true};
+  });
+ }
+}

@@ -1,7 +1,7 @@
 import {FileUpload} from '../ui/FileUpload.js';
 import { jobLabel } from "../components/job-label.js";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.js";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type Session } from "../api.js";
 import { Button } from "../ui/Button.js";
 import { Field } from "../ui/Field.js";
@@ -12,7 +12,7 @@ import {
   type ReportEntry,
   type InventoryLine,
 } from "../../server/inventory/reconciliation.js";
-import { confirmTransition } from "../confirm.js";
+import { confirmTransition,confirmRevision } from "../confirm.js";
 const empty: ReportEntry = {
   start: "",
   end: "",
@@ -41,6 +41,7 @@ export function InventoryWorkspace({
   accounts?: boolean;
   receiveOnly?: boolean;
 }) {
+  const savePending=useRef(false);
   const [tab, setTab] = useState(
       accounts ? "Receipts & Reconciliation" : "My Workspace",
     ),
@@ -127,25 +128,25 @@ export function InventoryWorkspace({
   }
   async function save(stage: string) {
     setErrorAction("save");
-    if (!job || busy) return;
+    if (!job || busy || savePending.current) return;
+    const command={jobKey:job.key,version:report?.version??0,stage,entry:structuredClone(entry)};
+    savePending.current=true;
+    setBusy(true);
+    try {
     if (
       stage === "Sent to Accounts" &&
-      !confirmTransition(
+      !(await confirmRevision(
         "Send reconciliation to Accounts",
         `${job.jobId}: the saved report becomes read-only. This does not approve invoice changes or close the job.`,
-      )
+        "Send reconciliation to Accounts",
+      ))
     )
       return;
-    setBusy(true);
     setError("");
-    try {
       const result = await api<any>("/inventory-reconciliation/reports", {
         csrf: session.csrfToken,
         body: {
-          jobKey: job.key,
-          version: report?.version ?? 0,
-          stage,
-          entry,
+          ...command,
           requestKey: crypto.randomUUID(),
         },
       });
@@ -153,13 +154,13 @@ export function InventoryWorkspace({
         id: result.reportId,
         version: result.version,
         stage,
-        job_key: job.key,
+        job_key: command.jobKey,
       });
       setDetail(
         await api<any>("/inventory-reconciliation/reports/" + result.reportId),
       );
       await load();
-      setSavedEntry(JSON.stringify(entry));
+      setSavedEntry(JSON.stringify(command.entry));
       setMessage(
         stage === "Sent to Accounts"
           ? "Sent to Accounts. Invoice adjustments await review and approval."
@@ -168,6 +169,7 @@ export function InventoryWorkspace({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      savePending.current=false;
       setBusy(false);
     }
   }

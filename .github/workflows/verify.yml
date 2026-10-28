@@ -10,6 +10,7 @@ on:
         "milestone-4/**",
         "milestone-5/**",
         "hardening/**",
+        "codex/**",
       ]
   pull_request:
 permissions:
@@ -31,6 +32,8 @@ jobs:
         run: pnpm audit --prod --audit-level high
       - name: Build and type check
         run: pnpm build
+      - name: Type check tests and operator tools
+        run: pnpm typecheck:tools
       - name: Native PostgreSQL integration tests
         run: pnpm test
       - name: Install browser

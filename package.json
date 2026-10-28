@@ -9,11 +9,13 @@
   "scripts": {
     "dev": "tsx watch server/main.ts",
     "dev:web": "vite --host 127.0.0.1",
-    "build": "node scripts/verify-document-formats.mjs && tsc --noEmit && vite build && node scripts/ocr-assets.mjs && tsc -p tsconfig.server.json",
+    "build": "node scripts/verify-document-formats.mjs && tsc -p tsconfig.app.json --noEmit && vite build && node scripts/ocr-assets.mjs && tsc -p tsconfig.server.json",
     "start": "node dist/server/main.js",
     "migrate": "tsx server/db/migrate-cli.ts",
     "migrate:production": "node dist/server/db/migrate-cli.js",
     "typecheck": "tsc --noEmit",
+    "typecheck:app": "tsc -p tsconfig.app.json --noEmit",
+    "typecheck:tools": "tsc -p tsconfig.tools.json --noEmit",
     "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
     "test:e2e": "node scripts/browser-tests.mjs",
     "db:local": "tsx scripts/local-db.ts"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { api, ApiError, type Session } from "./api.js";
 import { AuthLayout } from "./components/AuthLayout.js";
 import { AccountLink } from "./pages/AccountLink.js";
@@ -7,6 +7,15 @@ import { Setup } from "./pages/Setup.js";
 import { Dashboard } from "./pages/Dashboard.js";
 import {clearDepartmentUser} from './department-view.js';
 
+const OperationsBoard=lazy(()=>import('./pages/operations-board/OperationsBoard.js').then(m=>({default:m.OperationsBoard})));
+const InventoryRoleGate=lazy(()=>import('./pages/InventoryRoleGate.js').then(m=>({default:m.InventoryRoleGate})));
+const ParentDos=lazy(()=>import('./pages/ParentDos.js').then(m=>({default:m.ParentDos})));
+const InventoryReviews=lazy(()=>import('./pages/InventoryReviews.js').then(m=>({default:m.InventoryReviews})));
+const GatePasses=lazy(()=>import('./pages/GatePasses.js').then(m=>({default:m.GatePasses})));
+const SiteMaterials=lazy(()=>import('./pages/SiteMaterials.js').then(m=>({default:m.SiteMaterials})));
+const WarehouseTransfers=lazy(()=>import('./pages/WarehouseTransfers.js').then(m=>({default:m.WarehouseTransfers})));
+const MaterialReplacements=lazy(()=>import('./pages/MaterialReplacements.js').then(m=>({default:m.MaterialReplacements})));
+
 type State =
   | { kind: "loading" }
   | { kind: "error"; message: string }
@@ -14,6 +23,7 @@ type State =
   | { kind: "login" }
   | { kind: "authenticated"; session: Session };
 export function App() {
+  const [oiaEntry]=useState(()=>/^\/(?:operations(?:\/|$)|inventory\/(?:materials|parent-dos|reconciliations|gate-passes|transfers|replacements)(?:\/|$)|accounts(?:\/|$))/.test(window.location.pathname)?window.location.pathname+window.location.search:'');
   const [pricingCarryLink]=useState(()=>{const token=new URLSearchParams(window.location.search).get('pricingPreviewToken');return token&&/^[0-9a-f-]{36}$/i.test(token)?`?pricingPreviewToken=${token}#workspace=pricing`:'';});
   const [notificationLink] = useState(()=>{
     const hash=window.location.hash,params=new URLSearchParams(hash.slice(1));
@@ -29,8 +39,8 @@ export function App() {
   );
   const [setupComplete, setSetupComplete] = useState(false);
   const go = useCallback(
-    (path: string) => window.history.replaceState(null, "", path+(path==="/dashboard"?(pricingCarryLink||notificationLink):"")),
-    [notificationLink,pricingCarryLink],
+    (path: string, role?: Session["user"]["role"]) => window.history.replaceState(null, "", (path==="/dashboard"&&oiaEntry&&(!role||!["Coordinator","Design","Employee"].includes(role))?oiaEntry+(/^#notification=[0-9a-f-]{36}$/i.test(notificationLink)?notificationLink:""):path+(path==="/dashboard"?(pricingCarryLink||notificationLink):""))),
+    [notificationLink,pricingCarryLink,oiaEntry],
   );
   const signedOut = useCallback(() => {
     clearDepartmentUser();
@@ -49,7 +59,7 @@ export function App() {
       try {
         const session = await api<Session>("/auth/session");
         setState({ kind: "authenticated", session });
-        go("/dashboard");
+        go("/dashboard", session.user.role);
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) signedOut();
         else throw err;
@@ -98,8 +108,14 @@ export function App() {
         />
       </AuthLayout>
     );
-  if (state.kind === "authenticated")
-    return <Dashboard session={state.session} onLogout={signedOut} />;
+  if (state.kind === "authenticated") {
+    const props={session:state.session,onLogout:signedOut};
+    if(["Coordinator","Design","Employee"].includes(state.session.user.role))return <Dashboard {...props}/>;
+    if(oiaEntry.startsWith('/operations'))return <Suspense fallback={<p role="status">Opening Operations…</p>}><OperationsBoard {...props}/></Suspense>;
+    if(oiaEntry.startsWith('/inventory/'))return <Suspense fallback={<p role="status">Opening Inventory…</p>}>{oiaEntry.startsWith('/inventory/materials')&&(location.pathname.split('/').filter(Boolean).length>2||new URLSearchParams(location.search).has('site'))?<SiteMaterials {...props}/>:(oiaEntry.startsWith('/inventory/parent-dos')||oiaEntry.split('?')[0].replace(/\/$/,'')==='/inventory/materials')?<ParentDos {...props}/>:oiaEntry.startsWith('/inventory/gate-passes')?<GatePasses {...props}/>:oiaEntry.startsWith('/inventory/transfers')?<WarehouseTransfers {...props}/>:oiaEntry.startsWith('/inventory/replacements')?<MaterialReplacements {...props}/>:<InventoryReviews {...props}/>}</Suspense>;
+    if(state.session.user.role==='Inventory')return <Suspense fallback={<p role="status">Opening assigned Inventory…</p>}><InventoryRoleGate {...props}/></Suspense>;
+    return <Dashboard {...props}/>;
+  }
   return (
     <AuthLayout>
       {state.kind === "loading" && (
@@ -141,7 +157,7 @@ export function App() {
           setupComplete={setupComplete}
           onLogin={(session) => {
             setState({ kind: "authenticated", session });
-            go("/dashboard");
+            go("/dashboard", session.user.role);
           }}
         />
       )}

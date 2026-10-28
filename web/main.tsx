@@ -13,3 +13,5 @@ void import('./App.js').then(({ App }) => {
   root.style.padding = '32px';
   root.textContent = `Unable to open the workspace: ${error instanceof Error ? error.message : String(error)}. Please reload or contact the administrator.`;
 });
+
+import './ui/accounts.css';

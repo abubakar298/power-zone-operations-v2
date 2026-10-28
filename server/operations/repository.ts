@@ -1,4 +1,7 @@
+import {linkCreatedOperationsMaterialSource} from '../inventory/source-links.js';
 import { allocateReference, boqIdentity } from "../documents/references.js";
+import {syncCreatedOperationsHandoff} from '../operations-board/live-ipo-sync.js';
+import {SiteWorkflowRepository} from '../site-workflow/repository.js';
 import { ownedCondition } from "../http/permissions.js";
 import { OrdersRepository } from "../orders/repository.js";
 import { randomUUID } from "node:crypto";
@@ -166,7 +169,7 @@ export class OperationsRepository {
   async list(actor?: string) {
     const rows = (
       await this.pool.query(
-        `SELECT o.* FROM ${visibleOperations} o ${actor ? `WHERE (${ownedCondition("issuance", "o.id", "$1")} OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role='Operations'))` : ""} ORDER BY o.created_at DESC LIMIT 200`,
+        `SELECT o.* FROM ${visibleOperations} o ${actor ? `WHERE (${ownedCondition("issuance", "o.id", "$1")} OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND active AND role='Operations'))` : "WHERE true"} AND o.snapshot->>'bulkHistoricalImport' IS DISTINCT FROM 'true' ORDER BY o.created_at DESC LIMIT 200`,
         actor ? [actor] : [],
       )
     ).rows;
@@ -420,6 +423,12 @@ export class OperationsRepository {
             line.unit,
           ],
         );
+      const historicalSource=(await c.query("SELECT snapshot->'historicalImport' IS NOT NULL AS historical FROM internal_purchase_orders WHERE id=$1",[input.ipoId])).rows[0]?.historical===true;
+      if(!historicalSource){
+        await new SiteWorkflowRepository(this.pool).ensure(c,row.id);
+        const receiving=await syncCreatedOperationsHandoff(c,actor,{ipoId:input.ipoId,operationsIssuanceId:row.id});
+        for(const linked of [...receiving.created,...receiving.retained])await linkCreatedOperationsMaterialSource(c,actor,{boardSiteId:linked.boardSiteId,ipoId:input.ipoId,operationsIssuanceId:row.id});
+      }
       await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
         actor,
         `operations.boq.issue:${row.id}:ipo:${input.ipoId}`,

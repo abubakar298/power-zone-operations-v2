@@ -17,6 +17,7 @@ test("C&I standard/revision/discount workflow, immutable history and departmenta
   await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,'test-only',$4)",[id,`${role.toLowerCase()}@example.test`,role,role==="OtherCoordinator"?"Coordinator":role]);
   await db.pool.query("INSERT INTO auth_sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",[digest(token),id,csrf]);users[role]={cookie:`pz_session=${token}`,csrf,id};
  }
+ await db.pool.query("INSERT INTO restricted_cost_access(user_id,granted_reason) VALUES($1,'Isolated cost-based workflow fixture')",[users.Management.id]);
  const get=(path:string,role="Coordinator")=>request(app).get(`/api/cni${path}`).set("Cookie",users[role].cookie);
  const post=(path:string,body:object,role="Coordinator")=>request(app).post(`/api/cni${path}`).set("Cookie",users[role].cookie).set("Origin",origin).set("X-CSRF-Token",users[role].csrf).send(body);
  const overview=async(role="Coordinator",team=false)=>(await request(app).get(`/api/coordinator${team?"?scope=team":""}`).set("Cookie",users[role].cookie).expect(200)).body;
