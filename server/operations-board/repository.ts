@@ -1,3 +1,4 @@
+import {recordDeliveryReturn} from './delivery-return.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {isDeepStrictEqual} from 'node:util';
 import {attachHistoricalEvidence} from './historical-evidence.js';
@@ -240,6 +241,7 @@ export class OperationsBoardRepository{
   return transaction(this.pool,async c=>{
    await lockActiveActor(c,actor);
    const a=await this.access(actor,c),row=await this.current(c,id,true);this.scope(a,row.snapshot);
+   if(v.action==='delivery-return'&&!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Returned delivery belongs to the assigned Operations lead.');
    if(v.action==='assign-team'&&!['owner','head'].includes(a.kind))throw new HttpError(403,'Only Moaz or Management can assign Operations teams.');
    if(v.action==='plan'&&!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Dispatch planning belongs to the assigned Operations lead.');
    if(['qc','ups-job'].includes(v.action)&&!['owner','head','qc'].includes(a.kind))throw new HttpError(403,'Only the assigned QC team can record installation progress.');
@@ -260,6 +262,8 @@ export class OperationsBoardRepository{
     const vendors=await this.vendorList(c);
     for(const [role,selected] of Object.entries(v.assignments)){const vendor=vendors.find(r=>r.id===selected);if(!(v.edit&&site.assignments?.[role]===selected)&&(!vendor?.active||!vendor.roles.includes(role)))throw new HttpError(422,'Choose an active vendor for each applicable service.');}
     snapshot=saveDispatchPlan(site,v,now,v.edit);kind='Dispatch plan';audiences=['accounts'];
+   }else if(v.action==='delivery-return'){
+    snapshot=recordDeliveryReturn(site,v,now);kind='Delivery returned';audiences=['operations-head','management','accounts','inventory'];
    }else if(v.action==='delivery'){
     const files=await this.references(c,id,[v.signedDoId,v.materialPhotoId]),value={deliveryDate:v.deliveryDate,signedDo:files.get(v.signedDoId)!,materialPhoto:files.get(v.materialPhotoId)!,partial:v.partial};
     if(!value.materialPhoto.mediaType.startsWith('image/'))throw new HttpError(422,'Upload a photo of the delivered material.');
