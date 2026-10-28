@@ -1,7 +1,7 @@
 import {Decimal} from 'decimal.js';
 /** Frozen departmental read-model port: source rows are imported records, not journal postings. */
 type SourceRow = Record<string, any>;
-export const ageingBands=[{id:'0-30',label:'0–30 days',color:'#5547d0'},{id:'31-60',label:'31–60 days',color:'#8b7fe0'},{id:'61-90',label:'61–90 days',color:'#c79739'},{id:'91+',label:'91+ days',color:'#b75a68'},{id:'unknown',label:'Date not recorded',color:'#a5a3ae'}];
+export const ageingBands=[{id:'0-7',label:'0–7 days',color:'#5547d0'},{id:'8-15',label:'8–15 days',color:'#c79739'},{id:'15+',label:'Over 15 days',color:'#a33f30'},{id:'unknown',label:'Date not recorded',color:'#a5a3ae'}];
 export function submissionDate(value:unknown){
  const s=String(value??'');
  const iso=s.match(/\b(20\d{2}-\d{2}-\d{2})(?=T|\b)/);if(iso)return iso[1];
@@ -10,7 +10,7 @@ export function submissionDate(value:unknown){
  if(match)return `${match[3]}-${String(monthNames.findIndex((m:any)=>m.toLowerCase()===match[2].toLowerCase())+1).padStart(2,'0')}-${match[1].padStart(2,'0')}`;
  return null;
 }
-export function ageBand(date:string|null|undefined,asOf:string){if(!date)return 'unknown';const days=Math.floor((Date.parse(asOf+'T12:00:00Z')-Date.parse(date+'T12:00:00Z'))/86400000);return !Number.isFinite(days)||days<0?'unknown':days<=30?'0-30':days<=60?'31-60':days<=90?'61-90':'91+';}
+export function ageBand(date:string|null|undefined,asOf:string){if(!date)return 'unknown';const days=Math.floor((Date.parse(asOf+'T12:00:00Z')-Date.parse(date+'T12:00:00Z'))/86400000);return !Number.isFinite(days)||days<0?'unknown':days<=7?'0-7':days<=15?'8-15':'15+';}
 export const invoiceIdentity=(value:unknown)=>String(value??'').trim().match(/^(\d{2}-\d{4,})(?!\d)/)?.[1]??null;
 export function isSubmittedReceivable(row:SourceRow){return row.submission==='Submitted';}
 export function billingRows(registers:SourceRow[],cables:SourceRow,internet:SourceRow,evidence:SourceRow={rows:[],cableStageAdjustments:[]}){
