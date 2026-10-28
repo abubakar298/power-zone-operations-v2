@@ -11,6 +11,7 @@ const storedWorkflowSiteSchema=sourceSiteSchema.and(z.object({
  dispatchDate:z.iso.date().optional(),planSavedAt:z.string().optional(),deliveryDate:z.iso.date().optional(),deliveryRecordedAt:z.string().optional(),stageStartedAt:z.string().optional(),
  assignments:z.record(z.string(),z.string()).optional(),qc:z.record(z.string(),entry).optional(),qcJob:entry.optional(),
  planningBatches:z.array(z.object({id:z.string(),number:z.string().optional(),kind:z.enum(['delivery','labour','both']),stops:z.array(z.object({siteId:z.string(),kind:z.enum(['delivery','labour','both']).optional(),plannedDate:z.iso.date(),start:z.string(),end:z.string()}).passthrough())}).passthrough()).default([]),
+ deliveryReturns:z.array(z.object({scope:z.enum(['full','partial']),date:z.iso.date().nullable(),dateUnknown:z.boolean(),warehouse:z.string(),reference:z.string(),reason:z.string(),recordedAt:z.string()}).passthrough()).default([]),
  deliveries:z.array(delivery).optional(),history:history.default([]),accounts:z.array(z.record(z.string(),z.unknown())).default([]),
  blockers:z.array(z.object({id:z.string(),reason:z.string(),stage:z.string(),status:z.enum(['open','resolved']),raisedAt:z.string(),raisedBy:z.string(),actorId:z.string(),resolution:z.string().optional(),resolvedAt:z.string().optional(),resolvedBy:z.string().optional()}).passthrough()).default([]),
 }).passthrough());
