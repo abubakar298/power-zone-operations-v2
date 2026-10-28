@@ -94,6 +94,10 @@ export function NotificationCenter({
         body: id ? { id } : {},
         csrf: session.csrfToken,
       });
+      const readAt = new Date().toISOString();
+      const acknowledged = items.filter(n => (!id || n.id === id) && !n.read_at && !n.resolved_at).length;
+      setItems(previous => previous.map(n => !id || n.id === id ? {...n, read_at: n.read_at || readAt} : n));
+      setUnread(previous => id ? Math.max(0, previous - acknowledged) : 0);
       await load();
     } catch {
       setError("Could not mark notifications as read.");
@@ -181,7 +185,7 @@ export function NotificationCenter({
                 >
                   <button
                     className="notice-link"
-                    onClick={() => {
+                    onClick={async () => {
                       if (
                         typeof n.target.url === "string" &&
                         /^\/api\/(project-workflow|orders)\/[A-Za-z0-9/-]+$/.test(
@@ -193,8 +197,8 @@ export function NotificationCenter({
                           "_blank",
                           "noopener,noreferrer",
                         );
-                      else onOpen(n.target);
-                      void mark(n.id);
+                      else { await mark(n.id); onOpen(n.target); setOpen(false); return; }
+                      await mark(n.id);
                       setOpen(false);
                     }}
                   >

@@ -31,6 +31,13 @@ test('Notification bell resolves authorized C&I approval, preserves direct links
     await page.setViewportSize({width:390,height:844});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.screenshot({path:'test-results/notification-center-mobile.png',fullPage:true});
+    await page.locator('.notice-link').filter({hasText:'Notification browser site'}).click();
+    await expect(page.getByRole('heading',{name:"C&I quotation review",exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'Notifications, 0 unread',exact:true})).toBeVisible();
+    expect((await (await page.request.get('/api/notifications')).json()).notifications.find((n:any)=>n.id===notice.id).read_at).toBeTruthy();
+    await page.reload();
+    await expect(page.getByRole('button',{name:'Notifications, 0 unread',exact:true})).toBeVisible();
+    expect((await page.request.post('/api/notifications/unread',{headers:adminHeaders,data:{id:notice.id}})).ok()).toBeTruthy();
     await page.goto(`/dashboard#notification=${notice.id}`);
     await expect(page.getByRole('heading',{name:"C&I quotation review",exact:true})).toBeVisible();
     expect((await (await page.request.get('/api/notifications')).json()).unreadCount).toBe(0);

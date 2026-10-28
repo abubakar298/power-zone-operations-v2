@@ -26,7 +26,7 @@ export function LibraryDocumentPreview({document:record,stage,onBack}:{document:
   // An unfinished survey has saved input fields, not a finalized calculated BOQ.
   const {jsPDF}=await import("jspdf");const {autoTable}=await import("jspdf-autotable");const pdf=new jsPDF();pdf.setFontSize(18);pdf.text('POWER ZONE',14,20);pdf.setFontSize(12);pdf.text('Saved survey draft',14,30);
   const rows=[['Document',record.number],['Customer',record.customer],['Site',record.site],['Stage',stage],...Object.entries(record.inputs??{}).filter(([key,value])=>value!=null&&typeof value!=='object'&&!/cost|price|rate|profit|margin|markup/i.test(key)).map(([key,value])=>[key.replace(/([a-z])([A-Z])/g,'$1 $2'),String(value)])];
-  autoTable(pdf,{startY:38,head:[['Field','Saved value']],body:rows,theme:'grid',styles:{fontSize:10},headStyles:{fillColor:[85,71,208]}});blob=pdf.output('blob');
+  autoTable(pdf,{startY:38,head:[['Field','Saved value']],body:rows,theme:'grid',styles:{fontSize:10},headStyles:{fillColor:[81,67,148]}});blob=pdf.output('blob');
  }
  objectUrl=URL.createObjectURL(blob);if(alive){setData(blob);setUrl(objectUrl)}else URL.revokeObjectURL(objectUrl);
  }catch(e){if(alive)setError((e as Error).message);}finally{if(alive)setLoading(false);}}

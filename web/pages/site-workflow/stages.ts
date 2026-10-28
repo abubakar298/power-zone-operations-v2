@@ -8,7 +8,7 @@ export const STAGE_LABELS: Record<StageKey, string> = {
 /** Product palette (design-tokens.css): the primary ramp for the work, success greens once the customer side is done. */
 export const STAGE_COLOURS: Record<StageKey, string> = {
   ipo_received: "#c4b5fd", planning: "#a89af0", delivery: "#8c7fe6", installation: "#6658e8",
-  commissioning: "#5547d0", handover: "#4435b5", doc_dispatch: "#2f7d55", closed: "#246443",
+  commissioning: "#514394", handover: "#4435b5", doc_dispatch: "#2f7d55", closed: "#246443",
 };
 export const stageInk = (key: StageKey) => (["ipo_received", "planning", "delivery"].includes(key) ? "#1d1b2e" : "#fff");
 /** Stages a site passes through for its scope. Delivery-only sites close straight after Delivery. */

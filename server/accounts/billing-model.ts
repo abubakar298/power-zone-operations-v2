@@ -1,7 +1,7 @@
 import {Decimal} from 'decimal.js';
 /** Frozen departmental read-model port: source rows are imported records, not journal postings. */
 type SourceRow = Record<string, any>;
-export const ageingBands=[{id:'0-7',label:'0–7 days',color:'#5547d0'},{id:'8-15',label:'8–15 days',color:'#c79739'},{id:'15+',label:'Over 15 days',color:'#a33f30'},{id:'unknown',label:'Date not recorded',color:'#a5a3ae'}];
+export const ageingBands=[{id:'0-7',label:'0–7 days',color:'#514394'},{id:'8-15',label:'8–15 days',color:'#c79739'},{id:'15+',label:'Over 15 days',color:'#a33f30'},{id:'unknown',label:'Date not recorded',color:'#a5a3ae'}];
 export function submissionDate(value:unknown){
  const s=String(value??'');
  const iso=s.match(/\b(20\d{2}-\d{2}-\d{2})(?=T|\b)/);if(iso)return iso[1];

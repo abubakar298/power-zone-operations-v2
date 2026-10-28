@@ -2,13 +2,13 @@
 :root {
   /* Management delivery-age chart: Director-approved sequential age palette. */
   --pz-age-recent:#c4b5fd; --pz-age-followup:#7861dc; --pz-age-attention:#e5a33d; --pz-age-overdue:#d66b73; --pz-age-unknown:#e6e3f0;
-  --pz-brand-primary:#6658e8; --pz-primary:#5547d0; --pz-primary-hover:#4435b5;
+  --pz-brand-primary:#6658e8; --pz-primary:#514394; --pz-primary-hover:#4435b5;
   --pz-surface:#fff; --pz-canvas:#f4f5fa; --pz-text:#24252b; --pz-muted:#676372; --pz-border:#dcd9e9;
   --pz-secondary-bg:#f0edff; --pz-secondary-text:#514474;
   --pz-neutral:#27262b; --pz-success:#246443; --pz-success-bg:#eaf3ed;
   --pz-warning:#8a4513; --pz-warning-bg:#fff7ef; --pz-danger:#a33f30; --pz-danger-bg:#fff1ee;
   --pz-pending:#655b7b; --pz-pending-bg:#f0edf8; --pz-disabled-bg:#eeedf2; --pz-disabled-text:#686571;
-  --pz-selected-bg:#f0edff; --pz-selected-border:#6658e8; --pz-focus:#5547d0;
+  --pz-selected-bg:#f0edff; --pz-selected-border:#6658e8; --pz-focus:#514394;
   --pz-font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   --pz-text-xs:12px; --pz-text-sm:13px; --pz-text-md:14px; --pz-text-lg:16px;
   --pz-space-1:4px; --pz-space-2:8px; --pz-space-3:12px; --pz-space-4:16px; --pz-space-5:24px; --pz-space-6:32px;

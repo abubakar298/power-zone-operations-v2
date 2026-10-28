@@ -5,8 +5,8 @@
 .ops{
   --ops-bg:#f4f4f5; --ops-card:#fff; --ops-card-2:#f4f4f5; --ops-card-3:#efeff1; --ops-line:#e4e4e7; --ops-line-2:#d4d4d8;
   --ops-fg:#18181b; --ops-muted:#52525b; --ops-faint:#8a8a93;
-  --ops-accent:#5547d0; --ops-accent-2:#6658e8; --ops-accent-ink:#4435b5; --ops-accent-soft:#eeebff; --ops-accent-line:#d6d0fb;
-  --ops-btn:linear-gradient(180deg,#7a6cf0,#5547d0); --ops-btn-glow:0 6px 16px rgba(85,71,208,.25);
+  --ops-accent:#514394; --ops-accent-2:#6658e8; --ops-accent-ink:#4435b5; --ops-accent-soft:#eeebff; --ops-accent-line:#d6d0fb;
+  --ops-btn:linear-gradient(180deg,#7a6cf0,#514394); --ops-btn-glow:0 6px 16px rgba(81,67,148,.25);
   --ops-good:#16a34a; --ops-good-ink:#15803d; --ops-good-soft:#eaf8ef; --ops-good-line:#bfe8cd;
   --ops-warn-ink:#b45309; --ops-warn-soft:#fff6e6; --ops-warn-line:#fbdca6;
   --ops-crit:#dc2626; --ops-crit-ink:#b91c1c; --ops-crit-soft:#fdeeee; --ops-crit-line:#f7c4c4;
