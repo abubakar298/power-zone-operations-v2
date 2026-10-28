@@ -21,6 +21,7 @@ test('forward-only reviewed handoffs route Accounts, Inventory and regional QC, 
  for(const [p,i,historical]of [[po,ipo,false],[oldPo,oldIpo,true]] as const){
  await db.pool.query("INSERT INTO customer_purchase_orders(id,customer_id,po_number,input,created_by) VALUES($1,(SELECT id FROM customers ORDER BY id LIMIT 1),$2,'{}',$3)",[p,'PO-'+p,ids.owner]);
  await db.pool.query("INSERT INTO internal_purchase_orders(id,customer_po_id,number,snapshot,fingerprint,request_key,created_by,created_at) VALUES($1,$2,$3,'{}','isolated',$4,$5,CASE WHEN $6 THEN now()-interval '1 day' ELSE now() END)",[i,p,'IPO-'+i,randomUUID(),ids.owner,historical]);}
+ for(const id of [ipo,oldIpo])await db.pool.query('INSERT INTO ipo_accounts_handoffs(id,ipo_id,created_by) VALUES($1,$2,$3)',[randomUUID(),id,ids.owner]);
  await db.pool.query("INSERT INTO inventory_warehouse_sources(source_sha256,catalogue_sha256,metadata,content_fingerprint,created_by) VALUES($1,$1,'{}',$1,$2)",[sha,ids.owner]);
  await db.pool.query('INSERT INTO inventory_material_drafts(id,created_by) VALUES($1,$2)',[draft,ids.inventory]);
  await db.pool.query("INSERT INTO inventory_material_draft_versions(draft_id,version,snapshot,request_key,request_fingerprint,created_by) VALUES($1,1,'{}',$2,$3,$4)",[draft,randomUUID(),sha,ids.inventory]);
@@ -38,6 +39,7 @@ test('forward-only reviewed handoffs route Accounts, Inventory and regional QC, 
  const acc=await list('accounts','Accounts'),qc=await list('central','Operations');
  for(const kind of ['IPO issued to Accounts','Material dispatched','Signed gate DO saved','Physical document update','Site completed'])assert.ok(acc.some(n=>n.kind===kind),kind);
  assert.equal(acc.filter(n=>n.kind==='IPO issued to Accounts').length,1,'historical IPO not replayed');
+ assert.equal(acc.filter(n=>n.kind==='Departmental handoff').length,1,'new receipt of old IPO retained; duplicate new IPO receipt suppressed');
  assert.ok(qc.some(n=>n.kind==='Material dispatched'));assert.ok(qc.some(n=>n.kind==='Signed gate DO saved'));
  assert.equal((await list('inventory','Inventory')).filter(n=>n.kind==='Dispatch plan saved').length,1,'installation-only stop does not alert Inventory');
  assert.equal((await list('wrong','Operations')).filter(n=>n.kind==='Project assigned').length,1);assert.equal((await list('lead','Operations')).filter(n=>n.kind==='Project assigned').length,0);
