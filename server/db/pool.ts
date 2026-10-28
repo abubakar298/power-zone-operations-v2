@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import type { Config } from '../config.js';
 
 export function createPool(config: Config) {
-  return new pg.Pool({
+  const pool = new pg.Pool({
     connectionString: config.databaseUrl,
     ssl: config.databaseSsl ? {
       rejectUnauthorized: true,
@@ -15,4 +15,12 @@ export function createPool(config: Config) {
     max: 10, connectionTimeoutMillis: 5000, idleTimeoutMillis: 30000,
     statement_timeout: 10000, application_name: 'power-zone-v2',
   });
+  // pg-pool handles idle-client errors, but checked-out clients can also lose
+  // their connection between queries while a transaction is doing async work.
+  // Keep that event from terminating Node; the query/transaction still fails
+  // and PostgreSQL rolls its transaction back. Never retry a business command.
+  pool.on('connect', client => client.on('error', error => {
+    console.error(JSON.stringify({event:'database.client.disconnected',code:(error as Error & {code?:string}).code??'CONNECTION_CLOSED'}));
+  }));
+  return pool;
 }

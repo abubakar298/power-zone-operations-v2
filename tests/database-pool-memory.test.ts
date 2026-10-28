@@ -38,3 +38,17 @@ test('application pool bounds query memory on every connection and reuse', async
     await db.close();
   }
 });
+
+test('checked-out database disconnect is handled and a fresh connection remains usable',async()=>{
+ const db=await testDatabase({skipMigrations:true});
+ const pool=createPool(readConfig({NODE_ENV:'test',APP_ORIGIN:'http://127.0.0.1:3199',DATABASE_URL:db.url,DATABASE_SSL:'false',ADMIN_SETUP_TOKEN:'isolated-pool-disconnect-test-only-000000'}));
+ let client:PoolClient|undefined;
+ try{
+  client=await pool.connect();assert.ok(client.listenerCount('error')>0,'A checked-out client must retain its disconnect guard.');
+  const pid=(await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  const disconnected=new Promise<Error>(resolve=>client!.once('error',resolve));
+  await db.pool.query('SELECT pg_terminate_backend($1)',[pid]);
+  const error=await disconnected;assert.ok(error);client.release(error);client=undefined;
+  assert.equal((await pool.query('SELECT 1 AS ready')).rows[0].ready,1);
+ }finally{client?.release();await pool.end();await db.close();}
+});
