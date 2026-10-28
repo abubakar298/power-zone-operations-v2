@@ -1,3 +1,4 @@
+import {regionalQcDelegationSql} from './qc-delegation.js';
 import {recordDeliveryReturn} from './delivery-return.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {isDeepStrictEqual} from 'node:util';
@@ -12,18 +13,18 @@ import {fileSchema,importSchema,movementSchema,commandSchema,vendorSchema,target
 import {workflowSiteSchema,saveDispatchPlan,confirmDelivery,completeQcStage,completeUpsJob,currentStage,siteBucket as siteBucketForBatch,qcType as qcTypeForBatch,type WorkflowSite,type FileReference,type Entry} from './workflow.js';
 import type {z} from 'zod';
 
-type Access={name:string;kind:'owner'|'head'|'lead'|'qc'|'accounts';team:'central'|'south'|null};
+type Access={qcDelegated?:boolean;name:string;kind:'owner'|'head'|'lead'|'qc'|'accounts';team:'central'|'south'|null};
 const latest='SELECT DISTINCT ON (site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC';
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 /** Server-owned records; browser role selectors never authorise access. */
 export class OperationsBoardRepository{
  constructor(private pool:Pool){}
  private async access(actor:string,c:Pool|PoolClient=this.pool):Promise<Access>{
-  const row=(await c.query('SELECT u.active,u.role,u.display_name,a.kind,a.team FROM users u LEFT JOIN operations_board_access a ON a.user_id=u.id WHERE u.id=$1',[actor])).rows[0];
+  const row=(await c.query(`SELECT u.active,u.role,u.display_name,a.kind,a.team,${regionalQcDelegationSql} AS qc_delegated FROM users u LEFT JOIN operations_board_access a ON a.user_id=u.id WHERE u.id=$1`,[actor])).rows[0];
   if(!row?.active)throw new HttpError(401,'Your access has ended.');
   if(['Admin','Management'].includes(row.role))return {kind:'owner',team:null,name:row.display_name};
   if(row.role==='Accounts')return {kind:'accounts',team:null,name:row.display_name};
-  if(row.role==='Operations'&&row.kind)return {kind:row.kind,team:row.team,name:row.display_name};
+  if(row.role==='Operations'&&row.kind)return {kind:row.kind,team:row.team,name:row.display_name,qcDelegated:row.qc_delegated===true};
   throw new HttpError(403,'Operations board access is not assigned.');
  }
  private scope(access:Access,site:BoardSite,documentsOnly=false){
@@ -244,8 +245,8 @@ export class OperationsBoardRepository{
    if(v.action==='delivery-return'&&!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Returned delivery belongs to the assigned Operations lead.');
    if(v.action==='assign-team'&&!['owner','head'].includes(a.kind))throw new HttpError(403,'Only Moaz or Management can assign Operations teams.');
    if(v.action==='plan'&&!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Dispatch planning belongs to the assigned Operations lead.');
-   if(['qc','ups-job'].includes(v.action)&&!['owner','head','qc'].includes(a.kind))throw new HttpError(403,'Only the assigned QC team can record installation progress.');
-   if(v.action==='historical-evidence'&&v.category==='handover'&&!['owner','head','qc'].includes(a.kind))throw new HttpError(403,'Only the assigned QC team can attach installation handover evidence.');
+   if(['qc','ups-job'].includes(v.action)&&!['owner','head','qc'].includes(a.kind)&&!a.qcDelegated)throw new HttpError(403,'Only the assigned QC team can record installation progress.');
+   if(v.action==='historical-evidence'&&v.category==='handover'&&!['owner','head','qc'].includes(a.kind)&&!a.qcDelegated)throw new HttpError(403,'Only the assigned QC team can attach installation handover evidence.');
    const replay=(await c.query('SELECT version,snapshot,request_sha256 FROM operations_board_versions WHERE site_id=$1 AND request_key=$2',[id,v.requestKey])).rows[0];
    if(replay){if(replay.request_sha256!==fingerprint)throw new HttpError(409,'This request key was used for a different site decision.');return {...replay.snapshot,version:replay.version};}
    if(row.version!==v.version)throw new HttpError(409,'The site was updated. Reload before saving your decision.');

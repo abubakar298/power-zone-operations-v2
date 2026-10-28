@@ -19,7 +19,7 @@ export function SiteDetail({site,siteId,access,session,onSaved,onBack,onBatches}
  function begin(key:string){if(loading)return;if(editor&&!confirmLeaveWorkspace())return;setEditor(key);}
  function saved(value:Site){setCurrent(normalise(value));setEditor(null);onSaved(value);}
  if(!current)return <section className="pz-panel pz-stack"><Button variant="neutral" onClick={onBack}>Back to sites</Button><h1>{loading?'Opening site…':'Site unavailable'}</h1>{error&&<p role="alert" className="form-error">{error}</p>}</section>;
- const s=current,supervisor=['owner','head'].includes(access.kind),planner=supervisor||access.kind==='lead',qc=supervisor||access.kind==='qc',hasJob=!!s.qcJob,completed=bucket(s)==='completed';
+ const s=current,supervisor=['owner','head'].includes(access.kind),planner=supervisor||access.kind==='lead',qc=supervisor||access.kind==='qc'||access.qcDelegated===true,hasJob=!!s.qcJob,completed=bucket(s)==='completed';
  const reviewFlags=Array.isArray(s.reviewFlags)?s.reviewFlags.filter((value):value is string=>typeof value==='string'&&!!value.trim()):[];
  const sourceRefs=s.legacySourceReferences&&typeof s.legacySourceReferences==='object'&&!Array.isArray(s.legacySourceReferences)?Object.entries(s.legacySourceReferences as Record<string,unknown>).filter((entry):entry is [string,string]=>typeof entry[1]==='string'&&!!entry[1]):[];
  const action=(key:string,label:string)=>loading?undefined:<Button variant="neutral" onClick={()=>begin(key)}>{label}</Button>;
