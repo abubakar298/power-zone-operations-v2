@@ -41,6 +41,18 @@ test('shared batch bookings are atomic, versioned and resource-conflict safe wit
   assert.equal((await repo.saveBatch(owner,mixed)).id,savedMixed.id,'mixed routes replay without duplicate work');
   for(const stop of mixed.stops){const current=await repo.site(owner,stop.siteId);const event=current.accounts.find(e=>e.type==='Batch plan');assert.equal(event?.dispatchDate,stop.kind==='labour'?undefined:stop.plannedDate);assert.equal(current.stage,stop.kind==='labour'?'delivered':'received');assert.equal(current.planningBatches[0].stops[0].kind,stop.kind);}
   await assert.rejects(repo.saveBatch(owner,{...mixed,requestKey:randomUUID(),kind:'delivery',stops:await Promise.all(mixed.stops.map(async stop=>({...stop,siteVersion:(await repo.site(owner,stop.siteId)).version})))}),/resources must match/);
+  await repo.importSource(owner,{sourceSha256:'d'.repeat(64),rows:[{id:'add-central',ipo:'ADD-C',name:'Additional Central IPO',stage:'received',projectType:'ups',installation:true,operationsTeam:'central'},{id:'add-south',ipo:'ADD-S',name:'South IPO',stage:'received',projectType:'ups',installation:true,operationsTeam:'south'},{id:'add-completed',ipo:'ADD-DONE',name:'Completed IPO',stage:'delivered',projectType:'ups',installation:false,completed:true,operationsTeam:'central'}]});
+  const extension=async(newId:string)=>batchSchema.parse({...mixed,id:savedMixed.id,version:1,requestKey:randomUUID(),edit:true,reason:'Add another IPO on the same route',stops:await Promise.all([...mixed.stops,{siteId:newId,siteVersion:1,kind:'both',order:4,plannedDate:'2026-11-02',start:'',end:''}].map(async stop=>({...stop,siteVersion:(await repo.site(owner,stop.siteId)).version})))});
+  await assert.rejects(repo.saveBatch(lead,await extension('add-south')),/not found/);
+  await assert.rejects(repo.saveBatch(lead,await extension('add-completed')),/not eligible/);
+  const addition=await extension('add-central');
+  await assert.rejects(repo.saveBatch(qc,addition),/Operations lead/);
+  await assert.rejects(repo.saveBatch(lead,{...addition,stops:addition.stops.slice(1)}),/Keep existing sites/);
+  const extended=await repo.saveBatch(lead,addition);assert.equal(extended.id,savedMixed.id);assert.equal(extended.number,savedMixed.number);assert.equal(extended.version,2);assert.equal(extended.stops.length,4);assert.deepEqual(extended.stops.slice(0,3).map(stop=>stop.kind),['labour','delivery','both']);
+  assert.equal((await repo.saveBatch(lead,addition)).version,2,'retrying an addition does not duplicate stops');
+  assert.equal((await repo.batches(lead)).batches.find(batch=>batch.id===savedMixed.id)?.canEdit,true);
+  const added=await repo.site(owner,'add-central');assert.equal(added.planningBatches[0].id,savedMixed.id);assert.equal(added.planningBatches[0].stops.length,1);assert.equal(added.planningBatches[0].stops[0].kind,'both');assert.equal(added.accounts.find(e=>e.type==='Batch plan')?.dispatchDate,'2026-11-02');
+  await assert.rejects(repo.saveBatch(lead,{...addition,requestKey:randomUUID()}),/batch was updated/);
   for(const table of ['internal_purchase_orders','accounts_job_closures','stock_on_hand_entries'])assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM '+table)).rows[0].n,0);
  }finally{await db.close();}
 });

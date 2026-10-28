@@ -16,13 +16,13 @@ export function validateBatch(input:BatchInput,sites:WorkflowSite[],existing:Bat
  if(previous&&previous.team!==input.team)throw new HttpError(422,'Keep the saved batch team. Reassign sites individually if needed.');
  const stops=[...input.stops].sort((a,b)=>a.order-b.order);
  if(new Set(stops.map(s=>s.siteId)).size!==stops.length||new Set(stops.map(s=>s.order)).size!==stops.length)throw new HttpError(422,'Each site and visit order must be unique.');
- if(previous&&JSON.stringify(previous.stops.map(s=>s.siteId).sort())!==JSON.stringify(stops.map(s=>s.siteId).sort()))throw new HttpError(422,'Keep the sites in the saved batch. Create another batch for additional sites.');
+ if(previous&&previous.stops.some(saved=>!stops.some(stop=>stop.siteId===saved.siteId)))throw new HttpError(422,'Keep existing sites in the saved batch. You can add more eligible sites.');
  for(const stop of stops){
   const site=sites.find(s=>s.id===stop.siteId);
   if(!site)throw new HttpError(422,'A selected site is unavailable.');
   const kind=stop.kind??input.kind;
   const oldStop=previous?.stops.find(s=>s.siteId===stop.siteId);
-  const changesWork=!previous||(oldStop?.kind??previous.kind)!==kind;
+  const changesWork=!previous||!oldStop||(oldStop.kind??previous.kind)!==kind;
   if(changesWork&&(siteBucket(site)==='completed'||site.scopePending||site.installation===null||kind==='labour'&&site.installation!==true||kind!=='labour'&&(!['received','awaiting'].includes(site.stage)||kind==='both'&&site.installation!==true)))throw new HttpError(422,`${site.name} is not eligible for this batch.`);
   if(site.operationsTeam&&site.operationsTeam!==input.team)throw new HttpError(422,'A selected site belongs to another Operations team.');
   if(Boolean(stop.start)!==Boolean(stop.end))throw new HttpError(422,'Provide both optional times or leave both blank.');
