@@ -12,7 +12,7 @@ export const inventoryMenu:ReadonlyArray<{id:InventorySection;label:string;path:
  {id:'materials',label:'Material issuance',path:'/inventory/materials',icon:'file'},
  {id:'site-ledger',label:'Site ledger',path:'/inventory/site-ledger',icon:'site'},
  {id:'parent-dos',label:'Parent DO reconciliation',path:'/inventory/parent-dos/review',icon:'file'},
- {id:'reconciliations',label:'Inventory reconciliations',path:'/inventory/reconciliations',icon:'shield'},
+ {id:'reconciliations',label:'Closing reconciliations',path:'/inventory/reconciliations',icon:'shield'},
  {id:'gate-passes',label:'Gate passes',path:'/inventory/gate-passes',icon:'file'},
  {id:'transfers',label:'Warehouse transfers',path:'/inventory/transfers',icon:'arrow'},
  {id:'replacements',label:'Replacements',path:'/inventory/replacements',icon:'file'},

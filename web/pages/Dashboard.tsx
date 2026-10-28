@@ -329,7 +329,7 @@ export function Dashboard({
     if(switchingDepartment||!confirmLeaveWorkspace())return false;
     setSwitchingDepartment(true);setDepartmentError('');
     try{
-      if(destination==='inventory'){await api('/auth/department-view',{csrf:principalSession.csrfToken,body:{userId:null}});clearDepartmentUser();window.location.assign('/inventory');return true;}
+      if(destination==='inventory'){clearDepartmentUser();window.location.assign('/inventory');return true;}
       let selected:User|undefined;
       if(destination!=='dashboard'){
         const role=managementDepartment(destination)!.role;
