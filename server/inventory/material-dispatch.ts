@@ -5,7 +5,7 @@ import {materialDocumentPolicy} from '../../shared/material-documents.js';
 const quantity=z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/).transform(v=>new Decimal(v).toString());
 const optionalQuantity=z.union([quantity,z.literal(''),z.null()]);
 const line=z.object({
- key:z.uuid(),itemId:z.string().trim().min(1).max(200),description:z.string().trim().min(1).max(1000),
+ documentPolicyVersion:z.literal(2).optional(),key:z.uuid(),itemId:z.string().trim().min(1).max(200),description:z.string().trim().min(1).max(1000),
  unit:z.string().trim().min(1).max(40),out:quantity,sites:z.array(z.string().min(1).max(160)).min(1).max(1000),
 }).strict();
 const usage=z.object({siteId:z.string().min(1).max(160),lineKey:z.uuid(),used:optionalQuantity,issued:optionalQuantity.optional(),returned:optionalQuantity.optional()}).strict();

@@ -27,3 +27,13 @@ test('only explicit aliases into the final stock catalogue seed approved BOQ ide
  assert.equal(rows[0].itemId,'CH-PCS-HYB-1P-006');assert.equal(rows[0].out,'1');assert.equal(rows[0].unit,'piece');assert.equal(rows[1].itemId,'CH-BAT-LV-05 KW');assert.equal(rows[1].out,'2');assert.equal(rows[2].itemId,'','A commercial/non-final identity is not silently converted to stock.');
  assert.equal(fixedPreparationRows(source,catalogue,()=>String(++n))[0].itemId,'','No prefix guessing when the explicit alias is absent.');
 });
+
+test('approved variable rows prefill only their exact site BOQ with blank issue quantities and explicit aliases',async()=>{
+ const {variablePreparationRows}=await import('../shared/material-preparation.js');
+ const source={siteId:'s1',installation:true,customer:'UBL',items:[{key:'EARTH-WIRE',description:'10mm earthing cable',qty:'90',unit:'m'},{key:'CH-PCS-20',description:'20kW inverter',qty:'1',unit:'Each'}]};
+ const rows=variablePreparationRows([source],catalogue,()=>crypto.randomUUID(),{'EARTH-WIRE':'CH-CBL-ERT-10MM/1C-PK'});
+ assert.equal(rows.length,1);assert.equal(rows[0].itemId,'CH-CBL-ERT-10MM/1C-PK');assert.equal(rows[0].out,'');assert.equal(rows[0].unit,'m');assert.deepEqual(rows[0].sites,['s1']);
+ assert.equal(variablePreparationRows([{...source,installation:false}],catalogue,()=>crypto.randomUUID()).length,0);
+ const unresolved=variablePreparationRows([source],catalogue,()=>crypto.randomUUID());assert.equal(unresolved[0].itemId,'');assert.equal(unresolved[0].description,'10mm earthing cable');
+ const pooled=variablePreparationRows([source,{...source,siteId:'s2'}],catalogue,()=>crypto.randomUUID(),{'EARTH-WIRE':'CH-CBL-ERT-10MM/1C-PK'});assert.equal(pooled.length,1);assert.deepEqual(pooled[0].sites,['s1','s2']);assert.equal(pooled[0].out,'');
+});

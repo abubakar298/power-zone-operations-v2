@@ -26,7 +26,7 @@ test('rendered PDFs identify drafts/simulations, omit financial source fields an
 });
 test('long descriptions paginate with repeatable primary headers and a footer on every page',async()=>{
  const model=materialDocumentSamples().models['parent-site-internal-irr-simulation'];model.rows=Array.from({length:65},(_,i)=>({itemId:'CH-LONG-'+i,description:'A long physical material specification with colour and installation information. '.repeat(3),unit:'piece',issued:String(i+1),used:null,returned:null,group:'Miscellaneous'}));
- const result=await pages(materialDocumentPdf(model));assert.ok(result.length>2);result.forEach((p,i)=>{assert.equal(p.match(/Installation Reconciliation Report/g)?.length,1,'The page header must not be drawn twice by separate tables.');assert.match(p,/SIMULATION - NOT AN ISSUED DOCUMENT/);assert.match(p,new RegExp(`Page ${i+1} of ${result.length}`));});assert.match(result.join(' '),/CH-LONG-64/);
+ const result=await pages(materialDocumentPdf(model));assert.ok(result.length>2);result.forEach((p,i)=>{assert.equal(p.match(/Installation Reconciliation Report/g)?.length,1,'The page header must not be drawn twice by separate tables.');assert.match(p,/SIMULATION - NOT AN ISSUED DOCUMENT/);assert.match(p,new RegExp(`Page ${i+1} of ${result.length}`));assert.match(p,/Site engineer/);assert.match(p,/Warehouse return verified by/);});assert.match(result.join(' '),/CH-LONG-64/);
 });
 
 test('issued warehouse copies require committed state and preserve the posted dispatch quantities',async()=>{
@@ -48,4 +48,26 @@ test('purchase IGP prints committed final IDs and received quantities without pu
 test('material PDF quantities show at most two decimals without changing the source values',async()=>{
  const model=materialDocumentSamples().models['parent-site-internal-irr-simulation'];model.rows[0]={...model.rows[0],issued:'1.234567',used:'1.230000',returned:null};
  const text=(await pages(materialDocumentPdf(model))).join(' ');assert.match(text,/1\.23/);assert.doesNotMatch(text,/1\.234567|1\.230000/);assert.equal(model.rows[0].issued,'1.234567');
+});
+
+test('new variable sign-offs combine mixed materials while retaining the document split of older saved records',async()=>{
+ const fixture=materialDocumentSamples(),plan=structuredClone(fixture.plan);
+ if(!plan.variable)throw Error('Fixture variable draft required');
+ plan.variable.snapshot.lines.forEach((row:any)=>row.documentPolicyVersion=2);
+ const signoff=sitePlanPrintModel(plan,'customer-signoff'),irr=sitePlanPrintModel(plan,'irr');
+ assert.ok(signoff.rows.some(row=>row.description==='16mm lugs'));
+ assert.ok(!irr.rows.some(row=>row.description==='16mm lugs'));
+ assert.match(signoff.title,/Variable-Material Usage/);
+ const standaloneText=(await pages(materialDocumentPdf(signoff))).join(' ');assert.match(standaloneText,/Returned/);
+ const parent=sitePlanPrintModel({...plan,variableSupply:'parent-do'},'customer-signoff');
+ const parentText=(await pages(materialDocumentPdf(parent))).join(' ');assert.match(parentText,/Used/);assert.doesNotMatch(parentText,/Planned issue|Issued at site|Returned/);
+ assert.ok(sitePlanPrintModel(fixture.plan,'irr').rows.some(row=>row.description==='16mm lugs'),'Unversioned historical preparations keep their original evidence rule');
+});
+
+test('partial return worksheet shows OUT, used, expected and earlier verified IN with actual return blank',async()=>{
+ const {returnWorksheetPrintModel}=await import('../server/inventory/material-document-model.js');
+ const sample=materialDocumentSamples();
+ const data={draft:sample.parent,references:['CPZ-PDO-26-TEST'],reconciliation:{rows:[{itemId:'CH-CBL-AC-16MM/4C-PK',description:'AC cable',unit:'m',warehouseOut:'70',used:'30',expectedReturn:'40',verifiedWarehouseReturn:'10',remaining:'30'}]}};
+ const model=returnWorksheetPrintModel(data);assert.equal(model.stockPosting,false);assert.equal(model.rows[0].returned,null);assert.equal(model.rows[0].remainingReturn,'30');
+ const result=await pages(materialDocumentPdf(model));assert.equal(result.length,1);assert.match(result[0],/Actual return/);assert.match(result[0],/Still due/);assert.match(result[0],/signed and stamped/);
 });

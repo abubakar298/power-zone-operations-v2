@@ -15,3 +15,5 @@
 .inventory-document-links{display:grid;gap:12px;align-content:start}
 @media(max-width:1000px){.inventory-dashboard-buckets{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.inventory-dashboard-tools{grid-template-columns:1fr}.inventory-dashboard-buckets{gap:10px}.inventory-dashboard-buckets>.pz-button{padding:15px;min-height:150px}.inventory-dashboard-buckets>.pz-button>span{font-size:13px}}
+
+.inventory-stock-section th{background:var(--pz-selected-bg);color:var(--pz-primary);font-weight:600;text-align:left!important;padding:12px!important}.inventory-stock-matrix tbody td{vertical-align:top}.inventory-stock-matrix td small{display:block;margin-top:6px;color:var(--pz-muted)}
