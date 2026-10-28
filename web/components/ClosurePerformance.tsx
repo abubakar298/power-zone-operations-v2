@@ -1,5 +1,5 @@
 import { Decimal } from "decimal.js";
-import { money } from "../numbers.js";
+import { money, wholeMoney, decimalDisplay } from "../numbers.js";
 const ptNames = [
   "Solar Panels",
   "Structure",
@@ -14,10 +14,10 @@ const epcNames = [
   "Deliveries",
   "Installation Cost",
 ];
-export const markupPercent = (selling: any, cost: any) =>
+export const markupPercent = (selling: any, cost: any, places = 2) =>
   selling == null || cost == null || new Decimal(cost).lte(0)
     ? "Not available"
-    : money(new Decimal(selling).sub(cost).div(cost).mul(100).toString()) + "%";
+    : decimalDisplay(new Decimal(selling).sub(cost).div(cost).mul(100).toString(), places) + "%";
 export function installationDays(entry: any) {
   if (!entry?.start || !entry?.end) return null;
   const start = Date.parse(entry.start),
@@ -101,6 +101,8 @@ export function ClosureCostTables({
   onAggregate: (value: string) => void;
   onDetails: (value: boolean) => void;
 }) {
+  const money = wholeMoney;
+  const wholeMarkup = (selling: any, cost: any) => markupPercent(selling, cost, 0);
   const val = (v: string | null | undefined) =>
     v === null || v === undefined || v === "" ? null : new Decimal(v);
   const sum = (map: Record<string, string>, names: string[]) =>
@@ -148,16 +150,16 @@ export function ClosureCostTables({
       </td>
       <td className="pz-number">
         {totalRow && name === "Total"
-          ? markupPercent(job.selling, b)
-          : markupPercent(name === "BESS subtotal"
+          ? wholeMarkup(job.selling, b)
+          : wholeMarkup(name === "BESS subtotal"
               ? (job.phaseSelling && ["Inverter", "Batteries", "BMS"].every(p => job.phaseSelling[p] != null)
                   ? ["Inverter", "Batteries", "BMS"].reduce((v, p) => v.add(job.phaseSelling[p]), new Decimal(0)).toString() : null)
               : job.phaseSelling?.[name], b)}
       </td>
       <td className="pz-number">
         {totalRow && name === "Total"
-          ? markupPercent(job.selling, a?.toString())
-          : markupPercent(name === "BESS subtotal"
+          ? wholeMarkup(job.selling, a?.toString())
+          : wholeMarkup(name === "BESS subtotal"
               ? (job.phaseSelling && ["Inverter", "Batteries", "BMS"].every(p => job.phaseSelling[p] != null)
                   ? ["Inverter", "Batteries", "BMS"].reduce((v, p) => v.add(job.phaseSelling[p]), new Decimal(0)).toString() : null)
               : job.phaseSelling?.[name], a?.toString())}

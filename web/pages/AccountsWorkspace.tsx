@@ -13,7 +13,7 @@ import { lazy, useEffect, useRef, useState } from "react";
 import { api, type Session } from "../api.js";
 import { Button } from "../ui/Button.js";
 import { Field } from "../ui/Field.js";
-import { decimalDisplay, money } from "../numbers.js";
+import { decimalDisplay, wholeMoney as money } from "../numbers.js";
 import { InventoryWorkspace } from "./InventoryWorkspace.js";
 const Departments = lazy(() =>
   import("./Departments.js").then((module) => ({ default: module.Departments })),
@@ -40,7 +40,7 @@ function ptQuantityDescription(description?: string) {
   return description?.replace(/(^|[;\n]\s*)(\d[\d,]*(?:\.\d+)?)(?=\s+(?:(?:W|kW|No\.?|Nos\.?|m|meters?|pcs|units?)(?: costing basis)?\s+)?[x×]\s)/gi,
     (_match, prefix, quantity) => {
       const value = new Decimal(quantity.replaceAll(',', ''));
-      return prefix + decimalDisplay(value.toString(), Math.min(2, value.decimalPlaces()));
+      return prefix + decimalDisplay(value.toString(), 0);
     }) || "Description not recorded";
 }
 

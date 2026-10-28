@@ -1,6 +1,6 @@
 import { DocumentDownload } from "../components/DocumentPreview.js";
 import { displayUnit } from "../../server/boq/unit.js";
-import { money } from "../numbers.js";
+import { money as preciseMoney, wholeMoney } from "../numbers.js";
 import { confirmTransition } from "../confirm.js";
 import { quotationTypeLabel } from "../../server/orders/sale-type.js";
 import { useEffect, useState } from "react";
@@ -49,6 +49,7 @@ export function Departments({
   department: Department;
   initialRecordId?: string;
 }) {
+  const money = department === "Accounts" ? wholeMoney : preciseMoney;
   const [records, setRecords] = useState<RecordRow[]>([]),
     [bucket, setBucket] = useState(stages[department][0]),
     [selected, setSelected] = useState<RecordRow>(),
