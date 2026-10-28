@@ -362,6 +362,12 @@ export function Dashboard({
       return true;
     }catch(e){setDepartmentError(e instanceof Error?e.message:'Unable to open department.');return false;}finally{setSwitchingDepartment(false);}
   }
+  useEffect(()=>{
+    const raw=sessionStorage.getItem('pz:management-switch-intent');
+    if(!raw)return;
+    sessionStorage.removeItem('pz:management-switch-intent');
+    try{const intent=JSON.parse(raw);if(canViewDepartments(principalSession.user.role)&&intent.principalId===principalSession.user.id&&(intent.destination==='dashboard'||managementDepartment(intent.destination)))void selectDepartment(intent.destination,intent.area==='procurement'?'procurement':'operations');}catch{/* Ignore stale or invalid local navigation intent. */}
+  },[principalSession.user.id]);
   const isCoordinator = session.user.role === "Coordinator";
   const canUseLibrary = ["Coordinator", "Admin", "Management"].includes(
     session.user.role,

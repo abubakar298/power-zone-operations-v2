@@ -15,3 +15,7 @@
 
 /* Keep sidebar icons in one stable column, including wrapped labels. */
 .ob-sidebar nav .pz-button{display:grid;grid-template-columns:19px minmax(0,1fr);align-items:start;line-height:20px}.ob-sidebar nav .pz-button svg{margin-top:1px;flex-shrink:0}.ob-sidebar nav .pz-button:not(.is-active):hover{background:var(--pz-secondary-bg);color:var(--pz-text)}.ob-sidebar nav .pz-button:focus-visible{outline:2px solid var(--pz-primary);outline-offset:2px}
+
+/* Keep the same notification → View as → account order as the shared dashboard. */
+.ob-header-actions{margin-left:auto;display:flex;align-items:center;gap:16px;min-width:0}.ob-account-name{display:grid;grid-template-rows:18px 14px;align-content:start;text-align:left}.ob-header-actions .pz-department-switcher{flex-shrink:0}.ob-account .avatar{display:grid;place-items:center;flex-shrink:0}.ob-account .account-menu{z-index:70}
+@media(max-width:760px){.ob-header-actions{gap:8px}.ob-account-name{display:none}.ob-account .account-trigger{padding:5px;gap:0}.ob-account .account-trigger>svg{display:none}.ob-header-actions .pz-department-switcher>.pz-button{padding:8px 10px}.ob-header-actions>.pz-button{padding:8px}.ob-header{gap:8px}}

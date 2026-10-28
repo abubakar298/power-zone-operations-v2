@@ -1,3 +1,5 @@
+import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
+import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
 import {InventoryNavigation} from '../components/InventoryNavigation.js';
 import {useEffect,useRef,useState} from 'react';
 import {Decimal} from 'decimal.js';
@@ -72,7 +74,7 @@ export function WarehouseTransfers({session,onLogout}:{session:Session;onLogout:
  const sourcePrintable=!!detail&&access?.readWarehouses.includes(detail.sourceWarehouse);
  async function logout(){if(busy||!confirmLeaveWorkspace())return;try{await api('/auth/logout',{csrf:session.csrfToken,body:{}});onLogout();}catch(e){setError((e as Error).message);}}
  const errorBlock=error?<p role="alert" className="form-error">{error}</p>:null;
- return <div className="ob-shell"><header className="ob-header"><Button className="ob-mobile-toggle" aria-label="Open navigation" onClick={()=>setMobile(!mobile)}><Icon name="menu"/></Button><Brand compact/><div className="ob-header-identity"><strong>{session.user.displayName}</strong><small>{session.user.role}</small></div><Button disabled={busy} onClick={()=>void logout()}>Sign out</Button></header>
+ return <div className="ob-shell"><header className="ob-header"><Button className="ob-mobile-toggle" aria-label="Open navigation" onClick={()=>setMobile(!mobile)}><Icon name="menu"/></Button><Brand compact/><div className="ob-header-actions"><ManagementHeaderSwitcher session={session} value="inventory"/><WorkspaceAccountMenu name={session.user.displayName} label={'Inventory'} onSignOut={()=>void logout()} disabled={busy}/></div></header>
   <InventoryNavigation mode="dispatcher" mobile={mobile}/>
   <main className="ob-main"><div className="ob-page-title"><div><h1>Warehouse transfers</h1><p>Source dispatch and counted destination receipt</p></div>{!creating&&!selectedId&&access?.sourceWarehouses.length!==0&&<Button variant="primary" disabled={locked||!access?.enabled} onClick={()=>go(base+'/new')}>Create transfer</Button>}</div>
    {notice&&<p role="status" className="ob-success">{notice}</p>}{loading&&<p role="status">Loading warehouse transfer records…</p>}{access&&!access.enabled&&<p>Warehouse transfers will be available after the verified release migration.</p>}

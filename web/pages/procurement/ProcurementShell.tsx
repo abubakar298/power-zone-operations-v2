@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
+import {ManagementHeaderSwitcher} from "../../components/ManagementHeaderSwitcher.js";
 import { NotificationCenter } from "../../components/NotificationCenter.js";
 import { PurchaseRequests } from "./PurchaseRequests.js";
 import { MiscSites } from "./MiscSites.js";
@@ -115,12 +116,12 @@ export function ProcurementShell({ session, onLogout, viewingAs, onReturn }: { s
         <ProcSearch data={data} onGo={(v) => go(v)} onOpenRequest={openReq} />
         <div className="ops-hdr-r">
           <NotificationCenter session={session} onOpen={() => undefined} />
+          <ManagementHeaderSwitcher session={session} value="operations" operationsArea="procurement"/>
           <div className="ops-avatar" ref={menuRef}>
             <button type="button" aria-haspopup="menu" aria-expanded={menuOpen} aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>{initials || "PZ"}</button>
             {menuOpen && (
               <div className="ops-menu" role="menu">
                 <div className="who"><strong>{session.user.displayName}</strong><small>{session.user.email} · Procurement{viewingAs ? ` · viewed by ${viewingAs}` : ""}</small></div>
-                {onReturn && <button type="button" role="menuitem" onClick={onReturn}>{I.out}Return to Management</button>}
                 <button type="button" role="menuitem" onClick={() => go("account")}>{I.account}My account</button>
                 <button type="button" role="menuitem" onClick={() => { go("account"); window.dispatchEvent(new Event("pz:change-password")); }}>{I.key}Change password</button>
                 {!onReturn && <button type="button" role="menuitem" onClick={() => void logout()} disabled={busy}>{I.out}{busy ? "Signing out…" : "Sign out"}</button>}

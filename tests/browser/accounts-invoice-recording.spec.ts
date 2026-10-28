@@ -19,7 +19,7 @@ test('Accounts reviews delivered/completed documents and persists PT invoice ref
  await expect(page.getByRole('heading',{name:'Delivery Invoices',exact:true})).toBeVisible();
  await page.getByRole('row').filter({hasText:'Delivered invoice fixture'}).getByRole('button',{name:'Review',exact:true}).click();
  const dialog=page.getByRole('dialog');await expect(dialog.getByText('Submitted to Accounts',{exact:false})).toBeVisible();
- const download=page.waitForEvent('download');await dialog.getByRole('link',{name:'Signed DO.pdf',exact:true}).click();expect(await (await download).failure()).toBeNull();
+ const download=page.waitForEvent('download');await dialog.getByRole('link',{name:'Signed DO.pdf',exact:true}).click();const downloaded=await download;expect(await downloaded.failure()).toBeNull();expect((await readFile((await downloaded.path())!,'utf8'))).toContain(delivered);
  await dialog.getByRole('button',{name:'Record invoice',exact:true}).click();
  await dialog.getByLabel('PT invoice reference',{exact:true}).fill('PT-E2E-100');await dialog.getByLabel('Invoice date',{exact:true}).fill('2026-10-29');await dialog.getByLabel('Notes',{exact:true}).fill('Recorded in PT; signed document reviewed.');
  await dialog.getByRole('button',{name:'Save invoice record',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'PT invoice reference recorded.'})).toBeVisible();
@@ -43,6 +43,6 @@ test('Accounts reviews delivered/completed documents and persists PT invoice ref
  await expect(page.getByRole('navigation',{name:'Main',exact:true}).getByRole('button',{name:/^POs received/})).toBeVisible();
  await page.reload();await expect(page.getByRole('button',{name:'Power Zone — Dashboard',exact:true})).toContainText('Procurement');
  expect((await(await page.request.get('/api/auth/session')).json()).user.role).toBe('Management');
- await page.getByRole('button',{name:'Account menu',exact:true}).click();await page.getByRole('menuitem',{name:'Return to Management',exact:true}).click();await expect(page.getByRole('button',{name:'View as',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'View as',exact:true}).click();await page.getByRole('navigation',{name:'View department workspace'}).getByRole('button',{name:'Management',exact:true}).click();await expect(page.getByRole('button',{name:'View as',exact:true})).toBeVisible();
  }finally{await pool.end();}
 });

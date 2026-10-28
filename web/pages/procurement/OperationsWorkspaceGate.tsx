@@ -19,5 +19,5 @@ export function OperationsWorkspaceGate({ session, onLogout, viewingAs, onReturn
   if (me === null) return <div className="ops"><p className="ops-foot" style={{ padding: 24 }}>Loading…</p></div>;
   if(me==='error')return <section className="pz-panel pz-stack"><p role="alert">Unable to open your assigned workspace.</p><Button onClick={()=>{setMe(null);setAttempt(v=>v+1);}}>Try again</Button></section>;
   if (me.buyer && !(me.operationsBoard && location.pathname.startsWith('/operations/'))) return <ProcurementShell session={session} onLogout={onLogout} viewingAs={viewingAs} onReturn={onReturn} />;
-  return <Suspense fallback={<p role="status">Opening assigned Operations sites…</p>}>{onReturn&&<Button onClick={onReturn}>Return to Management</Button>}<OperationsBoard session={session} onLogout={onLogout}/></Suspense>;
+  return <Suspense fallback={<p role="status">Opening assigned Operations sites…</p>}><OperationsBoard session={session} onLogout={onLogout}/></Suspense>;
 }
