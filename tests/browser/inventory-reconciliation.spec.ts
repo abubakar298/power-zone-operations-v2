@@ -1,5 +1,7 @@
 import {openWorkspaceSection} from './navigation.js';
 import { test, expect } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import pg from "pg";
 test("Inventory workspace: job search, draft, attachment, immutable handoff and QC-gated Accounts closure", async ({
   page,
   request,
@@ -90,10 +92,11 @@ test("Inventory workspace: job search, draft, attachment, immutable handoff and 
     path: "test-results/inventory-reconciliation-mobile.png",
     fullPage: true,
   });
-  page.once("dialog", (d) => d.accept());
   await page
     .getByRole("button", { name: "Send to Accounts", exact: true })
     .click();
+  await page.getByRole("dialog", { name: "Send reconciliation to Accounts", exact: true })
+    .getByRole("button", { name: "Send reconciliation to Accounts", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Sent to Accounts");
   await expect(
     page.getByRole("button", { name: "Edit entry", exact: true }),
@@ -108,10 +111,30 @@ test("Inventory workspace: job search, draft, attachment, immutable handoff and 
     page.getByRole("cell", { name: "Sent to Accounts", exact: true }),
   ).toBeVisible();
   await openWorkspaceSection(page, 'Accounts workspace');
-  await page
-    .getByRole("button", { name: "Prepare closure", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Enter approved documents in PT", exact: true }).click();
+  await page.getByRole("button", { name: "Record PT entry", exact: true }).click();
+  await page.getByLabel("PT reference (required)", { exact: true }).fill("PT-BROWSER-IRR-320");
+  await page.getByLabel("Entry date (required)", { exact: true }).fill("2026-10-02");
+  await page.getByRole("button", { name: "Save PT entry", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("PT entry recorded");
+  await page.getByRole("button", { name: /^Recorded ·/ }).click();
+  await page.getByRole("button", { name: "Prepare job closure", exact: true }).click();
   await expect(page.getByRole("heading", { name: /CHP-320/ })).toBeVisible();
+  // First opening also verifies that redacted budget values render safely.
+  // Give only this disposable costing actor the same explicit capability as
+  // the native closure tests before testing persisted actual-cost submission.
+  const port=process.env.PZ_E2E_PORT??'3180';
+  const fixture=JSON.parse(await readFile(`.local/e2e-fixture-${port}.json`,'utf8'));
+  const control=JSON.parse(await readFile(`.local/e2e-control-${port}.json`,'utf8'));
+  const database=new URL(fixture.databaseUrl);
+  if(fixture.marker!=='power-zone-disposable-browser-fixture-v1'||fixture.pid!==control.pid||database.hostname!=='127.0.0.1'||database.pathname!=='/power_zone_test'||database.username!=='postgres')throw Error('Owned disposable costing fixture required.');
+  const pool=new pg.Pool({connectionString:fixture.databaseUrl,max:1});
+  try{
+    const current=(await pool.query("SELECT current_database() AS name,current_setting('data_directory') AS directory")).rows[0];
+    if(current.name!=='power_zone_test'||!/[\\/]pz-v2-test-[^\\/]+[\\/]db$/.test(current.directory))throw Error('Owned disposable database directory required.');
+    const granted=await pool.query("INSERT INTO restricted_cost_access(user_id,granted_reason) SELECT id,'Explicit isolated browser closure costing capability' FROM users WHERE email='inventory-pilot@example.test' AND role='Admin' AND active ON CONFLICT(user_id) DO NOTHING RETURNING user_id");
+    expect(granted.rowCount).toBe(1);
+  }finally{await pool.end();}
   for (const phase of [
     "Solar Panels",
     "Structure",
@@ -141,7 +164,9 @@ test("Inventory workspace: job search, draft, attachment, immutable handoff and 
   await page.getByRole('button',{name:'Save closure draft',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'Closure draft saved'})).toBeVisible();
   // Accounts cannot manufacture QC evidence by entering a free-text reference.
   // Native closure tests cover submission/approval with separately supplied QC files.
-  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Submit closure to Management',exact:true}).click();
+  await page.getByRole('button',{name:'Submit closure to Management',exact:true}).click();
+  await page.getByRole('dialog',{name:'Submit closure to Management',exact:true})
+    .getByRole('button',{name:'Submit closure to Management',exact:true}).click();
   await expect(page.getByRole('alert')).toContainText('await client acknowledgment and site photographs from QC');
   await expect(page.getByRole('button',{name:'Save closure draft',exact:true})).toBeEnabled();
 });

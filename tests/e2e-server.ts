@@ -1,10 +1,14 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { testDatabase } from "./database.js";
+import { cp, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const db = await testDatabase();
 const port = process.env.PZ_E2E_PORT ?? "3180";
 const origin = `http://127.0.0.1:${port}`;
+const fixturePath = `.local/e2e-fixture-${port}.json`;
 const env = {
   ...process.env,
   NODE_ENV: "test",
@@ -14,8 +18,14 @@ const env = {
   ADMIN_SETUP_TOKEN: "browser-test-setup-key-isolated-only",
 };
 let app: ReturnType<typeof spawn>;
+// Express intentionally rejects hidden path segments. The release rehearsal can
+// live beneath .rehearsal, so serve its identical built assets from a temp path.
+const assetRoot = await mkdtemp(join(tmpdir(), "pz-browser-assets-"));
+await cp(resolve("dist/web"), join(assetRoot, "dist/web"), { recursive: true });
+const serverEntry = resolve("dist/server/main.js");
 async function startApp() {
-  app = spawn(process.execPath, ["dist/server/main.js"], {
+  app = spawn(process.execPath, [serverEntry], {
+    cwd: assetRoot,
     env,
     stdio: "inherit",
   });
@@ -29,6 +39,16 @@ async function startApp() {
   throw new Error("Test API did not become healthy");
 }
 await startApp();
+// Private harness metadata only. Tests never accept DATABASE_URL or grant staff
+// access through an application endpoint or a production database connection.
+await import("node:fs/promises").then(async (fs) => {
+  await fs.writeFile(fixturePath, JSON.stringify({
+    marker: "power-zone-disposable-browser-fixture-v1",
+    pid: process.pid,
+    databaseUrl: db.url,
+  }), { mode: 0o600 });
+  await fs.chmod(fixturePath, 0o600);
+});
 let restarting = false;
 let generation = 0;
 process.on("SIGUSR2", () => {
@@ -62,6 +82,8 @@ async function stop() {
     await exited;
   }
   await db.close();
+  await rm(assetRoot, { recursive: true, force: true });
+  await import("node:fs/promises").then((fs) => fs.rm(fixturePath, { force: true }));
   process.exit(0);
 }
 process.on("SIGTERM", () => {

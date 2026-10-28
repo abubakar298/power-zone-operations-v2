@@ -77,11 +77,12 @@ test("Reviewed UBL batch imports once, retains survey stage and exposes evidence
   await page.getByRole("button", {name:"Send review-only IPO / PT sample to Accounts",exact:true}).click();
   await expect(page.getByRole("link",{name:"IPO / PT review sample · version 1"})).toBeVisible();
   await openWorkspaceSection(page, 'Accounts workspace');
-  await page.getByRole("button", {name:"IPOs to review 1",exact:true}).click();
   await page.getByRole("button", {name:"Review IPO & PT",exact:true}).click();
   await expect(page.getByRole("img",{name:"IPO and PT · page 1"})).toBeVisible();
   await page.getByLabel("Accounts review remarks / revision reason").fill("Review sample layout accepted");
   await page.getByRole("button",{name:"Approve IPO",exact:true}).click();
+  await page.getByRole("dialog",{name:"Approve IPO",exact:true})
+    .getByRole("button",{name:"Approve IPO",exact:true}).click();
   await expect(page.getByRole("status").filter({hasText:"Approved sample"})).toBeVisible();
   await openWorkspaceSection(page,'UBL Site Workflow');
   await expect(page.getByRole("button",{name:"Heads-up Received—Preparation Pending 10",exact:true})).toBeVisible();

@@ -259,7 +259,14 @@ export function AccountsWorkspace({
         pt: i?.ptReference ?? "",
         ptAttachmentId: i?.ptAttachmentId ?? null,
       };
-      setJob(j);
+      const submitted = j.history[0];
+      // Review the immutable submitted figures, even if the current source
+      // budget changed afterward. Drafts continue using their current basis.
+      setJob(submitted && ["Awaiting Management", "Closed"].includes(submitted.stage)
+        ? { ...j, ...submitted.snapshot, history: j.history,
+            phaseCostComparison: j.phaseCostComparison,
+            configurationComparison: j.configurationComparison }
+        : j);
       setActual(v.actual);
       setEpc(v.epc);
       setEpcAggregate(v.epcAggregate);
@@ -479,17 +486,17 @@ export function AccountsWorkspace({
   try {
     epcTotal = new Decimal(epcAggregate || "0");
     if (
-      phases.every((k) => actual[k] !== undefined && actual[k] !== "") &&
+      phases.every((k) => actual[k] !== null && actual[k] !== undefined && actual[k] !== "") &&
       epcAggregate !== ""
     )
       actualTotal = total(actual, phases).add(epcTotal);
   } catch {}
-  const budgetTotal = job
+  const budgetTotal = job && Object.values(job.budget).every(v => v !== null && v !== undefined && v !== "")
     ? Object.values(job.budget).reduce(
         (n: Decimal, v: any) => n.add(v),
         new Decimal(0),
       )
-    : new Decimal(0);
+    : null;
   if(managementReview&&job&&!['Awaiting Management','Closed'].includes(latest?.stage))return <section className="pz-stack"><Button variant="neutral" onClick={onBack}>Back to jobs awaiting closure</Button><p role="status">This closure is no longer awaiting your approval. Current status: {latest?.stage??'Not submitted'}.</p></section>;
   if(managementReview&&!job)return <section className="pz-stack"><Button variant="neutral" onClick={onBack}>Back to jobs awaiting closure</Button>{error?<p role="alert" className="form-error">{error}</p>:<p role="status">Loading the saved Accounts closure…</p>}</section>;
   return (
@@ -1123,7 +1130,7 @@ export function AccountsWorkspace({
                 </tr>
                 <tr>
                   <th>Total cost</th>
-                  <td className="pz-number">{money(budgetTotal.toString())}</td>
+                  <td className="pz-number">{budgetTotal ? money(budgetTotal.toString()) : "Not available"}</td>
                   <td className="pz-number">
                     {money(actualTotal?.toString())}
                   </td>
@@ -1131,12 +1138,12 @@ export function AccountsWorkspace({
                 <tr>
                   <th>Markup amount</th>
                   <td className="pz-number">
-                    {money(
+                    {budgetTotal && job.selling != null ? money(
                       new Decimal(job.selling).sub(budgetTotal).toString(),
-                    )}
+                    ) : "Not available"}
                   </td>
                   <td className="pz-number">
-                    {actualTotal
+                    {actualTotal && job.selling != null
                       ? money(
                           new Decimal(job.selling).sub(actualTotal).toString(),
                         )
@@ -1146,7 +1153,7 @@ export function AccountsWorkspace({
                 <tr>
                   <th>Markup % on cost</th>
                   <td className="pz-number">
-                    {budgetTotal.isZero()
+                    {!budgetTotal || budgetTotal.isZero() || job.selling == null
                       ? "Not available"
                       : money(
                           new Decimal(job.selling)
@@ -1157,7 +1164,7 @@ export function AccountsWorkspace({
                         ) + "%"}
                   </td>
                   <td className="pz-number">
-                    {!actualTotal || actualTotal.isZero()
+                    {!actualTotal || actualTotal.isZero() || job.selling == null
                       ? "Not available"
                       : money(
                           new Decimal(job.selling)

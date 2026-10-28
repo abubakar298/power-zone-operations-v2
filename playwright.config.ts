@@ -14,7 +14,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "mkdir -p .local && pnpm build && pnpm exec tsx tests/e2e-server.ts",
+      `mkdir -p .local && ${process.env.PZ_E2E_PREBUILT === "1" ? "" : "pnpm build && "}node --import tsx tests/e2e-server.ts`,
     url: `${origin}/api/health`,
     reuseExistingServer: false,
     timeout: 120000,

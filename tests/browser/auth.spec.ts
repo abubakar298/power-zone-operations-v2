@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
+import pg from 'pg';
 import {Decimal} from 'decimal.js';
 import {actors,login,seedQuote,survey,openSavedQuote,password,origin} from './release-fixtures.js';
 import {openWorkspaceSection,signOut} from './navigation.js';
@@ -198,8 +199,27 @@ test('Coordinator can embed a revision discount, save it, export all six formats
 
 test('Inventory, Accounts and Design retain isolated workspaces and cannot open commercial administration',async({page})=>{
  await actors(page.request);
+ const port=process.env.PZ_E2E_PORT??'3180';
+ const fixture=JSON.parse(await readFile(`.local/e2e-fixture-${port}.json`,'utf8'));
+ const control=JSON.parse(await readFile(`.local/e2e-control-${port}.json`,'utf8'));
+ if(fixture.marker!=='power-zone-disposable-browser-fixture-v1'||fixture.pid!==control.pid)throw Error('The owned browser fixture is unavailable.');
+ const database=new URL(fixture.databaseUrl);
+ if(database.hostname!=='127.0.0.1'||database.pathname!=='/power_zone_test'||database.username!=='postgres')throw Error('Browser role fixtures require the owned isolated local database.');
+ const pool=new pg.Pool({connectionString:fixture.databaseUrl,max:1});
+ try{
+  const current=(await pool.query("SELECT current_database() AS name,current_setting('data_directory') AS directory")).rows[0];
+  if(current.name!=='power_zone_test'||!/[\\/]pz-v2-test-[^\\/]+[\\/]db$/.test(current.directory))throw Error('Browser role fixtures require the owned disposable database directory.');
+  const granted=await pool.query(`INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by)
+   SELECT staff.id,'Lahore warehouse','dispatcher',owner.id FROM users staff CROSS JOIN users owner
+   WHERE staff.email='inventory-release@example.test' AND staff.role='Inventory' AND staff.active
+    AND owner.email='admin@example.test' AND owner.role='Admin' AND owner.active
+   ON CONFLICT(user_id,warehouse,capability) DO NOTHING RETURNING user_id`);
+  expect([0,1]).toContain(granted.rowCount);
+ }finally{await pool.end();}
  for(const role of ['Inventory','Accounts','Design']){
-  await login(page.request,role.toLowerCase()+'-release@example.test');await page.goto('/dashboard');await expect(page.locator('.account-trigger')).toContainText(role);
+  await login(page.request,role.toLowerCase()+'-release@example.test');
+  if(role==='Inventory')expect((await(await page.request.get('/api/material-dispatches/access')).json()).kind).toBe('dispatcher');
+  await page.goto('/dashboard');await expect(page.locator('.account-trigger')).toContainText(role);
   for(const path of ['/api/accounts','/api/backups','/api/commercial/standard-policy'])expect((await page.request.get(path)).status()).toBe(403);
   expect((await page.request.get('/api/departments/'+(role==='Inventory'?'Accounts':'Inventory'))).status()).toBe(403);
  }

@@ -101,14 +101,14 @@ export function ClosureCostTables({
   onAggregate: (value: string) => void;
   onDetails: (value: boolean) => void;
 }) {
-  const val = (v: string | undefined) =>
-    v === undefined || v === "" ? null : new Decimal(v);
+  const val = (v: string | null | undefined) =>
+    v === null || v === undefined || v === "" ? null : new Decimal(v);
   const sum = (map: Record<string, string>, names: string[]) =>
     names.every((n) => val(map[n]) !== null)
       ? names.reduce((s, n) => s.add(map[n]), new Decimal(0))
       : null;
   const costs: Record<string, string> = { ...actual, EPC: epcAggregate };
-  const budget = sum(job.budget, ptNames)!;
+  const budget = sum(job.budget, ptNames);
   const total = sum(costs, ptNames);
   const split = sum(epc, epcNames);
   const epcTotal = val(epcAggregate);
@@ -144,7 +144,7 @@ export function ClosureCostTables({
         )}
       </td>
       <td className="pz-number">
-        {a === null ? "Not entered" : money(a.sub(b).toString())}
+        {a === null ? "Not entered" : val(b) === null ? "Not available" : money(a.sub(b).toString())}
       </td>
       <td className="pz-number">
         {totalRow && name === "Total"
@@ -206,7 +206,7 @@ export function ClosureCostTables({
               <th>BESS subtotal</th>
               {cells(
                 "BESS subtotal",
-                sum(job.budget, ptNames.slice(2, 5))!.toString(),
+                sum(job.budget, ptNames.slice(2, 5))?.toString(),
                 sum(actual, ptNames.slice(2, 5)),
                 true,
               )}
@@ -219,7 +219,7 @@ export function ClosureCostTables({
           <tfoot>
             <tr>
               <th>Total</th>
-              {cells("Total", budget.toString(), total, true)}
+              {cells("Total", budget?.toString(), total, true)}
             </tr>
           </tfoot>
         </table>
@@ -306,7 +306,7 @@ export function ClosureCostTables({
                   <td className="pz-number">
                     {split === null
                       ? "Not entered"
-                      : money(split.sub(job.budget.EPC).toString())}
+                      : val(job.budget.EPC) === null ? "Not available" : money(split.sub(job.budget.EPC).toString())}
                   </td>
                   <td>Not available</td>
                   <td>Not available</td>
