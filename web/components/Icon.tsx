@@ -1,4 +1,7 @@
 const paths: Record<string,string> = {
+  bell:'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4',
+  target:'M22 12a10 10 0 1 1-10-10 10 10 0 0 1 10 10Z M18 12a6 6 0 1 1-6-6 6 6 0 0 1 6 6Z M14 12a2 2 0 1 1-2-2 2 2 0 0 1 2 2Z',
+  route:'M7 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z M23 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z M7 6h9a4 4 0 0 1 0 8H8a4 4 0 0 0 0 8h8',
   plus:'M12 5v14 M5 12h14',
   rates:'M4 3h16v18H4z M8 7h8 M8 11h2 M14 11h2 M8 15h2 M14 15h2',
   dashboard:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',

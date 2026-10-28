@@ -13,7 +13,7 @@ import {SiteDetail} from './SiteDetail.js';
 import {Vendors,Targets,Alerts} from './Workspaces.js';
 import {Batches} from './Batches.js';
 import './operations-board.css';
-const links=[['sites','site','Site updates'],['vendors','users','Vendors'],['alerts','shield','Alerts'],['targets','rates','Stage targets'],['batches','file','Batch planning']] as const;
+const links=[['sites','site','Site updates'],['vendors','users','Vendors'],['alerts','bell','Alerts'],['targets','target','Stage targets'],['batches','route','Batch planning']] as const;
 function route(){const parts=location.pathname.split('/').filter(Boolean);let id:string|undefined;try{id=parts[1]==='sites'&&parts[2]?decodeURIComponent(parts[2]):undefined;}catch{}return {page:parts[1]??'sites',id};}
 export function OperationsBoard({session,onLogout}:{session:Session;onLogout:()=>void}){
  const [data,setData]=useState<Board>(),[error,setError]=useState(''),[loading,setLoading]=useState(true),[where,setWhere]=useState(route),[search,setSearch]=useState(''),[type,setType]=useState(''),[team,setTeam]=useState(''),[stage,setStage]=useState(''),[mobile,setMobile]=useState(false),[notice,setNotice]=useState('');
