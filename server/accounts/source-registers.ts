@@ -1,3 +1,4 @@
+import {latestOperationsStages,projectAccountsSites} from './site-projection.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {z} from 'zod';
@@ -63,10 +64,10 @@ export class AccountsSourceRegisters {
   const generalReceipts=s.evidence.generalReceipts??[];
   return {generalReceipts,asOf,sourceAsOf:record.source_date,sourceVersion:record.version,readOnlySource:true,rows,customers:customerTotals(rows,asOf),queues:invoicingQueues(s.registers),verification:{sourceModified:s.evidence.sourceModified,scope:'Reviewed source invoices; unknown original invoice amounts remain missing.'}};
  }
- async sites(actor:string){const r=await this.latest(actor);return {...r.snapshot.sites,sourceVersion:r.version,readOnlySource:true};}
+ async sites(actor:string){const r=await this.latest(actor);return {...projectAccountsSites(r.snapshot,await latestOperationsStages(this.pool)),sourceVersion:r.version,readOnlySource:true};}
  async summary(actor:string){
   await this.access(actor);
   const r=(await this.pool.query('SELECT version,source_sha256,snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0];
-  return r?{asOf:r.snapshot.sites.asOf,importId:r.source_sha256,sourceVersion:r.version,counts:r.snapshot.sites.counts}:null;
+  return r?{asOf:r.snapshot.sites.asOf,importId:r.source_sha256,sourceVersion:r.version,counts:projectAccountsSites(r.snapshot,await latestOperationsStages(this.pool)).counts}:null;
  }
 }

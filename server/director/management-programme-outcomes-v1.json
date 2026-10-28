@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "sourceDate": "2026-10-26",
+  "sourceName": "Frozen reviewed UBL cancellation outcomes",
+  "sourceFile": "inventory-preview/ubl-cancelled-outcomes.json",
+  "sourceSha256": "67904c40ae03a22e4eb0040cb56feb9328d6127c1515ad8d7c8b67ebefcd7856",
+  "identitySourceFile": "inventory-preview/ubl-delivery-register.json",
+  "identitySourceSha256": "ea922e3dd7a5c30494398f9f377179c519bd6771a204396cbe3fc776f338dfeb",
+  "frozenHandoff": "20261026T204031Z",
+  "scope": "Read-model evidence only; no replacement links, transactions or source rows are written. Unconfirmed wording is preserved verbatim.",
+  "entries": [
+    {
+      "sourceKey": "UBL:UPS:19/250",
+      "expectedOriginalPo": "POF252624658",
+      "outcome": "Cancelled. No replacement confirmed."
+    },
+    {
+      "sourceKey": "UBL:UPS:21/250",
+      "expectedOriginalPo": "POF252624862",
+      "outcome": "Cancelled. No replacement confirmed."
+    },
+    {
+      "sourceKey": "UBL:UPS:36/250",
+      "expectedOriginalPo": "POF252629300",
+      "outcome": "Transferred to Pangrio · active Atif order 124/250, PO POF262703034. Accounts reference 66/250."
+    },
+    {
+      "sourceKey": "UBL:UPS:54/250",
+      "expectedOriginalPo": "POF252630626",
+      "outcome": "Abbot Road appears again under active order 173/250, PO POF262707685. Replacement link needs confirmation."
+    },
+    {
+      "sourceKey": "UBL:UPS:55/250",
+      "expectedOriginalPo": "POF252630632",
+      "outcome": "Sabzi Mandi Pir Mahal appears under active order 97/250, PO POF252636783. Replacement link needs confirmation."
+    },
+    {
+      "sourceKey": "UBL:UPS:128/250",
+      "expectedOriginalPo": "POF262700917",
+      "outcome": "Cancelled. No replacement confirmed."
+    },
+    {
+      "sourceKey": "UBL:UPS:154/250",
+      "expectedOriginalPo": "POF262704406",
+      "outcome": "Reissued as active order 182/250 · PO POF262709638."
+    },
+    {
+      "sourceKey": "UBL:UPS:159/250",
+      "expectedOriginalPo": "POF262704860",
+      "outcome": "Reissued as active order 189/250 · PO POF262710851."
+    },
+    {
+      "sourceKey": "UBL:UPS:166/250",
+      "expectedOriginalPo": "POF262705416",
+      "outcome": "Rangeel Pur appears again under active order 205/250, PO POF262711838. Replacement link needs confirmation."
+    }
+  ]
+}

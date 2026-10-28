@@ -1,3 +1,4 @@
+import {managementProgrammes} from '../director/management-programmes.js';
 import { Router, type RequestHandler } from "express";
 import {invoiceRegister,recordInvoiceEntry,invoiceEntrySchema} from './invoice-entries.js';
 import {ptEntrySchema} from './pt-entries.js';
@@ -37,6 +38,7 @@ export function accountsHttp(
     const [overview,siteImport]=await Promise.all([repo.overview(actor),sources.summary(actor)]);
     res.json({...overview,siteImport});
   });
+  r.get('/programmes',async(req,res)=>res.json(await managementProgrammes(repo.pool,req.authSession!.user.id,true)));
   r.get('/closure-queue',async(req,res)=>res.json({closures:await repo.managementClosureQueue(req.authSession!.user.id)}));
   r.get('/billing',async(req,res)=>res.json(await sources.billing(req.authSession!.user.id)));
   r.get('/invoice-entries',async(req,res)=>res.json(await invoiceRegister(repo.pool,req.authSession!.user.id)));

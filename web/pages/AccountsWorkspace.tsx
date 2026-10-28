@@ -1,3 +1,4 @@
+import {ProgrammeDashboard} from '../components/ProgrammeDashboard.js';
 import {isClosurePreparationJob} from '../../shared/accounts-closure-queue.js';
 import {ClosureComparison} from "../components/ClosureComparison.js";
 import {AccountsImportedSites} from './AccountsImportedSites.js';
@@ -80,6 +81,7 @@ export function AccountsWorkspace({
     [ptEntryReference,setPtEntryReference]=useState(""),
     [ptEntryDate,setPtEntryDate]=useState(new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Karachi"}).format(new Date())),
     [ptEntryNotes,setPtEntryNotes]=useState(""),
+    [programmeSiteKey,setProgrammeSiteKey]=useState<string>(),
     [tab, setTab] = useState(
       initialRecordId ? "IPO Review" : initialTab||"My Workspace",
     ),
@@ -506,10 +508,11 @@ export function AccountsWorkspace({
       {!managementReview && <div className="pz-action-row">
         {['Job Closure','Awaiting Management','Closed Jobs'].includes(tab)&&!job&&<Field id="closure-status" label="Job status"><select id="closure-status" value={tab} onChange={e=>navigate(e.target.value)}><option value="Job Closure">Ready / In preparation</option><option>Awaiting Management</option><option value="Closed Jobs">Closed</option></select></Field>}
       </div>}
-      {!["My Workspace","Physical Documents","IPOs Received","IPOs Recorded in PT","Approved Documents","Inventory Recorded in PT","Job Closure","Awaiting Management","Closed Jobs","Project Sites","IPO Review","Invoicing","Receivables"].includes(tab)&&<h2>{tab==="My Workspace"?"Work queues":tab}</h2>}
+      {!["My Workspace","Physical Documents","IPOs Received","IPOs Recorded in PT","Approved Documents","Inventory Recorded in PT","Job Closure","Awaiting Management","Closed Jobs","Project Sites","Programme Dashboard","IPO Review","Invoicing","Receivables"].includes(tab)&&<h2>{tab==="My Workspace"?"Work queues":tab}</h2>}
       {doDocument&&<AccountsRecordDialog title="Approved Delivery DO" reference={doDocument.record.number??jobLabel(doDocument.record)} subtitle="Delivery-only site" onClose={()=>setDoDocument(undefined)}><section className="accounts-record-section"><h3>Inventory handoff</h3><p>Approved DO · version {doDocument.record.version}. No installation IRR is required for this delivery-only site.</p></section><section className="accounts-record-section"><h3>Approved documents</h3>{doDocument.loading?<p role="status">Loading DO evidence…</p>:doDocument.error?<p role="alert" className="form-error">{doDocument.error}</p>:doDocument.files?.length?<ul className="accounts-file-list">{doDocument.files.map((file:any)=><li key={file.id}><span>{file.filename}</span><a className="pz-button pz-button--secondary" href={'/api/inventory-reconciliation/files/'+file.id} target="_blank" rel="noreferrer">View / Download</a></li>)}</ul>:<p>No digital files are attached to this approved handoff.</p>}</section></AccountsRecordDialog>}
       {ptDocument&&<AccountsRecordDialog title="Record PT Entry" reference={ptDocument.number??jobLabel(ptDocument)} onClose={()=>void closePtEntry()}><p>Confirm the document has been entered in PT, then save its reference here.</p><div className="pz-form-grid"><Field id="pt-entry-reference" label="PT reference (required)"><input id="pt-entry-reference" value={ptEntryReference} onChange={e=>setPtEntryReference(e.target.value)}/></Field><Field id="pt-entry-date" label="Entry date (required)"><input id="pt-entry-date" type="date" value={ptEntryDate} onChange={e=>setPtEntryDate(e.target.value)}/></Field></div><Field id="pt-entry-notes" label="PT entry notes"><textarea id="pt-entry-notes" value={ptEntryNotes} onChange={e=>setPtEntryNotes(e.target.value)}/></Field><Button variant="primary" loading={busy} onClick={()=>void savePtEntry()}>Save PT entry</Button>{error&&errorAction==='pt-entry'&&<p role="alert" className="form-error">{error}</p>}</AccountsRecordDialog>}
-      {tab === "Project Sites" && <><header className="accounts-panel-heading accounts-subpage-heading"><h2>Project Sites</h2><Button variant="neutral" onClick={()=>navigate("My Workspace")}>Back to Dashboard</Button></header><AccountsImportedSites onOpenIpo={id=>void openIpo(id)}/></>}
+      {tab === "Programme Dashboard" && <ProgrammeDashboard userId={session.user.id} endpoint="/accounts-workspace/programmes" onOpenSite={row=>{if(row.recordKey?.startsWith('ipo:'))void openIpo(row.recordKey.slice(4));else{setProgrammeSiteKey(row.sourceKey);navigate('Project Sites');}}}/>}
+      {tab === "Project Sites" && <><header className="accounts-panel-heading accounts-subpage-heading"><h2>Project Sites</h2><Button variant="neutral" onClick={()=>navigate("My Workspace")}>Back to Dashboard</Button></header><AccountsImportedSites initialSiteKey={programmeSiteKey} onOpenIpo={id=>void openIpo(id)}/></>}
       {tab === "Physical Documents" && <AccountsPhysicalDocuments/>}
       {tab === "Receivables" && <AccountsBilling mode="receivables"/>}
       {tab === "Project checkpoints" && (
