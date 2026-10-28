@@ -43,6 +43,7 @@ test('physical warehouse dispatch posts once, supports partial trips, protects s
   const prepared=await stock.issue(f.reviewer,command);assert.equal(prepared.stockPosted,false);assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'7','Preparing and printing a DO does not issue stock.');
   const first=await issueSigned(f.reviewer,command);assert.equal(first.stockPosted,true);assert.deepEqual(await issueSigned(f.reviewer,command),first);
   assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'5');
+  const postedLedger=await stock.ledger(f.reviewer,{warehouse:'Lahore warehouse',direction:'out'});assert.equal(postedLedger.total,2);assert.equal(Number(postedLedger.events.find((e:any)=>e.kind==='dispatch-out')?.outgoing),2);
   assert.equal((await stock.dispatch(keeper,first.id)).number,first.number);
   await assert.rejects(issueSigned(f.reviewer,{...command,lines:[{...command.lines[0],quantity:'3'}]}),/different warehouse dispatch/);
   await assert.rejects(issueSigned(f.reviewer,{...command,requestKey:randomUUID()}),/balance changed/);

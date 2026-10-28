@@ -1,10 +1,9 @@
+import {StockPosition} from '../inventory-approved/StockPosition.js';
 import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
 import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
 import {navigateInventory} from '../inventory-approved/navigation.js';
-import finalStockIds from '../../data/final-stock-item-ids.json' with {type:'json'};
-import {stockSection,compareStockItems} from '../../shared/warehouse-stock-order.mjs';
 import {decimalDisplay} from '../numbers.js';
-import {Fragment,useEffect,useState} from 'react';
+import {useEffect,useState} from 'react';
 import {Decimal} from 'decimal.js';
 import {api,type Session} from '../api.js';
 import {Brand} from '../components/Brand.js';
@@ -82,13 +81,6 @@ export function InventoryHome({session,onLogout}:{session:Session;onLogout:()=>v
 
 function PurchaseList({rows,warehouses,session,search,onSearch,onReceived}:{rows?:Purchase[];warehouses:string[];session:Session;search:string;onSearch:(value:string)=>void;onReceived:()=>void}){return <div className="pz-stack"><label className="inventory-search">Search PRAs<input type="search" value={search} onChange={e=>onSearch(e.target.value)}/></label>{rows===undefined?<p role="status">Loading purchase receipt advices…</p>:<><div className="pz-table-scroll"><table className="ob-table"><thead><tr><th>Document</th><th>Expected date</th><th>Delivery to</th><th>Items due</th><th>Next Action</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><strong>{r.number}</strong><small>{r.title}</small><small>{r.orderReference}</small></td><td>{day(r.expectedOn)}</td><td>{r.deliveryTo}</td><td>{r.lines.filter(l=>new Decimal(l.due).gt(0)).map(l=><div key={l.itemKey}><strong>{shown(l.due)} {l.unit}</strong><small>{l.name}</small></div>)}</td><td><PurchaseReceiving requestId={r.id} warehouses={warehouses} session={session} onReceived={onReceived}/></td></tr>)}</tbody></table></div>{!rows.length&&<p>No approved purchases are awaiting receipt.</p>}</>}</div>;}
 
-function StockPosition({warehouses,revision}:{warehouses:string[];revision:number}){
- const [referenceOnly,setReferenceOnly]=useState(false);
- const [data,setData]=useState<Record<string,Position[]>>({}),[error,setError]=useState(''),[search,setSearch]=useState(''),[warehouse,setWarehouse]=useState(''),[busy,setBusy]=useState(true);
- useEffect(()=>{let live=true;setBusy(true);void (async()=>{const rows:[string,Position[]][]=[];let reference=false;for(const w of warehouses){const value=await api<{positions:Position[];referenceOnly?:boolean}>('/material-dispatches/stock?warehouse='+encodeURIComponent(w));rows.push([w,value.positions]);reference=reference||!!value.referenceOnly;}if(live)setReferenceOnly(reference);return rows;})().then(rows=>{if(live){setData(Object.fromEntries(rows));setError('');}}).catch(e=>{if(live)setError(e.message);}).finally(()=>{if(live)setBusy(false);});return()=>{live=false;};},[warehouses.join('|'),revision]);
- const chosen=warehouse?[warehouse]:warehouses,items=[...new Map(chosen.flatMap(w=>(data[w]??[]).map(p=>[p.itemId+'|'+p.unit,p] as const))).values()].map(p=>{const variant=finalStockIds.rows.find(r=>r.itemId===p.itemId)?.category??'';return {...p,variant,section:stockSection(variant,p.itemId,p.description)};}).filter(p=>`${p.itemId} ${p.description} ${p.section}`.toLowerCase().includes(search.toLowerCase())).sort(compareStockItems);
- return <section className="pz-panel pz-stack"><div className="inventory-dashboard-tools"><label>Find an item<input type="search" value={search} onChange={e=>setSearch(e.target.value)}/></label><label>Warehouse<select value={warehouse} onChange={e=>setWarehouse(e.target.value)}><option value="">All warehouses</option>{warehouses.map(w=><option key={w}>{w}</option>)}</select></label></div>{referenceOnly&&<p>Imported closing balances are shown for reference. Warehouse issuance activation is pending.</p>}{error&&<p role="alert" className="form-error">{error}</p>}{busy?<p role="status">Loading warehouse balances…</p>:<div className="pz-table-scroll"><table className="ob-table inventory-stock-matrix"><thead><tr><th rowSpan={2}>ITEM ID / MATERIAL</th><th rowSpan={2}>UNIT</th>{chosen.map(w=><th key={w} colSpan={4}>{w}</th>)}</tr><tr>{chosen.flatMap(w=>['OP','IN','OUT','CL'].map(label=><th key={w+label}>{label}</th>))}</tr></thead><tbody>{items.map((item,index)=><Fragment key={item.itemId+'|'+item.unit}>{(index===0||items[index-1].section!==item.section)&&<tr className="inventory-stock-section"><th colSpan={2+chosen.length*4} scope="rowgroup">{item.section}</th></tr>}<tr><td><strong>{item.itemId}</strong><small>{item.description}</small></td><td>{item.unit}</td>{chosen.flatMap(w=>{const p=data[w]?.find(p=>p.itemId===item.itemId&&p.unit===item.unit);return [p?.opening,p?.totalIn,p?.totalOut,p?.currentClosing].map((value,index)=><td key={w+index} className={index===3&&p?.negative?'inventory-negative':''}>{p?shown(value):'—'}</td>);})}</tr></Fragment>)}</tbody></table></div>}{!busy&&!items.length&&<p>No warehouse balances match these filters.</p>}</section>;
-}
 
 type Minimum={itemId:string;unit:string;minimum:string;version:number};
 function MinimumStock({warehouses,session,revision}:{warehouses:string[];session:Session;revision:number}){

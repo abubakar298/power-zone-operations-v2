@@ -1,5 +1,6 @@
 import {deferDispatch,dispatchPosted} from './signed-dispatch.js';
 import {requireOpenParent} from './parent-open.js';
+import {stockLedger} from './stock-ledger.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -30,6 +31,21 @@ export class MaterialStockRepository{
  constructor(private pool:Pool){this.drafts=new MaterialDraftRepository(pool);}
  private async scope(actor:string,warehouse:string,c:Pool|PoolClient=this.pool,printing=false){return requireWarehouseAccess(actor,warehouse,c,printing);}
  private async authority(c:PoolClient,warehouse:string,source:string,version:number){return lockWarehouseAuthority(c,warehouse,source,version);}
+ async ledger(actor:string,input:unknown){return stockLedger(this.pool,actor,input);}
+ async overview(actor:string){
+  const {warehouses}=await this.drafts.warehouses(actor);
+  const authorities=(await this.pool.query('SELECT warehouse,source_sha256 FROM inventory_warehouse_authority_current WHERE warehouse=ANY($1::text[])',[warehouses])).rows;
+  const reference=(await this.pool.query("SELECT source_sha256 FROM inventory_warehouse_sources ORDER BY (coalesce(metadata->>'canonicalIds','') ~ '^[1-9][0-9]*$') DESC,created_at DESC,source_sha256 LIMIT 1")).rows[0]?.source_sha256;
+  const sources=new Map(warehouses.map(w=>[w,authorities.find(a=>a.warehouse===w)?.source_sha256??reference]));
+  const positions:Record<string,unknown[]> = Object.fromEntries(warehouses.map(w=>[w,[]]));
+  for(const source of new Set([...sources.values()].filter(Boolean))){
+   for(const p of await warehousePositions(this.pool,source)){
+    const w=p.baseline.warehouse;if(!warehouses.includes(w)||sources.get(w)!==source)continue;
+    positions[w].push({ledgerKey:p.ledgerKey,itemId:p.baseline.itemId,description:p.baseline.description,unit:p.baseline.unit,opening:p.baseline.opening,totalIn:p.totalIn,totalOut:p.totalOut,currentClosing:p.currentClosing,ledgerRevision:p.ledgerRevision,unknown:p.currentClosing===null,negative:p.currentClosing!==null&&new Decimal(p.currentClosing).lt(0)});
+   }
+  }
+  return {positions,referenceOnly:warehouses.some(w=>!authorities.some(a=>a.warehouse===w))};
+ }
  async positions(actor:string,warehouse:string){
   await this.scope(actor,warehouse);
   const authority=(await this.pool.query('SELECT warehouse,version,source_sha256,state FROM inventory_warehouse_authority_current WHERE warehouse=$1',[warehouse])).rows[0];

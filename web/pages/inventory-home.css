@@ -10,10 +10,30 @@
 .inventory-home-main label{display:grid;gap:8px;align-content:start;font-size:13px;font-weight:550;min-width:0}
 .inventory-home-main .inventory-search{max-width:520px}
 .inventory-dashboard-list>.ob-section-title>span{font-size:13px;color:var(--pz-muted);line-height:24px}
-.inventory-stock-matrix{min-width:900px}.inventory-stock-matrix th:not(:first-child),.inventory-stock-matrix td:not(:first-child){text-align:right;min-width:75px}.inventory-stock-matrix thead tr:first-child th{text-align:center}.inventory-stock-matrix thead tr:first-child th:first-child{text-align:left;min-width:250px}
+
 .inventory-negative{color:var(--pz-danger,#a92f44);font-weight:600}
 .inventory-document-links{display:grid;gap:12px;align-content:start}
 @media(max-width:1000px){.inventory-dashboard-buckets{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.inventory-dashboard-tools{grid-template-columns:1fr}.inventory-dashboard-buckets{gap:10px}.inventory-dashboard-buckets>.pz-button{padding:15px;min-height:150px}.inventory-dashboard-buckets>.pz-button>span{font-size:13px}}
 
 .inventory-stock-section th{background:var(--pz-selected-bg);color:var(--pz-primary);font-weight:600;text-align:left!important;padding:12px!important}.inventory-stock-matrix tbody td{vertical-align:top}.inventory-stock-matrix td small{display:block;margin-top:6px;color:var(--pz-muted)}
+
+.stock-position-panel{padding:16px!important;min-width:0;max-width:100%}
+.stock-matrix-container{container-type:inline-size;width:100%;max-width:100%}
+.inventory-stock-matrix{width:100%;min-width:0!important;table-layout:fixed;font-size:clamp(8px,1cqw,11px);font-variant-numeric:tabular-nums}
+.inventory-stock-matrix.ob-table th,.inventory-stock-matrix.ob-table td{min-width:0!important;padding:8px 1px;vertical-align:top;white-space:normal}
+.inventory-stock-matrix.ob-table th:not(:first-child),.inventory-stock-matrix.ob-table td:not(:first-child){text-align:center}
+.inventory-stock-matrix.ob-table thead th{font-size:inherit;overflow-wrap:anywhere}
+.inventory-stock-matrix.ob-table td:first-child{font-size:clamp(9px,1.15cqw,12px);overflow-wrap:anywhere;padding-right:6px}
+.inventory-stock-matrix.ob-table td small{font-size:clamp(8px,1cqw,11px);line-height:1.5;margin-top:5px}
+.stock-ledger-link{font:inherit;color:inherit;background:none;border:0;border-radius:3px;padding:0;margin:0!important;min-width:0;cursor:pointer;text-align:inherit;line-height:inherit}
+.stock-ledger-link:hover{text-decoration:underline;color:var(--pz-primary)}
+.stock-ledger-link:focus-visible{outline:2px solid var(--pz-primary);outline-offset:2px}
+.inventory-stock-matrix td:not(:first-child) .stock-ledger-link{white-space:nowrap;font-size:clamp(7px,.85cqw,10px);letter-spacing:-.02em}
+.stock-ledger-panel>label{max-width:240px}.stock-ledger-panel td{vertical-align:top}.stock-ledger-panel td small{display:block;margin-top:5px}
+.stock-ledger-events{font-size:12px}.stock-ledger-panel .ob-section-title{align-items:flex-start;gap:16px}
+
+.inventory-stock-matrix tbody td:nth-child(4n+3){border-left:1px solid var(--pz-border)}
+.inventory-stock-matrix tbody td:nth-child(4n+6){font-weight:650}
+
+.parent-operations-batches{border:1px solid var(--pz-border);border-radius:12px;padding:16px;background:var(--pz-selected-bg)}.parent-operations-batches summary{font-weight:600;cursor:pointer}.parent-operations-batches .ob-section-title{align-items:flex-start;gap:16px}
