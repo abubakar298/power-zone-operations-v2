@@ -1,0 +1,25 @@
+import {test,expect} from '@playwright/test';
+test('regional resource directories keep the Operations shell and save distinct resources',async({page})=>{
+ const origin=`http://127.0.0.1:${process.env.PZ_E2E_PORT??'3180'}`,password='browser-test-passphrase-298';
+ expect((await page.request.post('/api/auth/setup',{headers:{Origin:origin},data:{email:'resources-owner@example.test',displayName:'Resources owner',password,setupToken:'browser-test-setup-key-isolated-only'}})).status()).toBe(201);
+ expect((await page.request.post('/api/auth/login',{headers:{Origin:origin},data:{email:'resources-owner@example.test',password}})).ok()).toBeTruthy();
+ await page.goto('/operations/members');
+ await expect(page.getByRole('heading',{name:'Team members',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Add team member',exact:true}).click();
+ await page.getByLabel('Name',{exact:true}).fill('Central electrician');
+ await page.getByLabel('Region',{exact:true}).first().selectOption('central');
+ await page.getByRole('button',{name:'Save',exact:true}).click();
+ await expect(page.getByRole('cell',{name:'Central electrician Available'})).toBeVisible();
+ await page.getByRole('navigation').getByRole('button',{name:'Vehicles',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Vehicles',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Add vehicle',exact:true}).click();
+ await page.getByLabel('Vehicle / registration',{exact:true}).fill('Karachi van');
+ await page.getByLabel('Region',{exact:true}).first().selectOption('south');
+ await page.getByRole('button',{name:'Save',exact:true}).click();
+ await expect(page.getByText('Karachi van',{exact:true})).toBeVisible();
+ await expect(page.getByText('Central electrician',{exact:true})).toHaveCount(0);
+ await page.getByRole('navigation').getByRole('button',{name:'Vendors',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Vendors',exact:true})).toBeVisible();
+ await expect(page.getByText('Karachi van',{exact:true})).toHaveCount(0);
+ await page.screenshot({path:'test-results/operations-regional-directories.png',fullPage:true});
+});

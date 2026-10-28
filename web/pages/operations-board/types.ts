@@ -2,7 +2,7 @@ import type {WorkflowSite,FileReference} from '../../../server/operations-board/
 export type Site=WorkflowSite&{version:number};
 export type Access={qcDelegated?:boolean;kind:'owner'|'head'|'lead'|'qc';team:'central'|'south'|null;name:string};
 export type Board={sites:Site[];access:Access};
-export type Vendor={id:string;version:number;name:string;phone:string;roles:string[];active:boolean;internal?:boolean};
+export type Vendor={id:string;version:number;name:string;phone:string;roles:string[];active:boolean;team?:'central'|'south'|null;kind?:'vendor'|'member'|'vehicle';internal?:boolean};
 export type Evidence=FileReference;
 export const normalise=(s:Site):Site=>({...s,history:s.history??[],accounts:s.accounts??[],blockers:s.blockers??[],planningBatches:s.planningBatches??[]});
 export const bucket=(s:Site)=>s.completed||s.qc?.signoff||s.qc?.handover||s.stage==='delivered'&&s.installation===false?'completed':s.stage;

@@ -9,7 +9,7 @@ const entry=z.object({date:z.iso.date(),evidence:fileReferenceSchema.optional(),
 const delivery=z.object({deliveryDate:z.iso.date(),signedDo:fileReferenceSchema,materialPhoto:fileReferenceSchema,partial:z.boolean(),documentId:z.string().optional()});
 const storedWorkflowSiteSchema=sourceSiteSchema.and(z.object({
  dispatchDate:z.iso.date().optional(),planSavedAt:z.string().optional(),deliveryDate:z.iso.date().optional(),deliveryRecordedAt:z.string().optional(),stageStartedAt:z.string().optional(),
- assignments:z.record(z.string(),z.string()).optional(),qc:z.record(z.string(),entry).optional(),qcJob:entry.optional(),
+ assignments:z.record(z.string(),z.string()).optional(),teamMembers:z.array(z.object({id:z.uuid(),name:z.string()})).optional(),qc:z.record(z.string(),entry).optional(),qcJob:entry.optional(),
  planningBatches:z.array(z.object({id:z.string(),number:z.string().optional(),kind:z.enum(['delivery','labour','both']),stops:z.array(z.object({siteId:z.string(),kind:z.enum(['delivery','labour','both']).optional(),plannedDate:z.iso.date(),start:z.string(),end:z.string()}).passthrough())}).passthrough()).default([]),
  deliveryReturns:z.array(z.object({scope:z.enum(['full','partial']),date:z.iso.date().nullable(),dateUnknown:z.boolean(),warehouse:z.string(),reference:z.string(),reason:z.string(),recordedAt:z.string()}).passthrough()).default([]),
  deliveries:z.array(delivery).optional(),history:history.default([]),accounts:z.array(z.record(z.string(),z.unknown())).default([]),
@@ -27,7 +27,7 @@ export type WorkflowSite=z.infer<typeof workflowSiteSchema>;
 export type FileReference=z.infer<typeof fileReferenceSchema>;
 export type Entry=z.infer<typeof entry>;
 export type Delivery=z.infer<typeof delivery>;
-export type Planning={dispatchDate:string;assignments:Record<string,string>};
+export type Planning={dispatchDate:string;assignments:Record<string,string>;teamMembers?:{id:string;name:string}[]};
 export const qcType=(site:WorkflowSite)=>site.projectType??(/solar/i.test(String(site.type??''))?'solar-bess':/ups/i.test(String(site.type??''))?'ups':'bess');
 export const qcStagesFor=(site:WorkflowSite)=>qcType(site)==='bess'?bessStages:solarStages;
 export const siteBucket=(site:WorkflowSite)=>site.completed||site.qc?.signoff||site.qc?.handover||site.stage==='delivered'&&site.installation===false?'completed':site.stage;

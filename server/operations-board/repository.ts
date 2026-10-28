@@ -165,7 +165,8 @@ export class OperationsBoardRepository{
     selected.push(workflowSiteSchema.parse(row.snapshot));versions.set(stop.siteId,row.version);
    }
    const vendors=await this.vendorList(c);
-   if(v.labourTeam&&!(previous?.snapshot.labourTeam===v.labourTeam)){const vendor=vendors.find(r=>r.id===v.labourTeam);if(!vendor?.active||!vendor.roles.includes('electrical'))throw new HttpError(422,'Choose an active electrical labour team.');}
+   if(v.labourTeam&&!(previous?.snapshot.labourTeam===v.labourTeam)){const vendor=vendors.find(r=>r.id===v.labourTeam);if(!vendor?.active||!vendor.roles.includes('electrical')||vendor.kind!=='vendor'||!vendor.internal&&vendor.team!==v.team)throw new HttpError(422,'Choose an active electrical labour team.');}
+   if(v.vehicle&&v.vehicle!==previous?.snapshot.vehicle){const matches=vendors.filter(r=>r.kind==='vehicle'&&r.name.toLowerCase()===v.vehicle.toLowerCase());if(matches.length&&!matches.some(r=>r.team===v.team&&r.active))throw new HttpError(422,'Choose a vehicle available in this region.');}
    const stops=validateBatch(v,selected,rows.map(r=>r.snapshot as BatchSnapshot),previous?.snapshot);
    const now=new Date().toISOString(),id=v.id??randomUUID(),number=previous?.snapshot.number??`OPB-${now.slice(0,10).replaceAll('-','')}-${String(rows.length+1).padStart(3,'0')}`;
    const snapshot:BatchSnapshot={id,number,team:v.team,kind:v.kind,vehicle:v.vehicle,driver:v.driver,labourTeam:v.labourTeam,inventoryReference:v.inventoryReference,stops,createdAt:previous?.snapshot.createdAt??now,updatedAt:now,plannedBy:a.name};
@@ -190,9 +191,13 @@ export class OperationsBoardRepository{
  }
  private async vendorList(c:Pool|PoolClient){
   const rows=(await c.query('SELECT DISTINCT ON (vendor_id) vendor_id,version,snapshot FROM operations_board_vendor_versions ORDER BY vendor_id,version DESC')).rows;
-  return [{id:'pz-team',version:1,name:'Power Zone team',phone:'',roles:['electrical'],active:true,internal:true},...rows.map(r=>({...r.snapshot,id:r.vendor_id,version:r.version,internal:false}))];
+  return [{id:'pz-team',version:1,name:'Power Zone team',phone:'',roles:['electrical'],active:true,internal:true,team:null as string|null,kind:'vendor'},...rows.map(r=>({...r.snapshot,id:r.vendor_id,version:r.version,internal:false,team:r.snapshot.team??null,kind:r.snapshot.kind??'vendor'}))];
  }
- async vendors(actor:string){const a=await this.access(actor);if(!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Vendor management belongs to the Operations lead.');return {vendors:await this.vendorList(this.pool)};}
+ async vendors(actor:string){const a=await this.access(actor);if(!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Vendor management belongs to the Operations lead.');return {vendors:(await this.vendorList(this.pool)).filter(v=>(v.internal||(v.kind??'vendor')==='vendor')&&(a.kind!=='lead'||v.internal||v.team===a.team))};}
+ async resources(actor:string,kind:'member'|'vehicle'){
+  const a=await this.access(actor);if(!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Resource management belongs to the Operations lead.');
+  return {resources:(await this.vendorList(this.pool)).filter(v=>!v.internal&&v.kind===kind&&(a.kind!=='lead'||v.team===a.team))};
+ }
  async saveVendor(actor:string,input:z.infer<typeof vendorSchema>){
   const v=vendorSchema.parse(input),fingerprint=createHash('sha256').update(JSON.stringify(v)).digest('hex');
   return transaction(this.pool,async c=>{
@@ -200,13 +205,16 @@ export class OperationsBoardRepository{
    const a=await this.access(actor,c);if(!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Vendor management belongs to the Operations lead.');
    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('operations.board.vendors',0))");
    const replay=(await c.query('SELECT vendor_id,version,snapshot,request_sha256 FROM operations_board_vendor_versions WHERE request_key=$1',[v.requestKey])).rows[0];
-   if(replay){if(replay.request_sha256!==fingerprint)throw new HttpError(409,'This request key was used for another vendor update.');return {...replay.snapshot,id:replay.vendor_id,version:replay.version};}
+   if(replay){if(a.kind==='lead'&&replay.snapshot.team!==a.team)throw new HttpError(404,'Vendor not found.');if(replay.request_sha256!==fingerprint)throw new HttpError(409,'This request key was used for another vendor update.');return {...replay.snapshot,id:replay.vendor_id,version:replay.version};}
    const vendors=await this.vendorList(c),old=v.id?vendors.find(r=>r.id===v.id):undefined;
-   if(v.id&&!old)throw new HttpError(404,'Vendor not found.');
+   if(v.id&&(!old||a.kind==='lead'&&old.team!==a.team))throw new HttpError(404,'Vendor not found.');
+   if(old&&(old.kind??'vendor')!==v.kind)throw new HttpError(422,'The saved resource type cannot change.');
+   if(a.kind==='lead'&&v.team&&v.team!==a.team)throw new HttpError(403,'Use your assigned region.');
+   const team=a.kind==='lead'?a.team:v.team??old?.team??null;
    if((old?.version??0)!==v.version)throw new HttpError(409,'The vendor was updated. Reload before saving.');
    if(old&&!v.reason)throw new HttpError(422,'Give a reason for changing the saved vendor.');
-   if(vendors.some(r=>r.id!==v.id&&r.name.toLowerCase()===v.name.toLowerCase()))throw new HttpError(409,'This vendor is already saved. Edit the existing record.');
-   const id=v.id??randomUUID(),snapshot={name:v.name,phone:v.phone,roles:[...new Set(v.roles)],active:v.active};
+   if(vendors.some(r=>r.id!==v.id&&r.team===team&&(r.kind??'vendor')===v.kind&&r.name.toLowerCase()===v.name.toLowerCase()))throw new HttpError(409,'This vendor is already saved. Edit the existing record.');
+   const id=v.id??randomUUID(),snapshot={name:v.name,phone:v.phone,roles:[...new Set(v.roles)],active:v.active,team,kind:v.kind};
    await c.query('INSERT INTO operations_board_vendor_versions(vendor_id,version,snapshot,request_key,request_sha256,reason,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[id,v.version+1,snapshot,v.requestKey,fingerprint,v.reason||'Initial vendor',actor]);
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`operations.board.vendor:${id}:${v.version+1}`]);return {...snapshot,id,version:v.version+1};
   });
@@ -253,7 +261,7 @@ export class OperationsBoardRepository{
    if(v.edit&&!v.reason)throw new HttpError(422,'Give a reason for editing the saved decision.');
    const site=workflowSiteSchema.parse(row.snapshot),now=new Date().toISOString();
    let snapshot:WorkflowSite,kind:string,audiences:string[]=['operations-head','management'];
-   if(v.edit&&v.action==='plan'&&site.dispatchDate===v.dispatchDate&&isDeepStrictEqual(site.assignments??{},v.assignments))throw new HttpError(422,'Nothing changed. Cancel editing or update the dispatch plan.');
+   if(v.edit&&v.action==='plan'&&site.dispatchDate===v.dispatchDate&&isDeepStrictEqual(site.assignments??{},v.assignments)&&isDeepStrictEqual(site.teamMembers?.map(m=>m.id)??[],v.teamMemberIds??site.teamMembers?.map(m=>m.id)??[]))throw new HttpError(422,'Nothing changed. Cancel editing or update the dispatch plan.');
    if(v.action==='assign-team'){
     if(v.edit&&!site.operationsTeam)throw new HttpError(409,'There is no saved team assignment to edit.');
     if(site.operationsTeam&&!v.edit)throw new HttpError(409,'The saved team assignment is locked. Use Edit and give a reason.');
@@ -261,8 +269,10 @@ export class OperationsBoardRepository{
     snapshot={...site,operationsTeam:v.team,stageStartedAt:site.stageStartedAt??now,history:[...site.history,{date:now,description:`${a.name} assigned this site to ${v.team==='central'?'Central':'South'} Operations.${v.edit?' Reason: '+v.reason:''}`}]};kind='Operations team assigned';
    }else if(v.action==='plan'){
     const vendors=await this.vendorList(c);
-    for(const [role,selected] of Object.entries(v.assignments)){const vendor=vendors.find(r=>r.id===selected);if(!(v.edit&&site.assignments?.[role]===selected)&&(!vendor?.active||!vendor.roles.includes(role)))throw new HttpError(422,'Choose an active vendor for each applicable service.');}
-    snapshot=saveDispatchPlan(site,v,now,v.edit);kind='Dispatch plan';audiences=['accounts'];
+    for(const [role,selected] of Object.entries(v.assignments)){const vendor=vendors.find(r=>r.id===selected);if(!(v.edit&&site.assignments?.[role]===selected)&&(!vendor?.active||!vendor.roles.includes(role)||vendor.kind!=='vendor'||!vendor.internal&&vendor.team!==site.operationsTeam))throw new HttpError(422,'Choose an active vendor for each applicable service.');}
+    const teamMembers=v.teamMemberIds===undefined?site.teamMembers??[]:v.teamMemberIds.map(id=>{const member=vendors.find(r=>r.id===id);if(!member||member.kind!=='member'||member.team!==site.operationsTeam||!member.active&&!site.teamMembers?.some(r=>r.id===id))throw new HttpError(422,'Choose active team members from this site region.');return {id:member.id,name:member.name};});
+    if(teamMembers.length&&!v.assignments.electrical)throw new HttpError(422,'Choose the electrical labour team before adding members.');
+    snapshot=saveDispatchPlan(site,{dispatchDate:v.dispatchDate,assignments:v.assignments,teamMembers},now,v.edit);kind='Dispatch plan';audiences=['accounts'];
    }else if(v.action==='delivery-return'){
     snapshot=recordDeliveryReturn(site,v,now);kind='Delivery returned';audiences=['operations-head','management','accounts','inventory'];
    }else if(v.action==='delivery'){

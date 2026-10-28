@@ -12,6 +12,8 @@ export function operationsBoardHttp(repo:OperationsBoardRepository,requireSessio
  r.get('/batches',async(req,res)=>res.json(await repo.batches(req.authSession!.user.id)));
  r.post('/batches',json({limit:'512kb'}),async(req,res)=>res.status(201).json(await repo.saveBatch(req.authSession!.user.id,parse(batchSchema,req.body))));
  r.get('/alerts',async(req,res)=>res.json(await repo.alerts(req.authSession!.user.id)));
+ r.get('/resources',async(req,res)=>res.json(await repo.resources(req.authSession!.user.id,parse(z.enum(['member','vehicle']),req.query.kind))));
+ r.post('/resources',json({limit:'128kb'}),async(req,res)=>res.status(201).json(await repo.saveVendor(req.authSession!.user.id,parse(vendorSchema,req.body))));
  r.get('/vendors',async(req,res)=>res.json(await repo.vendors(req.authSession!.user.id)));
  r.post('/vendors',json({limit:'128kb'}),async(req,res)=>res.status(201).json(await repo.saveVendor(req.authSession!.user.id,parse(vendorSchema,req.body))));
  r.get('/targets',async(req,res)=>res.json(await repo.targets(req.authSession!.user.id)));
