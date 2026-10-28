@@ -5,7 +5,7 @@ import {lockActiveActor} from '../auth/actor-lock.js';
 import {transaction} from '../db/transaction.js';
 import {HttpError} from '../http/errors.js';
 import {AccountsRepository} from './repository.js';
-import {invoicingQueues} from './billing-model.js';
+import {invoicingQueues,invoiceIdentity} from './billing-model.js';
 export const invoiceEntrySchema=z.object({sourceKind:z.enum(['Operations','Source register']),siteKey:z.string().min(1).max(160),sourceVersion:z.number().int().positive(),milestone:z.enum(['delivery','completion']),ptReference:z.string().trim().min(1).max(200),entryDate:z.iso.date(),notes:z.string().trim().max(2000),requestKey:z.uuid()}).strict();
 type Db=Pool|PoolClient;
 export function operationsInvoiceRows(rows:any[],registers:any[]=[]){
@@ -23,20 +23,42 @@ export function operationsInvoiceRows(rows:any[],registers:any[]=[]){
  }
  return result;
 }
+/** Existing invoices are already frozen in the source register. Link its stable
+ * row identity rather than re-importing financial rows or guessing invoice dates. */
+export function importedInvoiceEntries(operations:any[],source:any){
+ if(!source)return [];
+ const rows=source.snapshot.registers.flatMap((r:any)=>r.rows??[]).filter((r:any)=>!r.cancelled&&!r.transferred);
+ const nonSystem=new Set([...(source.snapshot.cables?.rows??[]),...(source.snapshot.internet?.rows??[])].map((r:any)=>invoiceIdentity(r.invoice)).filter(Boolean));
+ const norm=(v:unknown)=>String(v??'').trim().toLowerCase().replace(/\s+/g,' ');
+ return operations.flatMap(o=>{
+  const s=o.snapshot;if(s.cancelled||s.transferred||s.scopePending||!(s.completed===true||s.stage==='completed'||s.stage==='delivered'))return [];
+  const stable=rows.filter((r:any)=>o.site_id==='registered-'+r.key);
+  const matches=stable.length?stable:rows.filter((r:any)=>norm(r.ipo)===norm(s.ipo)&&norm(r.site)===norm(s.name));
+  if(matches.length!==1)return [];
+  const row=matches[0],references=[...new Set<string>((row.invoiceReferences??[]).filter((r:any)=>invoiceIdentity(r)&&!nonSystem.has(invoiceIdentity(r))).map((r:any)=>String(r).trim()))];
+  if(!references.length)return [];
+  const deliveryOnly=s.installation===false||s.projectType==='delivery-only';
+  const completed=s.completed===true||s.stage==='completed';
+  const knownMilestones=deliveryOnly?['delivery']:row.program==='Solar 70'?[...(row.advance?.invoiceAmount!=null?['delivery']:[]),...(completed&&row.completion?.invoiceAmount!=null?['completion']:[])]:completed?['completion']:[];
+  const milestone=knownMilestones.length?knownMilestones.join(' + '):'unconfirmed';
+  return [{id:'imported:'+o.site_id+':'+milestone,source_kind:'Source register',site_key:row.key,source_version:source.version,milestone,knownMilestones,pt_reference:references.join(' / '),entry_date:null,imported:true,notes:`Existing invoice references from reviewed Accounts register v${source.version}. Invoice date not recorded in source; balances unchanged.`,snapshot:{site:s.name,ipo:s.ipo,key:o.site_id,sourceKey:row.key,sourceVersion:source.version,references,sourceEvidence:row.sources??[]}}];
+ });
+}
 async function candidates(c:Db){
  const source=(await c.query('SELECT version,snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0];
- const operations=operationsInvoiceRows((await c.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC')).rows,source?.snapshot.registers??[]);
+ const savedOperations=(await c.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC')).rows;
+ const operations=operationsInvoiceRows(savedOperations,source?.snapshot.registers??[]),imported=importedInvoiceEntries(savedOperations,source);
  const queues=source?invoicingQueues(source.snapshot.registers):{delivery:[],completion:[],alreadyIssued:[]};
  const sameSite=(a:any,b:any)=>String(a.ipo??'').trim().toLowerCase()===String(b.ipo??'').trim().toLowerCase()&&String(a.site??'').trim().toLowerCase()===String(b.site??'').trim().toLowerCase();
  const issued=(queues.alreadyIssued as any[]);
- const eligibleOperations=operations.filter(o=>!issued.some(r=>sameSite(r,o)&&(r.milestone===o.milestone||r.milestone==='advance'&&o.milestone==='delivery')));
+ const eligibleOperations=operations.filter(o=>!imported.some(e=>e.snapshot.key===o.key&&e.knownMilestones.includes(o.milestone))&&!issued.some(r=>sameSite(r,o)&&(r.milestone===o.milestone||r.milestone==='advance'&&o.milestone==='delivery')));
  const legacy=['delivery','completion'].flatMap(milestone=>(queues[milestone as 'delivery'|'completion'] as any[]).filter(r=>!operations.some(o=>o.ipo===r.ipo&&o.site===r.site)).map(r=>({...r,sourceKind:'Source register',sourceVersion:source.version,milestone})));
- return [...eligibleOperations,...legacy];
+ return {rows:[...eligibleOperations,...legacy],imported};
 }
 export async function invoiceRegister(pool:Pool,actor:string){
  const role=await new AccountsRepository(pool).access(actor);
- const rows=await candidates(pool),entries=(await pool.query('SELECT *,entry_date::text AS entry_date FROM accounts_invoice_entries ORDER BY created_at DESC')).rows;
- return {canRecord:['Admin','Accounts'].includes(role),queues:{delivery:rows.filter(r=>r.milestone==='delivery'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='delivery')),completion:rows.filter(r=>r.milestone==='completion'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='completion'))},entries};
+ const {rows,imported}=await candidates(pool),entries=(await pool.query('SELECT *,entry_date::text AS entry_date FROM accounts_invoice_entries ORDER BY created_at DESC')).rows;
+ return {canRecord:['Admin','Accounts'].includes(role),queues:{delivery:rows.filter(r=>r.milestone==='delivery'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='delivery')),completion:rows.filter(r=>r.milestone==='completion'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='completion'))},entries:[...entries,...imported.filter(i=>!entries.some(e=>(e.site_key===i.snapshot.key||e.site_key===i.site_key)&&e.milestone===i.milestone))],importedCount:imported.length};
 }
 export async function recordInvoiceEntry(pool:Pool,actor:string,input:z.infer<typeof invoiceEntrySchema>){
  return transaction(pool,async c=>{
@@ -48,7 +70,7 @@ export async function recordInvoiceEntry(pool:Pool,actor:string,input:z.infer<ty
    throw new HttpError(409,'Request key already used.');}
   if(input.sourceKind==='Operations')await c.query('SELECT id FROM operations_board_sites WHERE id=$1 FOR UPDATE',[input.siteKey]);
   else await c.query("SELECT pg_advisory_xact_lock(hashtextextended('accounts.source-register',0))");
-  const source=(await candidates(c)).find(r=>r.sourceKind===input.sourceKind&&r.key===input.siteKey&&r.milestone===input.milestone);
+  const source=(await candidates(c)).rows.find(r=>r.sourceKind===input.sourceKind&&r.key===input.siteKey&&r.milestone===input.milestone);
   if(!source||source.sourceVersion!==input.sourceVersion)throw new HttpError(409,'Site milestone or documents changed. Reload and review before recording the invoice.');
   const duplicate=(await c.query("SELECT id FROM accounts_invoice_entries WHERE ((source_kind=$1 AND site_key=$2) OR (snapshot->>'ipo'=$4 AND snapshot->>'site'=$5)) AND milestone=$3",[input.sourceKind,input.siteKey,input.milestone,source.ipo,source.site])).rows[0];
   if(duplicate)throw new HttpError(409,'This site milestone already has a recorded invoice.');
