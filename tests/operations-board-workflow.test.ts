@@ -28,7 +28,7 @@ test('Operations planning, UPS/Solar/BESS QC, blockers and corrections preserve 
   await assert.rejects(command('qc','ups',{action:'plan',dispatchDate:'2026-01-01',assignments}),/Operations lead/);
   await assert.rejects(command('lead','unknown',{action:'plan',dispatchDate:'2026-01-01',assignments}),/scope/);
   await assert.rejects(command('lead','ups',{action:'plan',dispatchDate:'2026-01-01',assignments:{delivery:'pz-team',electrical:'pz-team',earthing:vendor.id}}),/active vendor/);
-  for(const row of rows)await command('lead',row.id,{action:'plan',dispatchDate:'2026-01-01',assignments:row.projectType==='ups'?{electrical:'pz-team',earthing:vendor.id,delivery:vendor.id}:row.installation?assignments:{delivery:vendor.id}});
+  for(const row of rows)await command('lead',row.id,{action:'plan',dispatchDate:'2026-01-01',assignments:row.projectType==='ups'?{electrical:'pz-team',delivery:vendor.id}:row.installation?assignments:{delivery:vendor.id}});
   await assert.rejects(command('lead','ups',{action:'plan',dispatchDate:'2026-01-02',assignments}),/locked/);
   await assert.rejects(command('lead','ups',{action:'plan',dispatchDate:'2026-01-02',assignments,edit:true}),/reason/);
   const fixed=await command('lead','ups',{action:'plan',dispatchDate:'2026-01-02',assignments:{electrical:'pz-team',earthing:vendor.id,delivery:vendor.id},edit:true,reason:'Vehicle rescheduled'});

@@ -31,6 +31,10 @@ test('shared batch bookings are atomic, versioned and resource-conflict safe wit
   const one=await repo.site(owner,'one');await repo.command(owner,'one',{action:'assign-team',team:'south',version:one.version,requestKey:randomUUID(),edit:true,reason:'Regional reassignment'});
   const scoped=await repo.batches(lead);assert.equal(scoped.batches.find(b=>b.id===booked.id)!.stops.some(s=>s.siteId==='one'),false);assert.equal(scoped.batches.find(b=>b.id===booked.id)!.canEdit,false);
   await assert.rejects(repo.saveBatch(lead,first),/not found/);
+  await repo.importSource(owner,{sourceSha256:'b'.repeat(64),rows:['installed-route-a','installed-route-b'].map(id=>({id,ipo:id,name:id,stage:'delivered',projectType:'ups',installation:true,completed:false,operationsTeam:'central',deliveryDate:'2026-10-27'}))});
+  const installation=batchSchema.parse({version:0,requestKey:randomUUID(),team:'central',kind:'labour',labourTeam:'pz-team',stops:await Promise.all(['installed-route-a','installed-route-b'].map(async(siteId,n)=>({siteId,siteVersion:(await repo.site(owner,siteId)).version,order:n+1,plannedDate:'2026-11-01'})))});
+  const installationBatch=await repo.saveBatch(owner,installation);assert.equal(installationBatch.stops.length,2);assert.ok(installationBatch.stops.every(s=>s.start===''&&s.end===''));
+  for(const stop of installationBatch.stops){const site=await repo.site(owner,stop.siteId);assert.equal(site.stage,'delivered');assert.equal(site.completed,false);assert.equal(site.deliveryDate,'2026-10-27');assert.equal(site.dispatchDate,undefined);assert.equal(site.accounts?.find((e:any)=>e.type==='Batch plan')?.dispatchDate,undefined,'installation route cannot notify Accounts of a new delivery');}
   for(const table of ['internal_purchase_orders','accounts_job_closures','stock_on_hand_entries'])assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM '+table)).rows[0].n,0);
  }finally{await db.close();}
 });

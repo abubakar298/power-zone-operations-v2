@@ -46,6 +46,6 @@ const time=z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
 export const batchSchema=z.object({
  id:z.uuid().optional(),version:z.number().int().nonnegative(),requestKey:z.uuid(),edit:z.boolean().default(false),team:teamSchema,kind:z.enum(['delivery','labour','both']),
  vehicle:z.string().trim().max(100).default(''),driver:z.string().trim().max(200).default(''),labourTeam:vendorId.optional(),inventoryReference:z.string().trim().max(200).default(''),reason:z.string().trim().max(2000).default(''),
- stops:z.array(z.object({siteId:z.string().min(1).max(160),siteVersion:z.number().int().positive(),order:z.number().int().positive(),plannedDate:z.iso.date(),start:time,end:time}).strict()).min(2).max(1000),
+ stops:z.array(z.object({siteId:z.string().min(1).max(160),siteVersion:z.number().int().positive(),order:z.number().int().positive(),plannedDate:z.iso.date(),start:z.union([time,z.literal('')]).default(''),end:z.union([time,z.literal('')]).default('')}).strict()).min(2).max(1000),
 }).strict();
 export type BatchInput=z.infer<typeof batchSchema>;

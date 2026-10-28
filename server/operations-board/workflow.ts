@@ -39,7 +39,7 @@ export function saveDispatchPlan(site:WorkflowSite,plan:Planning,now:string,edit
  if(site.completed&&!editing||site.stage==='delivered'&&!editing)throw new HttpError(409,'This site is already delivered.');
  if(site.scopePending||site.installation===null)throw new HttpError(422,'Verify the approved delivery and installation scope before planning dispatch.');
  if(!site.operationsTeam)throw new HttpError(422,'Moaz needs to assign the Operations team first.');
- const required=site.installation?qcType(site)==='ups'?['electrical','earthing','delivery']:['structure','electrical','earthing','delivery']:['delivery'];
+ const required=site.installation?qcType(site)==='ups'?['electrical','delivery']:['structure','electrical','earthing','delivery']:['delivery'];
  if(required.some(role=>!plan.assignments[role]?.trim()))throw new HttpError(422,'Complete the applicable vendor assignments, including Delivery.');
  const accountsEvent={id:`${site.id}:dispatch-plan`,type:'Dispatch plan',date:now,ipo:site.ipo,site:site.name,dispatchDate:plan.dispatchDate,description:'IPO and estimated dispatch date ready for Accounts'};
  return {...site,...plan,stage:editing?site.stage:'awaiting',planSavedAt:site.planSavedAt??now,stageStartedAt:site.stage==='received'?now:site.stageStartedAt,accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],history:event(site,now,`Dispatch estimated for ${plan.dispatchDate}. Accounts handoff updated.`)};
