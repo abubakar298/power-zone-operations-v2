@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type Session } from "../api.js";
 type Notice = {
   id: string;
@@ -18,6 +18,7 @@ export function NotificationCenter({
   session: Session;
   onOpen: (task: any) => void;
 }) {
+  const handledLink=useRef<string|null>(null);
   const [items, setItems] = useState<Notice[]>([]),
     [open, setOpen] = useState(false),
     [filter, setFilter] = useState("all"),
@@ -82,10 +83,11 @@ export function NotificationCenter({
     if (!id || !items.length) return;
     const n = items.find((n) => n.id === id);
     if (n) {
+      if(handledLink.current===id)return;
+      handledLink.current=id;
       setOpen(false);
-      onOpen(n.target);
-      void mark(n.id);
       window.history.replaceState(null, "", "/dashboard");
+      void mark(n.id).then(()=>onOpen(n.target));
     }
   }, [items]);
   async function mark(id?: string) {

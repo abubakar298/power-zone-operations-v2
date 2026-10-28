@@ -127,7 +127,7 @@ export class OperationsBoardRepository{
    const movement={location:v.location,date:v.date,tracking:v.tracking,carrier:v.carrier,recordedAt:new Date().toISOString(),recordedBy:actor,...(v.edit?{correctionReason:v.reason}:{})};
    const snapshot={...row.snapshot,documents:docs.map((d:any)=>d.id===v.documentId?{...d,...movement,history:[...(d.history??[]),movement]}:d)};
    await c.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[id,row.version+1,snapshot,action,reason,v.requestKey,actor]);
-   if(v.edit||v.location==='Submitted to Accounts')await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),id,row.version+1,v.edit?'Document movement corrected':'Documents submitted',JSON.stringify(v.edit?['operations-head','management']:['accounts']),actor]);
+   await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),id,row.version+1,v.edit?'Document movement corrected':'Physical document updated',JSON.stringify(v.edit?['accounts','operations-head','management']:['accounts']),actor]);
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`operations.board.document-movement:${id}:${row.version+1}`]);return {...snapshot,version:row.version+1};
   });
  }

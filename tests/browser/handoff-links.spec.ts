@@ -1,0 +1,21 @@
+import {test,expect} from '@playwright/test';import {actors,login} from './release-fixtures.js';
+test('Accounts handoff bell and Management closure email link persist read before opening the correct workspace',async({page})=>{
+ await actors(page.request);await login(page.request,'accounts-release@example.test');
+ let read=false;const id='11111111-1111-4111-8111-111111111111';
+ const notice=()=>({id,title:'Physical document update',reference:'Example · signed gate DO',actor:'Inventory',created_at:new Date().toISOString(),read_at:read?new Date().toISOString():null,resolved_at:null,actionable:false,target:{path:'/accounts/documents'}});
+ await page.route('**/api/notifications',r=>r.fulfill({json:{notifications:[notice()],unreadCount:read?0:1,hasMore:false}}));
+ await page.route('**/api/notifications/read',r=>{read=true;return r.fulfill({json:{ok:true}});});
+ await page.route('**/api/notifications/item/*',r=>r.fulfill({json:notice()}));
+ await page.route('**/api/accounts-workspace',r=>r.fulfill({json:{ipos:[],inventory:[],closures:[],siteImport:null}}));
+ await page.route('**/api/accounts-workspace/physical-documents',r=>r.fulfill({json:{sites:[]}}));
+ await page.goto('/dashboard');await page.getByRole('button',{name:'Notifications, 1 unread',exact:true}).click();await page.getByRole('button').filter({hasText:'Example · signed gate DO'}).click();
+ await expect(page).toHaveURL(/\/accounts\/documents/);expect(read).toBe(true);
+ await expect(page.getByRole('button',{name:'Notifications, 0 unread',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Physical Documents',exact:true})).toHaveClass(/nav-active/);
+ await page.screenshot({path:'test-results/accounts-handoff-document-link.png',fullPage:true});
+ await login(page.request,'management-release@example.test');read=false;
+ await page.route('**/api/notifications',r=>r.fulfill({json:{notifications:[{...notice(),title:'Closure approval required',target:{path:'/accounts/closure-review'}}],unreadCount:read?0:1,hasMore:false}}));
+ await page.goto('/dashboard#notification='+id);
+ await expect(page).toHaveURL(/\/accounts\/closure-review/);expect(read).toBe(true);
+ await expect(page.getByLabel('Job status',{exact:true})).toHaveValue('Awaiting Management');
+});

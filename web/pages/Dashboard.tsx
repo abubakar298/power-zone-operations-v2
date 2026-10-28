@@ -112,7 +112,7 @@ export function Dashboard({
   const [departmentUser,setDepartmentUser]=useState<User|undefined>(()=>savedDepartmentUser(principalSession.user));
   const session=departmentUser?{...principalSession,user:departmentUser}:principalSession;
   const [operationsArea,setOperationsArea]=useState<OperationsArea>(()=>currentOperationsArea(session.user));
-  const [accountsPage,setAccountsPage]=useState(()=>new URLSearchParams(location.hash.slice(1)).get('accountsTab')||({'/accounts/sites':'Project Sites','/accounts/ipos':'IPOs Received','/accounts/inventory':'Approved Documents','/accounts/closures':'Job Closure','/accounts/documents':'Physical Documents','/accounts/invoicing':'Invoicing','/accounts/receivables':'Receivables','/accounts/checkpoints':'Project checkpoints'} as Record<string,string>)[location.pathname]||'My Workspace');
+  const [accountsPage,setAccountsPage]=useState(()=>new URLSearchParams(location.hash.slice(1)).get('accountsTab')||({'/accounts/sites':'Project Sites','/accounts/ipos':'IPOs Received','/accounts/inventory':'Approved Documents','/accounts/closures':'Job Closure','/accounts/closure-review':'Awaiting Management','/accounts/documents':'Physical Documents','/accounts/invoicing':'Invoicing','/accounts/receivables':'Receivables','/accounts/checkpoints':'Project checkpoints'} as Record<string,string>)[location.pathname]||'My Workspace');
   const [accountsContext,setAccountsContext]=useState<string|null>(null);
   const [inventoryDispatcher,setInventoryDispatcher]=useState(false);
   useEffect(()=>{let live=true;if(session.user.role==='Inventory')void api<{kind:string}>('/material-dispatches/access').then(a=>{if(live)setInventoryDispatcher(a.kind==='dispatcher');}).catch(()=>{if(live)setInventoryDispatcher(false);});else setInventoryDispatcher(false);return()=>{live=false;};},[session.user.id,session.user.role]);
@@ -186,7 +186,7 @@ export function Dashboard({
     | "design"
     | "coordination"
     | "orders"
-  >(()=>new URLSearchParams(window.location.search).has('pricingPreviewToken')?'pricing':'dashboard');
+  >(()=>new URLSearchParams(window.location.search).has('pricingPreviewToken')?'pricing':/^\/accounts\/(ipos|inventory|documents|closures|closure-review|invoicing)$/.test(window.location.pathname)&&['Admin','Management','Accounts'].includes(session.user.role)?'finance':'dashboard');
   useEffect(() => {
     let cancelled = false;
     async function verify() {
@@ -936,7 +936,7 @@ export function Dashboard({
           <NotificationCenter
             session={session}
             onOpen={(task) => {
-              const operationsPath = ["Admin","Management"].includes(session.user.role) ? notificationPath(task) : null;
+              const operationsPath = ["Admin","Management","Accounts","Inventory"].includes(session.user.role) ? notificationPath(task) : null;
               if (operationsPath) { window.location.assign(operationsPath); return; }
               if (!navigate(task.target, task)) return;
               setPricingRevisionId(task.boq_revision_id ?? undefined);

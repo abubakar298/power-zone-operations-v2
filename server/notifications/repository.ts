@@ -33,7 +33,7 @@ export class NotificationsRepository {
     (e.audience='owner' AND u.id=e.owner_id AND u.role IN('Admin','Management','Coordinator')) OR (e.audience IN('security','assigned') AND u.id=e.owner_id) OR u.role=e.audience)
    WHERE e.kind<>'Stock shortage' AND e.created_at>=s.activated_at AND (u.id<>e.actor_id OR e.kind='Security')
    ON CONFLICT(user_id,source_key) DO NOTHING`);
-      await c.query(`UPDATE notifications n SET resolved_at=now() WHERE n.resolved_at IS NULL AND n.source_key LIKE 'operations-notice:%' AND NOT EXISTS(SELECT 1 FROM notification_events e WHERE e.source_key=n.source_key)`);
+      await c.query(`UPDATE notifications n SET resolved_at=now() WHERE n.resolved_at IS NULL AND (n.source_key LIKE 'operations-notice:%' OR n.source_key LIKE 'handoff:%') AND NOT EXISTS(SELECT 1 FROM notification_events e WHERE e.source_key=n.source_key)`);
       await c.query(`UPDATE notifications n SET resolved_at=now() WHERE n.resolved_at IS NULL AND n.actionable AND (
    NOT EXISTS(SELECT 1 FROM notification_events e WHERE e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1)) OR (n.source_key NOT LIKE 'operations-notice:%' AND EXISTS(SELECT 1 FROM notification_events e WHERE e.entity_key=n.entity_key AND e.created_at>n.created_at))
    OR (n.kind='Revision requested' AND EXISTS(SELECT 1 FROM quotation_revision_links l WHERE l.request_id::text=n.target->>'request_id'))
