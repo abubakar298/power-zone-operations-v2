@@ -31,9 +31,12 @@ export class MaterialStockRepository{
  async positions(actor:string,warehouse:string){
   await this.scope(actor,warehouse);
   const authority=(await this.pool.query('SELECT warehouse,version,source_sha256,state FROM inventory_warehouse_authority_current WHERE warehouse=$1',[warehouse])).rows[0];
-  if(!authority)return {authority:null,positions:[]};
-  const positions=(await warehousePositions(this.pool,authority.source_sha256,warehouse)).map(p=>({ledgerKey:p.ledgerKey,itemId:p.baseline.itemId,description:p.baseline.description,unit:p.baseline.unit,opening:p.baseline.opening,totalIn:p.totalIn,totalOut:p.totalOut,currentClosing:p.currentClosing,ledgerRevision:p.ledgerRevision,unknown:p.currentClosing===null,negative:p.currentClosing!==null&&new Decimal(p.currentClosing).lt(0)}));
-  return {authority,positions};
+  // Reading an imported closing source does not activate it for physical issuance.
+  const reference=authority?null:(await this.pool.query("SELECT source_sha256 FROM inventory_warehouse_sources ORDER BY (coalesce(metadata->>'canonicalIds','') ~ '^[1-9][0-9]*$') DESC,created_at DESC,source_sha256 LIMIT 1")).rows[0];
+  const source=authority?.source_sha256??reference?.source_sha256;
+  if(!source)return {authority:null,positions:[],referenceOnly:true};
+  const positions=(await warehousePositions(this.pool,source,warehouse)).map(p=>({ledgerKey:p.ledgerKey,itemId:p.baseline.itemId,description:p.baseline.description,unit:p.baseline.unit,opening:p.baseline.opening,totalIn:p.totalIn,totalOut:p.totalOut,currentClosing:p.currentClosing,ledgerRevision:p.ledgerRevision,unknown:p.currentClosing===null,negative:p.currentClosing!==null&&new Decimal(p.currentClosing).lt(0)}));
+  return {authority:authority??null,positions,referenceOnly:!authority};
  }
  async movements(actor:string,draftId:string){
   const draft=await this.drafts.detail(actor,draftId);await this.scope(actor,draft.snapshot.warehouse);

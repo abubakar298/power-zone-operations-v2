@@ -93,7 +93,7 @@ export class MaterialDraftRepository{
  saveMinimumStock(actor:string,input:unknown){return new MinimumStockRepository(this.pool).save(actor,input);}
  async warehouses(actor:string){
   const access=await this.access(actor);
-  const rows=await this.pool.query(`SELECT DISTINCT payload->>'warehouse' AS warehouse FROM inventory_warehouse_source_balances WHERE source_sha256=(SELECT source_sha256 FROM inventory_warehouse_sources WHERE metadata->>'canonicalIds' ~ '^[1-9][0-9]*$' ORDER BY created_at DESC,source_sha256 LIMIT 1) ORDER BY warehouse`);
+  const rows=await this.pool.query(`SELECT DISTINCT payload->>'warehouse' AS warehouse FROM inventory_warehouse_source_balances WHERE source_sha256=(SELECT source_sha256 FROM inventory_warehouse_sources ORDER BY (coalesce(metadata->>'canonicalIds','') ~ '^[1-9][0-9]*$') DESC,created_at DESC,source_sha256 LIMIT 1) ORDER BY warehouse`);
   return {warehouses:rows.rows.map(r=>r.warehouse as string).filter(w=>access.owner||access.warehouses.includes(w))};
  }
  async intake(actor:string){

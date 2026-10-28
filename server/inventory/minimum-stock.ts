@@ -16,7 +16,7 @@ export class MinimumStockRepository{
   if(!['Admin','Management'].includes(u.role)&&!(u.role==='Inventory'&&(await c.query("SELECT 1 FROM inventory_material_access WHERE user_id=$1 AND warehouse=$2 AND capability='dispatcher'",[actor,warehouse])).rowCount))throw new HttpError(403,'Minimum stock settings require material-issuance permission for this warehouse.');
  }
  private async catalogue(c:Pool|PoolClient,warehouse:string){
-  const source=(await c.query("SELECT source_sha256 FROM inventory_warehouse_sources WHERE metadata->>'canonicalIds' ~ '^[1-9][0-9]*$' ORDER BY created_at DESC,source_sha256 LIMIT 1")).rows[0];
+  const source=(await c.query("SELECT source_sha256 FROM inventory_warehouse_sources ORDER BY (coalesce(metadata->>'canonicalIds','') ~ '^[1-9][0-9]*$') DESC,created_at DESC,source_sha256 LIMIT 1")).rows[0];
   if(!source)throw new HttpError(409,'A reviewed warehouse catalogue is required before setting minimum stock.');
   const rows=(await c.query("SELECT payload->>'itemId' AS item_id,payload->>'unit' AS unit FROM inventory_warehouse_source_balances WHERE source_sha256=$1 AND payload->>'warehouse'=$2",[source.source_sha256,warehouse])).rows;
   if(!rows.length)throw new HttpError(422,'Select a warehouse from the reviewed stock catalogue.');
