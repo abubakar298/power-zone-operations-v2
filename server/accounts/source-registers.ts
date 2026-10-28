@@ -60,7 +60,8 @@ export class AccountsSourceRegisters {
   const record=await this.latest(actor),s=record.snapshot;
   const asOf=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
   const rows=billingRows(s.registers,s.cables,s.internet,s.evidence).map((r):Record<string,any>=>({...r,band:ageBand(r.date,asOf)}));
-  return {asOf,sourceAsOf:record.source_date,sourceVersion:record.version,readOnlySource:true,rows,customers:customerTotals(rows,asOf),queues:invoicingQueues(s.registers),verification:{sourceModified:s.evidence.sourceModified,scope:'Reviewed source invoices; unknown original invoice amounts remain missing.'}};
+  const generalReceipts=s.evidence.generalReceipts??[];
+  return {generalReceipts,asOf,sourceAsOf:record.source_date,sourceVersion:record.version,readOnlySource:true,rows,customers:customerTotals(rows,asOf),queues:invoicingQueues(s.registers),verification:{sourceModified:s.evidence.sourceModified,scope:'Reviewed source invoices; unknown original invoice amounts remain missing.'}};
  }
  async sites(actor:string){const r=await this.latest(actor);return {...r.snapshot.sites,sourceVersion:r.version,readOnlySource:true};}
  async summary(actor:string){
