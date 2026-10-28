@@ -60,10 +60,11 @@ function complete(site:WorkflowSite,value:Entry,now:string):WorkflowSite{
  return {...site,completed:true,accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],documents:[...(site.documents??[]).filter(d=>d.id!==document.id),old?{...document,...old,evidence:document.evidence}:document]};
 }
 export function completeQcStage(site:WorkflowSite,stageId:string,value:Entry,now:string,editing=false):WorkflowSite{
- if(!site.installation||site.stage!=='delivered')throw new HttpError(409,'QC updates apply after delivery for installation sites.');
+ if(!site.installation||!(site.stage==='delivered'||site.stage==='awaiting'&&site.deliveries?.length))throw new HttpError(409,'QC updates require a recorded delivery for installation sites.');
  if(qcType(site)==='ups')throw new HttpError(422,'UPS is completed as one job with a single date.');
  const stages=qcStagesFor(site),index=stages.findIndex(s=>s.id===stageId);
  if(index<0)throw new HttpError(422,'Choose an applicable QC stage.');
+ if(index===stages.length-1&&site.stage!=='delivered')throw new HttpError(409,'Record the remaining delivery before final customer handover.');
  if(editing&&!site.qc?.[stageId])throw new HttpError(409,'There is no saved QC stage to edit.');
  if(site.qc?.[stageId]&&!editing)throw new HttpError(409,'This QC stage is locked. Use Edit and give a reason.');
  if(stages.slice(0,index).some(s=>!site.qc?.[s.id]))throw new HttpError(422,'Complete the earlier QC stages first.');

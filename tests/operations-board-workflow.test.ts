@@ -41,6 +41,10 @@ test('Operations planning, UPS/Solar/BESS QC, blockers and corrections preserve 
   await assert.rejects(command('qc','ups',{action:'delivery',deliveryDate:'2026-01-02',signedDoId:files.bess.pdf,materialPhotoId:files.ups.photo}),/different site/);
   await assert.rejects(command('qc','ups',{action:'delivery',deliveryDate:'2026-01-02',signedDoId:files.ups.pdf,materialPhotoId:files.ups.pdf}),/photo/);
   const partial=await command('qc','ups',{action:'delivery',deliveryDate:'2026-01-02',signedDoId:files.ups.pdf,materialPhotoId:files.ups.photo,partial:true});assert.equal(partial.stage,'awaiting');assert.equal(partial.completed,false);
+  await command('qc','solar-bess',{action:'delivery',deliveryDate:'2026-01-02',signedDoId:files['solar-bess'].pdf,materialPhotoId:files['solar-bess'].photo,partial:true});
+  const partialQc=await command('qc','solar-bess',{action:'qc',stageId:'civil',date:'2026-01-02',evidenceIds:[files['solar-bess'].photo]});
+  assert.equal(partialQc.stage,'awaiting');assert.equal(partialQc.completed,false);
+  assert.equal(partialQc.accounts?.some((event:any)=>event.type==='Installation completed'||event.type==='Delivery invoice due'),false);
   for(const row of rows)await command('qc',row.id,{action:'delivery',deliveryDate:'2026-01-03',signedDoId:files[row.id].pdf,materialPhotoId:files[row.id].photo});
   assert.equal((await repo.site(users.owner,'delivery-only')).completed,true);
   const upsDeliveries=await repo.site(users.owner,'ups');assert.equal(new Set(upsDeliveries.documents?.map(d=>d.id)).size,2,'partial and final deliveries stay distinct even when a combined PDF is reused');
@@ -53,8 +57,8 @@ test('Operations planning, UPS/Solar/BESS QC, blockers and corrections preserve 
   await assert.rejects(command('qc','ups',{action:'qc',stageId:'civil',date:'2026-01-04',evidenceIds:[files.ups.photo]}),/single date/);
   const jobs=[['solar-bess',['civil','electrical','testing','signoff']],['bess',['cabinet','panel','bessTesting','handover']]] as const;
   for(const [id,stages] of jobs){
-   await assert.rejects(command('qc',id,{action:'qc',stageId:stages[1],date:'2026-01-04',evidenceIds:[files[id].photo]}),/earlier QC/);
-   for(const stageId of stages)await command('qc',id,{action:'qc',stageId,date:'2026-01-04',evidenceIds:[files[id].photo],...(stageId===stages[3]?{acknowledgementId:files[id].pdf,irrId:files[id].pdf,variableSignoffId:files[id].pdf}:{})});
+   if(id!=='solar-bess')await assert.rejects(command('qc',id,{action:'qc',stageId:stages[1],date:'2026-01-04',evidenceIds:[files[id].photo]}),/earlier QC/);
+   for(const stageId of stages.filter(stage=>id!=='solar-bess'||stage!=='civil'))await command('qc',id,{action:'qc',stageId,date:'2026-01-04',evidenceIds:[files[id].photo],...(stageId===stages[3]?{acknowledgementId:files[id].pdf,irrId:files[id].pdf,variableSignoffId:files[id].pdf}:{})});
    assert.equal((await repo.site(users.owner,id)).completed,true);
   }
   const beforeCorrection=workflowSiteSchema.parse(await repo.site(users.owner,'bess'));
