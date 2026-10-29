@@ -141,12 +141,14 @@ export function AccountsWorkspace({
   currentActor.current = actorContext;
   useEffect(()=>{
     if(tab!=='My Workspace')return;
-    let active=true;
+    let active=true,generation=0;
     setInvoiceQueueCount(null);setPaymentQueueCount(null);setQueueCountError(false);
-    void api<any>('/accounts-workspace/work-queues').then(result=>{
-      if(active){setInvoiceQueueCount(result.invoicesToSubmit);setPaymentQueueCount(result.paymentsToRecord);}
-    }).catch(()=>{if(active)setQueueCountError(true);});
-    return()=>{active=false;};
+    const refresh=()=>{const request=++generation;void api<{invoicesToSubmit:number;paymentsToRecord:number}>('/accounts-workspace/work-queues').then(result=>{
+      if(active&&request===generation){setInvoiceQueueCount(result.invoicesToSubmit);setPaymentQueueCount(result.paymentsToRecord);setQueueCountError(false);}
+    }).catch(()=>{if(active&&request===generation){setInvoiceQueueCount(null);setPaymentQueueCount(null);setQueueCountError(true);}});};
+    const visible=()=>{if(document.visibilityState==='visible')refresh();};
+    refresh();window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',visible);
+    return()=>{active=false;generation++;window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',visible);};
   },[tab,actorContext]);
   async function load() {
     if (!workspaceNeeded && !reportsNeeded) return;

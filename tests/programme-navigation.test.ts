@@ -17,3 +17,9 @@ test('Accounts programme filters retain the finance workspace and selected Accou
  const hash=programmeNavigationHash('#workspace=finance&accountsTab=Programme+Dashboard&viewAs=Accounts',{programme:'mbl-ups-60',bucket:'pendingDelivery',search:'Branch'});
  const params=new URLSearchParams(hash.slice(1));assert.equal(params.get('workspace'),'finance');assert.equal(params.get('accountsTab'),'Programme Dashboard');assert.equal(params.get('viewAs'),'Accounts');
 });
+
+test('Management project tracking remains on its view-only workspace while filtering',()=>{
+ const expected={programme:'ubl-solar-70',bucket:'pendingDelivery',search:'Branch'};
+ const hash=programmeNavigationHash('#workspace=project-tracking',expected);
+ assert.equal(new URLSearchParams(hash.slice(1)).get('workspace'),'project-tracking');assert.deepEqual(programmeNavigation(hash,choices),expected);
+});

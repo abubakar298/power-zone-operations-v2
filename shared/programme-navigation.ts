@@ -6,7 +6,7 @@ export function programmeNavigation(hash:string,programmes:readonly string[]):Pr
 }
 /** Replace filters, preserve unrelated workspace/deep-link fields, and never push one history entry per keystroke. */
 export function programmeNavigationHash(hash:string,value:ProgrammeNavigation):string{
- const params=new URLSearchParams(hash.replace(/^#/,''));params.set('workspace',params.get('workspace')==='finance'?'finance':'dashboard');params.set('programme',value.programme);
+ const params=new URLSearchParams(hash.replace(/^#/,''));params.set('workspace',['finance','project-tracking'].includes(params.get('workspace')??'')?params.get('workspace')!:'dashboard');params.set('programme',value.programme);
  if(value.bucket==='active')params.delete('programmeBucket');else params.set('programmeBucket',value.bucket);
  if(value.search)params.set('programmeSearch',value.search.slice(0,200));else params.delete('programmeSearch');
  return '#'+params.toString();

@@ -1,3 +1,5 @@
+import {ProgrammeDashboard} from '../components/ProgrammeDashboard.js';
+import {AccountsBilling} from './AccountsBilling.js';
 import {accountsPageName} from '../../shared/accounts-navigation.js';
 import {notificationPath} from '../../shared/notification-target.js';
 import {UpsAlerts} from '../components/UpsAlerts.js';
@@ -186,6 +188,8 @@ export function Dashboard({
     | "stock-count"
     | "reports"
     | "inventory"
+    | "project-tracking"
+    | "receivables"
     | "finance"
     | "design"
     | "coordination"
@@ -287,7 +291,9 @@ export function Dashboard({
       | "stock-count"
       | "reports"
       | "inventory"
-      | "finance"
+      | "project-tracking"
+    | "receivables"
+    | "finance"
       | "design"
       | "coordination"
       | "orders",
@@ -384,7 +390,7 @@ export function Dashboard({
       }
       if(!departmentUser)setDepartmentView(undefined);
       // Restore authorized workspace links after a reload as well as sidebar navigation.
-      const linkedRoles:Record<string,string[]>={finance:['Admin','Management','Accounts'],account:['Admin','Management','Coordinator','Design','Operations','Inventory','Accounts'],team:['Admin'],boqs:['Admin','Management','Coordinator','Design'],pricing:['Admin','Management','Coordinator'],quotes:['Admin','Management','Coordinator'],orders:['Admin','Management','Coordinator','Accounts'],reports:['Admin','Management','Accounts','Inventory'],rates:['Admin','Management']};
+      const linkedRoles:Record<string,string[]>={'project-tracking':['Management'],'receivables':['Management'],finance:['Admin','Management','Accounts'],account:['Admin','Management','Coordinator','Design','Operations','Inventory','Accounts'],team:['Admin'],boqs:['Admin','Management','Coordinator','Design'],pricing:['Admin','Management','Coordinator'],quotes:['Admin','Management','Coordinator'],orders:['Admin','Management','Coordinator','Accounts'],reports:['Admin','Management','Accounts','Inventory'],rates:['Admin','Management']};
       if(destination&&linkedRoles[destination]?.includes(session.user.role)){
         setView(destination as typeof view);return;
       }
@@ -481,7 +487,7 @@ export function Dashboard({
       </Suspense>
     );
   return (
-    <div className={`workspace fixed-header-layout ${(["Accounts","Admin","Management"].includes(session.user.role)&&(session.user.role==='Accounts'||view==='finance'))?'accounts-ui':''} ${session.user.role === "Coordinator" ? "coordinator-layout" : session.user.role === "Operations" ? "operations-layout" : ""}`}>
+    <div className={`workspace fixed-header-layout ${(["Accounts","Admin","Management"].includes(session.user.role)&&(session.user.role==='Accounts'||['finance','receivables','project-tracking'].includes(view)))?'accounts-ui':''} ${session.user.role === "Coordinator" ? "coordinator-layout" : session.user.role === "Operations" ? "operations-layout" : ""}`}>
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="sidebar-brand">
           <Brand compact />
@@ -508,6 +514,8 @@ export function Dashboard({
                 ["mbl-ups", "MBL UPS"],
                 ["bafl-solar", "BAFL Solar"],
                 ["alerts", "Alerts"],
+                ["project-tracking", "Project Tracking"],
+                ["receivables", "Receivables"],
               ] as const).map(([destination, label]) => (
                 <button key={destination}
                   className={view === destination ? "nav-active" : ""}
@@ -616,7 +624,6 @@ export function Dashboard({
                   Dashboard
                 </button>}
                 {["Accounts"].includes(session.user.role) && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
-                {session.user.role==='Accounts'&&<button className={(accountsContext||accountsPage)==='Project Tracking'?'nav-active':''} onClick={()=>openAccountsPage('Project Tracking')}><Icon name="dashboard"/><span>Project Tracking</span></button>}
                 {["Admin", "Management", "Coordinator"].includes(
                   session.user.role,
                 ) && (
@@ -1269,6 +1276,8 @@ export function Dashboard({
               {view === "dashboard" && session.user.role === "Operations" && (
                 <OperationsHome session={session} onGo={(target) => { if (target === "operations") setOperationsIpoId(undefined); navigate(target); }} onOpenSite={openSiteFromAnywhere} onOpenStage={(stage) => { setStageToOpen(stage); setSiteToOpen(undefined); navigate("sites"); }} />
               )}
+              {view==='project-tracking'&&session.user.role==='Management'&&<ProgrammeDashboard userId={session.user.id} title="Project Tracking" endpoint="/accounts-workspace/programmes"/>}
+              {view==='receivables'&&session.user.role==='Management'&&<AccountsBilling mode="receivables"/>}
               {managementHome && <ManagementDashboard session={session} onOpenUps={()=>navigate("ubl-ups")} onOpenSolar={()=>navigate("ubl")} onOpen={(task)=>{
                 setRevisionDraftId(task.draft_id);
                 setPricingRevisionId(task.boq_revision_id);
