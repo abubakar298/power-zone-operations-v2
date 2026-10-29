@@ -7,7 +7,7 @@ import {lockActiveActor} from '../auth/actor-lock.js';
 import {transaction} from '../db/transaction.js';
 import {HttpError} from '../http/errors.js';
 import {AccountsRepository} from './repository.js';
-import {invoicingQueues,invoiceIdentity} from './billing-model.js';
+import {billingRows,invoicingQueues,invoiceIdentity} from './billing-model.js';
 export const invoiceEntrySchema=z.object({sourceKind:z.enum(['Operations','Source register']),siteKey:z.string().min(1).max(160),sourceVersion:z.number().int().positive(),milestone:z.enum(['delivery','completion']),ptReference:z.string().trim().min(1).max(200),entryDate:z.iso.date(),notes:z.string().trim().max(2000),requestKey:z.uuid()}).strict();
 type Db=Pool|PoolClient;
 export function operationsInvoiceRows(rows:any[],registers:any[]=[]){
@@ -51,11 +51,15 @@ async function candidates(c:Db){
  const savedOperations=(await c.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC')).rows;
  // Use stable source identity and current Operations milestones; display IPO suffixes
  // must not recreate work for an already submitted/paid source milestone.
- if(source)source={...source,snapshot:{...source.snapshot,registers:source.snapshot.registers.map((r:any)=>({...r,rows:applyOperationsStages(r.rows,savedOperations).map((row:any)=>({...row,invoiceReferences:[...new Set([...(row.verifiedInvoiceReferences??[]),...(row.invoiceReferences??[]).filter((ref:any)=>invoiceIdentity(ref))])]}))}))}};
+ const confirmedBilling=source?billingRows(source.snapshot.registers,source.snapshot.cables,source.snapshot.internet,source.snapshot.evidence):[];
+ const stageOperations=savedOperations.map(o=>({...o,snapshot:{...o.snapshot,completionDate:o.snapshot.qc?.handover?.date??o.snapshot.qc?.signoff?.date??o.snapshot.qcJob?.date??o.snapshot.completionDate}}));
+ if(source)source={...source,snapshot:{...source.snapshot,registers:source.snapshot.registers.map((r:any)=>({...r,rows:applyOperationsStages(r.rows,stageOperations).map((row:any)=>({...row,singleInvoiceSubmitted:row.singleInvoiceSubmitted===true||(row.kind==='UPS'&&confirmedBilling.some(b=>b.category==='System'&&b.site===row.site&&b.customer===(row.customer==='MBL'?'Meezan Bank Limited':'United Bank Limited')&&b.submission==='Submitted'&&(row.invoiceReferences??[]).some((ref:any)=>invoiceIdentity(ref)===invoiceIdentity(b.invoice)))),invoiceReferences:[...new Set([...(row.verifiedInvoiceReferences??[]),...(row.invoiceReferences??[]).filter((ref:any)=>invoiceIdentity(ref))])]}))}))}};
  const sourceRows=source?.snapshot.registers.flatMap((r:any)=>r.rows??[])??[];
  const operationsById=new Map(savedOperations.map(s=>[s.site_id,s]));
  const sourceByKey=new Map<string,any[]>();for(const row of sourceRows)sourceByKey.set(row.key,[...(sourceByKey.get(row.key)??[]),row]);
- const approvedFor=(o:any)=>{const key=o.key.startsWith('registered-')?o.key.slice('registered-'.length):operationsById.get(o.key)?.snapshot.sourceKey;const exact=sourceByKey.get(key)??[];return exact.length===1?exact[0]:undefined;};
+ // Owner confirmed Consumer Hub moved20/60 to2/20 for an extra battery.
+ // Scope the invoice-only link to the exact old native record and labels.
+ const approvedFor=(o:any)=>{const old=operationsById.get(o.key)?.snapshot;const upgrade=o.key==='live-ipo:ddb6711e-97b3-41a2-9994-22c768cf590c'&&old?.ipo==='CHP-338 · 20/60'&&old?.name==='Consumer Hub Lahore'?'MBL:CHP-233:20-site order:2/20':undefined;const key=upgrade??(o.key.startsWith('registered-')?o.key.slice('registered-'.length):old?.sourceKey);const exact=sourceByKey.get(key)??[];return exact.length===1?exact[0]:undefined;};
  const submitted=(o:any)=>{const row=approvedFor(o);if(!row)return false;return row.program==='Solar 70'?row[o.milestone==='delivery'?'advance':'completion']?.submitted===true||row[o.milestone==='delivery'?'advance':'completion']?.received===true:row.singleInvoiceSubmitted===true||row.singlePaymentReceived===true;};
  const operations=operationsInvoiceRows(savedOperations,source?.snapshot.registers??[]),imported=importedInvoiceEntries(savedOperations,source);
  const queues=source?invoicingQueues(source.snapshot.registers):{delivery:[],completion:[],alreadyIssued:[]};
