@@ -20,3 +20,12 @@ test('unchanged projection avoids duplicate insert attempts, evaluates resolutio
  for(const t of ['internal_purchase_orders','stock_on_hand_entries','accounts_job_closures'])assert.equal((await db.pool.query('SELECT count(*)::int n FROM '+t)).rows[0].n,0);
  }finally{await db.close();}
 });
+test('a concurrent projection skips without waiting, then processes new work exactly once after the current worker releases',async()=>{
+ const db=await testDatabase();try{
+ const actor=randomUUID(),owner=randomUUID();for(const [id,role] of [[actor,'Admin'],[owner,'Accounts']])await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$3,$4)',[id,id+'@example.test',role,'isolated']);
+ await db.pool.query("UPDATE notification_settings SET activated_at=now()-interval '1 hour'");await db.pool.query("INSERT INTO audit_log(user_id,target_user_id,action) VALUES($1,$2,'account.activated')",[actor,owner]);
+ const current=await db.pool.connect();await current.query('BEGIN');await current.query('SELECT pg_advisory_xact_lock(742019032)');const repo=new NotificationsRepository(db.pool);
+ try{const start=performance.now();await repo.sync();assert.ok(performance.now()-start<2000,'A duplicate sweep must skip rather than wait for the held projector lock');assert.equal((await db.pool.query('SELECT count(*)::int n FROM notifications')).rows[0].n,0);}finally{await current.query('ROLLBACK');current.release();}
+ await repo.sync();await repo.sync();assert.equal((await db.pool.query('SELECT count(*)::int n FROM notifications WHERE user_id=$1',[owner])).rows[0].n,1);assert.equal((await db.pool.query("SELECT count(*)::int n FROM audit_log WHERE action='account.activated'")).rows[0].n,1);
+ }finally{await db.close();}
+});

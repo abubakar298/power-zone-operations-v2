@@ -20,15 +20,20 @@ export class NotificationsRepository {
   // Projection runs separately from business transactions: delivery failures never undo work.
   async sync() {
     return transaction(this.pool, async (c) => {
-      await c.query("SELECT pg_advisory_xact_lock(742019032)");
+      // Another live/draining instance will finish the same projection; do not queue
+      // a duplicate sweep or tie up a database connection waiting for it.
+      const lock=await c.query("SELECT pg_try_advisory_xact_lock(742019032) AS acquired");
+      if(!lock.rows[0].acquired)return;
       const operationsClock=new Date().toISOString();
       await new OperationsNotificationProjector().sync(c,operationsClock);
       await new OperationsIncidentProjector().sync(c,operationsClock);
-      await c.query(`INSERT INTO notifications(id,user_id,source_key,entity_key,kind,title,reference,actor_id,target,actionable,created_at)
+      await c.query(`WITH eligible_events AS MATERIALIZED (
+   SELECT e.* FROM notification_events e CROSS JOIN notification_settings s WHERE e.kind<>'Stock shortage' AND e.created_at>=s.activated_at
+   ) INSERT INTO notifications(id,user_id,source_key,entity_key,kind,title,reference,actor_id,target,actionable,created_at)
    SELECT gen_random_uuid(),u.id,e.source_key,e.entity_key,e.kind,
     CASE WHEN e.kind IN('Submitted','Approval requested') THEN 'Quotation approval required' WHEN e.kind='Approved' THEN 'Quotation approved' WHEN e.kind='Changes requested' THEN 'Revision requested' ELSE e.kind END,
     e.reference,e.actor_id,e.target,e.actionable,e.created_at
-   FROM notification_events e CROSS JOIN notification_settings s JOIN users u ON u.active AND (
+   FROM eligible_events e CROSS JOIN notification_settings s JOIN users u ON u.active AND (
     (e.audience='management' AND u.role IN('Admin','Management')) OR
     (e.audience='owner' AND u.id=e.owner_id AND u.role IN('Admin','Management','Coordinator')) OR (e.audience IN('security','assigned') AND u.id=e.owner_id) OR u.role=e.audience)
    WHERE e.kind<>'Stock shortage' AND e.created_at>=s.activated_at AND (u.id<>e.actor_id OR e.kind='Security')
@@ -65,7 +70,7 @@ export class NotificationsRepository {
   async list(user: User, id?: string, cursor?: { time: string; id: string }) {
     return (
       await this.pool.query(
-        `WITH inbox AS (SELECT COUNT(*) FILTER(WHERE n.read_at IS NULL AND n.resolved_at IS NULL) OVER()::integer AS unread_count,n.id,n.kind,COALESCE(t.title,n.title) AS title,n.reference,n.target,n.actionable,n.created_at,n.read_at,n.resolved_at,COALESCE(u.display_name,'Power Zone') AS actor FROM notifications n JOIN notification_events e ON e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1) LEFT JOIN notification_types t ON t.kind=n.kind LEFT JOIN users u ON u.id=n.actor_id WHERE n.user_id=$1 AND n.kind<>'Stock shortage' AND ($3::uuid IS NULL OR n.id=$3) AND ((e.audience='management' AND $2 IN('Admin','Management')) OR (e.audience='owner' AND e.owner_id=$1 AND $2 IN('Admin','Management','Coordinator')) OR (e.audience IN('security','assigned') AND e.owner_id=$1) OR e.audience=$2 OR (n.kind='Escalation' AND $2 IN('Admin','Management'))) ) SELECT * FROM inbox WHERE ($4::timestamptz IS NULL OR (created_at,id)<($4::timestamptz,$5::uuid)) ORDER BY created_at DESC,id DESC LIMIT 100`,
+        `WITH inbox_events AS MATERIALIZED (SELECT source_key,audience,owner_id FROM notification_events e WHERE $2 IN('Admin','Management') OR (e.audience='owner' AND e.owner_id=$1 AND $2='Coordinator') OR (e.audience IN('security','assigned') AND e.owner_id=$1) OR e.audience=$2), inbox AS (SELECT COUNT(*) FILTER(WHERE n.read_at IS NULL AND n.resolved_at IS NULL) OVER()::integer AS unread_count,n.id,n.kind,COALESCE(t.title,n.title) AS title,n.reference,n.target,n.actionable,n.created_at,n.read_at,n.resolved_at,COALESCE(u.display_name,'Power Zone') AS actor FROM notifications n JOIN inbox_events e ON e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1) LEFT JOIN notification_types t ON t.kind=n.kind LEFT JOIN users u ON u.id=n.actor_id WHERE n.user_id=$1 AND n.kind<>'Stock shortage' AND ($3::uuid IS NULL OR n.id=$3) AND ((e.audience='management' AND $2 IN('Admin','Management')) OR (e.audience='owner' AND e.owner_id=$1 AND $2 IN('Admin','Management','Coordinator')) OR (e.audience IN('security','assigned') AND e.owner_id=$1) OR e.audience=$2 OR (n.kind='Escalation' AND $2 IN('Admin','Management'))) ) SELECT * FROM inbox WHERE ($4::timestamptz IS NULL OR (created_at,id)<($4::timestamptz,$5::uuid)) ORDER BY created_at DESC,id DESC LIMIT 100`,
         [
           user.id,
           user.role,
