@@ -164,7 +164,6 @@ export function AccountsWorkspace({
     void load().catch((e) => { if (active && currentActor.current === actorContext) setError(e.message); });
     return () => { active = false; loadGeneration.current++; };
   }, [workspaceNeeded, reportsNeeded, actorContext]);
-  useEffect(()=>{if(tab!=='My Workspace')return;let active=true;setInvoiceQueueCount(null);void api<any>('/accounts-workspace/invoice-entries').then(r=>{if(active)setInvoiceQueueCount(r.queues.delivery.length+r.queues.completion.length);}).catch(()=>{if(active)setInvoiceQueueCount(null);});return()=>{active=false;};},[tab,actorContext]);
   useEffect(() => {
     if (initialRecordId) void openIpo(initialRecordId);
     if (initialJobKey) void openJob(initialJobKey);
