@@ -16,3 +16,17 @@ test('bulk IPO reads preserve single-record holds/corrections and use two querie
  assert.equal(bulk.get(rows[3].id).snapshot.siteCode,'NEW');assert.equal(rows[3].snapshot.siteCode,'OLD','Original snapshot is not rewritten');
  const before=queries;assert.equal((await approvedMaterialIdentities(db as any,[])).size,0);assert.equal(queries,before);
 });
+
+test('native bulk archive projection preserves array, object and scalar membership with a large historical archive',async()=>{
+ const {testDatabase}=await import('./database.js');const db=await testDatabase();try{
+  const actor=randomUUID(),customer=(await db.pool.query('SELECT id FROM customers ORDER BY id LIMIT 1')).rows[0].id;
+  await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash)VALUES($1,$2,$3,$4,$5)',[actor,'bulk-native@example.test','Native fixture','Admin','isolated']);
+  const ids=Array.from({length:4},()=>randomUUID());
+  for(const [i,id]of ids.entries()){const po=randomUUID(),number='ISOLATED-BULK-'+i;await db.pool.query('INSERT INTO customer_purchase_orders(id,customer_id,po_number,input,created_by)VALUES($1,$2,$3,$4,$5)',[po,customer,number,{},actor]);await db.pool.query('INSERT INTO internal_purchase_orders(id,customer_po_id,number,snapshot,fingerprint,request_key,created_by)VALUES($1,$2,$3,$4,$5,$6,$7)',[id,po,number,{siteCode:'S'+i,input:{poNumber:number}},'test',randomUUID(),actor]);}
+  const values=[[...Array.from({length:10000},()=>randomUUID()),ids[0]],{[ids[1]]:true},ids[2]];
+  for(const [i,value]of values.entries())await db.pool.query('INSERT INTO test_workflow_archives(key,cutoff,counts,records)VALUES($1,now(),$2,$3)',['ISOLATED-BULK-'+i,{}, {localPreviewDocumentIds:value}]);
+  const rows=await approvedMaterialIdentities(db.pool,ids);
+  for(const id of ids){let expected;try{expected=await approvedMaterialIdentity(db.pool,id);}catch(e){expected=e;}const actual=rows.get(id);if(expected instanceof HttpError){assert(actual instanceof HttpError);assert.equal(actual.message,expected.message);}else assert.deepEqual(actual,expected);}
+  assert(!(rows.get(ids[3]) instanceof HttpError));
+ }finally{await db.close();}
+});

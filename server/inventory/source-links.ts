@@ -21,10 +21,18 @@ export async function approvedMaterialIdentity(c:Pool|PoolClient,ipoId:string){
  * Director-correction and saved-PO checks; no result is cached across requests. */
 export async function approvedMaterialIdentities(c:Pool|PoolClient,ipoIds:string[]){
  const ids=[...new Set(ipoIds)],result=new Map<string,any>();if(!ids.length)return result;
- const rows=(await c.query(`SELECT i.id,i.number,i.snapshot,p.po_number AS saved_po_reference,
-  (EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.records->'localPreviewDocumentIds' ? i.id::text)
-   OR EXISTS(SELECT 1 FROM archived_sample_ipos a WHERE a.ipo_id=i.id AND a.restored_at IS NULL)) AS archived
-  FROM internal_purchase_orders i JOIN customer_purchase_orders p ON p.id=i.customer_po_id WHERE i.id=ANY($1::uuid[])`,[ids])).rows;
+ const rows=(await c.query(`WITH archive_sources AS MATERIALIZED (
+  SELECT records->'localPreviewDocumentIds' AS ids FROM test_workflow_archives
+ ), archived_ids AS MATERIALIZED (
+  SELECT DISTINCT id FROM (
+   SELECT value#>>'{}' AS id FROM archive_sources CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(ids)='array' THEN ids ELSE '[]'::jsonb END) value WHERE jsonb_typeof(value)='string'
+   UNION ALL SELECT key FROM archive_sources CROSS JOIN LATERAL jsonb_object_keys(CASE WHEN jsonb_typeof(ids)='object' THEN ids ELSE '{}'::jsonb END) key
+   UNION ALL SELECT ids#>>'{}' FROM archive_sources WHERE jsonb_typeof(ids)='string'
+   UNION ALL SELECT ipo_id::text FROM archived_sample_ipos WHERE ipo_id=ANY($1::uuid[]) AND restored_at IS NULL
+  ) archived
+ ) SELECT i.id,i.number,i.snapshot,p.po_number AS saved_po_reference,(a.id IS NOT NULL) AS archived
+ FROM internal_purchase_orders i JOIN customer_purchase_orders p ON p.id=i.customer_po_id
+ LEFT JOIN archived_ids a ON a.id=i.id::text WHERE i.id=ANY($1::uuid[])`,[ids])).rows;
  const corrections=(await c.query(`SELECT DISTINCT ON(d.snapshot->>'ipoId') d.id,d.snapshot,u.role
   FROM project_workflow_documents d JOIN users u ON u.id=d.created_by
   WHERE d.kind IN ('IPO branch code correction','IPO site identity correction') AND d.snapshot->>'ipoId'=ANY($1::text[])
