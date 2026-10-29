@@ -1,3 +1,4 @@
+import {applyOperationsStages} from './site-projection.js';
 import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -36,7 +37,7 @@ export function importedInvoiceEntries(operations:any[],source:any){
   const stable=rows.filter((r:any)=>o.site_id==='registered-'+r.key);
   const matches=stable.length?stable:rows.filter((r:any)=>norm(r.ipo)===norm(s.ipo)&&norm(r.site)===norm(s.name));
   if(matches.length!==1)return [];
-  const row=matches[0],references=[...new Set<string>((row.invoiceReferences??[]).filter((r:any)=>invoiceIdentity(r)&&!nonSystem.has(invoiceIdentity(r))).map((r:any)=>String(r).trim()))];
+  const row=matches[0],references=[...new Set<string>([...(row.verifiedInvoiceReferences??[]),...(row.invoiceReferences??[])].filter((r:any)=>invoiceIdentity(r)&&((row.verifiedInvoiceReferences??[]).includes(r)||!nonSystem.has(invoiceIdentity(r)))).map((r:any)=>String(r).trim()))];
   if(!references.length)return [];
   const deliveryOnly=s.installation===false||s.projectType==='delivery-only';
   const completed=s.completed===true||s.stage==='completed';
@@ -46,13 +47,21 @@ export function importedInvoiceEntries(operations:any[],source:any){
  });
 }
 async function candidates(c:Db){
- const source=(await c.query('SELECT version,snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0];
+ let source=(await c.query('SELECT version,snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0];
  const savedOperations=(await c.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC')).rows;
+ // Use stable source identity and current Operations milestones; display IPO suffixes
+ // must not recreate work for an already submitted/paid source milestone.
+ if(source)source={...source,snapshot:{...source.snapshot,registers:source.snapshot.registers.map((r:any)=>({...r,rows:applyOperationsStages(r.rows,savedOperations).map((row:any)=>({...row,invoiceReferences:[...new Set([...(row.verifiedInvoiceReferences??[]),...(row.invoiceReferences??[]).filter((ref:any)=>invoiceIdentity(ref))])]}))}))}};
+ const sourceRows=source?.snapshot.registers.flatMap((r:any)=>r.rows??[])??[];
+ const operationsById=new Map(savedOperations.map(s=>[s.site_id,s]));
+ const sourceByKey=new Map<string,any[]>();for(const row of sourceRows)sourceByKey.set(row.key,[...(sourceByKey.get(row.key)??[]),row]);
+ const approvedFor=(o:any)=>{const key=o.key.startsWith('registered-')?o.key.slice('registered-'.length):operationsById.get(o.key)?.snapshot.sourceKey;const exact=sourceByKey.get(key)??[];return exact.length===1?exact[0]:undefined;};
+ const submitted=(o:any)=>{const row=approvedFor(o);if(!row)return false;return row.program==='Solar 70'?row[o.milestone==='delivery'?'advance':'completion']?.submitted===true||row[o.milestone==='delivery'?'advance':'completion']?.received===true:row.singleInvoiceSubmitted===true||row.singlePaymentReceived===true;};
  const operations=operationsInvoiceRows(savedOperations,source?.snapshot.registers??[]),imported=importedInvoiceEntries(savedOperations,source);
  const queues=source?invoicingQueues(source.snapshot.registers):{delivery:[],completion:[],alreadyIssued:[]};
  const sameSite=(a:any,b:any)=>String(a.ipo??'').trim().toLowerCase()===String(b.ipo??'').trim().toLowerCase()&&String(a.site??'').trim().toLowerCase()===String(b.site??'').trim().toLowerCase();
  const issued=(queues.alreadyIssued as any[]);
- const eligibleOperations=operations.filter(o=>!imported.some(e=>e.snapshot.key===o.key&&e.knownMilestones.includes(o.milestone))&&!issued.some(r=>sameSite(r,o)&&(r.milestone===o.milestone||r.milestone==='advance'&&o.milestone==='delivery')));
+ const eligibleOperations=operations.filter(o=>!submitted(o)&&!imported.some(e=>e.snapshot.key===o.key&&e.knownMilestones.includes(o.milestone))&&!issued.some(r=>sameSite(r,o)&&(r.milestone===o.milestone||r.milestone==='advance'&&o.milestone==='delivery')));
  const legacy=['delivery','completion'].flatMap(milestone=>(queues[milestone as 'delivery'|'completion'] as any[]).filter(r=>!isArchivedLegacySolar(r)&&!operations.some(o=>o.ipo===r.ipo&&o.site===r.site)).map(r=>({...r,sourceKind:'Source register',sourceVersion:source.version,milestone})));
  return {rows:[...eligibleOperations,...legacy],imported,alreadyIssued:issued.filter(r=>!isArchivedLegacySolar(r)).map(r=>({...r,sourceKind:'Source register',sourceVersion:source.version,milestone:r.milestone==='advance'?'delivery':r.milestone}))};
 }
