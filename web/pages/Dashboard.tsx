@@ -946,7 +946,7 @@ export function Dashboard({
                                     ? "Inventory workspace"
                                     : view === "finance"
                                       ? "Accounts workspace"
-                                      : "My account"}
+                                      : view === "project-tracking" ? "Project Tracking" : view === "receivables" ? "Receivables" : "My account"}
             </strong>
           </span>
           {["Operations", "Admin", "Management"].includes(session.user.role) && (
@@ -1104,7 +1104,7 @@ export function Dashboard({
                                           ? "Inventory workspace"
                                           : view === "finance"
                                             ? "Accounts workspace"
-                                            : "My account"}
+                                            : view === "project-tracking" ? "Project Tracking" : view === "receivables" ? "Receivables" : "My account"}
                   </h1>
                   <p className="dashboard-intro">
                     {[
@@ -1179,7 +1179,7 @@ export function Dashboard({
                                           ? "Stock preparation and dispatch document queues."
                                           : view === "finance"
                                             ? "IPO review and supporting-document queues."
-                                            : "Your identity and access to the Power Zone workspace."}
+                                            : view === "project-tracking" ? "View-only project stages, invoice status and payments." : view === "receivables" ? "View-only customer receivables and invoice ageing." : "Your identity and access to the Power Zone workspace."}
                   </p>
                 </div>
               </div>
