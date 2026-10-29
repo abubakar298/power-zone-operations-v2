@@ -25,3 +25,41 @@
 .reconciled-stock .reconciled-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.reconciled-stock .reconciled-stat>strong{grid-row:1;grid-column:2}.reconciled-stock .reconciled-stat>small{grid-row:1;grid-column:3;align-self:start}.reconciled-stock .reconciled-stat>span{grid-column:1;grid-row:1}@media(max-width:900px){.reconciled-stock .reconciled-summary{grid-template-columns:1fr 1fr}}
 
 .reconciled-stock.stock-position-panel{padding:0!important}.reconciled-stock .stock-matrix-container{border:1px solid var(--pz-border);border-radius:12px;overflow:auto;background:var(--pz-surface)}.reconciled-stock .inventory-stock-matrix thead th{background:#efebf7;border-right:1px solid #e1dced;font-size:10px}.reconciled-stock .inventory-stock-matrix tbody td{background:white;border-right:1px solid #eeedf3}.reconciled-stock .inventory-stock-matrix .inventory-stock-section th{background:#eee8fb;color:var(--pz-primary)}
+
+/* Approved 5221 stock matrix: one item track and four measures per warehouse. */
+.reconciled-stock .reconciled-summary>.reconciled-stat{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);min-height:85px;padding:12px 15px!important;gap:8px;align-items:start}
+.reconciled-stock .reconciled-stat>strong{white-space:nowrap;padding-top:8px}
+.reconciled-stock .reconciled-stat>strong small{display:inline;font-size:13px}
+.reconciled-stock .reconciled-stat>span{padding-top:12px}
+.reconciled-stock .reconciled-filterbar{grid-template-columns:minmax(220px,1fr) 200px auto auto;padding:12px 14px;min-height:116px}
+.reconciled-stock .reconciled-filterbar>label{color:var(--pz-muted);font-weight:400}
+.reconciled-stock .reconciled-tabs{min-height:58px;align-items:start}
+.reconciled-stock .reconciled-tabs>small{padding:12px 8px 0;font-size:12px;color:var(--pz-muted)}
+.reconciled-stock .inventory-stock-matrix{width:100%;min-width:0;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:10px;line-height:1.5}
+.reconciled-stock .inventory-stock-matrix th,.reconciled-stock .inventory-stock-matrix td{padding:0 2px;border-bottom:1px solid var(--pz-border);border-right:0;vertical-align:top}
+.reconciled-stock .inventory-stock-matrix thead th{position:sticky;background:var(--pz-secondary-bg);color:var(--pz-primary);font-size:10px;text-align:center;font-weight:600;letter-spacing:0;text-transform:none;top:0;height:44px;border-left:1px solid var(--pz-border)}
+.reconciled-stock .inventory-stock-matrix thead th[rowspan]{text-align:left;vertical-align:middle;border-left:0}
+.reconciled-stock .inventory-stock-matrix thead tr:nth-child(2) th{height:30px;top:44px;border-left:0;background:var(--pz-canvas);font-size:8px}
+.reconciled-stock .inventory-stock-matrix thead tr:nth-child(2) th:nth-child(4n+1){border-left:1px solid var(--pz-border)}
+.reconciled-stock .inventory-stock-matrix tbody td{height:57px;text-align:center;background:var(--pz-surface)}
+.reconciled-stock .inventory-stock-matrix tbody tr:nth-child(even) td{background:var(--pz-canvas)}
+.reconciled-stock .inventory-stock-matrix tbody td:nth-child(4n+2){border-left:1px solid var(--pz-border)}
+.reconciled-stock .inventory-stock-matrix tbody td:first-child{text-align:left;padding:5px 4px 5px 6px;border-right:1px solid var(--pz-border)}
+.reconciled-stock .inventory-stock-matrix .stock-ledger-link{display:flex;align-items:center;justify-content:center;width:100%;min-height:32px;padding:0 1px;font-size:10px;line-height:1.2;color:inherit;text-align:center;font-weight:400;white-space:nowrap}
+.reconciled-stock .inventory-stock-matrix tbody td:first-child .stock-ledger-link{justify-content:flex-start;white-space:normal;overflow-wrap:anywhere;text-align:left;color:var(--pz-primary)}
+.reconciled-stock .inventory-stock-matrix tbody td:first-child strong{font-size:10px;font-weight:620}
+.reconciled-stock .inventory-stock-matrix tbody td:first-child>small{display:block;margin:2px 0 0;color:var(--pz-muted);font-size:9px;line-height:1.3;overflow-wrap:anywhere}
+.reconciled-stock .inventory-stock-matrix tbody td:nth-child(4n+1) .stock-ledger-link{font-weight:600}
+.reconciled-stock .inventory-stock-matrix thead th[colspan] .stock-ledger-link{flex-direction:column;min-height:44px;font-weight:600;gap:2px}
+.reconciled-stock .stock-open-ledger{display:block;font-size:9px;font-weight:400;color:var(--pz-muted)}
+.reconciled-stock .inventory-stock-matrix .inventory-stock-section th{height:28px;padding:6px;text-align:left;background:var(--pz-selected-bg);color:var(--pz-primary);font-size:11px}
+.reconciled-stock .inventory-stock-matrix .inventory-negative .stock-ledger-link{color:var(--pz-danger)}
+.reconciled-stock .stock-matrix-container{max-height:68vh}
+@media(max-width:1000px){.reconciled-stock .reconciled-filterbar{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){.reconciled-stock .inventory-stock-matrix{min-width:950px}.reconciled-stock .reconciled-filterbar{grid-template-columns:1fr}.reconciled-stock .reconciled-stat>strong{font-size:21px}.reconciled-stock .reconciled-tabs{flex-wrap:wrap}.reconciled-stock .reconciled-tabs>small{flex-basis:100%;margin:0;padding:4px}}
+
+.reconciled-stock .inventory-stock-matrix .inventory-stock-section th{padding:6px!important}
+.reconciled-stock .inventory-stock-matrix thead th[rowspan] .stock-ledger-link{justify-content:flex-start;text-align:left}
+.reconciled-stock .inventory-stock-matrix thead tr:nth-child(2) .stock-ledger-link{min-height:30px;font-size:8px}
+.reconciled-stock .inventory-stock-matrix tbody td{border-left:0;font-weight:400}
+.reconciled-stock .inventory-stock-matrix tbody td:nth-child(4n+2){border-left:1px solid var(--pz-border)}
