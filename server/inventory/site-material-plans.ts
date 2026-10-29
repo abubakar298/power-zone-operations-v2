@@ -1,3 +1,5 @@
+import {Decimal} from 'decimal.js';
+import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -36,6 +38,13 @@ export class SiteMaterialPlanRepository{
   if(fixed.version!==row.fixed_draft_version||(variable&&variable.version!==row.variable_draft_version))throw new HttpError(409,'A material module changed separately. Review its saved draft before continuing.');
   return {id:row.id,version:row.version,variableSupply:row.variable_supply,fixed,variable,createdAt:row.created_at,stockPosting:false as const};
  }
+ async issued(actor:string,id:string){
+  const plan=await this.detail(actor,id),ids=[plan.fixed.id,...(plan.variable?[plan.variable.id]:[])];
+  const rows=(await this.pool.query("SELECT id,number,snapshot,created_at FROM inventory_material_dispatches WHERE draft_id=ANY($1::uuid[]) OR snapshot#>>'{combinedPlan,id}'=$2 ORDER BY created_at DESC,id",[ids,id])).rows;
+  return {dispatches:rows.map(r=>({id:r.id,number:r.number,createdAt:r.created_at,variable:r.snapshot.lines.some((l:any)=>l.out&&Number(l.out)>0&&materialDocumentPolicy(l).customerUsageSignoff)}))};
+ }
+ async materialCatalogue(actor:string){return this.drafts.catalogue(actor);}
+ async issueSaved(actor:string,id:string,input:unknown,stock:import('./material-stock.js').MaterialStockRepository){const {issueSavedSite}=await import('./site-material-issuance.js');return issueSavedSite(this.pool,this,stock,actor,id,input);}
  async detail(actor:string,id:string){return this.read(actor,id,this.pool);}
  async list(actor:string){
   const permitted=await this.drafts.list(actor),ids=new Set(permitted.drafts.map(r=>r.id));
@@ -63,6 +72,17 @@ export class SiteMaterialPlanRepository{
    if(existing){
     const before=existing.fixed.snapshot.sites[0];
     if(before.siteId!==input.source.siteId||before.basisId!==input.source.basisId||before.sourceKind!==input.source.sourceKind)throw new HttpError(409,'Keep this preparation linked to its original approved site and BOQ.');
+   }
+   if(existing){
+    const sent=(await c.query("SELECT l.line_key,l.item_id,l.unit,l.description,sum(l.quantity)::text quantity FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.snapshot#>>'{combinedPlan,id}'=$1 OR d.draft_id=ANY($2::uuid[]) GROUP BY l.line_key,l.item_id,l.unit,l.description",[id,[existing.fixed.id,...(existing.variable?[existing.variable.id]:[])]] )).rows;
+    if(sent.length){
+     if(input.warehouse!==existing.fixed.snapshot.warehouse)throw new HttpError(409,'Previously issued material must keep its original warehouse.');
+     const rows=[...input.fixedLines,...input.variableLines];
+     for(const line of sent){const row=rows.find(r=>r.key===line.line_key);if(!row||row.itemId!==line.item_id||row.unit!==line.unit||row.description!==line.description||!row.out||new Decimal(row.out).lt(line.quantity))throw new HttpError(409,'Retain the item, unit and quantity already issued on the saved DO.');}
+     if(input.variableSupply!==existing.variableSupply&&sent.some(l=>existing.variable?.snapshot.lines.some((r:any)=>r.key===l.line_key)))throw new HttpError(409,'Issued variable items must retain their original individual or Parent DO supply route.');
+     const changed=JSON.stringify(input.fixedLines)!==JSON.stringify(existing.fixed.snapshot.lines)||JSON.stringify(input.variableLines)!==JSON.stringify(existing.variable?.snapshot.lines??[])||JSON.stringify(input.transport)!==JSON.stringify(existing.fixed.snapshot.transport);
+     if(changed&&!input.revisionReason)throw new HttpError(422,'Give a reason for revising an issued material preparation.');
+    }
    }
    const common={warehouse:input.warehouse,parent:false,sites:[input.source],transport:input.transport,...(input.revisionReason?{revisionReason:input.revisionReason}:{})};
    const fixed=await this.drafts.save(actor,{...common,...(existing?{id:existing.fixed.id}:{}),version:existing?.fixed.version??0,requestKey:childRequest(input.requestKey,'fixed'),kind:'fixed',lines:input.fixedLines},c);

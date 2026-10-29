@@ -23,7 +23,7 @@ export function InventoryRoleGate({session,onLogout}:{session:Session;onLogout:(
  useEffect(()=>{if(['Admin','Management'].includes(session.user.role))clearDepartmentUser();let active=true;void api<{kind:string}>('/material-dispatches/access').then(result=>{if(!active)return;if(result.kind==='storekeeper')history.replaceState(null,'','/inventory/gate-passes');if(['dispatcher','management'].includes(result.kind)&&!location.pathname.startsWith('/inventory')){history.replaceState(null,'','/inventory');setPath('/inventory');}setKind(result.kind);setError('');}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[session.user.id,attempt]);
  if(error)return <section className="pz-panel pz-stack"><p role="alert">{error}</p><Button onClick={()=>{setError('');setAttempt(v=>v+1);}}>Try again</Button></section>;
  if(!kind)return <p role="status">Opening your assigned Inventory workspace…</p>;
- if(kind==='storekeeper')return <GatePasses session={session} onLogout={onLogout}/>;
+ if(kind==='storekeeper')return <GatePasses session={session} onLogout={onLogout} limitedAccess/>;
  if(kind==='dispatcher'||kind==='management'){
   const props={session,onLogout};
   const content=(()=>{

@@ -1,3 +1,4 @@
+import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {postSignedDispatch,dispatchPosted} from './signed-dispatch.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {createHash,randomUUID} from 'node:crypto';
@@ -7,7 +8,7 @@ import {HttpError} from '../http/errors.js';
 import {transaction} from '../db/transaction.js';
 import {requireWarehouseAccess} from './warehouse-access.js';
 export const gatePassKind=z.enum(['dispatch','return','purchase','transfer-out','transfer-in','replacement-out','replacement-in']);
-export const gatePassCopySchema=z.object({kind:gatePassKind,documentId:z.uuid(),copyKind:z.enum(['signed-gate','signed-store']),evidenceId:z.uuid(),note:z.string().trim().min(3).max(2000),requestKey:z.uuid()}).strict();
+export const gatePassCopySchema=z.object({kind:gatePassKind,documentId:z.uuid(),copyKind:z.enum(['signed-gate','signed-store','signed-customer','customer-signoff']),siteId:z.uuid().optional(),evidenceId:z.uuid(),note:z.string().trim().min(3).max(2000),requestKey:z.uuid()}).strict();
 type Kind=z.infer<typeof gatePassKind>;
 const docs=`SELECT 'dispatch' kind,id,number,warehouse,created_at FROM inventory_material_dispatches UNION ALL SELECT 'return',id,number,snapshot->>'warehouse',created_at FROM inventory_material_receipts UNION ALL SELECT 'purchase',id,number,warehouse,created_at FROM inventory_material_purchase_receipts`;
 export class GatePassRepository{
@@ -20,8 +21,13 @@ export class GatePassRepository{
   if(access.kind==='unassigned')throw new HttpError(403,'Warehouse document access is required.');
   const warehouses=owner?(await this.pool.query(`SELECT DISTINCT warehouse FROM (${docs}) d UNION SELECT warehouse FROM inventory_warehouse_authority_current ORDER BY warehouse`)).rows.map(r=>r.warehouse):(await this.pool.query("SELECT DISTINCT warehouse FROM inventory_material_access WHERE user_id=$1 AND capability IN('dispatcher','storekeeper') ORDER BY warehouse",[actor])).rows.map(r=>r.warehouse);
   if(!owner&&!warehouses.length)throw new HttpError(403,'Warehouse document access is required.');
-  const records=(await this.pool.query(`SELECT d.*, (SELECT count(*)::int FROM inventory_gate_pass_copies c WHERE c.document_kind=d.kind AND c.document_id=d.id) signed_copies FROM (${docs}) d WHERE warehouse=ANY($1) ORDER BY created_at DESC,id DESC`,[warehouses])).rows;
-  return {kind:access.kind,warehouses,records};
+  const records=(await this.pool.query(`SELECT d.*, (SELECT count(*)::int FROM inventory_gate_pass_copies c WHERE c.document_kind=d.kind AND c.document_id=d.id AND c.copy_kind IN('signed-gate','signed-store')) signed_copies FROM (${docs}) d WHERE warehouse=ANY($1) ORDER BY created_at DESC,id DESC`,[warehouses])).rows;
+  const dispatches=(await this.pool.query('SELECT id,number,warehouse,snapshot,created_at FROM inventory_material_dispatches WHERE warehouse=ANY($1) ORDER BY created_at DESC,id',[warehouses])).rows;
+  for(const record of records){const dispatch=record.kind==='dispatch'?dispatches.find(d=>d.id===record.id):undefined;if(dispatch){record.parent=!!dispatch.snapshot.parent;record.siteName=dispatch.snapshot.sites.map((site:any)=>site.siteName).join(' · ');record.ipo=dispatch.snapshot.sites.map((site:any)=>site.ipo??'').join(' · ');}}
+  const signoffs=dispatches.flatMap(d=>(d.snapshot.sites??[]).filter((site:any)=>site.installation!==false&&d.snapshot.lines.some((line:any)=>line.sites.includes(site.siteId)&&Number(line.out)>0&&materialDocumentPolicy(line).customerUsageSignoff)).map((site:any)=>({kind:'dispatch',id:d.id,number:d.number,warehouse:d.warehouse,created_at:d.created_at,siteId:site.siteId,siteName:site.siteName,ipo:site.ipo??'',signoff:true})));
+  const signed=(await this.pool.query("SELECT document_id,source_site_id,count(*)::int n FROM inventory_gate_pass_copies WHERE warehouse=ANY($1) AND copy_kind='customer-signoff' GROUP BY document_id,source_site_id",[warehouses])).rows;
+  for(const item of signoffs)item.signed_copies=signed.find(r=>r.document_id===item.id&&r.source_site_id===item.siteId)?.n??0;
+  return {kind:access.kind,warehouses,records,signoffs};
  }
  async record(actor:string,kind:Kind,id:string,c:Pool|PoolClient=this.pool){
   let row:any;
@@ -39,16 +45,24 @@ export class GatePassRepository{
   }
   if(!row)throw new HttpError(404,'Warehouse document not found.');await requireWarehouseAccess(actor,row.warehouse,c,true);if(['dispatch','transfer-out','replacement-out','replacement-in'].includes(kind))row.snapshot={...row.snapshot,stockPosting:await dispatchPosted(c,kind as 'dispatch'|'transfer-out'|'replacement-out'|'replacement-in',id)};return row;
  }
- async detail(actor:string,kind:Kind,id:string){const record=await this.record(actor,kind,id);return {id:record.id,number:record.number,warehouse:record.warehouse,created_at:record.created_at,kind,copies:(await this.pool.query('SELECT id,copy_kind,evidence_id,note,created_at FROM inventory_gate_pass_copies WHERE document_kind=$1 AND document_id=$2 ORDER BY created_at,id',[kind,id])).rows};}
+ async detail(actor:string,kind:Kind,id:string){const record=await this.record(actor,kind,id);return {id:record.id,number:record.number,warehouse:record.warehouse,created_at:record.created_at,parent:!!record.snapshot.parent,kind,copies:(await this.pool.query('SELECT id,copy_kind,source_site_id,evidence_id,note,created_at FROM inventory_gate_pass_copies WHERE document_kind=$1 AND document_id=$2 ORDER BY created_at,id',[kind,id])).rows};}
  async attach(actor:string,raw:z.infer<typeof gatePassCopySchema>){const input=gatePassCopySchema.parse(raw),fingerprint=createHash('sha256').update(JSON.stringify(input)).digest('hex');return transaction(this.pool,async c=>{
    await lockActiveActor(c,actor);
   const record=await this.record(actor,input.kind,input.documentId,c);
   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.gate.copy.'||$1,0))",[input.requestKey]);
   const replay=(await c.query('SELECT id,fingerprint,created_by FROM inventory_gate_pass_copies WHERE request_key=$1',[input.requestKey])).rows[0];if(replay){if(replay.fingerprint!==fingerprint||replay.created_by!==actor)throw new HttpError(409,'This request belongs to another document copy.');return {id:replay.id,stockPosted:false};}
+  if(input.copyKind==='customer-signoff'){
+   const site=record.snapshot.sites?.find((s:any)=>s.siteId===input.siteId);
+   if(input.kind!=='dispatch'||!site||site.installation===false||!record.snapshot.lines.some((line:any)=>line.sites.includes(input.siteId)&&Number(line.out)>0&&materialDocumentPolicy(line).customerUsageSignoff))throw new HttpError(422,'Select a site with issued variable materials on this DO.');
+  }else if(input.siteId)throw new HttpError(422,'Only customer sign-offs have a site allocation.');
+  if(input.copyKind==='signed-customer'){
+   if(input.kind!=='dispatch'||record.snapshot.parent)throw new HttpError(422,'Customer receiving copies belong to individual site DOs.');
+   if(!(await c.query("SELECT 1 FROM inventory_gate_pass_copies WHERE document_kind='dispatch' AND document_id=$1 AND copy_kind='signed-gate' LIMIT 1",[input.documentId])).rowCount)throw new HttpError(409,'Upload the signed gate copy before customer receiving.');
+  }
   const evidence=(await c.query('SELECT warehouse FROM inventory_material_evidence WHERE id=$1',[input.evidenceId])).rows[0];if(!evidence||evidence.warehouse!==record.warehouse)throw new HttpError(422,'Upload the signed copy for this warehouse.');
   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.gate.copy.document.'||$1,0))",[input.kind+':'+input.documentId+':'+input.copyKind+':'+input.evidenceId]);
-  const existing=(await c.query('SELECT id FROM inventory_gate_pass_copies WHERE document_kind=$1 AND document_id=$2 AND copy_kind=$3 AND evidence_id=$4',[input.kind,input.documentId,input.copyKind,input.evidenceId])).rows[0];if(existing)return {id:existing.id,stockPosted:false};
+  const existing=(await c.query('SELECT id FROM inventory_gate_pass_copies WHERE document_kind=$1 AND document_id=$2 AND copy_kind=$3 AND evidence_id=$4 AND source_site_id IS NOT DISTINCT FROM $5::uuid',[input.kind,input.documentId,input.copyKind,input.evidenceId,input.siteId??null])).rows[0];if(existing)return {id:existing.id,stockPosted:false};
   const stockPosted=await postSignedDispatch(c,actor,input.kind,input.documentId,input.copyKind,input.evidenceId);
-  const id=randomUUID();await c.query('INSERT INTO inventory_gate_pass_copies(id,document_kind,document_id,warehouse,copy_kind,evidence_id,note,request_key,fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[id,input.kind,input.documentId,record.warehouse,input.copyKind,input.evidenceId,input.note,input.requestKey,fingerprint,actor]);await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`inventory.gate_copy.${input.copyKind}:${input.kind}:${input.documentId}`]);return {id,stockPosted};
+  const id=randomUUID();await c.query('INSERT INTO inventory_gate_pass_copies(id,document_kind,document_id,warehouse,copy_kind,evidence_id,note,request_key,fingerprint,created_by,source_site_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',[id,input.kind,input.documentId,record.warehouse,input.copyKind,input.evidenceId,input.note,input.requestKey,fingerprint,actor,input.siteId??null]);await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`inventory.gate_copy.${input.copyKind}:${input.kind}:${input.documentId}`]);return {id,stockPosted};
  });}
 }

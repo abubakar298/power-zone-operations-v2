@@ -10,7 +10,9 @@ test('scheduled batches are visible before Parent DO selection and each approved
   if(path==='/site-plans')return r.fulfill({json:{plans:[{id:saved,siteId:site}]}});
   return r.fulfill({json:{drafts:[]}});
  });
- await page.goto('/inventory/materials');const batches=page.locator('.parent-operations-batches');await expect(batches).toBeVisible();await expect(batches.locator('summary')).toHaveText('Scheduled Operations batches');
- const held=batches.getByRole('row').filter({hasText:'Held site'});await expect(held).toContainText('Approved BOQ link required');await expect(held.getByRole('button',{name:'Open materials',exact:true})).toHaveCount(0);
- await batches.getByRole('row').filter({hasText:'Approved UPS site'}).getByRole('button',{name:'Open materials',exact:true}).click();await expect(page).toHaveURL(new RegExp('/inventory/materials/'+saved+'$'));expect(writes).toBe(0);
+ await page.goto('/inventory/materials');await expect(page.getByRole('heading',{name:'Operations batches',exact:true})).toBeVisible();
+ const summary=page.getByRole('row').filter({hasText:'OPB-TEST'});await expect(summary).toContainText('2026-11-01');await expect(summary).not.toContainText('Approved UPS site');await summary.getByRole('button',{name:'View',exact:true}).click();
+ await expect(page).toHaveURL(/operations-batch=batch/);await expect(page.getByRole('button',{name:'Create Parent DO',exact:true})).toBeEnabled();
+ const held=page.getByRole('row').filter({hasText:'Held site'});await expect(held).toContainText('Approved BOQ link required');await expect(held.getByRole('button',{name:'Open materials',exact:true})).toHaveCount(0);
+ await page.getByRole('row').filter({hasText:'Approved UPS site'}).getByRole('button',{name:'Open materials',exact:true}).click();await expect(page).toHaveURL(new RegExp('/inventory/materials/'+saved+'$'));expect(writes).toBe(0);
 });

@@ -9,8 +9,10 @@ const quantity=(value:string|null)=>value===null?'':new Decimal(value).toDecimal
 /** Render-only: whitelisted document fields, never prices or arbitrary source
  * snapshots. Long rows paginate with repeated headers and top-aligned cells. */
 export const warehouseDoCopies=['Customer copy','Gate copy','Handover evidence','Storekeeper copy'];
+/** Parent dispatch is one shared warehouse order; it does not need per-customer or driver copies. */
+export const parentDoCopies=['Gate copy','Storekeeper copy'];
 export function materialDocumentPdf(model:MaterialPrintModel,copies:string[]=['']){
- const pdf=new jsPDF({format:'a4',compress:true}),status=model.status==='received'?'RECEIVED - WAREHOUSE IN':model.status==='site-record'?'SITE USAGE - NOT A WAREHOUSE RECEIPT':model.status==='issued'?'ISSUED - WAREHOUSE DISPATCH':model.status==='simulation'?'SIMULATION - NOT AN ISSUED DOCUMENT':'DRAFT - NOT ISSUED';
+ const pdf=new jsPDF({format:'a4',compress:true}),status=model.status==='prepared'?'PREPARED - AWAITING SIGNED GATE COPY':model.status==='received'?'RECEIVED - WAREHOUSE IN':model.status==='site-record'?'SITE USAGE - NOT A WAREHOUSE RECEIPT':model.status==='issued'?'ISSUED - WAREHOUSE DISPATCH':model.status==='simulation'?'SIMULATION - NOT AN ISSUED DOCUMENT':'DRAFT - NOT ISSUED';
  let copyLabel='';
  const top=70,headed=new Set<number>();
  const header=()=>{

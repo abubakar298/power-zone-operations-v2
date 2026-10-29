@@ -29,7 +29,7 @@ export const materialDraftInputSchema=z.object({
  transport:z.object({issuedTo:z.string().trim().max(200),vehicle:z.string().trim().max(100),driver:z.string().trim().max(200),driverIdentity:z.string().trim().max(100)}).strict(),
 }).strict();
 export type MaterialDraftInput=z.infer<typeof materialDraftInputSchema>;
-export type MaterialSource={sourceKind:'store-boq'|'headsup'|'linked-ipo';registeredSiteId?:string;storeHandoffId?:string;basisId:string;basisVersion:1;siteId:string;ipo:string|null;orderNumber?:string;customerPo?:string;dispatchDate?:string|null;installationDate?:string|null;siteName:string;customer:string;installation:boolean|null;authorization:'approved-store-boq'|'approved-ipo-boq'|'forecast-only';items:unknown[]};
+export type MaterialSource={installationOnly?:boolean;sourceKind:'store-boq'|'headsup'|'linked-ipo';registeredSiteId?:string;storeHandoffId?:string;basisId:string;basisVersion:1;siteId:string;ipo:string|null;orderNumber?:string;customerPo?:string;dispatchDate?:string|null;installationDate?:string|null;siteName:string;customer:string;installation:boolean|null;authorization:'approved-store-boq'|'approved-ipo-boq'|'forecast-only';items:unknown[]};
 type Source=MaterialSource;
 const latest=`SELECT d.id,v.version,v.snapshot,v.created_at,(SELECT number FROM inventory_parent_preparation_references WHERE draft_id=d.id) AS number FROM inventory_material_drafts d JOIN LATERAL(SELECT * FROM inventory_material_draft_versions WHERE draft_id=d.id ORDER BY version DESC LIMIT 1)v ON true`;
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
@@ -61,6 +61,8 @@ export class MaterialDraftRepository{
    JOIN LATERAL(SELECT snapshot FROM operations_board_versions WHERE site_id=l.board_site_id ORDER BY version DESC LIMIT 1)v ON true
    JOIN boq_revisions b ON b.id=l.boq_revision_id`)).rows;
   const registered=(await c.query('SELECT DISTINCT ON(site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC')).rows;
+  const activeBatches=(await c.query('SELECT DISTINCT ON(batch_id) version,snapshot FROM operations_board_batch_versions ORDER BY batch_id,version DESC')).rows;
+  const installationOnlyBoards=new Set(inventoryOperationsBatches(activeBatches,registered,[]).flatMap(batch=>batch.stops.filter(stop=>stop.work==='labour').map(stop=>stop.boardSiteId)));
   const reference=(number:string,order:string)=>`${number}${order?' · '+order:''}`.trim().replace(/\s+/g,' ').toLowerCase();
   for(const source of confirmed){
    const known=registered.some(r=>reference(r.snapshot.ipo??'','')===reference(source.ipo_number,source.order_number??''));
@@ -70,11 +72,11 @@ export class MaterialDraftRepository{
   for(const link of links){
    const ipo=approvedIpos.get(link.ipo_id);if(!ipo||ipo instanceof HttpError){heldIpos.add(link.ipo_id);continue;}
    const s=ipo.snapshot;
-   const identity=checkMaterialSourceLink({...link.board,id:link.board_site_id},[{id:ipo.id,number:ipo.number,orderNumber:s.input?.orderNumber??'',poNumber:s.input?.poNumber??'',siteName:s.siteName??''}],continuations.has(ipo.id)&&link.board.installation===true);
+   const identity=checkMaterialSourceLink({...link.board,id:link.board_site_id},[{id:ipo.id,number:ipo.number,orderNumber:s.input?.orderNumber??'',poNumber:s.input?.poNumber??'',siteName:s.siteName??''}],(continuations.has(ipo.id)||installationOnlyBoards.has(link.board_site_id))&&link.board.installation===true);
    if(identity.status!=='eligible'||hash(s)!==link.ipo_sha256||hash(link.boq)!==link.boq_sha256){heldIpos.add(ipo.id);continue;}
    const existing=confirmed.find(r=>r.ipo_id===ipo.id);
    if(existing)heldIpos.add(ipo.id); // Preserve the stable link basis when a later Store handoff arrives.
-   linked.push({sourceKind:'linked-ipo',storeHandoffId:existing?.id,registeredSiteId:link.board_site_id,basisId:link.id,basisVersion:1,siteId:ipo.id,ipo:ipo.number,orderNumber:String(s.input?.orderNumber??''),customerPo:String(s.input?.poNumber??''),siteName:s.siteName,customer:String(s.customer?.name??''),installation:link.board.installation===true?true:link.board.installation===false?false:null,dispatchDate:plannedInventoryDelivery({...link.board,id:link.board_site_id}),installationDate:plannedInventoryInstallation(link.board),authorization:'approved-ipo-boq',items:items(link.boq.lines)});
+   linked.push({installationOnly:installationOnlyBoards.has(link.board_site_id),sourceKind:'linked-ipo',storeHandoffId:existing?.id,registeredSiteId:link.board_site_id,basisId:link.id,basisVersion:1,siteId:ipo.id,ipo:ipo.number,orderNumber:String(s.input?.orderNumber??''),customerPo:String(s.input?.poNumber??''),siteName:s.siteName,customer:String(s.customer?.name??''),installation:link.board.installation===true?true:link.board.installation===false?false:null,dispatchDate:plannedInventoryDelivery({...link.board,id:link.board_site_id}),installationDate:plannedInventoryInstallation(link.board),authorization:'approved-ipo-boq',items:items(link.boq.lines)});
   }
   return [...confirmed.filter(r=>!heldIpos.has(r.ipo_id)).map(r=>({sourceKind:'store-boq' as const,registeredSiteId:r.registeredSiteId,basisId:r.id,basisVersion:1 as const,siteId:r.ipo_id,ipo:r.ipo_number,dispatchDate:(()=>{const matches=registered.filter(b=>b.snapshot.origin?.ipoId===r.ipo_id&&b.snapshot.origin?.operationsIssuanceId===r.operations_issuance_id);return matches.length===1?plannedInventoryDelivery({...matches[0].snapshot,id:matches[0].site_id}):null;})(),installationDate:(()=>{const matches=registered.filter(b=>b.snapshot.origin?.ipoId===r.ipo_id&&b.snapshot.origin?.operationsIssuanceId===r.operations_issuance_id);return matches.length===1?plannedInventoryInstallation(matches[0].snapshot):null;})(),orderNumber:r.order_number??'',customerPo:r.po_number??'',siteName:String(r.snapshot.siteName),customer:String(r.snapshot.customer?.name??''),installation:r.registeredSiteId?(r.registeredInstallation===true?true:r.registeredInstallation===false?false:null):r.scope==='installation'?true:r.scope==='delivery_only'?false:null,authorization:'approved-store-boq' as const,items:items(r.snapshot.items)})),
    ...linked,...advance.map(r=>({sourceKind:'headsup' as const,basisId:r.id,basisVersion:1 as const,siteId:r.record_id,ipo:null,dispatchDate:null,siteName:r.site_name,customer:String(r.site.customer??''),installation:null,authorization:'forecast-only' as const,items:items(r.site.items)}))];
@@ -155,6 +157,8 @@ export class MaterialDraftRepository{
   const rows=await this.pool.query(`SELECT DISTINCT payload->>'warehouse' AS warehouse FROM inventory_warehouse_source_balances WHERE source_sha256=(SELECT source_sha256 FROM inventory_warehouse_sources ORDER BY (coalesce(metadata->>'canonicalIds','') ~ '^[1-9][0-9]*$') DESC,created_at DESC,source_sha256 LIMIT 1) ORDER BY warehouse`);
   return {warehouses:rows.rows.map(r=>r.warehouse as string).filter(w=>access.owner||access.warehouses.includes(w))};
  }
+ async catalogue(actor:string){await this.access(actor);return this.stockCatalogue();}
+ async issueSaved(actor:string,id:string,input:unknown,stock:import('./material-stock.js').MaterialStockRepository){const {issueSavedParent}=await import('./site-material-issuance.js');return issueSavedParent(this.pool,this,stock,actor,id,input);}
  async intake(actor:string){
   const access=await this.access(actor),stock=await this.stockCatalogue();
   // Imported Accounts/Operations positioning is visible without pretending that
@@ -177,15 +181,18 @@ export class MaterialDraftRepository{
   if(ipoIds.length)await c.query('SELECT id FROM site_workflow WHERE ipo_id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',[ipoIds]);
   const hasDispatch=continuingDraftId&&(await c.query('SELECT 1 FROM inventory_material_dispatches WHERE draft_id=$1 LIMIT 1',[continuingDraftId])).rowCount;
   const available=await this.sources(c,hasDispatch?new Set(selected.map(s=>s.siteId)):new Set());
+  const resolved:MaterialSource[]=[];
   for(const saved of selected){
    const current=available.find(s=>s.siteId===saved.siteId&&s.sourceKind===saved.sourceKind&&s.basisId===saved.basisId&&s.basisVersion===saved.basisVersion);
    if(!current)throw new HttpError(409,'A selected site is no longer pending or its approved BOQ identity changed.');
    if(current.authorization==='forecast-only')throw new HttpError(409,'A forecast preparation needs approved material-issuance authority before stock can leave.');
    if(current.installation===null||current.installation!==saved.installation)throw new HttpError(409,'Confirm the approved installation or delivery-only scope before issuing material.');
+   resolved.push(current);
   }
+  return resolved;
  }
  async history(actor:string,id:string){const access=await this.access(actor);await this.detail(actor,id);const versions=(await this.pool.query('SELECT version,created_at,snapshot FROM inventory_material_draft_versions WHERE draft_id=$1 ORDER BY version DESC',[id])).rows;return {versions:versions.filter(r=>access.owner||access.warehouses.includes(r.snapshot.warehouse)).map(r=>({version:r.version,at:r.created_at,reason:r.snapshot.revisionReason??'Preparation saved',warehouse:r.snapshot.warehouse}))};}
- async list(actor:string){const access=await this.access(actor);const rows=(await this.pool.query(latest+' ORDER BY v.created_at DESC')).rows;return {access,drafts:rows.filter(r=>access.owner||access.warehouses.includes(r.snapshot.warehouse)),stockPosting:false};}
+ async list(actor:string){const access=await this.access(actor);const rows=(await this.pool.query(latest+' ORDER BY v.created_at DESC')).rows;return {access,drafts:rows.filter(r=>!r.snapshot.combinedPlan&&(access.owner||access.warehouses.includes(r.snapshot.warehouse))),stockPosting:false};}
  async detail(actor:string,id:string,c:Pool|PoolClient=this.pool){const access=await this.access(actor,c),row=(await c.query(latest+' WHERE d.id=$1',[id])).rows[0];if(!row)throw new HttpError(404,'Material draft not found.');this.scope(access,row.snapshot.warehouse);return {...row,stockPosting:false};}
  async save(actor:string,raw:MaterialDraftInput,client?:PoolClient){
   const input=materialDraftInputSchema.parse(raw);
@@ -201,6 +208,7 @@ export class MaterialDraftRepository{
     await c.query('SELECT id FROM inventory_material_drafts WHERE id=$1 FOR UPDATE',[id]);
     const current=(await c.query(latest+' WHERE d.id=$1',[id])).rows[0];
     if(!current)throw new HttpError(404,'Material draft not found.');this.scope(access,current.snapshot.warehouse);
+    if(current.snapshot.combinedPlan)throw new HttpError(409,'Edit this issuance through its original site material preparation.');
     if(!client&&(await c.query('SELECT 1 FROM inventory_site_material_plan_versions WHERE fixed_draft_id=$1 OR variable_draft_id=$1 LIMIT 1',[id])).rowCount)throw new HttpError(409,'Edit both modules through the site material preparation.');
     if(current.version!==input.version)throw new HttpError(409,'This draft changed. Refresh before saving.');
     const identity=(sites:any[])=>sites.map(s=>`${s.sourceKind}:${s.basisId}:${s.basisVersion}:${s.siteId}`).sort().join('|');

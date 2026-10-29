@@ -13,7 +13,7 @@ export const inventoryMenu:ReadonlyArray<{id:InventorySection;label:string;path:
  {id:'transfers',label:'Inter-Warehouse Transfers',path:'/inventory/transfers',icon:'arrow'},
  {id:'replacements',label:'Replacements',path:'/inventory/replacements',icon:'file'},
  {id:'site-ledger',label:'Site ledger',path:'/inventory/site-ledger',icon:'site'},
- {id:'gate-passes',label:'Gate passes',path:'/inventory/gate-passes',icon:'file'},
+ {id:'gate-passes',label:'Documents Upload',path:'/inventory/gate-passes',icon:'file'},
  {id:'parent-dos',label:'Parent DO reconciliation',path:'/inventory/parent-dos/review',icon:'file'},
  {id:'reconciliations',label:'Closing reconciliations',path:'/inventory/reconciliations',icon:'shield'},
  {id:'minimum-stock',label:'Minimum Closing Stock',path:'/inventory/minimum-stock',icon:'rates'},

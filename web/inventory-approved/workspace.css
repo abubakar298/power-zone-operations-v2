@@ -9,3 +9,5 @@
 
 .approved-parent-form .issue-fixed-module,.approved-parent-form .issue-parent-do-choice{display:none!important}.approved-parent-form .issue-parent-deferred{opacity:1}
 .approved-transport-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:16px}.approved-transport-fields>div{display:grid;grid-template-rows:auto 44px;gap:8px;align-items:start}.approved-transport-fields label{display:grid;gap:8px}.approved-transport-fields .pz-button{justify-self:start}@media(max-width:800px){.approved-transport-fields{grid-template-columns:1fr}}
+
+.approved-storekeeper-inventory .approved-inventory-content{margin-left:0}

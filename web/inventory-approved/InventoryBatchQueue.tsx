@@ -1,0 +1,18 @@
+import {useState} from 'react';
+import {Button} from '../ui/Button.js';
+import {navigateInventory} from './navigation.js';
+import type {InventoryBatch} from '../../server/inventory/operations-batches.js';
+const dates=(b:InventoryBatch)=>[...new Set(b.stops.map(s=>s.date).filter(Boolean))].sort();
+const day=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+function compare(a:InventoryBatch,b:InventoryBatch){const x=dates(a)[0]??'',y=dates(b)[0]??'',today=day();if(!x||!y)return x?-1:y?1:0;const futureX=x>=today,futureY=y>=today;return futureX!==futureY?futureX?-1:1:futureX?x.localeCompare(y):y.localeCompare(x);}
+const work=(s:InventoryBatch['stops'][number])=>s.work==='labour'?'Installation only':s.work==='delivery'?'Delivery only':'Delivery + installation';
+export function InventoryBatchList({batches,onView}:{batches:InventoryBatch[];onView:(b:InventoryBatch)=>void}){
+ const [search,setSearch]=useState('');
+ const matching=batches.filter(b=>`${b.number} ${b.stops.map(s=>s.name+' '+s.ipo).join(' ')}`.toLowerCase().includes(search.toLowerCase())).sort(compare),rows=search.trim()?matching:matching.slice(0,5);
+ return <section className="pz-stack"><h2>Operations batches</h2><label>Search batches dispatched by Operations<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Batch number, IPO or site"/></label><div className="pz-table-scroll"><table className="ob-table"><thead><tr><th>Batch ID</th><th>Scheduled delivery date</th><th>Sites</th><th>Action</th></tr></thead><tbody>{rows.map(b=><tr key={b.id}><td><strong>{b.number||b.id}</strong></td><td>{dates(b).join(', ')||'No material delivery scheduled'}</td><td>{b.stops.length}</td><td><Button variant="secondary" onClick={()=>onView(b)}>View</Button></td></tr>)}</tbody></table></div>{!rows.length&&<p>No scheduled batches match this search.</p>}</section>;
+}
+export function InventoryBatchDetail({batch,plans,onBack,onParent}:{batch?:InventoryBatch;plans:{id:string;siteId:string}[];onBack:()=>void;onParent:(ids:string[])=>void}){
+ if(!batch)return <section className="pz-panel pz-stack"><Button onClick={onBack}>Back to Material issuance</Button><p>This batch is no longer in the current schedule. Refresh to see its latest Operations state.</p></section>;
+ const ready=batch.stops.filter(s=>(s.status==='ready'||s.status==='installation-only')&&s.siteId).map(s=>s.siteId!);
+ return <section className="pz-panel pz-stack"><Button onClick={onBack}>Back to Material issuance</Button><div className="ob-section-title"><div><h1>{batch.number}</h1><p>{dates(batch).join(', ')||'No material delivery scheduled'} · {batch.stops.length} sites</p></div><Button variant="primary" disabled={!ready.length} onClick={()=>onParent([...new Set(ready)])}>Create Parent DO</Button></div><div className="pz-table-scroll"><table className="ob-table"><thead><tr><th>Site / IPO</th><th>Work type</th><th>Scheduled delivery date</th><th>Action</th></tr></thead><tbody>{batch.stops.map(s=>{const saved=plans.find(p=>p.siteId===s.siteId);return <tr key={s.boardSiteId}><td><strong>{s.name}</strong><small>{s.ipo}</small></td><td>{work(s)}</td><td>{s.date||'No material delivery scheduled'}</td><td>{s.siteId&&s.status!=='approved-boq-required'?<Button variant="secondary" onClick={()=>navigateInventory('/inventory/materials/'+(saved?saved.id:'new?site='+encodeURIComponent(s.siteId!)))}>Open materials</Button>:<span>{s.status==='installation-only'?'No new equipment delivery':'Approved BOQ link required'}</span>}</td></tr>;})}</tbody></table></div></section>;
+}

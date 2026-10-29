@@ -1,0 +1,25 @@
+.reconciled-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:2px 2px 4px}
+.reconciled-heading h1{margin:3px 0 2px;font-size:28px;line-height:1.18;font-weight:600;letter-spacing:-.45px;color:var(--pz-text)}
+.reconciled-heading p{margin:5px 0 0;color:var(--pz-muted);font-size:13px}.reconciled-heading p span{padding:0 4px;color:var(--pz-border)}
+.reconciled-eyebrow{font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--pz-primary)}
+.reconciled-source{display:grid;justify-items:end;gap:4px;color:var(--pz-muted);font-size:12px}.reconciled-source small{font-size:11px}
+.reconciled-summary{gap:10px}
+.reconciled-stat{display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:12px;row-gap:3px;min-height:76px;padding:12px 15px!important;background:var(--pz-surface);border:1px solid var(--pz-border);border-radius:12px;box-shadow:0 1px 2px rgb(34 27 69 / 4%)}
+.reconciled-stat>span{font-size:12px;font-weight:550;color:var(--pz-muted)}
+.reconciled-stat>strong{grid-column:2;grid-row:1 / span 2;font-size:24px;line-height:1;font-weight:620;color:var(--pz-text)}
+.reconciled-stat>strong small{font-size:13px;color:var(--pz-muted);font-weight:500}
+.reconciled-stat>small{font-size:11px;line-height:1.35;color:var(--pz-muted)}
+.reconciled-stat-good>strong{color:var(--pz-success)}.reconciled-stat-alert>strong{color:var(--pz-danger)}
+.reconciled-tabs{display:flex;align-items:center;gap:8px;min-height:48px;padding:6px 8px;background:var(--pz-surface);border:1px solid var(--pz-border);border-radius:12px}
+.reconciled-tabs>.pz-button{min-height:38px;padding:0 13px;border-radius:8px;font-size:13px}
+.reconciled-tabs>.pz-button[aria-pressed="true"]{background:var(--pz-selected-bg);border-color:var(--pz-selected-border);color:var(--pz-primary);font-weight:600}
+.reconciled-tabs>.pz-button span{display:inline-flex;align-items:center;justify-content:center;min-width:23px;height:22px;margin-left:6px;padding:0 5px;border-radius:11px;background:rgb(255 255 255 / 76%);font-size:11px;font-variant-numeric:tabular-nums}
+.reconciled-tabs-note{margin-left:auto;padding-right:8px;color:var(--pz-muted);font-size:12px}
+.reconciled-filterbar{display:grid;grid-template-columns:minmax(260px,1fr) 230px auto;align-items:end;gap:12px;padding:12px 14px;background:var(--pz-surface);border:1px solid var(--pz-border);border-radius:12px}
+.reconciled-filterbar .pz-field{gap:5px}.reconciled-filterbar .pz-field label{font-size:12px;font-weight:550;color:var(--pz-muted)}
+.reconciled-filterbar input,.reconciled-filterbar select{min-height:42px}
+.reconciled-filterbar>.pz-button{min-height:42px;margin-bottom:0}
+.reconciled-summary>div{border-radius:12px}
+.reconciled-stock{display:grid;gap:14px}.reconciled-stock .reconciled-summary>div{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:start;gap:8px;padding:14px;background:var(--pz-surface);border:1px solid var(--pz-border);border-radius:12px}.reconciled-stock .reconciled-tabs{display:flex;align-items:start;gap:8px;padding:6px;background:var(--pz-surface);border:1px solid var(--pz-border);border-radius:12px}.reconciled-stock .reconciled-tabs>small{margin-left:auto}.reconciled-stock .reconciled-filterbar{display:grid;grid-template-columns:minmax(240px,1fr) 200px auto;align-items:start;gap:12px;padding:16px;background:var(--pz-surface);border:1px solid var(--pz-border);border-radius:12px}.reconciled-stock .reconciled-filterbar label{display:grid;gap:8px;font-size:12px}.reconciled-stock .reconciled-filterbar .stock-minimum-filter{display:flex;align-items:center;padding-top:27px}.reconciled-stock .stock-minimum-filter input{width:18px;height:18px}.reconciled-stock .inventory-stock-matrix td,.reconciled-stock .inventory-stock-matrix th{vertical-align:top}@media(max-width:900px){.reconciled-stock .reconciled-summary{grid-template-columns:1fr 1fr}.reconciled-stock .reconciled-filterbar{grid-template-columns:1fr}.reconciled-stock .reconciled-filterbar .stock-minimum-filter{padding-top:0}}
+
+.reconciled-stock .reconciled-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.reconciled-stock .reconciled-stat>strong{grid-row:1;grid-column:2}.reconciled-stock .reconciled-stat>small{grid-row:1;grid-column:3;align-self:start}.reconciled-stock .reconciled-stat>span{grid-column:1;grid-row:1}@media(max-width:900px){.reconciled-stock .reconciled-summary{grid-template-columns:1fr 1fr}}

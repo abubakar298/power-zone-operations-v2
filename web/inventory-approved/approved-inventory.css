@@ -208,3 +208,7 @@
 .approved-document-scroll{overflow:auto;max-width:100%}
 
 .approved-inventory .issue-parent-sites-covered{grid-column:span 2}.approved-inventory .issue-parent-sites-covered dd{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3mm}.approved-inventory .issue-parent-sites-covered dd small{display:block;font-size:8px;margin-top:2px}
+
+/* Approved issuance module actions stay on their own line. */
+.approved-inventory .issue-entry-module>.issue-inline-add{display:block;border:0;background:transparent;color:var(--pz-primary);font:inherit;font-weight:600;min-height:44px;padding:8px 0;text-align:left;cursor:pointer}
+.approved-inventory .issue-entry-module>.issue-inline-add:focus-visible{outline:2px solid var(--pz-focus);outline-offset:2px}

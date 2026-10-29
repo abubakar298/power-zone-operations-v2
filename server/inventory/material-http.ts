@@ -1,3 +1,5 @@
+import {savedSiteIssueSchema} from './site-material-issuance.js';
+import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import closingReviewed from './closing-reviewed-source.json' with {type:'json'};
 import {replacementCommittedPrintRecord,replacementDocumentPdf} from './material-replacement-documents.js';
 import {warehouseTransferPrintModel,warehouseTransferReceiptPrintModel} from './warehouse-transfer-documents.js';
@@ -8,8 +10,8 @@ import {equalSecrets} from '../auth/crypto.js';
 import {HttpError} from '../http/errors.js';
 import {MaterialDraftRepository,materialDraftInputSchema} from './material-drafts.js';
 import {SiteMaterialPlanRepository,siteMaterialPlanInputSchema} from './site-material-plans.js';
-import {returnWorksheetPrintModel,returnReceiptPrintModel,purchaseReceiptPrintModel,siteUsagePrintModel,issuedDispatchPrintModel,parentDraftPrintModel,sitePlanPrintModel} from './material-document-model.js';
-import {materialDocumentPdf,warehouseDoCopies} from './material-document-pdf.js';
+import {issuedCustomerSignoffModels,returnWorksheetPrintModel,returnReceiptPrintModel,purchaseReceiptPrintModel,siteUsagePrintModel,issuedDispatchPrintModel,parentDraftPrintModel,sitePlanPrintModel} from './material-document-model.js';
+import {materialDocumentPdf,parentDoCopies,warehouseDoCopies} from './material-document-pdf.js';
 
 import {MaterialStockRepository,materialIssueInputSchema,materialReceiptInputSchema,materialEvidenceInputSchema} from './material-stock.js';
 
@@ -31,9 +33,10 @@ export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:Re
   r.get('/gate-passes',async(req,res)=>res.json(await gates.list(req.authSession!.user.id)));
   r.get('/gate-passes/:kind/:id',async(req,res)=>res.json(await gates.detail(req.authSession!.user.id,kind(req.params.kind),key(req.params.id))));
   r.post('/gate-pass-copies',async(req,res)=>{const input=gatePassCopySchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Select the warehouse document, copy type and signed evidence.');res.json(await gates.attach(req.authSession!.user.id,input.data));});
-  r.get('/gate-passes/:kind/:id/document.pdf',async(req,res)=>{const type=kind(req.params.kind),record=await gates.record(req.authSession!.user.id,type,key(req.params.id));if(type==='replacement-out'||type==='replacement-in'){const model=replacementCommittedPrintRecord(record,type);res.locals.downloadContext={documentType:type==='replacement-out'?'Replacement DO':'Faulty return IGP',identity:`gate-pass:${type}:${record.id}`,revision:1};res.type('pdf').set('Content-Disposition',`inline; filename="${record.number}.pdf"`).send(replacementDocumentPdf(model));return;}const model=type==='transfer-out'?warehouseTransferPrintModel(record):type==='transfer-in'?warehouseTransferReceiptPrintModel(record):type==='dispatch'?issuedDispatchPrintModel(record):type==='return'?returnReceiptPrintModel(record):purchaseReceiptPrintModel(record);if(req.query.format==='model'){res.json(model);return;}res.locals.downloadContext={documentType:model.title,identity:`gate-pass:${type}:${record.id}`,revision:1};res.type('pdf').set('Content-Disposition',`inline; filename="${record.number}.pdf"`).send(materialDocumentPdf(model,type==='transfer-out'?warehouseDoCopies:undefined));});
+  r.get('/gate-passes/:kind/:id/document.pdf',async(req,res)=>{const type=kind(req.params.kind),record=await gates.record(req.authSession!.user.id,type,key(req.params.id));if(type==='replacement-out'||type==='replacement-in'){const model=replacementCommittedPrintRecord(record,type);res.locals.downloadContext={documentType:type==='replacement-out'?'Replacement DO':'Faulty return IGP',identity:`gate-pass:${type}:${record.id}`,revision:1};res.type('pdf').set('Content-Disposition',`inline; filename="${record.number}.pdf"`).send(replacementDocumentPdf(model));return;}const model=type==='transfer-out'?warehouseTransferPrintModel(record):type==='transfer-in'?warehouseTransferReceiptPrintModel(record):type==='dispatch'?issuedDispatchPrintModel(record):type==='return'?returnReceiptPrintModel(record):purchaseReceiptPrintModel(record);if(req.query.format==='model'){res.json(model);return;}res.locals.downloadContext={documentType:model.title,identity:`gate-pass:${type}:${record.id}`,revision:1};res.type('pdf').set('Content-Disposition',`inline; filename="${record.number}.pdf"`).send(materialDocumentPdf(model,type==='transfer-out'?warehouseDoCopies:type==='dispatch'&&model.parentDispatch?parentDoCopies:undefined));});
  }
  if(stock){
+  r.post('/drafts/:id/issue-saved',async(req,res)=>{const input=savedSiteIssueSchema.omit({partialDelivery:true}).safeParse(req.body);if(!input.success)throw new HttpError(422,'Check the saved Parent DO version and note.');res.json(await repo.issueSaved(req.authSession!.user.id,z.uuid().parse(req.params.id),input.data,stock));});
   r.get('/stock-overview',async(req,res)=>res.json(await stock.overview(req.authSession!.user.id)));
   r.get('/stock-ledger',async(req,res)=>res.json(await stock.ledger(req.authSession!.user.id,req.query)));
   const uuid=(value:unknown)=>{const parsed=z.uuid().safeParse(value);if(!parsed.success)throw new HttpError(400,'Invalid warehouse record.');return parsed.data;};
@@ -43,12 +46,30 @@ export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:Re
   r.post('/receipts',async(req,res)=>{const input=materialReceiptInputSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Check the counted return quantities and warehouse receipt evidence.');res.json(await stock.receive(req.authSession!.user.id,input.data));});
   r.post('/evidence',async(req,res)=>{const input=materialEvidenceInputSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Upload a PDF, PNG or JPEG warehouse evidence file up to 15 MB.');res.json(await stock.uploadEvidence(req.authSession!.user.id,input.data));});
   r.get('/evidence/:id',async(req,res)=>{const file=await stock.evidence(req.authSession!.user.id,uuid(req.params.id));res.set('Content-Type',file.media_type).set('Content-Disposition',`attachment; filename="Warehouse-evidence-${file.id}.${file.media_type==='application/pdf'?'pdf':file.media_type==='image/png'?'png':'jpg'}"`).send(file.content);});
+  r.get('/issued/:id/customer-signoff.pdf',async(req,res)=>{
+   const record=await stock.dispatch(req.authSession!.user.id,uuid(req.params.id)),models=issuedCustomerSignoffModels(record),siteId=typeof req.query.site==='string'?z.uuid().parse(req.query.site):undefined;
+   if(record.snapshot.parent&&!siteId)throw new HttpError(422,'Select the site for its Parent DO sign-off.');
+   const model=siteId?models.find(m=>m.sourceSiteId===siteId):models[0];
+   if(!model)throw new HttpError(404,'This site has no issued variable items on this DO.');
+   if(req.query.format==='model'){res.json(model);return;}
+   res.locals.downloadContext={documentType:model.title,identity:`material-signoff:${record.id}:${model.sourceSiteId}`,revision:1,site:model.sites[0]?.name};
+   res.type('pdf').send(materialDocumentPdf(model));
+  });
+  r.get('/drafts/:id/customer-signoffs',async(req,res)=>{
+   const draft=await repo.detail(req.authSession!.user.id,uuid(req.params.id));
+   if(!draft.snapshot.parent)throw new HttpError(422,'Select a Parent DO for batch sign-off download.');
+   const record=await stock.dispatch(req.authSession!.user.id,z.uuid().parse(req.query.dispatch));
+   if(record.draft_id!==draft.id)throw new HttpError(404,'This DO does not belong to the selected preparation.');
+   const documents=issuedCustomerSignoffModels(record);
+   if(!documents.length)throw new HttpError(404,'This Parent DO has no variable-item sign-offs.');
+   res.json({documents});
+  });
   r.get('/issued/:id',async(req,res)=>res.json(await stock.dispatch(req.authSession!.user.id,uuid(req.params.id))));
   r.get('/issued/:id/document.pdf',async(req,res)=>{
    const record=await stock.dispatch(req.authSession!.user.id,uuid(req.params.id)),model=issuedDispatchPrintModel(record);
    if(req.query.format==='model'){res.json(model);return;}
    res.locals.downloadContext={documentType:model.title,identity:`material-dispatch:${record.id}`,revision:1,site:model.sites.map(s=>s.name).join(' - ')};
-   res.type('pdf').set('Content-Disposition',`inline; filename="${record.number}.pdf"`).send(materialDocumentPdf(model));
+   res.type('pdf').set('Content-Disposition',`inline; filename="${record.number}.pdf"`).send(materialDocumentPdf(model,model.parentDispatch?parentDoCopies:undefined));
   });
  }
  if(usage){
@@ -100,6 +121,8 @@ export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:Re
  });
  r.post('/drafts',async(req,res)=>{const input=materialDraftInputSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Check the selected sites, item IDs and material quantities. Blank draft quantities are allowed.');res.json(await repo.save(req.authSession!.user.id,input.data));});
  if(sitePlans){
+  if(stock)r.post('/site-plans/:id/issue',async(req,res)=>{const id=z.uuid().parse(req.params.id),input=savedSiteIssueSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Check the saved preparation version, partial delivery choice and issuance note.');res.json(await sitePlans.issueSaved(req.authSession!.user.id,id,input.data,stock));});
+  r.get('/site-plans/:id/issued',async(req,res)=>res.json(await sitePlans.issued(req.authSession!.user.id,z.uuid().parse(req.params.id))));
   r.get('/site-plans',async(req,res)=>res.json(await sitePlans.list(req.authSession!.user.id)));
   r.get('/site-plans/:id',async(req,res)=>{const id=z.uuid().safeParse(req.params.id);if(!id.success)throw new HttpError(400,'Invalid site material preparation.');res.json(await sitePlans.detail(req.authSession!.user.id,id.data));});
   r.get('/site-plans/:id/documents/:kind.pdf',async(req,res)=>{

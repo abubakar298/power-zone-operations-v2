@@ -12,8 +12,6 @@ import {Brand} from '../components/Brand.js';
 import {FinancialValue} from '../ui/FinancialValue.js';
 import {Icon} from '../components/Icon.js';
 import {Button} from '../ui/Button.js';
-import {MaterialUsage} from '../components/MaterialUsage.js';
-import {WarehouseMovements} from '../components/WarehouseMovements.js';
 import {MaterialDocuments} from '../components/MaterialDocuments.js';
 import {useUnsavedChanges,confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
@@ -36,6 +34,11 @@ export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>v
  const requested=new URLSearchParams(location.search).get('site');
  const [intake,setIntake]=useState<Intake>(),[source,setSource]=useState<MaterialSource>(),[id,setId]=useState(initialId),[version,setVersion]=useState(0),[fixed,setFixed]=useState<PreparationRow[]>([]),[variable,setVariable]=useState<PreparationRow[]>([]),[warehouse,setWarehouse]=useState(''),[transport,setTransport]=useState(blankTransport),[supply,setSupply]=useState<'single-site'|'parent-do'>('single-site'),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[mobile,setMobile]=useState(false);
  const [revisionReason,setRevisionReason]=useState('');
+ const [partialDelivery,setPartialDelivery]=useState(false),[documents,setDocuments]=useState<{id:string;label:string;url:string}[]>([]),[previewRequest,setPreviewRequest]=useState(0);
+ const issueRequest=useRef<{signature:string;key:string}|null>(null);
+ const documentRequest=useRef(0);
+ async function loadDocuments(planId:string){const ticket=++documentRequest.current;const data=await api<{dispatches:{id:string;number:string;variable:boolean}[]}>('/material-dispatches/site-plans/'+planId+'/issued');const choices=data.dispatches.flatMap(d=>[{id:d.id,label:d.number+' · DO',url:'/api/material-dispatches/issued/'+d.id+'/document.pdf'},...(d.variable?[{id:d.id+':signoff',label:d.number+' · Customer sign-off',url:'/api/material-dispatches/issued/'+d.id+'/customer-signoff.pdf'}]:[])]);if(ticket===documentRequest.current)setDocuments(choices);return choices;}
+ useEffect(()=>{if(id!=='new'&&version>0)void loadDocuments(id).catch(e=>setError(e.message));},[id,version]);
  const [positions,setPositions]=useState<MaterialPosition[]>();
  useEffect(()=>{let active=true;setPositions(undefined);if(warehouse)void api<{positions:MaterialPosition[]}>('/material-dispatches/stock?warehouse='+encodeURIComponent(warehouse)).then(result=>{if(active)setPositions(result.positions);}).catch(()=>{});return()=>{active=false;};},[warehouse]);
  const saved=useRef(''),request=useRef<{signature:string;key:string}|null>(null);
@@ -49,7 +52,7 @@ export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>v
    let s:MaterialSource|undefined,rows:PreparationRow[],v:PreparationRow[]=[],w=i.warehouses.length===1?i.warehouses[0]:'',t=blankTransport(),route:'single-site'|'parent-do'='single-site';
    if(initialId==='new'){
     s=i.sources.find(v=>v.siteId===requested);if(!s)throw Error('This IPO is no longer pending or its approved BOQ link needs review.');
-    rows=fixedPreparationRows(s,i.catalogue,()=>crypto.randomUUID(),i.aliases??{});v=variablePreparationRows([s],i.catalogue,()=>crypto.randomUUID(),i.aliases??{});
+    rows=s.installationOnly?[]:fixedPreparationRows(s,i.catalogue,()=>crypto.randomUUID(),i.aliases??{});v=variablePreparationRows([s],i.catalogue,()=>crypto.randomUUID(),i.aliases??{});
    }else{
     const d=await api<Detail>('/material-dispatches/site-plans/'+initialId);s=d.fixed.snapshot.sites[0];rows=d.fixed.snapshot.lines;v=d.variable?.snapshot.lines??[];w=d.fixed.snapshot.warehouse;t=d.fixed.snapshot.transport;route=d.variableSupply;if(active)setVersion(d.version);
    }
@@ -64,8 +67,10 @@ export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>v
   const body={...(id!=='new'?{id}:{}),version,source:{sourceKind:source.sourceKind,basisId:source.basisId,basisVersion:source.basisVersion,siteId:source.siteId},warehouse,transport,...(revisionReason.trim()?{revisionReason:revisionReason.trim()}:{}),fixedLines:fixed,variableLines:variable.map(({basisLine,...row})=>row),variableSupply:supply};
   const mark=JSON.stringify(body);if(request.current?.signature!==mark)request.current={signature:mark,key:crypto.randomUUID()};
   try{
-   const result=await api<{id:string;version:number}>('/material-dispatches/site-plans',{csrf:session.csrfToken,body:{...body,requestKey:request.current.key}});
-   saved.current=signature;setId(result.id);setVersion(result.version);request.current=null;history.replaceState(null,'','/inventory/materials/'+result.id);setNotice('Preparation saved. Use Create DO & print 4 copies to prepare the numbered DO. Stock balances are unchanged.');
+   if(!dirty&&version>0&&documents.length){setPreviewRequest(v=>v+1);return;}
+   const result=!dirty&&version>0?{id,version}:await api<{id:string;version:number}>('/material-dispatches/site-plans',{csrf:session.csrfToken,body:{...body,requestKey:request.current.key}});
+   saved.current=signature;setId(result.id);setVersion(result.version);request.current=null;history.replaceState(null,'','/inventory/materials/'+result.id);const issueBody={version:result.version,partialDelivery,note:revisionReason.trim()||'Saved from material issuance'};const issueSignature=JSON.stringify({id:result.id,...issueBody});if(issueRequest.current?.signature!==issueSignature)issueRequest.current={signature:issueSignature,key:crypto.randomUUID()};
+   const issued=await api<{id:string;number:string}>('/material-dispatches/site-plans/'+result.id+'/issue',{csrf:session.csrfToken,body:{...issueBody,requestKey:issueRequest.current.key}});issueRequest.current=null;await loadDocuments(result.id);setPreviewRequest(v=>v+1);setNotice(issued.number+' saved. Download the DO from Preview Documents. Signed gate evidence records the warehouse dispatch.');
   }catch(e){setError((e as Error).message);}finally{setBusy(false);}
  }
  function update(key:string,patch:Partial<PreparationRow>,isFixed:boolean){(isFixed?setFixed:setVariable)(old=>old.map(r=>r.key===key?{...r,...patch}:r));}
@@ -77,12 +82,14 @@ export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>v
 
  }
  return <div className="ob-shell"><header className="ob-header"><Button className="ob-mobile-toggle" aria-label="Open navigation" onClick={()=>setMobile(!mobile)}><Icon name="menu"/></Button><Brand compact/><div className="ob-header-actions"><ManagementHeaderSwitcher session={session} value="inventory"/><WorkspaceAccountMenu name={session.user.displayName} label={'Inventory'} onSignOut={()=>void logout()}/></div></header><InventoryNavigation mode="dispatcher" mobile={mobile}/><main className="ob-main"><Button className="ob-back" onClick={back}>Back to IPOs</Button>{error&&<p role="alert" className="form-error">{error}</p>}{!intake&&!error&&<p role="status">Loading approved material basis…</p>}{intake&&source&&<>
-  <div className="ob-page-title"><div><h1>Material issuance</h1><p>{source.siteName}</p><small>{source.ipo??'Heads-up forecast'}{source.orderNumber?' · Order '+source.orderNumber:''}</small></div><div className="material-plan-actions"><WarehouseMovements triggerLabel="Create DO & print 4 copies" id={id} kind="site" version={version} session={session} disabled={busy||dirty||version===0}/><MaterialDocuments disabled={busy||dirty||version===0} documents={[{id:'fixed-do',label:'Fixed material DO',url:`/api/material-dispatches/site-plans/${id}/documents/fixed-do.pdf?version=${version}`},...(source.installation!==false?[...(supply==='single-site'?[{id:'variable-do',label:'Variable material dispatch',url:`/api/material-dispatches/site-plans/${id}/documents/variable-do.pdf?version=${version}`}]:[]),{id:'customer-signoff',label:'Customer variable-material sign-off',url:`/api/material-dispatches/site-plans/${id}/documents/customer-signoff.pdf?version=${version}`},{id:'irr',label:'Internal installation reconciliation',url:`/api/material-dispatches/site-plans/${id}/documents/irr.pdf?version=${version}`}]:[])]}/><Button variant="primary" disabled={busy||!warehouse} loading={busy} onClick={()=>void save()}>Save preparation</Button></div></div>{notice&&<p role="status" className="ob-success">{notice}</p>}
+  <div className="ob-page-title"><div><h1>Material issuance</h1><p>{source.siteName}</p><small>{source.ipo??'Heads-up forecast'}{source.orderNumber?' · Order '+source.orderNumber:''}</small></div></div>{notice&&<p role="status" className="ob-success">{notice}</p>}
   <section className="pz-panel ob-editor pz-stack"><div className="ob-facts"><label>Warehouse<select disabled={busy} value={warehouse} onChange={e=>setWarehouse(e.target.value)}><option value="">Select warehouse</option>{intake.warehouses.map(w=><option key={w}>{w}</option>)}</select></label></div></section><ApprovedTransportFields session={session} warehouse={warehouse} value={transport} onChange={setTransport} disabled={busy}/>
-  {version>0&&source.installation===true&&<details className="pz-panel"><summary>Site use and reconciliation</summary><MaterialUsage id={id} kind="site" version={version} session={session} disabled={busy||dirty}/></details>}
+
   {version>0&&<SavedVersionHistory id={id} version={version} kind="site"/>}
   {version>0&&<section className="pz-panel pz-stack"><details><summary>Reason for revising an issued preparation</summary><label>Change reason<input value={revisionReason} onChange={e=>setRevisionReason(e.target.value)} maxLength={2000}/></label><small>Required when changing quantities or transport after a warehouse dispatch. Issued copies stay unchanged.</small></details></section>}
+  <label className="issue-partial-choice"><input type="checkbox" checked={partialDelivery} disabled={busy} onChange={e=>setPartialDelivery(e.target.checked)}/> Partial delivery <small>Required only when fixed items are below the remaining approved BOQ. Variable quantities may differ.</small></label>
   <ApprovedMaterialForm source={source} fixed={fixed} variable={variable} warehouse={warehouse} catalogue={intake.catalogue} positions={positions} supply={supply} onSupply={setSupply} onParent={()=>navigateInventory('/inventory/parent-dos/new?sites='+encodeURIComponent(source.siteId))} onChange={update} onRemove={(key,isFixed)=>(isFixed?setFixed:setVariable)(old=>old.filter(row=>row.key!==key))} onAdd={(row,isFixed)=>(isFixed?setFixed:setVariable)(old=>[...old,row])}/>
+  <div className="material-plan-actions inventory-issuance-final-actions"><Button variant="primary" disabled={busy||!warehouse} loading={busy} onClick={()=>void save()}>Save</Button><MaterialDocuments disabled={busy||dirty||!documents.length} documents={documents} openRequest={previewRequest}/></div>
   <section className="pz-panel pz-stack"><details><summary>Approved BOQ reference</summary><div className="pz-table-scroll"><table className="ob-table"><thead><tr><th>Material</th><th>Approved quantity</th><th>Unit</th></tr></thead><tbody>{source.items.map((r:any,i)=><tr key={i}><td>{r.description??r.key}</td><td>{r.qty==null?'Not recorded':<FinancialValue value={r.qty}/>}</td><td>{r.unit??'Not recorded'}</td></tr>)}</tbody></table></div></details></section>
  </>}</main></div>;
 }

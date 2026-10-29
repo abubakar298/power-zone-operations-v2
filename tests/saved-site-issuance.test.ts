@@ -1,0 +1,71 @@
+import {MaterialUsageRepository} from '../server/inventory/material-usage.js';
+import {GatePassRepository} from '../server/inventory/gate-passes.js';
+import {directMaterialDatabase} from './direct-material-database.js';
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {testDatabase} from './database.js';
+import {materialStockFixture} from './material-stock-fixture.js';
+import {approvedMaterialIpo,materialInstallationFixture} from './approved-material-ipo-fixture.js';
+import {createDashboardSamples} from '../server/coordinator/samples.js';
+import {OperationsRepository} from '../server/operations/repository.js';
+import {SiteWorkflowRepository} from '../server/site-workflow/repository.js';
+import {MaterialDraftRepository} from '../server/inventory/material-drafts.js';
+import {SiteMaterialPlanRepository} from '../server/inventory/site-material-plans.js';
+import {MaterialStockRepository} from '../server/inventory/material-stock.js';
+import {WarehouseAuthorityRepository,warehousePosition} from '../server/inventory/warehouse-ledger.js';
+import {signDispatch} from './signed-dispatch-fixture.js';
+
+test('saved site quantities create one replay-safe DO without a second quantity payload; warehouse gate posting remains once',async()=>{
+ const db=await (process.env.TEST_DIRECT_PGLITE==='true'?directMaterialDatabase():testDatabase());try{
+  const f=await materialStockFixture(db.pool,'CH-CBL-AC-16MM/4C-PK',{canonicalIds:2},[{itemId:'CH-BAT-HV-05 KW',warehouse:'Lahore warehouse',unit:'Nos',description:'HV battery',opening:10,in:0,out:0,closing:10,openingStatus:'Reviewed source',review:''}]),coord=randomUUID(),opsUser=randomUUID(),keeper=randomUUID();
+  for(const [id,role] of [[coord,'Coordinator'],[opsUser,'Operations'],[keeper,'Inventory']])await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[id,id+'@saved-issue.example.test',role,role,'isolated']);
+  const fixedId='CH-BAT-HV-05 KW';
+  await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$3),($2,'Lahore warehouse','storekeeper',$3)",[f.reviewer,keeper,f.owner]);
+  const samples=await createDashboardSamples(db.pool,coord,f.owner),source=await approvedMaterialIpo(db.pool,coord,f.owner,samples.find((r:any)=>r.ipoId)!.ipoId),ops=new OperationsRepository(db.pool);
+  const issuance=await ops.issue(coord,{ipoId:source.ipoId,notes:'Disposable saved issuance test',requestKey:randomUUID()}),delivery=await ops.planDelivery(opsUser,issuance.id,{version:0,requestKey:randomUUID(),details:{deliveryAddress:'Test site',siteContact:'Test',sitePhone:'0300',deliveryDate:'2026-10-29',deliveryTime:'',instructions:''}});
+  await ops.sendToStore(opsUser,issuance.id,delivery.id,randomUUID());await new SiteWorkflowRepository(db.pool).list(opsUser);await db.pool.query("UPDATE site_workflow SET scope='installation' WHERE issuance_id=$1",[issuance.id]);await materialInstallationFixture(db.pool,source.ipoId,f.owner);
+  const drafts=new MaterialDraftRepository(db.pool),plans=new SiteMaterialPlanRepository(db.pool),stock=new MaterialStockRepository(db.pool),basis=(await drafts.intake(f.reviewer)).sources.find(s=>s.siteId===source.ipoId)!;
+  const saved=await plans.save(f.reviewer,{version:0,requestKey:randomUUID(),source:{sourceKind:basis.sourceKind,basisId:basis.basisId,basisVersion:1,siteId:basis.siteId},warehouse:'Lahore warehouse',transport:{issuedTo:'Test custodian',vehicle:'TEST',driver:'Test driver',driverIdentity:''},fixedLines:[{key:randomUUID(),itemId:fixedId,description:'HV battery',unit:'Nos',out:'1',sites:[basis.siteId],fixedGroup:'bess'}],variableLines:[{key:randomUUID(),itemId:'CH-CBL-AC-16MM/4C-PK',description:'Cable',unit:'m',out:'2',sites:[basis.siteId],section:'customer'}],variableSupply:'single-site'});
+  await new WarehouseAuthorityRepository(db.pool).command(f.owner,{warehouse:'Lahore warehouse',version:0,sourceSha256:f.stockSha,state:'active',reason:'Verified isolated baseline',requestKey:randomUUID()});
+  const command={version:saved.version,requestKey:randomUUID(),partialDelivery:true,note:'Entered quantities from saved preparation'};
+  await assert.rejects(plans.issueSaved(keeper,saved.id,command,stock),/not assigned/);
+  await assert.rejects(plans.issueSaved(f.reviewer,saved.id,{...command,partialDelivery:false},stock),/Partial delivery/);
+  await assert.rejects(plans.issueSaved(f.reviewer,saved.id,{...command,quantities:{cable:'999'}},stock));
+  const result=await plans.issueSaved(f.reviewer,saved.id,command,stock),record=await stock.dispatch(f.reviewer,result.id);
+  assert.equal(record.snapshot.lines.length,2);assert.equal(record.snapshot.lines.find((r:any)=>r.itemId===fixedId).out,'1');assert.equal(record.snapshot.lines.find((r:any)=>r.itemId==='CH-CBL-AC-16MM/4C-PK').out,'2');assert.equal(result.stockPosted,false);
+  assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'7');
+  assert.equal((await plans.issueSaved(f.reviewer,saved.id,command,stock)).id,result.id);
+  await assert.rejects(plans.issueSaved(f.reviewer,saved.id,{...command,requestKey:randomUUID()},stock),/already have a DO/);
+  const gates=new GatePassRepository(db.pool),queue=await gates.list(keeper);
+  assert.equal(queue.signoffs.length,1);assert.equal(queue.signoffs[0].siteId,basis.siteId);
+  const evidence=await stock.uploadEvidence(keeper,{warehouse:'Lahore warehouse',filename:'signed-test-signoff.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7 DISPOSABLE SIGNOFF').toString('base64')});
+  const copy={kind:'dispatch' as const,documentId:result.id,copyKind:'customer-signoff' as const,siteId:basis.siteId,evidenceId:evidence.id,note:'Isolated customer sign-off',requestKey:randomUUID()};
+  await assert.rejects(gates.attach(keeper,{...copy,siteId:randomUUID()}),/Select a site/);
+  const attached=await gates.attach(keeper,copy);assert.equal(attached.stockPosted,false);assert.equal((await gates.attach(keeper,copy)).id,attached.id);
+  assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'7');
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_material_site_usage_versions')).rows[0].n,0,'Uploading evidence cannot claim QC measurements or completion.');
+  assert.equal((await gates.list(keeper)).signoffs[0].signed_copies,1);
+  await assert.rejects(gates.attach(keeper,{...copy,siteId:undefined,copyKind:'signed-customer',requestKey:randomUUID()}),/signed gate copy/);
+  await signDispatch(db.pool,keeper,'dispatch',result.id);
+  assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'5');
+  assert.equal((await plans.issueSaved(f.reviewer,saved.id,command,stock)).stockPosted,true);
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_material_dispatches')).rows[0].n,1);
+  const modules=await plans.detail(f.reviewer,saved.id);const variableMovement=await stock.movements(f.reviewer,modules.variable!.id),fixedMovement=await stock.movements(f.reviewer,modules.fixed.id);
+  assert.deepEqual(variableMovement.lines.map(r=>[r.item_id,r.issued]),[['CH-CBL-AC-16MM/4C-PK','2']]);assert.deepEqual(fixedMovement.lines.map(r=>[r.item_id,r.issued]),[[fixedId,'1']]);
+  const usage=await new MaterialUsageRepository(db.pool).read(f.reviewer,modules.variable!.id);assert.equal(usage.references[0],result.number);assert.equal(usage.dispatch.lines[0].out,'2');
+  const parent=await drafts.save(f.reviewer,{version:0,requestKey:randomUUID(),kind:'variable',parent:true,warehouse:'Lahore warehouse',sites:[{sourceKind:basis.sourceKind,basisId:basis.basisId,basisVersion:1,siteId:basis.siteId}],lines:[{key:randomUUID(),itemId:'CH-CBL-AC-16MM/4C-PK',description:'Cable',unit:'m',out:'1',sites:[basis.siteId],section:'customer'}],transport:{issuedTo:'Test custodian',vehicle:'TEST',driver:'Test driver',driverIdentity:''}});
+  const parentCommand={version:parent.version,requestKey:randomUUID(),note:'Saved Parent DO quantities'};
+  const parentIssue=await drafts.issueSaved(f.reviewer,parent.id,parentCommand,stock);
+  assert.equal((await drafts.issueSaved(f.reviewer,parent.id,parentCommand,stock)).id,parentIssue.id);
+  assert.equal((await drafts.issueSaved(f.reviewer,parent.id,{...parentCommand,requestKey:randomUUID()},stock)).id,parentIssue.id);
+  await assert.rejects(drafts.issueSaved(f.reviewer,parent.id,{...parentCommand,quantities:{fake:'999'}},stock));
+  assert.equal((await stock.dispatch(f.reviewer,parentIssue.id)).snapshot.lines[0].out,'1');
+  assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'5','Saving a Parent DO must not post material stock.');
+  const receipt=await stock.uploadEvidence(f.reviewer,{warehouse:'Lahore warehouse',filename:'counted-return.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7 ISOLATED RETURN').toString('base64')});
+  await stock.receive(f.reviewer,{draftId:modules.variable!.id,sourceSha256:f.stockSha,authorityVersion:1,evidenceId:receipt.id,reason:'One cable unit physically returned',requestKey:randomUUID(),lines:[{lineKey:modules.variable!.snapshot.lines[0].key,quantity:'1',ledgerRevision:1}]});
+  assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'6');assert.equal((await stock.movements(f.reviewer,modules.variable!.id)).lines[0].returned,'1');
+
+
+ }finally{await db.close();}
+});
