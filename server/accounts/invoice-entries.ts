@@ -70,7 +70,7 @@ async function candidates(c:Db){
  * references in the work queue until the reviewed source confirms submission. */
 export function invoiceSubmissionRows(ready:any[],issued:any[],entries:any[]){
  const result:any[]=[];
- const same=(a:any,b:any)=>String(a.ipo??'').trim().toLowerCase()===String(b.ipo??'').trim().toLowerCase()&&String(a.site??'').trim().toLowerCase()===String(b.site??'').trim().toLowerCase();
+ const same=(a:any,b:any)=>(a.key&&b.key&&String(a.key).replace(/^registered-/, '')===String(b.key).replace(/^registered-/, ''))||(String(a.ipo??'').trim().toLowerCase()===String(b.ipo??'').trim().toLowerCase()&&String(a.site??'').trim().toLowerCase()===String(b.site??'').trim().toLowerCase());
  for(const candidate of [...ready,...issued]){
   const entry=entries.find(e=>e.milestone===candidate.milestone&&((e.source_kind===candidate.sourceKind&&e.site_key===candidate.key)||same(e.snapshot,candidate)));
   const refs=entry?[entry.pt_reference]:candidate.invoiceReferences??[];

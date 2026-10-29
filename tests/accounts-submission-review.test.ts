@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {testDatabase} from './database.js';
-import {invoiceRegister} from '../server/accounts/invoice-entries.js';
+import {invoiceRegister,invoiceSubmissionRows} from '../server/accounts/invoice-entries.js';
 import {billingRows} from '../server/accounts/billing-model.js';
 import {paymentReviewNote} from '../shared/accounts-payment-review.js';
 test('review migration preserves money/history and clears only verified submission work',async()=>{
@@ -30,3 +30,5 @@ test('review migration preserves money/history and clears only verified submissi
  }finally{await db.close();}
 });
 test('payment holds are scoped to exact reviewed source identities',()=>{assert.match(paymentReviewNote('system:Meezan Bank Limited:26-20204',3)!,/two installments/);assert.equal(paymentReviewNote('system:United Bank Limited:26-20204',3),undefined);assert.equal(paymentReviewNote('system:Meezan Bank Limited:26-20204',4),undefined);});
+
+test('registered Operations and source rows count once despite display IPO suffixes',()=>{const rows=invoiceSubmissionRows([{key:'registered-UBL:UPS:183/250',site:'Jaranwala',ipo:'CHP-163 · 183/250',milestone:'completion'},{key:'UBL:UPS:183/250',site:'Jaranwala',ipo:'CHP-163',milestone:'completion'}],[],[]);assert.equal(rows.length,1);});
