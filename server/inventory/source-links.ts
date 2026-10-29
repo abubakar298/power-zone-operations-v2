@@ -4,7 +4,7 @@ import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
 import {transaction} from '../db/transaction.js';
 import {HttpError} from '../http/errors.js';
-import {ipoSiteIdentity} from '../orders/site-identity.js';
+import {ipoSiteIdentity,applyIpoSiteIdentity} from '../orders/site-identity.js';
 import {checkMaterialSourceLink} from './source-link-policy.js';
 export const materialSourceLinkSchema=z.object({boardSiteId:z.string().min(1).max(160),boardVersion:z.number().int().positive(),ipoId:z.uuid(),reason:z.string().trim().min(1).max(2000),requestKey:z.uuid()}).strict();
 const sha=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
@@ -16,6 +16,29 @@ export async function approvedMaterialIdentity(c:Pool|PoolClient,ipoId:string){
  const po=(value:unknown)=>typeof value==='string'?value.trim().replace(/\s+/g,' ').toLowerCase():'';
  if(po(ipo.snapshot.input?.poNumber)&&po(ipo.snapshot.input.poNumber)!==po(ipo.saved_po_reference))throw new HttpError(409,'Approved IPO identity needs review: po-mismatch with its saved customer PO reference.');
  return ipo;
+}
+/** Request-local bulk read only. Each link still receives the original archive,
+ * Director-correction and saved-PO checks; no result is cached across requests. */
+export async function approvedMaterialIdentities(c:Pool|PoolClient,ipoIds:string[]){
+ const ids=[...new Set(ipoIds)],result=new Map<string,any>();if(!ids.length)return result;
+ const rows=(await c.query(`SELECT i.id,i.number,i.snapshot,p.po_number AS saved_po_reference,
+  (EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.records->'localPreviewDocumentIds' ? i.id::text)
+   OR EXISTS(SELECT 1 FROM archived_sample_ipos a WHERE a.ipo_id=i.id AND a.restored_at IS NULL)) AS archived
+  FROM internal_purchase_orders i JOIN customer_purchase_orders p ON p.id=i.customer_po_id WHERE i.id=ANY($1::uuid[])`,[ids])).rows;
+ const corrections=(await c.query(`SELECT DISTINCT ON(d.snapshot->>'ipoId') d.id,d.snapshot,u.role
+  FROM project_workflow_documents d JOIN users u ON u.id=d.created_by
+  WHERE d.kind IN ('IPO branch code correction','IPO site identity correction') AND d.snapshot->>'ipoId'=ANY($1::text[])
+  ORDER BY d.snapshot->>'ipoId',d.created_at DESC,d.version DESC`,[ids])).rows;
+ const correctionsById=new Map(corrections.map(r=>[r.snapshot.ipoId,r]));
+ for(const row of rows){try{
+  if(row.archived)throw new HttpError(409,'This IPO is archived.');
+  const ipo={id:row.id,number:row.number,snapshot:row.snapshot,saved_po_reference:row.saved_po_reference};
+  const correction=applyIpoSiteIdentity(ipo,correctionsById.get(row.id));if(correction.snapshot)ipo.snapshot=correction.snapshot;
+  const po=(value:unknown)=>typeof value==='string'?value.trim().replace(/\s+/g,' ').toLowerCase():'';
+  if(po(ipo.snapshot.input?.poNumber)&&po(ipo.snapshot.input.poNumber)!==po(ipo.saved_po_reference))throw new HttpError(409,'Approved IPO identity needs review: po-mismatch with its saved customer PO reference.');
+  result.set(row.id,ipo);
+ }catch(error){if(error instanceof HttpError&&error.status===409)result.set(row.id,error);else throw error;}}
+ return result;
 }
 type SourceLinkInput=z.infer<typeof materialSourceLinkSchema>;
 async function writeMaterialSource(c:PoolClient,actor:string,input:SourceLinkInput){

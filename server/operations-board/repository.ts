@@ -175,6 +175,7 @@ export class OperationsBoardRepository{
    await c.query('INSERT INTO operations_board_batch_versions(batch_id,version,number,snapshot,request_key,request_sha256,reason,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,v.version+1,number,snapshot,v.requestKey,fingerprint,v.reason||'Initial shared batch plan',actor]);
    for(const original of selected){
     const stop=stops.find(s=>s.siteId===original.id)!,kind=stop.kind??v.kind;let site:WorkflowSite={...original,operationsTeam:original.operationsTeam??v.team,stageStartedAt:original.stageStartedAt??now};
+    if(site.installation!==false){if(kind==='labour'||kind==='both')site={...site,installationPlanDate:stop.plannedDate};else if(!site.installationPlanDate&&site.dispatchDate)site={...site,installationPlanDate:site.dispatchDate};}
     if(kind!=='labour'&&siteBucketForBatch(site)!=='completed'&&site.stage!=='delivered'){
      if(site.dispatchDate&&site.dispatchDate!==stop.plannedDate){if(!v.reason)throw new HttpError(422,'Give a change reason to revise a saved dispatch date.');site=saveDispatchPlan(site,{dispatchDate:stop.plannedDate,assignments:site.assignments??{}},now,true);}
      else if(!site.dispatchDate){const required=site.installation?qcTypeForBatch(site)==='ups'?['electrical','delivery']:['structure','electrical','earthing','delivery']:['delivery'];if(required.every(role=>site.assignments?.[role]))site=saveDispatchPlan(site,{dispatchDate:stop.plannedDate,assignments:site.assignments??{}},now);}
@@ -278,7 +279,7 @@ export class OperationsBoardRepository{
     for(const [role,selected] of Object.entries(v.assignments)){const vendor=vendors.find(r=>r.id===selected);if(!(v.edit&&site.assignments?.[role]===selected)&&(!vendor?.active||!vendor.roles.includes(role)||vendor.kind!=='vendor'||!vendor.internal&&vendor.team!==site.operationsTeam))throw new HttpError(422,'Choose an active vendor for each applicable service.');}
     const teamMembers=v.teamMemberIds===undefined?site.teamMembers??[]:v.teamMemberIds.map(id=>{const member=vendors.find(r=>r.id===id);if(!member||member.kind!=='member'||member.team!==site.operationsTeam||!member.active&&!site.teamMembers?.some(r=>r.id===id))throw new HttpError(422,'Choose active team members from this site region.');return {id:member.id,name:member.name};});
     if(teamMembers.length&&!v.assignments.electrical)throw new HttpError(422,'Choose the electrical labour team before adding members.');
-    snapshot=saveDispatchPlan(site,{dispatchDate:v.dispatchDate,assignments:v.assignments,teamMembers},now,v.edit);kind='Dispatch plan';audiences=['accounts'];
+    snapshot=saveDispatchPlan(site,{dispatchDate:v.dispatchDate,assignments:v.assignments,teamMembers},now,v.edit);if(site.installation!==false)snapshot={...snapshot,installationPlanDate:v.dispatchDate};kind='Dispatch plan';audiences=['accounts'];
    }else if(v.action==='delivery-return'){
     snapshot=recordDeliveryReturn(site,v,now);kind='Delivery returned';audiences=['operations-head','management','accounts','inventory'];
    }else if(v.action==='delivery'){

@@ -16,7 +16,7 @@ test('shared batch bookings are atomic, versioned and resource-conflict safe wit
   const first=await input(['one','two']);
   await assert.rejects(repo.saveBatch(qc,first),/Operations lead/);await assert.rejects(repo.saveBatch(lead,first),/not found/);
   const booked=await repo.saveBatch(owner,first);assert.equal(booked.version,1);assert.equal((await repo.saveBatch(owner,first)).id,booked.id);
-  for(const id of ['one','two']){const s=await repo.site(owner,id);assert.equal(s.operationsTeam,'central');assert.equal(s.stage,'received','missing vendors must remain pending, not look dispatch-ready');assert.equal(s.completed,undefined);assert.equal((s as any).planningBatches[0].stops.length,1,'site snapshots contain their own stop only');}
+  for(const id of ['one','two']){const s=await repo.site(owner,id);assert.equal(s.operationsTeam,'central');assert.equal(s.installationPlanDate,'2026-10-28','Combined route preserves its installation planning date');assert.equal(s.stage,'received','missing vendors must remain pending, not look dispatch-ready');assert.equal(s.completed,undefined);assert.equal((s as any).planningBatches[0].stops.length,1,'site snapshots contain their own stop only');}
   await assert.rejects(repo.saveBatch(owner,await input(['three','four'],'a b c 1 2 3')),/already booked/);
   const before=(await db.pool.query('SELECT count(*)::int AS n FROM operations_board_batch_versions')).rows[0].n;
   const invalid=await input(['three','four'],'DEF-999');invalid.stops[1].start='09:00';await assert.rejects(repo.saveBatch(owner,invalid),/overlap/);

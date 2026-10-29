@@ -8,5 +8,12 @@ export function plannedInventoryDelivery(site:Record<string,any>):string|null{
   if((stop.kind??batch.kind)==='labour')continue;
   const date=z.iso.date().safeParse(stop.plannedDate);if(date.success)return date.data;
  }
+ if(site.installation!==false)return null;
  const date=z.iso.date().safeParse(site.dispatchDate);return date.success?date.data:null;
+}
+
+/** Installation planning is distinct from the material delivery route. */
+export function plannedInventoryInstallation(site:Record<string,any>):string|null{
+ if(site.installation===false)return null;
+ const date=z.iso.date().safeParse(site.installationPlanDate??site.dispatchDate);return date.success?date.data:null;
 }

@@ -1,3 +1,4 @@
+import {signDispatch} from './signed-dispatch-fixture.js';
 import request from 'supertest';
 import {createApp} from '../server/app.js';
 import {readConfig} from '../server/config.js';
@@ -52,7 +53,7 @@ test('explicit source links retain the original approved IPO/BOQ, prevent duplic
   const prepared={...draft,id:saved.id,version:2,requestKey:randomUUID(),lines:[{key:line,itemId:'CH-CBL-AC-16MM/4C-PK',description:'AC cable',unit:'m',out:'6',sites:[ipo.id]}],transport:{issuedTo:'Fictional site engineer',vehicle:'TEST',driver:'Test driver',driverIdentity:''}};
   const preparedVersion=await repo.save(inventory,prepared);
   const issue={draftId:saved.id,version:preparedVersion.version,sourceSha256:warehouseFixture.stockSha,authorityVersion:1,requestKey:randomUUID(),reason:'First physical custody handover.',transport:prepared.transport,lines:[{lineKey:line,quantity:'1',ledgerRevision:0}]};
-  await stock.issue(inventory,issue);
+  const dispatch=await stock.issue(inventory,issue);await signDispatch(db.pool,inventory,'dispatch',dispatch.id);
   const qc=randomUUID(),southQc=randomUUID(),lead=randomUUID();for(const [uid,kind,team] of [[qc,'qc','central'],[southQc,'qc','south'],[lead,'lead','central']]){await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[uid,uid+'@qc.example.test',kind,'Operations','isolated']);await db.pool.query('INSERT INTO operations_board_access(user_id,kind,team,granted_by) VALUES($1,$2,$3,$4)',[uid,kind,team,owner]);}
   assert.equal((await new ProcurementRepository(db.pool).me(qc)).operationsBoard,true,'Assigned QC defaults to the new Operations board, not the legacy shell.');
   const usage=new MaterialUsageRepository(db.pool),qcView=await usage.qcSite(qc,id);assert.equal(qcView.records.length,1);assert.equal(qcView.records[0].lines[0].issued,null,'Parent warehouse OUT is not repeated as a site-issued quantity.');assert.equal('items' in qcView.site,false);assert.equal('draft' in qcView.records[0],false);
@@ -77,7 +78,7 @@ test('explicit source links retain the original approved IPO/BOQ, prevent duplic
   assert.equal((await repo.intake(inventory)).sources.filter(s=>s.siteId===ipo.id).length,0,'Accounts/Operations delivery also excludes an older Store handoff.');
   await assert.rejects(repo.save(inventory,{...draft,requestKey:randomUUID()}),/no longer pending/);
   const amended=await repo.save(inventory,{...prepared,version:preparedVersion.version,requestKey:randomUUID(),revisionReason:'Additional material during ongoing installation.',lines:[{...prepared.lines[0],out:'7'}]});
-  await stock.issue(inventory,{...issue,version:amended.version,requestKey:randomUUID(),lines:[{...issue.lines[0],ledgerRevision:1}]});
+  const additional=await stock.issue(inventory,{...issue,version:amended.version,requestKey:randomUUID(),lines:[{...issue.lines[0],ledgerRevision:1}]});await signDispatch(db.pool,inventory,'dispatch',additional.id);
   await db.pool.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,3,$2,$3,$4,$5,$6)',[id,{...board,stage:'delivered',customerPo:'REISSUED-OTHER-PO'},'PO changed','isolated fixture',randomUUID(),owner]);
   await assert.rejects(stock.issue(inventory,{...issue,version:amended.version,requestKey:randomUUID(),lines:[{...issue.lines[0],ledgerRevision:2}]}),/approved BOQ identity changed/);
   await db.pool.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,4,$2,$3,$4,$5,$6)',[id,{...board,stage:'completed',completed:true},'Completion confirmed','isolated fixture',randomUUID(),owner]);
