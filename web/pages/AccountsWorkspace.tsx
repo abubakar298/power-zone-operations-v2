@@ -83,7 +83,7 @@ export function AccountsWorkspace({
     [ptEntryNotes,setPtEntryNotes]=useState(""),
     [programmeSiteKey,setProgrammeSiteKey]=useState<string>(),
     [tab, setTab] = useState(
-      initialRecordId ? "IPO Review" : initialTab||"My Workspace",
+      initialRecordId ? "IPO Review" : initialJobKey ? "Job Closure" : initialTab||"My Workspace",
     ),
     [data, setData] = useState<any>({ ipos: [], closures: [] }),
     [reports, setReports] = useState<any[]>([]),
@@ -128,21 +128,31 @@ export function AccountsWorkspace({
   const latest = job?.history[0];
   const revisionReason = latest?.stage === "Returned for Revision" ? closureDecisionNote(latest.snapshot) : null;
   const readonly = ["Awaiting Management", "Closed"].includes(latest?.stage);
+  const workspaceNeeded = !['Programme Dashboard','Project Sites','Physical Documents','Receivables','Invoicing','Project checkpoints','Inventory Reconciliations'].includes(tab);
+  const reportsNeeded = ['My Workspace','Approved Documents','Inventory Recorded in PT','Job Closure'].includes(tab);
+  const loadGeneration = useRef(0);
+  const actorContext = `${session.user.id}:${session.user.role}`;
+  const currentActor = useRef(actorContext);
+  currentActor.current = actorContext;
   async function load() {
+    if (!workspaceNeeded && !reportsNeeded) return;
+    const generation = ++loadGeneration.current;
     const [d, r] = await Promise.all([
-      api<any>("/accounts-workspace"),
-      api<any>("/inventory-reconciliation/reports"),
+      workspaceNeeded ? api<any>("/accounts-workspace") : Promise.resolve(null),
+      reportsNeeded ? api<any>("/inventory-reconciliation/reports") : Promise.resolve(null),
     ]);
-    setData(d);
-    setReports(r.reports.filter((x: any) => x.stage === "Sent to Accounts"));
+    if (generation !== loadGeneration.current || currentActor.current !== actorContext) return;
+    if (d) setData(d);
+    if (r) setReports(r.reports.filter((x: any) => x.stage === "Sent to Accounts"));
   }
   useEffect(() => {
-    void load()
-      .then(() => {
-        if (initialRecordId) void openIpo(initialRecordId);
-        if (initialJobKey) void openJob(initialJobKey);
-      })
-      .catch((e) => setError(e.message));
+    let active = true;
+    void load().catch((e) => { if (active && currentActor.current === actorContext) setError(e.message); });
+    return () => { active = false; loadGeneration.current++; };
+  }, [workspaceNeeded, reportsNeeded, actorContext]);
+  useEffect(() => {
+    if (initialRecordId) void openIpo(initialRecordId);
+    if (initialJobKey) void openJob(initialJobKey);
   }, []);
   async function navigate(t: string) {
     if (

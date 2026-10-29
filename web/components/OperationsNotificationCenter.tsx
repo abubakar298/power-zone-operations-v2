@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type Session } from "../api.js";
 import {notificationPath,notificationDocumentUrl} from "../../shared/notification-target.js";
 type Notice = {
@@ -22,6 +22,15 @@ export function NotificationCenter({
   onOpenPath?: (path:string)=>boolean;
 }) {
   const handledLink=useRef<string|null>(null);
+  const inboxActor = useRef(session.user.id);
+  const itemsActor = useRef(session.user.id);
+  const actorEpoch = useRef(0);
+  // A read mutation invalidates older polling responses before they can restore
+  // stale badges. Share concurrent refreshes within the same inbox generation.
+  const inboxGeneration = useRef(0);
+  const inboxLoad = useRef<{ generation: number; promise: Promise<void> } | null>(null);
+  const marking = useRef(false);
+  const readMutation = useRef<Promise<void> | null>(null);
   const [items, setItems] = useState<Notice[]>([]),
     [open, setOpen] = useState(false),
     [filter, setFilter] = useState("all"),
@@ -29,6 +38,27 @@ export function NotificationCenter({
     [email, setEmail] = useState(true),
     [unread, setUnread] = useState(0),
     [hasMore, setHasMore] = useState(false);
+  useLayoutEffect(() => {
+    if (inboxActor.current !== session.user.id) {
+      inboxActor.current = session.user.id;
+      handledLink.current = null;
+      setItems([]);
+      setUnread(0);
+      setHasMore(false);
+      setOpen(false);
+      setFilter("all");
+      setError("");
+      setEmail(true);
+    }
+    return () => {
+      // Invalidate the previous actor before paint or any pending response.
+      actorEpoch.current += 1;
+      inboxGeneration.current += 1;
+      inboxLoad.current = null;
+      readMutation.current = null;
+      marking.current = false;
+    };
+  }, [session.user.id]);
   useEffect(() => {
     if (!open) return;
     const escape = (e: KeyboardEvent) => {
@@ -46,7 +76,18 @@ export function NotificationCenter({
     if(!target||typeof target!=='object'||typeof (target as {target?:unknown}).target!=='string'){setError('This notification destination is unavailable.');return false;}
     return onOpen(target);
   }
-  async function load() {
+  function load(): Promise<void> {
+    if (marking.current) return Promise.resolve();
+    const generation = inboxGeneration.current;
+    if (inboxLoad.current?.generation === generation) return inboxLoad.current.promise;
+    const promise = refresh(generation);
+    inboxLoad.current = { generation, promise };
+    void promise.finally(() => {
+      if (inboxLoad.current?.promise === promise) inboxLoad.current = null;
+    });
+    return promise;
+  }
+  async function refresh(generation: number) {
     try {
       const r = await api<{
         notifications: Notice[];
@@ -64,18 +105,21 @@ export function NotificationCenter({
         const n = await api<Notice>("/notifications/item/" + id);
         r.notifications.unshift(n);
       }
+      if (generation !== inboxGeneration.current) return;
+      itemsActor.current = session.user.id;
       setItems(r.notifications);
       setUnread(r.unreadCount);
       setHasMore(r.hasMore);
       setError("");
     } catch {
-      setError("Notifications could not refresh. Your work is unaffected.");
+      if (generation === inboxGeneration.current) setError("Notifications could not refresh. Your work is unaffected.");
     }
   }
   useEffect(() => {
+    const epoch = actorEpoch.current;
     void load();
     void api<{ email_enabled: boolean }>("/notifications/preferences")
-      .then((p) => setEmail(p.email_enabled))
+      .then((p) => { if (epoch === actorEpoch.current) setEmail(p.email_enabled); })
       .catch(() => {});
     const timer = setInterval(() => {
       if (!document.hidden) void load();
@@ -94,6 +138,7 @@ export function NotificationCenter({
     );
     if (!id){handledLink.current=null;return;}
     if(!items.length||handledLink.current===id)return;
+    if (itemsActor.current !== session.user.id) return;
     const n = items.find((n) => n.id === id);
     if (n) {
       handledLink.current=id;
@@ -104,35 +149,54 @@ export function NotificationCenter({
       }
     }
   }, [items]);
-  async function mark(id?: string) {
+  function mark(id?: string): Promise<void> {
+    const epoch = actorEpoch.current;
+    const pending = readMutation.current;
+    if (pending) return id ? pending.then(() => epoch === actorEpoch.current ? mark(id) : undefined) : pending;
+    const promise = persistRead(id);
+    readMutation.current = promise;
+    void promise.finally(() => {
+      if (readMutation.current === promise) readMutation.current = null;
+    });
+    return promise;
+  }
+  async function persistRead(id?: string) {
+    const epoch = actorEpoch.current;
+    marking.current = true;
+    inboxGeneration.current += 1;
     try {
       await api("/notifications/read", {
         body: id ? { id } : {},
         csrf: session.csrfToken,
       });
-      const readAt = new Date().toISOString();
-      const acknowledged = items.filter(n => (!id || n.id === id) && !n.read_at && !n.resolved_at).length;
-      setItems(previous => previous.map(n => !id || n.id === id ? {...n, read_at: n.read_at || readAt} : n));
-      setUnread(previous => id ? Math.max(0, previous - acknowledged) : 0);
+      if (epoch !== actorEpoch.current) return;
+      // Read state and count come from the persisted inbox, including any new
+      // notifications created after the acknowledgment statement completed.
+      marking.current = false;
+      inboxGeneration.current += 1;
       await load();
     } catch {
-      setError("Could not mark notifications as read.");
+      if (epoch === actorEpoch.current) setError("Could not mark notifications as read.");
+    } finally {
+      if (epoch === actorEpoch.current) marking.current = false;
     }
   }
   async function more() {
+    const epoch = actorEpoch.current;
     const last = items.at(-1);
     if (!last) return;
     try {
       const r = await api<{ notifications: Notice[]; hasMore: boolean }>(
         `/notifications?beforeTime=${encodeURIComponent(last.created_at)}&beforeId=${last.id}`,
       );
+      if (epoch !== actorEpoch.current) return;
       setItems((prev) => [
         ...prev,
         ...r.notifications.filter((n) => !prev.some((p) => p.id === n.id)),
       ]);
       setHasMore(r.hasMore);
     } catch {
-      setError("Earlier notifications could not load.");
+      if (epoch === actorEpoch.current) setError("Earlier notifications could not load.");
     }
   }
   return (
@@ -143,7 +207,7 @@ export function NotificationCenter({
         aria-expanded={open}
         onClick={() => {
           setOpen(!open);
-          void load();
+          if (!open) void mark();
         }}
       >
         <svg
@@ -181,7 +245,7 @@ export function NotificationCenter({
               </button>
             ))}
           </div>
-          {error && <p role="status">{error}</p>}
+          {error && <p role="alert">{error}</p>}
           <button className="text-button" onClick={() => void mark()}>
             Mark all as read
           </button>
@@ -202,8 +266,9 @@ export function NotificationCenter({
                   <button
                     className="notice-link"
                     onClick={async () => {
+                      const epoch = actorEpoch.current;
                       await mark(n.id);
-                      if(openTarget(n.target,n.id))setOpen(false);
+                      if(epoch === actorEpoch.current && openTarget(n.target,n.id))setOpen(false);
                     }}
                   >
                     <strong>{n.title}</strong>
@@ -232,14 +297,18 @@ export function NotificationCenter({
                     className="text-button"
                     onClick={async () => {
                       if (n.read_at) {
+                        const epoch = actorEpoch.current;
                         try {
+                          inboxGeneration.current += 1;
                           await api("/notifications/unread", {
                             body: { id: n.id },
                             csrf: session.csrfToken,
                           });
+                          if (epoch !== actorEpoch.current) return;
+                          inboxGeneration.current += 1;
                           await load();
                         } catch {
-                          setError("Could not update read status.");
+                          if (epoch === actorEpoch.current) setError("Could not update read status.");
                         }
                       } else void mark(n.id);
                     }}
@@ -266,14 +335,15 @@ export function NotificationCenter({
                 checked={email}
                 onChange={async (e) => {
                   const value = e.target.checked;
+                  const epoch = actorEpoch.current;
                   try {
                     await api("/notifications/preferences", {
                       body: { email_enabled: value },
                       csrf: session.csrfToken,
                     });
-                    setEmail(value);
+                    if (epoch === actorEpoch.current) setEmail(value);
                   } catch {
-                    setError("Preference could not be saved.");
+                    if (epoch === actorEpoch.current) setError("Preference could not be saved.");
                   }
                 }}
               />{" "}

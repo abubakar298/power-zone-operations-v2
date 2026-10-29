@@ -32,19 +32,25 @@ export class NotificationsRepository {
     (e.audience='management' AND u.role IN('Admin','Management')) OR
     (e.audience='owner' AND u.id=e.owner_id AND u.role IN('Admin','Management','Coordinator')) OR (e.audience IN('security','assigned') AND u.id=e.owner_id) OR u.role=e.audience)
    WHERE e.kind<>'Stock shortage' AND e.created_at>=s.activated_at AND (u.id<>e.actor_id OR e.kind='Security')
+   AND NOT EXISTS(SELECT 1 FROM notifications existing WHERE existing.user_id=u.id AND existing.source_key=e.source_key)
    ON CONFLICT(user_id,source_key) DO NOTHING`);
-      await c.query(`UPDATE notifications n SET resolved_at=now() WHERE n.resolved_at IS NULL AND (n.source_key LIKE 'operations-notice:%' OR n.source_key LIKE 'handoff:%') AND NOT EXISTS(SELECT 1 FROM notification_events e WHERE e.source_key=n.source_key)`);
-      await c.query(`UPDATE notifications n SET resolved_at=now() WHERE n.resolved_at IS NULL AND n.actionable AND (
-   NOT EXISTS(SELECT 1 FROM notification_events e WHERE e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1)) OR (n.source_key NOT LIKE 'operations-notice:%' AND EXISTS(SELECT 1 FROM notification_events e WHERE e.entity_key=n.entity_key AND e.created_at>n.created_at))
-   OR (n.kind='Revision requested' AND EXISTS(SELECT 1 FROM quotation_revision_links l WHERE l.request_id::text=n.target->>'request_id'))
-   OR (n.kind='Work assigned' AND EXISTS(SELECT 1 FROM boq_draft_finalizations f WHERE f.draft_id::text=n.target->>'draft_id')))`);
+      // Evaluate the expensive live event view once for both resolution paths.
+      // Read-state, audience, deadline and immutable source semantics are unchanged.
+      await c.query(`WITH current_events AS MATERIALIZED (
+   SELECT source_key,entity_key,created_at FROM notification_events
+   ) UPDATE notifications n SET resolved_at=now() WHERE n.resolved_at IS NULL AND (
+   ((n.source_key LIKE 'operations-notice:%' OR n.source_key LIKE 'handoff:%') AND NOT EXISTS(SELECT 1 FROM current_events e WHERE e.source_key=n.source_key))
+   OR (n.actionable AND (
+    NOT EXISTS(SELECT 1 FROM current_events e WHERE e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1)) OR (n.source_key NOT LIKE 'operations-notice:%' AND EXISTS(SELECT 1 FROM current_events e WHERE e.entity_key=n.entity_key AND e.created_at>n.created_at))
+    OR (n.kind='Revision requested' AND EXISTS(SELECT 1 FROM quotation_revision_links l WHERE l.request_id::text=n.target->>'request_id'))
+    OR (n.kind='Work assigned' AND EXISTS(SELECT 1 FROM boq_draft_finalizations f WHERE f.draft_id::text=n.target->>'draft_id')))))`);
       await c.query(`INSERT INTO notifications(id,user_id,source_key,entity_key,kind,title,reference,actor_id,target,actionable,created_at,parent_id)
    SELECT gen_random_uuid(),n.user_id,n.source_key||'/reminder',n.entity_key,'Reminder','Action overdue',n.reference,NULL,n.target,true,now(),n.id
-   FROM notifications n CROSS JOIN notification_settings s WHERE n.source_key NOT LIKE 'operations-notice:%' AND s.reminders_enabled AND n.actionable AND n.resolved_at IS NULL AND n.parent_id IS NULL AND n.created_at<now()-make_interval(hours=>s.reminder_hours) ON CONFLICT DO NOTHING`);
+   FROM notifications n CROSS JOIN notification_settings s WHERE n.source_key NOT LIKE 'operations-notice:%' AND s.reminders_enabled AND n.actionable AND n.resolved_at IS NULL AND n.parent_id IS NULL AND n.created_at<now()-make_interval(hours=>s.reminder_hours) AND NOT EXISTS(SELECT 1 FROM notifications existing WHERE existing.user_id=n.user_id AND existing.source_key=n.source_key||'/reminder') ON CONFLICT DO NOTHING`);
       await c.query(`INSERT INTO notifications(id,user_id,source_key,entity_key,kind,title,reference,actor_id,target,actionable,created_at,parent_id)
    SELECT gen_random_uuid(),u.id,n.source_key||'/escalation',n.entity_key,'Escalation','Overdue work requires attention',n.reference,NULL,n.target,true,now(),n.id
    FROM notifications n CROSS JOIN notification_settings s JOIN users u ON u.active AND u.role IN('Admin','Management')
-   WHERE n.source_key NOT LIKE 'operations-notice:%' AND s.reminders_enabled AND n.actionable AND n.resolved_at IS NULL AND n.parent_id IS NULL AND n.created_at<now()-make_interval(hours=>s.reminder_hours*2) AND n.user_id<>u.id ON CONFLICT DO NOTHING`);
+   WHERE n.source_key NOT LIKE 'operations-notice:%' AND s.reminders_enabled AND n.actionable AND n.resolved_at IS NULL AND n.parent_id IS NULL AND n.created_at<now()-make_interval(hours=>s.reminder_hours*2) AND n.user_id<>u.id AND NOT EXISTS(SELECT 1 FROM notifications existing WHERE existing.user_id=u.id AND existing.source_key=n.source_key||'/escalation') ON CONFLICT DO NOTHING`);
       await c.query(
         `UPDATE notifications n SET resolved_at=now() FROM notifications p WHERE n.parent_id=p.id AND p.resolved_at IS NOT NULL AND n.resolved_at IS NULL`,
       );
@@ -53,7 +59,7 @@ export class NotificationsRepository {
       );
       await c.query(`INSERT INTO notification_email_queue(id) SELECT n.id FROM notifications n JOIN notification_settings s ON s.email_enabled
    JOIN notification_types t ON t.kind=n.kind AND t.email_enabled LEFT JOIN notification_preferences p ON p.user_id=n.user_id
-   WHERE (t.critical OR COALESCE(p.email_enabled,true)) AND n.resolved_at IS NULL AND n.kind NOT IN('PO received','Stock shortage') ON CONFLICT DO NOTHING`);
+   WHERE (t.critical OR COALESCE(p.email_enabled,true)) AND n.resolved_at IS NULL AND n.kind NOT IN('PO received','Stock shortage') AND NOT EXISTS(SELECT 1 FROM notification_email_queue existing WHERE existing.id=n.id) ON CONFLICT DO NOTHING`);
     });
   }
   async list(user: User, id?: string, cursor?: { time: string; id: string }) {
@@ -72,7 +78,7 @@ export class NotificationsRepository {
   }
   async read(user: User, id?: string) {
     await this.pool.query(
-      "UPDATE notifications SET read_at=COALESCE(read_at,now()) WHERE user_id=$1 AND ($2::uuid IS NULL OR id=$2)",
+      "UPDATE notifications SET read_at=COALESCE(read_at,now()) WHERE user_id=$1 AND read_at IS NULL AND ($2::uuid IS NULL OR id=$2)",
       [user.id, id ?? null],
     );
   }
