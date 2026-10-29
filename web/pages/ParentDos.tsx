@@ -1,3 +1,4 @@
+import {scheduledTransport} from '../../shared/operations-transport.js';
 import {InventoryBatchList,InventoryBatchDetail} from '../inventory-approved/InventoryBatchQueue.js';
 import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
 import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
@@ -71,7 +72,7 @@ function ParentEditor({id,requested,intake,session,onBack,onDirty,onSaved}:{id:s
  const dirty=loaded&&savedSignature.current!==''&&stateSignature!==savedSignature.current;
  useUnsavedChanges(dirty);
  useEffect(()=>{if(dirty){onDirty();setNotice('');}},[dirty]);
- useEffect(()=>{if(id==='new'){const seeded=variablePreparationRows(sites,intake.catalogue,()=>crypto.randomUUID(),intake.aliases??{}) as Slot[];setRows(seeded);savedSignature.current=JSON.stringify({rows:seeded,warehouse:intake.warehouses.length===1?intake.warehouses[0]:'',transport:blankTransport()});return;}
+ useEffect(()=>{if(id==='new'){const seeded=variablePreparationRows(sites,intake.catalogue,()=>crypto.randomUUID(),intake.aliases??{}) as Slot[];const initialTransport=scheduledTransport(intake.operationsBatches??[],sites.map(s=>s.siteId))?.transport??blankTransport();setRows(seeded);setTransport(initialTransport);savedSignature.current=JSON.stringify({rows:seeded,warehouse:intake.warehouses.length===1?intake.warehouses[0]:'',transport:initialTransport});return;}
   let active=true;void api<Draft>('/material-dispatches/drafts/'+id).then(d=>{if(!active)return;const next=d.snapshot.lines.map(r=>({...r,section:r.section??(materialDocumentPolicy(r).group==='internal-variable'?'internal' as const:'customer' as const)}));setRows(next);setWarehouse(d.snapshot.warehouse);setTransport(d.snapshot.transport);setSites(d.snapshot.sites);setVersion(d.version);savedSignature.current=JSON.stringify({rows:next,warehouse:d.snapshot.warehouse,transport:d.snapshot.transport});setLoaded(true);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};
  },[id]);
  function update(key:string,patch:Partial<Slot>){setRows(old=>old.map(r=>r.key===key?{...r,...patch}:r));setNotice('');}

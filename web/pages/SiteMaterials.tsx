@@ -1,3 +1,5 @@
+import {scheduledTransport} from '../../shared/operations-transport.js';
+import type {InventoryBatch} from '../../server/inventory/operations-batches.js';
 import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
 import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
 import {SavedVersionHistory} from '../inventory-approved/SavedVersionHistory.js';
@@ -22,7 +24,7 @@ import './operations-board/operations-board.css';
 import './parent-dos.css';
 
 type StockItem={itemId:string;description:string;units:string[]};
-type Intake={sources:MaterialSource[];catalogue:StockItem[];aliases?:Record<string,string>;warehouses:string[]};
+type Intake={operationsBatches?:InventoryBatch[];sources:MaterialSource[];catalogue:StockItem[];aliases?:Record<string,string>;warehouses:string[]};
 type Detail={id:string;version:number;variableSupply:'single-site'|'parent-do';fixed:{snapshot:{sites:MaterialSource[];warehouse:string;transport:SiteMaterialPlanInput['transport'];lines:PreparationRow[]}};variable:{snapshot:{lines:PreparationRow[]}}|null};
 const blankTransport=()=>({issuedTo:'',vehicle:'',driver:'',driverIdentity:''});
 const labels={bess:'BESS',panels:'Panels, Structure and Earthing',other:'Other BOQ Items and Extras',customer:'Variable Material Issuance',internal:'Variable Mixed Items Issuance'};
@@ -53,6 +55,7 @@ export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>v
    if(initialId==='new'){
     s=i.sources.find(v=>v.siteId===requested);if(!s)throw Error('This IPO is no longer pending or its approved BOQ link needs review.');
     rows=s.installationOnly?[]:fixedPreparationRows(s,i.catalogue,()=>crypto.randomUUID(),i.aliases??{});v=variablePreparationRows([s],i.catalogue,()=>crypto.randomUUID(),i.aliases??{});
+    t=scheduledTransport(i.operationsBatches??[],[s.siteId])?.transport??t;
    }else{
     const d=await api<Detail>('/material-dispatches/site-plans/'+initialId);s=d.fixed.snapshot.sites[0];rows=d.fixed.snapshot.lines;v=d.variable?.snapshot.lines??[];w=d.fixed.snapshot.warehouse;t=d.fixed.snapshot.transport;route=d.variableSupply;if(active)setVersion(d.version);
    }
