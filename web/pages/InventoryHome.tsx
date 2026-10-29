@@ -3,7 +3,7 @@ import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
 import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
 import {navigateInventory} from '../inventory-approved/navigation.js';
 import {decimalDisplay} from '../numbers.js';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Decimal} from 'decimal.js';
 import {api,type Session} from '../api.js';
 import {Brand} from '../components/Brand.js';
@@ -31,30 +31,31 @@ const viewTitles:Record<string,string>={dashboard:'Inventory Dashboard',stock:'S
 const buckets=[['purchase','PRAs Received'],['headsup','Heads-up Shared'],['ipos','IPOs Received'],['parents','Parent DOs Waiting for Reconciliation'],['irr-pending','IRRs Pending'],['irr-received','IRRs & Sign-offs Received']] as const;
 
 /** Approved Inventory composition backed only by authenticated production APIs. */
-export function InventoryHome({session,onLogout}:{session:Session;onLogout:()=>void}){
+export function InventoryHome({session,onLogout,assignedKind}:{session:Session;onLogout:()=>void;assignedKind?:string}){
  const path=location.pathname,view=path==='/inventory'?'dashboard':path.split('/')[2]||'dashboard';
  const [mobile,setMobile]=useState(false),[intake,setIntake]=useState<Intake>(),[purchases,setPurchases]=useState<Purchase[]>(),[drafts,setDrafts]=useState<Draft[]>(),[reports,setReports]=useState<Report[]>(),[parents,setParents]=useState<Parent[]>(),[errors,setErrors]=useState<Record<string,string>>({}),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[bucket,setBucket]=useState<string>('purchase'),[search,setSearch]=useState(''),[schedule,setSchedule]=useState('all'),[reportWorkspace,setReportWorkspace]=useState(false);
- async function load(){setLoading(true);setErrors({});try{
-  const access=await api<{kind:string}>('/material-dispatches/access');if(access.kind==='storekeeper'){location.replace('/inventory/gate-passes');return;}if(!['dispatcher','management'].includes(access.kind))throw Error('Inventory access is not assigned.');
+ const loadEpoch=useRef(0);
+ async function load(){const epoch=++loadEpoch.current;const active=()=>epoch===loadEpoch.current;setLoading(true);setErrors({});try{
+  const access=assignedKind?{kind:assignedKind}:await api<{kind:string}>('/material-dispatches/access');if(!active())return;if(access.kind==='storekeeper'){location.replace('/inventory/gate-passes');return;}if(!['dispatcher','management'].includes(access.kind))throw Error('Inventory access is not assigned.');
   if(view!=='dashboard'){
-   const scope=await api<{warehouses:string[]}>('/material-dispatches/warehouses');setIntake({warehouses:scope.warehouses,sources:[]});
-   if(view==='purchase-receiving'){const value=await api<{toReceive:Purchase[]}>('/procurement/store');setPurchases(value.toReceive.filter(r=>r.lines.some(l=>new Decimal(l.due).gt(0))));}
-   if(view==='site-ledger'){const value=await api<{drafts:Draft[]}>('/material-dispatches/drafts');setDrafts(value.drafts);}
+   const scope=await api<{warehouses:string[]}>('/material-dispatches/warehouses');if(!active())return;setIntake({warehouses:scope.warehouses,sources:[]});
+   if(view==='purchase-receiving'){const value=await api<{toReceive:Purchase[]}>('/procurement/store');if(!active())return;setPurchases(value.toReceive.filter(r=>r.lines.some(l=>new Decimal(l.due).gt(0))));}
+   if(view==='site-ledger'){const value=await api<{drafts:Draft[]}>('/material-dispatches/drafts');if(active())setDrafts(value.drafts);}
    return;
   }
-  const tasks=await Promise.allSettled([api<Intake>('/material-dispatches/intake'),api<{toReceive:Purchase[]}>('/procurement/store'),api<{drafts:Draft[]}>('/material-dispatches/drafts'),api<{reports:Report[]}>('/inventory-reconciliation/reports'),api<{rows:ReviewCase[]}>('/inventory-reviews')]);
-  const names=['intake','purchase','drafts','reports','parents'],messages:Record<string,string>={};tasks.forEach((task,index)=>{if(task.status==='rejected')messages[names[index]]=task.reason instanceof Error?task.reason.message:'Unable to load these records.';});setErrors(messages);
-  if(tasks[0].status==='fulfilled')setIntake(tasks[0].value as Intake);
-  if(tasks[1].status==='fulfilled')setPurchases((tasks[1].value as {toReceive:Purchase[]}).toReceive.filter(r=>r.lines.some(l=>new Decimal(l.due).gt(0))));
-  if(tasks[3].status==='fulfilled')setReports((tasks[3].value as {reports:Report[]}).reports);
-  if(tasks[2].status==='fulfilled')setDrafts((tasks[2].value as {drafts:Draft[]}).drafts);
-  if(tasks[4].status==='fulfilled'){
-   const groups=new Map<string,Parent>();
-   for(const row of (tasks[4].value as {rows:ReviewCase[]}).rows){if(row.source_row.sourceRow.reviewKind==='standalone-closing'||['source-verified','posted','approved-awaiting-posting'].includes(row.state))continue;const item=groups.get(row.source_row.groupId)??{id:row.source_row.groupId,title:row.source_row.groupTitle,warehouse:row.source_row.warehouse,items:0,updatedAt:row.created_at};item.items++;if(row.created_at>item.updatedAt)item.updatedAt=row.created_at;groups.set(item.id,item);}
-   setParents([...groups.values()]);
-  }
- }catch(e){setErrors({access:(e as Error).message});}finally{setLoading(false);}}
- useEffect(()=>{void load();},[revision]);
+  async function receive<T>(name:string,path:string,apply:(value:T)=>void){try{const value=await api<T>(path);if(active())apply(value);}catch(error){if(active())setErrors(old=>({...old,[name]:error instanceof Error?error.message:'Unable to load these records.'}));}}
+  await Promise.all([
+   receive<Intake>('intake','/material-dispatches/intake',setIntake),
+   receive<{toReceive:Purchase[]}>('purchase','/procurement/store',value=>setPurchases(value.toReceive.filter(r=>r.lines.some(l=>new Decimal(l.due).gt(0))))),
+   receive<{reports:Report[]}>('reports','/inventory-reconciliation/reports',value=>setReports(value.reports)),
+   receive<{rows:ReviewCase[]}>('parents','/inventory-reviews',value=>{
+    const groups=new Map<string,Parent>();
+    for(const row of value.rows){if(row.source_row.sourceRow.reviewKind==='standalone-closing'||['source-verified','posted','approved-awaiting-posting'].includes(row.state))continue;const item=groups.get(row.source_row.groupId)??{id:row.source_row.groupId,title:row.source_row.groupTitle,warehouse:row.source_row.warehouse,items:0,updatedAt:row.created_at};item.items++;if(row.created_at>item.updatedAt)item.updatedAt=row.created_at;groups.set(item.id,item);}
+    setParents([...groups.values()]);
+   })
+  ]);
+ }catch(e){if(active())setErrors({access:(e as Error).message});}finally{if(active())setLoading(false);}}
+ useEffect(()=>{void load();return()=>{loadEpoch.current++;};},[revision,session.user.id,assignedKind]);
  function go(path:string){if(confirmLeaveWorkspace())navigateInventory(path);}
  async function logout(){if(!confirmLeaveWorkspace())return;try{await api('/auth/logout',{csrf:session.csrfToken,body:{}});onLogout();}catch(e){setErrors({...errors,logout:(e as Error).message});}}
  const headsup=intake?.sources.filter(s=>s.authorization==='forecast-only');

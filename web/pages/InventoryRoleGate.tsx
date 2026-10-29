@@ -36,7 +36,7 @@ export function InventoryRoleGate({session,onLogout}:{session:Session;onLogout:(
   if(path.startsWith('/inventory/transfers'))return <WarehouseTransfers key={path} {...props}/>;
   if(path.startsWith('/inventory/replacements'))return <MaterialReplacements key={path} {...props}/>;
   if(path.startsWith('/inventory/gate-passes'))return <GatePasses key={path} {...props}/>;
-  return <InventoryHome key={path} {...props}/>;
+  return <InventoryHome key={path} {...props} assignedKind={kind}/>;
   })();
   return <ApprovedInventoryWorkspace session={session} onLogout={onLogout} path={path}>{content}</ApprovedInventoryWorkspace>;
  }
