@@ -35,11 +35,11 @@ const latest=`SELECT d.id,v.version,v.snapshot,v.created_at,(SELECT number FROM 
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 export class MaterialDraftRepository{
  constructor(private pool:Pool){}
- private async access(actor:string,c:Pool|PoolClient=this.pool){
+ private async access(actor:string,c:Pool|PoolClient=this.pool,temporary=false){
   const u=(await c.query('SELECT active,role FROM users WHERE id=$1',[actor])).rows[0];
   if(!u?.active)throw new HttpError(401,'Your access has ended.');
   if(['Admin','Management'].includes(u.role))return {owner:true,warehouses:[] as string[]};
-  const grants=u.role==='Inventory'?(await c.query("SELECT warehouse FROM inventory_material_access WHERE user_id=$1 AND capability='dispatcher'",[actor])).rows:[];
+  const grants=u.role==='Inventory'?(await c.query("SELECT warehouse FROM inventory_material_access WHERE user_id=$1 AND capability=ANY($2::text[])",[actor,temporary?['dispatcher','storekeeper']:['dispatcher']])).rows:[];
   if(!grants.length)throw new HttpError(403,'Material issuance preparation is not assigned to this account.');
   return {owner:false,warehouses:grants.map(r=>r.warehouse as string)};
  }
@@ -125,15 +125,15 @@ export class MaterialDraftRepository{
   return transaction(this.pool,async c=>{await lockActiveActor(c,actor);const access=await this.access(actor,c);this.scope(access,v.warehouse);await c.query('INSERT INTO inventory_transport_choices(warehouse,kind,value,details,actor_id)VALUES($1,$2,$3,$4,$5) ON CONFLICT(warehouse,kind,value)DO NOTHING',[v.warehouse,v.kind,v.value,v.kind==='driver'?v.details:'',actor]);return {saved:true};});
  }
  async temporaryDocuments(actor:string){
-  const access=await this.access(actor),catalogue=await this.stockCatalogue();
+  const access=await this.access(actor,this.pool,true),catalogue=await this.stockCatalogue();
   const rows=await this.pool.query('SELECT snapshot FROM inventory_temporary_documents WHERE ($1 OR warehouse=ANY($2::text[])) ORDER BY created_at DESC',[access.owner,access.warehouses]);
-  return {documents:rows.rows.map(r=>r.snapshot),warehouses:catalogue.warehouses.filter(w=>access.owner||access.warehouses.includes(w)),items:catalogue.catalogue.map(r=>({id:r.itemId,description:r.description,unit:r.units[0]??''}))};
+  return {documents:rows.rows.map(r=>r.snapshot),warehouses:access.owner?catalogue.warehouses:access.warehouses,items:catalogue.catalogue.map(r=>({id:r.itemId,description:r.description,unit:r.units[0]??''}))};
  }
  async saveTemporaryDocument(actor:string,value:unknown){
   const input=z.object({requestKey:z.uuid(),id:z.union([z.uuid(),z.literal('')]),version:z.number().int().nonnegative(),type:z.enum(['IGP','OGP','TRF','IRR','OTHER']),date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),warehouse:z.string().trim().min(1).max(200),party:z.string().max(500),sourceReference:z.string().max(500),actualReference:z.string().max(500),notes:z.string().max(5000),detailsConfirmed:z.boolean(),lines:z.array(z.object({itemId:z.string().max(200),description:z.string().max(1000),quantity:z.union([z.literal(''),z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/)]),unit:z.string().max(40),remarks:z.string().max(2000)}).strict()).min(1).max(500)}).strict().safeParse(value);
   if(!input.success)throw new HttpError(422,'Check the temporary document, quantities and warehouse.');
   const v=input.data;if(v.detailsConfirmed&&!v.actualReference.trim())throw new HttpError(422,'Enter the actual reference before confirming details.');
-  return transaction(this.pool,async c=>{await lockActiveActor(c,actor);const access=await this.access(actor,c);this.scope(access,v.warehouse);
+  return transaction(this.pool,async c=>{await lockActiveActor(c,actor);const access=await this.access(actor,c,true);this.scope(access,v.warehouse);
    await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[v.requestKey]);
    const replay=(await c.query('SELECT input,snapshot FROM inventory_temporary_document_versions WHERE request_key=$1',[v.requestKey])).rows[0];
    if(replay){this.scope(access,replay.snapshot.warehouse);if(!isDeepStrictEqual(replay.input,v))throw new HttpError(409,'This save request was already used for different details.');return replay.snapshot;}
