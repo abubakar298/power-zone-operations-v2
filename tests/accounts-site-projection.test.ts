@@ -11,3 +11,11 @@ test('ambiguous, unknown and cancelled source stages are not silently replaced',
  assert.deepEqual(applyOperationsStages(rows,[{site_id:'registered-x',version:1,snapshot:{stage:null}},{site_id:'registered-y',version:1,snapshot:{stage:'received'}}]),rows);
  assert.deepEqual(applyOperationsStages(rows,[{site_id:'a',snapshot:{sourceKey:'x',stage:'received'}},{site_id:'b',snapshot:{sourceKey:'x',stage:'delivered'}}]),rows);
 });
+
+test('native completion dates propagate through the actual SQL projection without overwriting source evidence',async()=>{
+ const {testDatabase}=await import('./database.js');const {latestOperationsStages}=await import('../server/accounts/site-projection.js');const {randomUUID}=await import('node:crypto');const db=await testDatabase();try{
+ const user=randomUUID();await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,'completion-date@example.test','Owner','Admin','isolated')",[user]);
+ for(const [id,completion] of [['ups',{qcJob:{date:'2026-10-27'}}],['solar',{qc:{handover:{date:'2026-10-28'},signoff:{date:'2026-10-26'}}}]] as const){await db.pool.query('INSERT INTO operations_board_sites(id,created_by) VALUES($1,$2)',['registered-'+id,user]);await db.pool.query("INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,1,$2,'qc','Completed',$3,$4)",['registered-'+id,{sourceKey:id,stage:'delivered',completed:true,...completion},randomUUID(),user]);}
+ const source=[{key:'ups',installationDate:'Pending',completion:{received:true}},{key:'solar',installationDate:null}];const result=applyOperationsStages(source,await latestOperationsStages(db.pool));assert.equal(result[0].installationDate,'2026-10-27');assert.equal(result[1].installationDate,'2026-10-28');assert.equal(result[0].completion.received,true);assert.equal(source[0].installationDate,'Pending');
+ }finally{await db.close();}
+});

@@ -3,7 +3,7 @@ import type {Pool} from 'pg';
 type Row=Record<string,any>;
 export async function latestOperationsStages(pool:Pool){
  return (await pool.query(`SELECT DISTINCT ON(site_id) site_id,version,created_at,
- jsonb_build_object('sourceKey',snapshot->'sourceKey','stage',snapshot->'stage','completed',snapshot->'completed','partial',snapshot->'partial','deliveryDate',snapshot->'deliveryDate','completionDate',snapshot->'completionDate','cancelled',snapshot->'cancelled','transferred',snapshot->'transferred') AS snapshot
+ jsonb_build_object('sourceKey',snapshot->'sourceKey','stage',snapshot->'stage','completed',snapshot->'completed','partial',snapshot->'partial','deliveryDate',snapshot->'deliveryDate','completionDate',COALESCE(snapshot#>'{qc,handover,date}',snapshot#>'{qc,signoff,date}',snapshot#>'{qcJob,date}',snapshot->'completionDate'),'cancelled',snapshot->'cancelled','transferred',snapshot->'transferred') AS snapshot
  FROM operations_board_versions ORDER BY site_id,version DESC`)).rows;
 }
 /** Read projection only: never overwrite imported history or current Operations facts. */
