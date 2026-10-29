@@ -1,9 +1,11 @@
+import {accountsPageName} from '../../shared/accounts-navigation.js';
 import {ProgrammeDashboard} from '../components/ProgrammeDashboard.js';
 import {isClosurePreparationJob} from '../../shared/accounts-closure-queue.js';
 import {ClosureComparison} from "../components/ClosureComparison.js";
 import {AccountsImportedSites} from './AccountsImportedSites.js';
 import {isDeliveryOnlyDo,accountsDocumentLabel} from '../workspaces/accounts-document-types.js';
 import {AccountsRecordDialog} from '../components/AccountsRecordDialog.js';
+import {AccountsPayments} from './AccountsPayments.js';
 import {AccountsBilling} from './AccountsBilling.js';
 import {AccountsPhysicalDocuments} from './AccountsPhysicalDocuments.js';
 import {FileUpload} from '../ui/FileUpload.js';
@@ -83,10 +85,13 @@ export function AccountsWorkspace({
     [ptEntryNotes,setPtEntryNotes]=useState(""),
     [programmeSiteKey,setProgrammeSiteKey]=useState<string>(),
     [tab, setTab] = useState(
-      initialRecordId ? "IPO Review" : initialJobKey ? "Job Closure" : initialTab||"My Workspace",
+      initialRecordId ? "IPO Review" : initialJobKey ? "Job Closure" : accountsPageName(initialTab),
     ),
     [data, setData] = useState<any>({ ipos: [], closures: [] }),
     [reports, setReports] = useState<any[]>([]),
+    [invoiceQueueCount,setInvoiceQueueCount]=useState<number|null>(null),
+    [paymentQueueCount,setPaymentQueueCount]=useState<number|null>(null),
+    [queueCountError,setQueueCountError]=useState(false),
     [selected, setSelected] = useState<any>(),
     [samplePreview, setSamplePreview] = useState<any>(),
     [job, setJob] = useState<any>(),
@@ -128,12 +133,21 @@ export function AccountsWorkspace({
   const latest = job?.history[0];
   const revisionReason = latest?.stage === "Returned for Revision" ? closureDecisionNote(latest.snapshot) : null;
   const readonly = ["Awaiting Management", "Closed"].includes(latest?.stage);
-  const workspaceNeeded = !['Programme Dashboard','Project Sites','Physical Documents','Receivables','Invoicing','Project checkpoints','Inventory Reconciliations'].includes(tab);
+  const workspaceNeeded = !['Project Tracking','Programme Dashboard','Project Sites','Physical Documents','Receivables','Invoicing','Invoices to Submit','Payments to Record','Project checkpoints','Inventory Reconciliations'].includes(tab);
   const reportsNeeded = ['My Workspace','Approved Documents','Inventory Recorded in PT','Job Closure'].includes(tab);
   const loadGeneration = useRef(0);
   const actorContext = `${session.user.id}:${session.user.role}`;
   const currentActor = useRef(actorContext);
   currentActor.current = actorContext;
+  useEffect(()=>{
+    if(tab!=='My Workspace')return;
+    let active=true;
+    setInvoiceQueueCount(null);setPaymentQueueCount(null);setQueueCountError(false);
+    void api<any>('/accounts-workspace/work-queues').then(result=>{
+      if(active){setInvoiceQueueCount(result.invoicesToSubmit);setPaymentQueueCount(result.paymentsToRecord);}
+    }).catch(()=>{if(active)setQueueCountError(true);});
+    return()=>{active=false;};
+  },[tab,actorContext]);
   async function load() {
     if (!workspaceNeeded && !reportsNeeded) return;
     const generation = ++loadGeneration.current;
@@ -150,6 +164,7 @@ export function AccountsWorkspace({
     void load().catch((e) => { if (active && currentActor.current === actorContext) setError(e.message); });
     return () => { active = false; loadGeneration.current++; };
   }, [workspaceNeeded, reportsNeeded, actorContext]);
+  useEffect(()=>{if(tab!=='My Workspace')return;let active=true;setInvoiceQueueCount(null);void api<any>('/accounts-workspace/invoice-entries').then(r=>{if(active)setInvoiceQueueCount(r.queues.delivery.length+r.queues.completion.length);}).catch(()=>{if(active)setInvoiceQueueCount(null);});return()=>{active=false;};},[tab,actorContext]);
   useEffect(() => {
     if (initialRecordId) void openIpo(initialRecordId);
     if (initialJobKey) void openJob(initialJobKey);
@@ -518,13 +533,13 @@ export function AccountsWorkspace({
       {!managementReview && <div className="pz-action-row">
         {['Job Closure','Awaiting Management','Closed Jobs'].includes(tab)&&!job&&<Field id="closure-status" label="Job status"><select id="closure-status" value={tab} onChange={e=>navigate(e.target.value)}><option value="Job Closure">Ready / In preparation</option><option>Awaiting Management</option><option value="Closed Jobs">Closed</option></select></Field>}
       </div>}
-      {!["My Workspace","Physical Documents","IPOs Received","IPOs Recorded in PT","Approved Documents","Inventory Recorded in PT","Job Closure","Awaiting Management","Closed Jobs","Project Sites","Programme Dashboard","IPO Review","Invoicing","Receivables"].includes(tab)&&<h2>{tab==="My Workspace"?"Work queues":tab}</h2>}
+      {!["My Workspace","Physical Documents","IPOs Received","IPOs Recorded in PT","Approved Documents","Inventory Recorded in PT","Job Closure","Awaiting Management","Closed Jobs","Project Sites","Programme Dashboard","Project Tracking","Payments to Record","IPO Review","Invoicing","Receivables"].includes(tab)&&<h2>{tab==="My Workspace"?"Work queues":tab}</h2>}
       {doDocument&&<AccountsRecordDialog title="Approved Delivery DO" reference={doDocument.record.number??jobLabel(doDocument.record)} subtitle="Delivery-only site" onClose={()=>setDoDocument(undefined)}><section className="accounts-record-section"><h3>Inventory handoff</h3><p>Approved DO · version {doDocument.record.version}. No installation IRR is required for this delivery-only site.</p></section><section className="accounts-record-section"><h3>Approved documents</h3>{doDocument.loading?<p role="status">Loading DO evidence…</p>:doDocument.error?<p role="alert" className="form-error">{doDocument.error}</p>:doDocument.files?.length?<ul className="accounts-file-list">{doDocument.files.map((file:any)=><li key={file.id}><span>{file.filename}</span><a className="pz-button pz-button--secondary" href={'/api/inventory-reconciliation/files/'+file.id} target="_blank" rel="noreferrer">View / Download</a></li>)}</ul>:<p>No digital files are attached to this approved handoff.</p>}</section></AccountsRecordDialog>}
       {ptDocument&&<AccountsRecordDialog title="Record PT Entry" reference={ptDocument.number??jobLabel(ptDocument)} onClose={()=>void closePtEntry()}><p>Confirm the document has been entered in PT, then save its reference here.</p><div className="pz-form-grid"><Field id="pt-entry-reference" label="PT reference (required)"><input id="pt-entry-reference" value={ptEntryReference} onChange={e=>setPtEntryReference(e.target.value)}/></Field><Field id="pt-entry-date" label="Entry date (required)"><input id="pt-entry-date" type="date" value={ptEntryDate} onChange={e=>setPtEntryDate(e.target.value)}/></Field></div><Field id="pt-entry-notes" label="PT entry notes"><textarea id="pt-entry-notes" value={ptEntryNotes} onChange={e=>setPtEntryNotes(e.target.value)}/></Field><Button variant="primary" loading={busy} onClick={()=>void savePtEntry()}>Save PT entry</Button>{error&&errorAction==='pt-entry'&&<p role="alert" className="form-error">{error}</p>}</AccountsRecordDialog>}
-      {tab === "Programme Dashboard" && <ProgrammeDashboard userId={session.user.id} endpoint="/accounts-workspace/programmes" onOpenSite={row=>{if(row.recordKey?.startsWith('ipo:'))void openIpo(row.recordKey.slice(4));else{setProgrammeSiteKey(row.sourceKey);navigate('Project Sites');}}}/>}
-      {tab === "Project Sites" && <><header className="accounts-panel-heading accounts-subpage-heading"><h2>Project Sites</h2><Button variant="neutral" onClick={()=>navigate("My Workspace")}>Back to Dashboard</Button></header><AccountsImportedSites initialSiteKey={programmeSiteKey} onOpenIpo={id=>void openIpo(id)}/></>}
+      {["Programme Dashboard","Project Tracking"].includes(tab) && <ProgrammeDashboard userId={session.user.id} title="Project Tracking" endpoint="/accounts-workspace/programmes" onOpenSite={row=>{if(row.recordKey?.startsWith('ipo:'))void openIpo(row.recordKey.slice(4));else{setProgrammeSiteKey(row.sourceKey);navigate('Project Sites');}}}/>}
+      {tab === "Project Sites" && <><header className="accounts-panel-heading accounts-subpage-heading"><h2>Site Details</h2><Button variant="neutral" onClick={()=>navigate("Project Tracking")}>Back to Project Tracking</Button></header><AccountsImportedSites initialSiteKey={programmeSiteKey} onOpenIpo={id=>void openIpo(id)}/></>}
       {tab === "Physical Documents" && <AccountsPhysicalDocuments/>}
-      {tab === "Receivables" && <AccountsBilling mode="receivables"/>}
+      {tab === "Payments to Record" && <><Button variant="neutral" onClick={()=>navigate("My Workspace")}>Back to Dashboard</Button><AccountsPayments/></>}
       {tab === "Project checkpoints" && (
         <ProjectCheckpoints session={session} mode="Accounts" />
       )}
@@ -543,9 +558,11 @@ export function AccountsWorkspace({
               ['Approved Documents',reports.filter(r=>!ptRecorded('Inventory',r)).length,'Approved Documents',`${reports.filter(r=>ptRecorded('Inventory',r)).length} recorded in PT`],
               ['Job Closure',preparationReports.length,'Job Closure','Ready, drafts and returned jobs'],
               ['Awaiting Management',data.closures.filter((c:any)=>c.stage==='Awaiting Management').length,'Awaiting Management',`${data.closures.filter((c:any)=>c.stage==='Closed').length} jobs closed`],
+              ['Invoices to Submit',invoiceQueueCount??(queueCountError?'—':'…'),'Invoices to Submit',queueCountError?'Count unavailable · open queue':'Delivery and completion invoices'],
+              ['Payments to Record',paymentQueueCount??(queueCountError?'—':'…'),'Payments to Record',queueCountError?'Count unavailable · open queue':'Transaction ID and payment date pending'],
             ].map(([label,count,destination,hint])=><Button key={String(label)} variant="neutral" className="stage-card" onClick={()=>navigate(String(destination))}><strong>{count}</strong><span>{label}</span><small>{hint}</small></Button>)}
           </div>
-          {data.siteImport&&<section className="accounts-site-overview"><div><h2>Project Sites</h2><span>{data.siteImport.counts.active} active · {data.siteImport.counts.history} in history</span></div><dl><div><dd>{data.siteImport.counts.awaiting}</dd><dt>Awaiting delivery</dt></div><div><dd>{data.siteImport.counts.delivered}</dd><dt>Delivered</dt></div><div><dd>{data.siteImport.counts.completed}</dd><dt>Installation complete</dt></div></dl><Button variant="neutral" onClick={()=>navigate('Project Sites')}>View Sites</Button></section>}
+
           <section className="accounts-list-panel accounts-next-actions"><header className="accounts-panel-heading"><h2>Next Actions</h2></header>
 
           <div className="table-scroll">
@@ -1428,7 +1445,7 @@ export function AccountsWorkspace({
           </details>
         </article>
       )}
-      {tab === "Invoicing" && <AccountsBilling mode="invoicing"/>}
+      {["Invoicing","Invoices to Submit"].includes(tab) && <><Button variant="neutral" onClick={()=>navigate("My Workspace")}>Back to Dashboard</Button><AccountsBilling mode="invoicing"/></>}
 
     </section>
   );
