@@ -50,6 +50,10 @@ export function authHttp(service: AuthService, config: Config) {
       res.clearCookie(cookieName, options);
       throw new HttpError(401, "Your session has ended. Please sign in again.");
     }
+    const expectedPrincipal=req.get('X-PZ-Session-User');
+    if(expectedPrincipal&&expectedPrincipal!==req.authSession.user.id){
+      res.status(409).json({code:'SESSION_CHANGED',message:'The signed-in account changed. Reload its workspace before continuing.'});return;
+    }
     // Signed out after a stretch without real activity; background refreshes do not count (Moaz, 24 Oct 2026).
     const idleMinutes = config.idleMinutes ?? 30;
     const last = req.authSession.lastActivityAt ? new Date(req.authSession.lastActivityAt).getTime() : Date.now();

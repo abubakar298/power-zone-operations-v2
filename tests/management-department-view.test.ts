@@ -28,6 +28,10 @@ test('Management opens real department identity per request, keeps principal ses
   const r=await request(app).get('/api/dashboard').set('Cookie',cookies.Management).set('X-PZ-Department-User',ids[role]).set('X-PZ-Management-User',ids.Management).expect(200);
   assert.equal(r.body.user.id,ids[role]);assert.equal(r.body.user.role,role);
  }
+ await request(app).get('/api/dashboard').set('Cookie',cookies.Accounts).set('X-PZ-Session-User',ids.Inventory).expect(409).expect(r=>assert.equal(r.body.code,'SESSION_CHANGED'));
+ await request(app).post('/api/auth/logout').set('Origin',origin).set('Cookie',cookies.Accounts).set('X-CSRF-Token',csrf.Accounts).set('X-PZ-Session-User',ids.Inventory).send({}).expect(409);
+ await request(app).get('/api/auth/session').set('Cookie',cookies.Accounts).expect(200).expect(r=>assert.equal(r.body.user.id,ids.Accounts));
+ await request(app).get('/api/dashboard').set('Cookie',cookies.Management).set('X-PZ-Session-User',ids.Management).set('X-PZ-Department-User',ids.Coordinator).set('X-PZ-Management-User',ids.Management).expect(200).expect(r=>assert.equal(r.body.user.id,ids.Coordinator));
  const real=await request(app).get('/api/auth/session').set('Cookie',cookies.Management).set('X-PZ-Department-User',ids.Coordinator).set('X-PZ-Management-User',ids.Management).expect(200);
  assert.equal(real.body.user.id,ids.Management);assert.equal(real.body.csrfToken,csrf.Management);
  await request(app).get('/api/dashboard').set('Cookie',cookies.Management).expect(200).expect(r=>assert.equal(r.body.user.id,ids.Management));

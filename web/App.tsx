@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { api, ApiError, type Session } from "./api.js";
+import { api, resetApiPrincipal, ApiError, type Session } from "./api.js";
 import { AuthLayout } from "./components/AuthLayout.js";
 import { AccountLink } from "./pages/AccountLink.js";
 import { Login } from "./pages/Login.js";
@@ -39,7 +39,7 @@ export function App() {
   );
   const [setupComplete, setSetupComplete] = useState(false);
   const go = useCallback(
-    (path: string, role?: Session["user"]["role"]) => window.history.replaceState(null, "", (path==="/dashboard"&&oiaEntry&&(!role||!["Coordinator","Design","Employee"].includes(role))?oiaEntry+(/^#notification=[0-9a-f-]{36}$/i.test(notificationLink)?notificationLink:""):path+(path==="/dashboard"?(pricingCarryLink||notificationLink):""))),
+    (path: string, role?: Session["user"]["role"]) => window.history.replaceState(null, "", (path==="/dashboard"&&oiaEntry&&(!role||['Admin','Management'].includes(role)||role==='Inventory'&&oiaEntry.startsWith('/inventory')||role==='Operations'&&oiaEntry.startsWith('/operations')||role==='Accounts'&&oiaEntry.startsWith('/accounts'))?oiaEntry+(/^#notification=[0-9a-f-]{36}$/i.test(notificationLink)?notificationLink:""):path+(path==="/dashboard"?(pricingCarryLink||notificationLink):""))),
     [notificationLink,pricingCarryLink,oiaEntry],
   );
   const signedOut = useCallback(() => {
@@ -96,6 +96,13 @@ export function App() {
     const timer = setInterval(() => void api("/auth/session").catch(() => undefined), 60_000);
     return () => { for (const name of names) window.removeEventListener(name, active); clearInterval(timer); };
   }, [state.kind]);
+  useEffect(()=>{
+    const changed=()=>{clearDepartmentUser();resetApiPrincipal();window.history.replaceState(null,'','/dashboard');window.location.reload();};
+    window.addEventListener('pz:account-changed',changed);
+    const check=()=>{if(document.visibilityState==='visible'&&state.kind==='authenticated')void api('/auth/session').catch(()=>undefined);};
+    window.addEventListener('focus',check);document.addEventListener('visibilitychange',check);
+    return()=>{window.removeEventListener('pz:account-changed',changed);window.removeEventListener('focus',check);document.removeEventListener('visibilitychange',check);};
+  },[state.kind]);
   if (linkPage)
     return (
       <AuthLayout>
@@ -111,8 +118,8 @@ export function App() {
   if (state.kind === "authenticated") {
     const props={session:state.session,onLogout:signedOut};
     if(["Coordinator","Design","Employee"].includes(state.session.user.role))return <Dashboard {...props}/>;
-    if(oiaEntry.startsWith('/operations'))return <Suspense fallback={<p role="status">Opening Operations…</p>}><OperationsBoard {...props}/></Suspense>;
-    if(oiaEntry==='/inventory'||oiaEntry.startsWith('/inventory/'))return <Suspense fallback={<p role="status">Opening Inventory…</p>}><InventoryRoleGate {...props}/></Suspense>;
+    if(oiaEntry.startsWith('/operations')&&['Admin','Management','Operations'].includes(state.session.user.role))return <Suspense fallback={<p role="status">Opening Operations…</p>}><OperationsBoard {...props}/></Suspense>;
+    if((oiaEntry==='/inventory'||oiaEntry.startsWith('/inventory/'))&&['Admin','Management','Inventory'].includes(state.session.user.role))return <Suspense fallback={<p role="status">Opening Inventory…</p>}><InventoryRoleGate {...props}/></Suspense>;
     if(state.session.user.role==='Inventory')return <Suspense fallback={<p role="status">Opening assigned Inventory…</p>}><InventoryRoleGate {...props}/></Suspense>;
     return <Dashboard {...props}/>;
   }

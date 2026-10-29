@@ -36,6 +36,9 @@ if (typeof window !== "undefined")
     window.addEventListener(name, () => { lastInput = Date.now(); }, { capture: true, passive: true });
 const background = () => Date.now() - lastInput > 10_000;
 
+let principalId:string|undefined;
+export function resetApiPrincipal(){principalId=undefined;}
+function accountChanged(){resetApiPrincipal();if(typeof window!=="undefined")window.dispatchEvent(new Event('pz:account-changed'));}
 export async function api<T>(
   path: string,
   options?: { body: unknown; csrf?: string },
@@ -49,7 +52,7 @@ export async function api<T>(
       signal: controller.signal,
       credentials: "same-origin",
       cache: "no-store",
-      headers: {...departmentViewHeaders(path),...(background() ? { "X-PZ-Background": "1" } : {}),...(options
+      headers: {...(principalId?{"X-PZ-Session-User":principalId}:{}),...departmentViewHeaders(path),...(background() ? { "X-PZ-Background": "1" } : {}),...(options
         ? {
             "Content-Type": "application/json",
             ...(options.csrf ? { "X-CSRF-Token": options.csrf } : {}),
@@ -68,7 +71,7 @@ export async function api<T>(
   }
   try {
     if (response.status === 204) { if(options)workflowFeedback(path,options.body); return undefined as T; }
-    let body: { message?: string; requestId?: string };
+    let body: { message?: string; requestId?: string; code?:string; user?:User };
     try {
       body = await response.json();
     } catch {
@@ -85,6 +88,11 @@ export async function api<T>(
     // An ended session (idle or expired) takes the app back to the sign-in page, which says why.
     if (response.status === 401 && path !== "/auth/login" && typeof window !== "undefined")
       window.dispatchEvent(new CustomEvent("pz:session-ended", { detail: body.message ?? "" }));
+    if(response.status===409&&body.code==='SESSION_CHANGED')accountChanged();
+    if(response.ok&&['/auth/session','/auth/login'].includes(path)&&body.user){
+      if(path==='/auth/session'&&principalId&&principalId!==body.user.id){accountChanged();throw new ApiError(409,'The signed-in account changed. Reloading its workspace.');}
+      principalId=body.user.id;
+    }
     if (!response.ok)
       throw new ApiError(
         response.status,
