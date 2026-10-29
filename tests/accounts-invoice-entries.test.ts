@@ -2,8 +2,9 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {AccountsSourceRegisters} from '../server/accounts/source-registers.js';
+import {invoicingQueues} from '../server/accounts/billing-model.js';
 import {testDatabase} from './database.js';
-import {recordInvoiceEntry,invoiceRegister,operationsInvoiceRows,invoiceEntrySchema,importedInvoiceEntries} from '../server/accounts/invoice-entries.js';
+import {recordInvoiceEntry,invoiceRegister,operationsInvoiceRows,invoiceEntrySchema,importedInvoiceEntries,invoiceSubmissionRows} from '../server/accounts/invoice-entries.js';
 
 test('invoice milestone projection excludes planned and partial sites and retains document-only evidence',()=>{
  const rows=operationsInvoiceRows([{site_id:'planned',version:1,snapshot:{stage:'awaiting',deliveries:[{partial:true}]}},{site_id:'delivered',version:2,snapshot:{name:'D',installation:true,invoiceOnDelivery:true,stage:'delivered',documents:[{id:'doc',evidence:[{id:'00000000-0000-4000-8000-000000000001',name:'Signed DO'}]}]}},{site_id:'complete',version:3,snapshot:{installation:true,invoiceOnDelivery:true,completed:true,stage:'delivered'}}]);
@@ -33,7 +34,7 @@ test('PT invoice references are immutable, version checked, exactly once and lea
   assert.equal((await recordInvoiceEntry(db.pool,ids.Accounts,input)).id,saved.id);
   await assert.rejects(recordInvoiceEntry(db.pool,ids.Accounts,{...input,notes:'Changed'}),/Request key/);
   await assert.rejects(recordInvoiceEntry(db.pool,ids.Accounts,{...input,requestKey:randomUUID()}),/already has/);
-  const register=await invoiceRegister(db.pool,ids.Accounts);assert.equal(register.queues.delivery.length,0);assert.equal(register.entries[0].pt_reference,'PT-100');assert.equal(register.entries[0].snapshot.ipo,'IPO-1');
+  const register=await invoiceRegister(db.pool,ids.Accounts);assert.equal(register.queues.delivery.length,0);assert.equal(register.submissionQueues.delivery.length,1);assert.equal(register.submissionQueues.delivery[0].invoiceCreated,true);assert.deepEqual(register.submissionQueues.delivery[0].invoiceReferences,['PT-100']);assert.equal(register.entries[0].pt_reference,'PT-100');assert.equal(register.entries[0].snapshot.ipo,'IPO-1');
   await assert.rejects(db.pool.query("UPDATE accounts_invoice_entries SET notes='changed' WHERE id=$1",[saved.id]));
   await assert.rejects(db.pool.query('DELETE FROM accounts_invoice_entries WHERE id=$1',[saved.id]));
   for(const table of ['internal_purchase_orders','accounts_job_closures','stock_on_hand_entries'])assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM '+table)).rows[0].n,0);
@@ -71,4 +72,27 @@ test('existing Solar invoice references cover only stages confirmed in the sourc
  assert.deepEqual(importedInvoiceEntries([op],source)[0].knownMilestones,['delivery']);
  row.completion.invoiceAmount='500' as any;assert.deepEqual(importedInvoiceEntries([op],source)[0].knownMilestones,['delivery','completion']);
  assert.deepEqual(importedInvoiceEntries([{...op,snapshot:{...op.snapshot,completed:false}}],source)[0].knownMilestones,['delivery']);
+});
+
+
+test('submission worklist covers delivery-only, staged delivery and completion, including invoices already created',()=>{
+ const ready=[{key:'direct',site:'Direct',ipo:'1',deliveryOnly:true,milestone:'delivery'},{key:'solar',site:'Solar',ipo:'2',milestone:'delivery'},{key:'install',site:'Install',ipo:'3',milestone:'completion'}];
+ const issued=[{key:'direct-issued',site:'Direct issued',ipo:'4',deliveryOnly:true,milestone:'delivery',invoiceReferences:['27-10001']},{key:'solar-issued',site:'Solar issued',ipo:'5',milestone:'delivery',invoiceReferences:['27-10002']},{key:'install-issued',site:'Install issued',ipo:'6',milestone:'completion',invoiceReferences:['27-10003']}];
+ const rows=invoiceSubmissionRows(ready,issued,[]);
+ assert.deepEqual(rows.map(r=>r.billingStage),['delivery-only','delivery','completion','delivery-only','delivery','completion']);
+ assert.deepEqual(rows.map(r=>r.invoiceCreated),[false,false,false,true,true,true]);
+ assert.equal(invoiceSubmissionRows([...ready,ready[0]],issued,[]).length,6);
+});
+
+test('source submission eligibility retains created invoices but excludes submitted, paid, cancelled and premature milestones',()=>{
+ const direct={key:'direct',site:'Direct',ipo:'D',deliveryOnly:true,delivered:true,invoiceReferences:['27-10001']};
+ const solar={key:'solar',site:'Solar',ipo:'S',program:'Solar 70',delivered:true,installed:true,invoiceReferences:['27-10002'],advance:{invoiceAmount:'500',submitted:false},completion:{invoiceAmount:null,submitted:false}};
+ const ups={key:'ups',site:'UPS',ipo:'U',kind:'UPS',installed:true,invoiceReferences:[],singleInvoiceSubmitted:false};
+ const queues=invoicingQueues([{rows:[direct,solar,ups,{...direct,key:'submitted',singleInvoiceSubmitted:true},{...ups,key:'paid',singlePaymentReceived:true},{...solar,key:'cancelled',cancelled:true},{...ups,key:'premature',installed:false}]}]);
+ const rows=invoiceSubmissionRows([...queues.delivery.map(r=>({...r,milestone:'delivery'})),...queues.completion.map(r=>({...r,milestone:'completion'}))],queues.alreadyIssued.map(r=>({...r,milestone:r.milestone==='advance'?'delivery':r.milestone})),[]);
+ assert.equal(rows.length,4);
+ assert.equal(rows.filter(r=>r.billingStage==='delivery-only').length,1);
+ assert.equal(rows.filter(r=>r.billingStage==='delivery').length,1);
+ assert.equal(rows.filter(r=>r.billingStage==='completion').length,2);
+ assert.equal(rows.filter(r=>r.invoiceCreated).length,2);
 });

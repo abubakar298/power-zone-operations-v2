@@ -28,7 +28,7 @@ export function billingRows(registers:SourceRow[],cables:SourceRow,internet:Sour
    const amount=new Decimal(value.invoiceAmount).minus(adjustment).toFixed(2);
    const outstanding=value.received?'0':Decimal.max(0,new Decimal(value.outstandingAmount??value.invoiceAmount).minus(adjustment)).toFixed(2);
    const systemRefs=row.invoiceReferences.filter((ref:any)=>!cableIds.has(invoiceIdentity(ref))&&!internetIds.has(invoiceIdentity(ref)));
-   result.push({id:`${row.key}:${stage}`,customer,category:stage==='advance'?'System · advance':'System · completion',ipo:row.ipo,site:row.site,invoice:systemRefs.join(' / '),amount,pending:outstanding,date:value.submitted?submissionDate(value.submissionEvidence):null,dateBasis:'Days since verified submission',submission:value.submitted?'Submitted':'Submission not confirmed',notes:[value.receiptEvidence,adjustment.gt(0)?`Separate cable invoice value ${adjustment.toFixed(2)} excluded from system total to prevent double counting.`:''].filter(Boolean).join(' '),minimum:false});
+   result.push({id:`${row.key}:${stage}`,customer,category:stage==='advance'?'System · advance':'System · completion',ipo:row.ipo,site:row.site,invoice:systemRefs.join(' / '),amount,pending:outstanding,receiptConfirmed:value.received===true,date:value.submitted?submissionDate(value.submissionEvidence):null,dateBasis:'Days since verified submission',submission:value.submitted?'Submitted':'Submission not confirmed',notes:[value.receiptEvidence,adjustment.gt(0)?`Separate cable invoice value ${adjustment.toFixed(2)} excluded from system total to prevent double counting.`:''].filter(Boolean).join(' '),minimum:false});
   }else if(row.kind==='UPS'){
    for(const invoice of row.invoiceReferences??[]){
     const identity=invoiceIdentity(invoice);if(!identity||cableIds.has(identity)||internetIds.has(identity))continue;
@@ -37,14 +37,14 @@ export function billingRows(registers:SourceRow[],cables:SourceRow,internet:Sour
     const amount=row.actualInvoiceAmount??row.invoiceAmount??null;
     const pending=latest?String(latest.balance):row.singlePaymentReceived||paid?'0':null;
     const submitted=latest?latest.status==='submitted':paid||row.singleInvoiceSubmitted;
-    const entry={id:'system:'+key,customer,category:'System',ipo:row.ipo,site:row.site,invoice:identity,amount:amount==null?null:String(amount),pending,date:sourceDate(customer,invoice)??(submitted?submissionDate(row.invoiceStatus):null),dateBasis:'Days since verified submission',submission:submitted?'Submitted':'Submission not confirmed',notes:[amount==null?'Original invoice total not loaded; recovery balance is kept separate from invoiced value.':'',latest?.source,latest?.notes,latest&&row.singlePaymentReceived?'Recovery still lists a balance against this invoice despite the site-level receipt status.':''].filter(Boolean).join(' '),minimum:false};
+    const entry={id:'system:'+key,customer,category:'System',ipo:row.ipo,site:row.site,invoice:identity,amount:amount==null?null:String(amount),pending,receiptConfirmed:(paid||row.singlePaymentReceived===true)&&new Decimal(pending??1).isZero(),date:sourceDate(customer,invoice)??(submitted?submissionDate(row.invoiceStatus):null),dateBasis:'Days since verified submission',submission:submitted?'Submitted':'Submission not confirmed',notes:[amount==null?'Original invoice total not loaded; recovery balance is kept separate from invoiced value.':'',latest?.source,latest?.notes,latest&&row.singlePaymentReceived?'Recovery still lists a balance against this invoice despite the site-level receipt status.':''].filter(Boolean).join(' '),minimum:false};
     if(systemIds.has(key)){const previous=systemIds.get(key)!;if(!previous.site.includes(row.site))previous.site+=' / '+row.site;continue;}
     systemIds.set(key,entry);result.push(entry);
    }
   }
  }
- for(const row of cables.rows){result.push({id:'cable:'+row.key,customer:row.program.startsWith('MBL')?'Meezan Bank Limited':'United Bank Limited',category:'Extra cable',ipo:row.sites.map((s:any)=>s.ipo).filter(Boolean).join(' / '),site:row.sites.map((s:any)=>s.site).join(' / '),invoice:row.invoice,amount:row.invoicedAmount==null?null:String(row.invoicedAmount),pending:row.pendingAmount==null?null:String(row.pendingAmount),date:sourceDate(row.program.startsWith('MBL')?'Meezan Bank Limited':'United Bank Limited',row.invoice)??submissionDate(row.observations?.find((o:any)=>o.submitted)?.submissionEvidence),dateBasis:'Days since verified submission',submission:sourceDate(row.program.startsWith('MBL')?'Meezan Bank Limited':'United Bank Limited',row.invoice)?'Submitted':row.submission,notes:row.notes.join(' '),minimum:row.minimumOnly});}
- for(const row of internet.rows)result.push({id:'internet:'+row.key,customer:'United Bank Limited',category:'Internet',ipo:row.ipo,site:row.site,invoice:row.invoice,amount:String(row.amount),pending:String(row.pendingAmount),date:row.submission==='Submitted'?submissionDate(row.submissionDate):null,dateBasis:'Days since verified submission',submission:row.submission,notes:row.notes,minimum:false});
+ for(const row of cables.rows){result.push({id:'cable:'+row.key,customer:row.program.startsWith('MBL')?'Meezan Bank Limited':'United Bank Limited',category:'Extra cable',receiptConfirmed:lookup(row.program.startsWith('MBL')?'Meezan Bank Limited':'United Bank Limited',row.invoice).some((e:any)=>e.status==='paid')||row.paymentReceived===true,ipo:row.sites.map((s:any)=>s.ipo).filter(Boolean).join(' / '),site:row.sites.map((s:any)=>s.site).join(' / '),invoice:row.invoice,amount:row.invoicedAmount==null?null:String(row.invoicedAmount),pending:row.pendingAmount==null?null:String(row.pendingAmount),date:sourceDate(row.program.startsWith('MBL')?'Meezan Bank Limited':'United Bank Limited',row.invoice)??submissionDate(row.observations?.find((o:any)=>o.submitted)?.submissionEvidence),dateBasis:'Days since verified submission',submission:sourceDate(row.program.startsWith('MBL')?'Meezan Bank Limited':'United Bank Limited',row.invoice)?'Submitted':row.submission,notes:row.notes.join(' '),minimum:row.minimumOnly});}
+ for(const row of internet.rows)result.push({id:'internet:'+row.key,customer:'United Bank Limited',category:'Internet',receiptConfirmed:lookup('United Bank Limited',row.invoice).some((e:any)=>e.status==='paid')||row.paymentReceived===true,ipo:row.ipo,site:row.site,invoice:row.invoice,amount:String(row.amount),pending:String(row.pendingAmount),date:row.submission==='Submitted'?submissionDate(row.submissionDate):null,dateBasis:'Days since verified submission',submission:row.submission,notes:row.notes,minimum:false});
  return result;
 }
 export function customerTotals(rows:SourceRow[],asOf:string){
@@ -56,12 +56,16 @@ export function customerTotals(rows:SourceRow[],asOf:string){
 export function invoicingQueues(registers:SourceRow[]){
  const delivery:SourceRow[]=[],completion:SourceRow[]=[],alreadyIssued:SourceRow[]=[];
  for(const row of registers.flatMap((r:any)=>r.rows).filter((r:any)=>!r.cancelled&&!r.transferred)){
-  if(row.kind==='UPS'){
-   if(row.installed&&!row.singleInvoiceSubmitted&&!row.invoiceReferences.length)completion.push(row);
-   else if(row.installed&&!row.singleInvoiceSubmitted)alreadyIssued.push({...row,milestone:'completion'});
+  if(row.deliveryOnly===true||row.installation===false||row.projectType==='delivery-only'){
+   if(row.delivered&&!row.singleInvoiceSubmitted&&!row.singlePaymentReceived){
+    if((row.invoiceReferences??[]).length)alreadyIssued.push({...row,milestone:'delivery',deliveryOnly:true});else delivery.push({...row,milestone:'delivery',deliveryOnly:true});
+   }
+  }else if(row.kind==='UPS'){
+   if(row.installed&&!row.singlePaymentReceived&&!row.singleInvoiceSubmitted&&!row.invoiceReferences.length)completion.push(row);
+   else if(row.installed&&!row.singlePaymentReceived&&!row.singleInvoiceSubmitted)alreadyIssued.push({...row,milestone:'completion'});
   }else if(row.program==='Solar 70'){
    for(const [stage,ready,list]of [['advance',row.delivered,delivery],['completion',row.installed,completion]]){
-    if(!ready||row[stage]?.submitted)continue;
+    if(!ready||row[stage]?.submitted||row[stage]?.received)continue;
     const hasInvoice=row[stage]?.invoiceAmount!=null&&row.invoiceReferences.some((ref:any)=>!/^27-50/.test(ref));
     if(hasInvoice)alreadyIssued.push({...row,milestone:stage});else list.push({...row,milestone:stage});
    }

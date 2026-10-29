@@ -20,7 +20,7 @@ function AmountOnly({value}:{value:string|null|undefined}){return value==null?<s
 function status(row:ProgrammeRow){return row.cancelled?'Cancelled':row.transferred?'Transferred':row.installed?'Installed':row.delivered?'Delivered · installation pending':row.partialDelivery?'Part delivered':'Awaiting delivery';}
 
 /** Read-only programme projection. All counts, financial rules and bucket membership are server-owned. */
-export function ProgrammeDashboard({userId,onOpenSite,endpoint='/director/programmes'}:{userId:string;endpoint?:string;onOpenSite:(row:ProgrammeRow)=>void}){
+export function ProgrammeDashboard({userId,onOpenSite,endpoint='/director/programmes',title='Bank programmes'}:{userId:string;endpoint?:string;title?:string;onOpenSite:(row:ProgrammeRow)=>void}){
  const [data,setData]=useState<Dashboard>(),[loading,setLoading]=useState(true),[error,setError]=useState(''),[programmeKey,setProgrammeKey]=useState(()=>navigation().programme),[selectionKey,setSelectionKey]=useState(()=>navigation().bucket),[search,setSearch]=useState(()=>navigation().search);
  const generation=useRef(0),mounted=useRef(false),lastLoaded=useRef(0);
  const load=useCallback(async()=>{const current=++generation.current;setLoading(true);try{const next=await api<Dashboard>(endpoint);if(mounted.current&&current===generation.current){setData(next);setError('');lastLoaded.current=Date.now();}}catch(e){if(mounted.current&&current===generation.current)setError((e as Error).message);}finally{if(mounted.current&&current===generation.current)setLoading(false);}},[endpoint]);
@@ -42,7 +42,7 @@ export function ProgrammeDashboard({userId,onOpenSite,endpoint='/director/progra
   return key==='active'?'Contract value including tax':'Outstanding value including tax';
  };
  return <section className="programme-dashboard" aria-label="Bank programme progress" aria-busy={loading}>
-  <div className="programme-heading"><div><h2>Bank programmes</h2><p>Delivery, installation and payments</p></div><Button variant="neutral" loading={loading} loadingLabel="Refreshing…" onClick={()=>void load()}>Refresh</Button></div>
+  <div className="programme-heading"><div><h2>{title}</h2><p>Delivery, installation and payments</p></div><Button variant="neutral" loading={loading} loadingLabel="Refreshing…" onClick={()=>void load()}>Refresh</Button></div>
   {error&&<p className="form-error" role="alert">{error}{data?' Showing the last successful refresh.':''}</p>}
   <div className="programme-toolbar"><label>Programme<select value={programmeKey} onChange={e=>{setProgrammeKey(e.target.value);setSelectionKey('active');setSearch('');remember(e.target.value,'active','');}}>{options.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><label>Search sites<input type="search" value={search} onChange={e=>{setSearch(e.target.value);remember(programmeKey,selectionKey,e.target.value);}} maxLength={200} placeholder="IPO, order, site, customer PO or invoice"/></label></div>
   {!data&&!error?<p role="status">Loading programme progress…</p>:!programme?<p role="status">This programme is not available in the current record. Refresh to check again.</p>:<>

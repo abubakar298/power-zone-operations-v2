@@ -18,7 +18,7 @@ export function operationsInvoiceRows(rows:any[],registers:any[]=[]){
   const ups=approved?.kind==='UPS'||s.projectType==='ups';
   const deliveryMilestone=deliveryOnly||!ups&&(approved?.program==='Solar 70'||s.invoiceOnDelivery===true);
   const completionMilestone=!deliveryOnly&&(s.installation===true||ups||approved?.program==='Solar 70');
-  const base={key:row.site_id,sourceKind:'Operations',sourceVersion:row.version,site:s.name,ipo:s.ipo,po:s.customerPo??s.po??'',program:s.projectType??'',deliveryDate:s.deliveryDate,installationDate:s.qc?.handover?.date??s.qc?.signoff?.date??s.qcJob?.date,documents:s.documents??[],evidence:(s.documents??[]).flatMap((d:any)=>(d.evidence??[]).filter((f:any)=>z.uuid().safeParse(f.id).success).map((f:any)=>({id:f.id,filename:f.name??'Supporting document',url:`/api/operations-board/sites/${encodeURIComponent(row.site_id)}/files/${f.id}`})))};
+  const base={deliveryOnly,key:row.site_id,sourceKind:'Operations',sourceVersion:row.version,site:s.name,ipo:s.ipo,po:s.customerPo??s.po??'',program:s.projectType??'',deliveryDate:s.deliveryDate,installationDate:s.qc?.handover?.date??s.qc?.signoff?.date??s.qcJob?.date,documents:s.documents??[],evidence:(s.documents??[]).flatMap((d:any)=>(d.evidence??[]).filter((f:any)=>z.uuid().safeParse(f.id).success).map((f:any)=>({id:f.id,filename:f.name??'Supporting document',url:`/api/operations-board/sites/${encodeURIComponent(row.site_id)}/files/${f.id}`})))};
   if(deliveryMilestone&&(s.stage==='delivered'||s.stage==='completed'||s.completed===true))result.push({...base,milestone:'delivery'});
   if(completionMilestone&&(s.completed===true||s.stage==='completed'))result.push({...base,milestone:'completion'});
  }
@@ -54,12 +54,30 @@ async function candidates(c:Db){
  const issued=(queues.alreadyIssued as any[]);
  const eligibleOperations=operations.filter(o=>!imported.some(e=>e.snapshot.key===o.key&&e.knownMilestones.includes(o.milestone))&&!issued.some(r=>sameSite(r,o)&&(r.milestone===o.milestone||r.milestone==='advance'&&o.milestone==='delivery')));
  const legacy=['delivery','completion'].flatMap(milestone=>(queues[milestone as 'delivery'|'completion'] as any[]).filter(r=>!isArchivedLegacySolar(r)&&!operations.some(o=>o.ipo===r.ipo&&o.site===r.site)).map(r=>({...r,sourceKind:'Source register',sourceVersion:source.version,milestone})));
- return {rows:[...eligibleOperations,...legacy],imported};
+ return {rows:[...eligibleOperations,...legacy],imported,alreadyIssued:issued.filter(r=>!isArchivedLegacySolar(r)).map(r=>({...r,sourceKind:'Source register',sourceVersion:source.version,milestone:r.milestone==='advance'?'delivery':r.milestone}))};
 }
+
+/** Creation of a PT invoice is separate from submission to the bank. Keep created
+ * references in the work queue until the reviewed source confirms submission. */
+export function invoiceSubmissionRows(ready:any[],issued:any[],entries:any[]){
+ const result:any[]=[];
+ const same=(a:any,b:any)=>String(a.ipo??'').trim().toLowerCase()===String(b.ipo??'').trim().toLowerCase()&&String(a.site??'').trim().toLowerCase()===String(b.site??'').trim().toLowerCase();
+ for(const candidate of [...ready,...issued]){
+  const entry=entries.find(e=>e.milestone===candidate.milestone&&((e.source_kind===candidate.sourceKind&&e.site_key===candidate.key)||same(e.snapshot,candidate)));
+  const refs=entry?[entry.pt_reference]:candidate.invoiceReferences??[];
+  const invoiceCreated=!!entry||issued.includes(candidate);
+  const billingStage=candidate.deliveryOnly===true||candidate.installation===false||candidate.projectType==='delivery-only'?'delivery-only':candidate.milestone==='delivery'?'delivery':'completion';
+  const row={...candidate,billingStage,invoiceCreated,invoiceReferences:invoiceCreated?refs:[],invoiceEntryId:entry?.id};
+  if(!result.some(r=>same(r,row)&&r.milestone===row.milestone))result.push(row);
+ }
+ return result;
+}
+
 export async function invoiceRegister(pool:Pool,actor:string){
  const role=await new AccountsRepository(pool).access(actor);
- const {rows,imported}=await candidates(pool),entries=(await pool.query('SELECT *,entry_date::text AS entry_date FROM accounts_invoice_entries ORDER BY created_at DESC')).rows;
- return {canRecord:['Admin','Accounts'].includes(role),queues:{delivery:rows.filter(r=>r.milestone==='delivery'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='delivery')),completion:rows.filter(r=>r.milestone==='completion'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='completion'))},entries:[...entries,...imported.filter(i=>!entries.some(e=>(e.site_key===i.snapshot.key||e.site_key===i.site_key)&&e.milestone===i.milestone))],importedCount:imported.length};
+ const {rows,imported,alreadyIssued}=await candidates(pool),entries=(await pool.query('SELECT *,entry_date::text AS entry_date FROM accounts_invoice_entries ORDER BY created_at DESC')).rows;
+ const submissionRows=invoiceSubmissionRows(rows,alreadyIssued,entries);
+ return {canRecord:['Admin','Accounts'].includes(role),submissionQueues:{deliveryOnly:submissionRows.filter(r=>r.billingStage==='delivery-only'),delivery:submissionRows.filter(r=>r.billingStage==='delivery'),completion:submissionRows.filter(r=>r.billingStage==='completion')},queues:{delivery:rows.filter(r=>r.milestone==='delivery'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='delivery')),completion:rows.filter(r=>r.milestone==='completion'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='completion'))},entries:[...entries,...imported.filter(i=>!entries.some(e=>(e.site_key===i.snapshot.key||e.site_key===i.site_key)&&e.milestone===i.milestone))],importedCount:imported.length};
 }
 export async function recordInvoiceEntry(pool:Pool,actor:string,input:z.infer<typeof invoiceEntrySchema>){
  return transaction(pool,async c=>{

@@ -1,3 +1,4 @@
+import {accountsPageName} from '../../shared/accounts-navigation.js';
 import {notificationPath} from '../../shared/notification-target.js';
 import {UpsAlerts} from '../components/UpsAlerts.js';
 import {ManagementDashboard} from "../components/ManagementDashboard.js";
@@ -115,7 +116,7 @@ export function Dashboard({
   const [managementProcurement,setManagementProcurement]=useState(()=>canViewDepartments(principalSession.user.role)&&sessionStorage.getItem("pz:management-procurement")===principalSession.user.id);
   const session=departmentUser?{...principalSession,user:departmentUser}:principalSession;
   const [operationsArea,setOperationsArea]=useState<OperationsArea>(()=>currentOperationsArea(session.user));
-  const [accountsPage,setAccountsPage]=useState(()=>new URLSearchParams(location.hash.slice(1)).get('accountsTab')||({'/accounts/programmes':'Programme Dashboard','/accounts/sites':'Project Sites','/accounts/ipos':'IPOs Received','/accounts/inventory':'Approved Documents','/accounts/closures':'Job Closure','/accounts/closure-review':'Awaiting Management','/accounts/documents':'Physical Documents','/accounts/invoicing':'Invoicing','/accounts/receivables':'Receivables','/accounts/checkpoints':'Project checkpoints'} as Record<string,string>)[location.pathname]||'My Workspace');
+  const [accountsPage,setAccountsPage]=useState(()=>accountsPageName(new URLSearchParams(location.hash.slice(1)).get('accountsTab')||({'/accounts/programmes':'Programme Dashboard','/accounts/sites':'Project Sites','/accounts/ipos':'IPOs Received','/accounts/inventory':'Approved Documents','/accounts/closures':'Job Closure','/accounts/closure-review':'Awaiting Management','/accounts/documents':'Physical Documents','/accounts/invoicing':'Invoicing','/accounts/receivables':'Receivables','/accounts/checkpoints':'Project checkpoints'} as Record<string,string>)[location.pathname]||'My Workspace'));
   const [accountsContext,setAccountsContext]=useState<string|null>(null);
   const [inventoryDispatcher,setInventoryDispatcher]=useState(false);
   useEffect(()=>{let live=true;if(session.user.role==='Inventory')void api<{kind:string}>('/material-dispatches/access').then(a=>{if(live)setInventoryDispatcher(a.kind==='dispatcher');}).catch(()=>{if(live)setInventoryDispatcher(false);});else setInventoryDispatcher(false);return()=>{live=false;};},[session.user.id,session.user.role]);
@@ -605,7 +606,7 @@ export function Dashboard({
             <>
               <div className="nav-label">WORKSPACE</div>{(session.user.role==='Inventory'&&inventoryDispatcher)&&<nav aria-label="Inventory material workflow">{[['Material issuance','/inventory/materials'],['Parent DOs','/inventory/parent-dos'],['Reconciliations','/inventory/reconciliations'],['Gate passes','/inventory/gate-passes'],['Warehouse transfers','/inventory/transfers'],['Replacements','/inventory/replacements']].map(([title,path])=><button key={path} onClick={()=>location.assign(path)}><Icon name="file"/><span>{title}</span></button>)}</nav>}
               <nav aria-label="Main navigation">
-                {session.user.role==='Accounts'&&[['Dashboard','My Workspace'],['IPOs Received','IPOs Received'],['Inventory & PT','Approved Documents'],['Job Closure','Job Closure'],['Physical Documents','Physical Documents'],['Invoicing','Invoicing'],['Receivables','Receivables']].map(([title,page])=><button key={page} className={(accountsContext||accountsPage)===page?'nav-active':''} onClick={()=>openAccountsPage(page)}><Icon name={page==='My Workspace'?'dashboard':'file'}/><span>{title}</span></button>)}
+                {session.user.role==='Accounts'&&[['Dashboard','My Workspace'],['IPOs Received','IPOs Received'],['Inventory & PT','Approved Documents'],['Job Closure','Job Closure'],['Physical Documents','Physical Documents']].map(([title,page])=><button key={page} className={(accountsContext||accountsPage)===page?'nav-active':''} onClick={()=>openAccountsPage(page)}><Icon name={page==='My Workspace'?'dashboard':'file'}/><span>{title}</span></button>)}
                 {session.user.role!=='Accounts'&&<button
                   className={view === "dashboard" ? "nav-active" : ""}
                   aria-current={view === "dashboard" ? "page" : undefined}
@@ -615,7 +616,7 @@ export function Dashboard({
                   Dashboard
                 </button>}
                 {["Accounts"].includes(session.user.role) && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
-                {session.user.role==='Accounts'&&<button className={(accountsContext||accountsPage)==='Programme Dashboard'?'nav-active':''} onClick={()=>openAccountsPage('Programme Dashboard')}><Icon name="dashboard"/><span>Programme Dashboard</span></button>}
+                {session.user.role==='Accounts'&&<button className={(accountsContext||accountsPage)==='Project Tracking'?'nav-active':''} onClick={()=>openAccountsPage('Project Tracking')}><Icon name="dashboard"/><span>Project Tracking</span></button>}
                 {["Admin", "Management", "Coordinator"].includes(
                   session.user.role,
                 ) && (
