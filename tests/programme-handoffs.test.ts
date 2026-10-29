@@ -80,3 +80,7 @@ test('delivery-only sites do not wait for installation; delivery invoices remain
 test('a later partial dispatch after a partial return cannot reuse the old final DO as full delivery',()=>{
  const s=programmeHandoffState(observation({stage:'awaiting',deliveryReturns:[{scope:'partial',recordedAt:'2026-10-29T00:00:00Z',priorDeliveries:[delivery]}],deliveries:[delivery,{...delivery,deliveryDate:'2026-10-30',partial:true}],deliveryRecordedAt:'2026-10-30T00:00:00Z'}));assert.equal(s.delivered,false);assert.equal(s.partialDelivery,true);
 });
+
+test('a genuinely new Solar IPO on the reviewed source date is not lost at the cutoff',async()=>{
+ const {appendIssuedProgrammeSales}=await import('../server/director/management-programmes.js');const out=appendIssuedProgrammeSales(source(row()),[{id:'today',frameworkType:'ubl-solar',customer:'UBL',issuedAt:new Date('2026-10-30T06:00:00Z'),siteCode:'NEW',poReference:'NEW-PO',number:'IPO-TODAY'}],'2026-10-30');assert.equal(out.snapshot.registers.at(-1)!.rows.length,1);
+});
