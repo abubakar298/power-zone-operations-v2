@@ -1,3 +1,4 @@
+import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
@@ -11,7 +12,7 @@ type Db=Pool|PoolClient;
 export function operationsInvoiceRows(rows:any[],registers:any[]=[]){
  const result:any[]=[];
  for(const row of rows){const s=row.snapshot;
-  if(s.cancelled||s.transferred||s.scopePending)continue;
+  if(isArchivedLegacySolar({...s,id:row.site_id})||s.cancelled||s.transferred||s.scopePending)continue;
   const approved=registers.flatMap(r=>r.rows??[]).find(r=>r.ipo===s.ipo&&r.site===s.name);
   const deliveryOnly=s.installation===false||s.projectType==='delivery-only';
   const ups=approved?.kind==='UPS'||s.projectType==='ups';
@@ -52,7 +53,7 @@ async function candidates(c:Db){
  const sameSite=(a:any,b:any)=>String(a.ipo??'').trim().toLowerCase()===String(b.ipo??'').trim().toLowerCase()&&String(a.site??'').trim().toLowerCase()===String(b.site??'').trim().toLowerCase();
  const issued=(queues.alreadyIssued as any[]);
  const eligibleOperations=operations.filter(o=>!imported.some(e=>e.snapshot.key===o.key&&e.knownMilestones.includes(o.milestone))&&!issued.some(r=>sameSite(r,o)&&(r.milestone===o.milestone||r.milestone==='advance'&&o.milestone==='delivery')));
- const legacy=['delivery','completion'].flatMap(milestone=>(queues[milestone as 'delivery'|'completion'] as any[]).filter(r=>!operations.some(o=>o.ipo===r.ipo&&o.site===r.site)).map(r=>({...r,sourceKind:'Source register',sourceVersion:source.version,milestone})));
+ const legacy=['delivery','completion'].flatMap(milestone=>(queues[milestone as 'delivery'|'completion'] as any[]).filter(r=>!isArchivedLegacySolar(r)&&!operations.some(o=>o.ipo===r.ipo&&o.site===r.site)).map(r=>({...r,sourceKind:'Source register',sourceVersion:source.version,milestone})));
  return {rows:[...eligibleOperations,...legacy],imported};
 }
 export async function invoiceRegister(pool:Pool,actor:string){

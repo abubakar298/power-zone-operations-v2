@@ -1,3 +1,4 @@
+import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -41,6 +42,7 @@ export async function importPendingIpo(pool:Pool,actor:string,raw:z.infer<typeof
   if(b.sample||b.completed||!['received','awaiting'].includes(b.stage))throw new HttpError(409,'Only original sites still pending delivery can be imported here.');
   const candidates=source.snapshot.registers.flatMap((r:any)=>r.rows).filter((r:any)=>r.key===b.sourceKey);
   if(candidates.length!==1)throw new HttpError(409,'The source site identity is missing or ambiguous.');
+  if(isArchivedLegacySolar(candidates[0]))throw new HttpError(409,'Archived legacy Solar sites cannot be imported as active IPOs.');
   const row=candidates[0],bank=String(row.key).split(':')[0].toUpperCase();
   for(const field of ['cancelled','transferred','delivered','installed','canIssue'])if(row[field]!==undefined&&typeof row[field]!=='boolean')throw new HttpError(422,'Review the source status field '+field+' before importing.');
   if(!['UBL','MBL'].includes(bank)||row.cancelled===true||row.transferred===true||row.delivered===true||row.installed===true||row.canIssue===false)throw new HttpError(409,'This source position is not an active pending-delivery order.');

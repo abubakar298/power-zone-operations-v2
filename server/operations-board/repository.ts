@@ -1,3 +1,4 @@
+import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
 import {regionalQcDelegationSql} from './qc-delegation.js';
 import {recordDeliveryReturn} from './delivery-return.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
@@ -41,7 +42,7 @@ export class OperationsBoardRepository{
  async sites(actor:string){
   const access=await this.access(actor);if(access.kind==='accounts')throw new HttpError(403,'Accounts can view document tracking only.');
   const rows=(await this.pool.query(latest)).rows;
-  return {sites:rows.filter(r=>['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team).map(r=>({...r.snapshot,version:r.version})),access};
+  return {sites:rows.filter(r=>!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>({...r.snapshot,version:r.version})),access};
  }
  async site(actor:string,id:string){const a=await this.access(actor),r=await this.current(this.pool,id);this.scope(a,r.snapshot);return {...r.snapshot,version:r.version};}
  async history(actor:string,id:string,before?:number){
@@ -54,7 +55,7 @@ export class OperationsBoardRepository{
   const access=await this.access(actor),rows=(await this.pool.query(latest)).rows;
   if(!rows.length)throw new HttpError(409,'The reviewed Operations site register has not been imported.');
   // Deliberately project documents, not vendors, blockers or arbitrary snapshot data.
-  return {sites:rows.filter(r=>['owner','head','accounts'].includes(access.kind)||r.snapshot.operationsTeam===access.team).map(r=>{
+  return {sites:rows.filter(r=>!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head','accounts'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>{
    const s=r.snapshot;return {id:r.site_id,name:s.name,ipo:s.ipo,completed:s.completed===true,version:r.version,documents:s.documents??[],evidencePending:s.evidencePending===true};
   })};
  }
@@ -115,6 +116,7 @@ export class OperationsBoardRepository{
   return transaction(this.pool,async c=>{
    await lockActiveActor(c,actor);
    const a=await this.access(actor,c),row=await this.current(c,id,true);this.scope(a,row.snapshot);
+   if(isArchivedLegacySolar({...row.snapshot,id}))throw new HttpError(409,'Archived legacy Solar sites are read-only. History and documents remain available.');
    const replay=(await c.query('SELECT snapshot,version,action,reason FROM operations_board_versions WHERE site_id=$1 AND request_key=$2',[id,v.requestKey])).rows[0];
    const action=`Document movement:${v.documentId}`,reason=JSON.stringify({...v,requestKey:undefined});
    if(replay){if(replay.action!==action||replay.reason!==reason)throw new HttpError(409,'This request key was already used for a different update.');return {...replay.snapshot,version:replay.version};}
@@ -253,6 +255,7 @@ export class OperationsBoardRepository{
   return transaction(this.pool,async c=>{
    await lockActiveActor(c,actor);
    const a=await this.access(actor,c),row=await this.current(c,id,true);this.scope(a,row.snapshot);
+   if(isArchivedLegacySolar({...row.snapshot,id}))throw new HttpError(409,'Archived legacy Solar sites are read-only. History and documents remain available.');
    if(v.action==='delivery-return'&&!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Returned delivery belongs to the assigned Operations lead.');
    if(v.action==='assign-team'&&!['owner','head'].includes(a.kind))throw new HttpError(403,'Only Moaz or Management can assign Operations teams.');
    if(v.action==='plan'&&!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Dispatch planning belongs to the assigned Operations lead.');

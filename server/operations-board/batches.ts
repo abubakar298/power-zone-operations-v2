@@ -1,3 +1,4 @@
+import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
 import {isDeepStrictEqual} from 'node:util';
 import {HttpError} from '../http/errors.js';
 import type {BatchInput} from './schema.js';
@@ -22,6 +23,7 @@ export function validateBatch(input:BatchInput,sites:WorkflowSite[],existing:Bat
   if(!site)throw new HttpError(422,'A selected site is unavailable.');
   const kind=stop.kind??input.kind;
   const oldStop=previous?.stops.find(s=>s.siteId===stop.siteId);
+  if(isArchivedLegacySolar(site)&&!oldStop)throw new HttpError(409,'Archived legacy Solar sites are unavailable for new batch work.');
   const changesWork=!previous||!oldStop||(oldStop.kind??previous.kind)!==kind;
   if(changesWork&&(siteBucket(site)==='completed'||site.scopePending||site.installation===null||kind==='labour'&&site.installation!==true||kind!=='labour'&&(!['received','awaiting'].includes(site.stage)||kind==='both'&&site.installation!==true)))throw new HttpError(422,`${site.name} is not eligible for this batch.`);
   if(site.operationsTeam&&site.operationsTeam!==input.team)throw new HttpError(422,'A selected site belongs to another Operations team.');
