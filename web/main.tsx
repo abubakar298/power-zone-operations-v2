@@ -15,3 +15,5 @@ void import('./App.js').then(({ App }) => {
 });
 
 import './ui/accounts.css';
+
+import './components/staff-sidebar.css';

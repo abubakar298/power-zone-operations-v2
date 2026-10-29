@@ -1,3 +1,4 @@
+import {staffNavigationIcon} from './staff-navigation-icons.js';
 import {navigateInventory} from '../inventory-approved/navigation.js';
 import {Button} from '../ui/Button.js';
 import {Icon} from './Icon.js';
@@ -32,9 +33,9 @@ export function InventoryNavigation({mode='dispatcher',storekeeper=false,active,
  const limited=storekeeper||mode==='storekeeper';
  const selected=active??(location.pathname.startsWith('/inventory/parent-dos')&&!location.pathname.startsWith('/inventory/parent-dos/review')?'materials':undefined)??inventoryMenu.find(item=>item.path!=='/inventory'&&(location.pathname===item.path||location.pathname.startsWith(item.path+'/')))?.id??'dashboard';
  function navigate(path:string){if(onNavigate){onNavigate(path);return;}if(confirmLeaveWorkspace())navigateInventory(path);}
- return <aside className={`ob-sidebar inventory-sidebar ${mobile?'is-open':''}`}>
+ return <aside data-staff-sidebar className={`ob-sidebar inventory-sidebar ${mobile?'is-open':''}`}>
   <p className="ob-nav-caption">{limited?'WAREHOUSE DOCUMENTS':'WORKSPACE'}</p>
-  <nav aria-label={limited?'Storekeeper documents':'Inventory navigation'}>{limited?storekeeperMenu.map(item=><Button key={item.id} className={selected===item.id?'is-active':''} aria-current={selected===item.id?'page':undefined} onClick={()=>onSelect?onSelect(item.id):navigate('/inventory/gate-passes?view='+item.id)}><Icon name={item.icon}/><span>{item.label}</span></Button>):inventoryMenu.map((item,index)=><div key={item.id}>{index===1&&<p className="ob-nav-caption inventory-nav-group">PROJECT OPERATIONS</p>}<Button className={selected===item.id?'is-active':''} aria-current={selected===item.id?'page':undefined} onClick={()=>navigate(item.path)}><Icon name={item.icon}/><span>{item.label}</span></Button></div>)}</nav>
+  <nav aria-label={limited?'Storekeeper documents':'Inventory navigation'}>{limited?storekeeperMenu.map(item=><Button key={item.id} className={selected===item.id?'is-active':''} aria-current={selected===item.id?'page':undefined} onClick={()=>onSelect?onSelect(item.id):navigate('/inventory/gate-passes?view='+item.id)}><Icon name={staffNavigationIcon(item.label)}/><span>{item.label}</span></Button>):inventoryMenu.map((item,index)=><div key={item.id}>{index===1&&<p className="ob-nav-caption inventory-nav-group">PROJECT OPERATIONS</p>}<Button className={selected===item.id?'is-active':''} aria-current={selected===item.id?'page':undefined} onClick={()=>navigate(item.path)}><Icon name={staffNavigationIcon(item.label)}/><span>{item.label}</span></Button></div>)}</nav>
   <div className="ob-sidebar-foot">Power Zone · Inventory</div>
  </aside>;
 }

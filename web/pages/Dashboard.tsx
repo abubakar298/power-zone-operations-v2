@@ -1,3 +1,4 @@
+import {staffNavigationIcon} from '../components/staff-navigation-icons.js';
 import {ProgrammeDashboard} from '../components/ProgrammeDashboard.js';
 import {AccountsBilling} from './AccountsBilling.js';
 import {accountsPageName} from '../../shared/accounts-navigation.js';
@@ -488,7 +489,7 @@ export function Dashboard({
     );
   return (
     <div className={`workspace fixed-header-layout ${(["Accounts","Admin","Management"].includes(session.user.role)&&(session.user.role==='Accounts'||['finance','receivables','project-tracking'].includes(view)))?'accounts-ui':''} ${session.user.role === "Coordinator" ? "coordinator-layout" : session.user.role === "Operations" ? "operations-layout" : ""}`}>
-      <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
+      <aside data-staff-sidebar={["Accounts","Coordinator","Design","Operations","Inventory"].includes(session.user.role)?true:undefined} className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="sidebar-brand">
           <Brand compact />
           <button
@@ -562,11 +563,11 @@ export function Dashboard({
                   <button className={view === "masters" ? "nav-active" : ""}
                     aria-current={view === "masters" ? "page" : undefined}
                     onClick={() => navigate("masters")}>
-                    <span className="sidebar-bucket-label">Databases</span>
+                    <Icon name="database"/><span className="sidebar-bucket-label">Databases</span>
                   </button>
                 )}
                 {session.user.role === "Design" && <>
-                <button
+                <button className={view==='dashboard'&&departmentPage==='Survey History'?'nav-active':''} aria-current={view==='dashboard'&&departmentPage==='Survey History'?'page':undefined}
                   onClick={() => {
                     if (navigate("dashboard")) {
                       sessionStorage.setItem(
@@ -586,11 +587,11 @@ export function Dashboard({
                     }
                   }}
                 >
-                  {session.user.role === "Design"
+                  <Icon name="history"/>{session.user.role === "Design"
                     ? "Survey History"
                     : "Customer & Site Search"}
                 </button>
-                <button
+                <button className={view==='dashboard'&&departmentPage==='Performance'?'nav-active':''} aria-current={view==='dashboard'&&departmentPage==='Performance'?'page':undefined}
                   onClick={() => {
                     if (navigate("dashboard")) {
                       sessionStorage.setItem(
@@ -605,7 +606,7 @@ export function Dashboard({
                     }
                   }}
                 >
-                  Performance
+                  <Icon name="chart"/>Performance
                 </button>
                 </>}
               </nav>
@@ -614,7 +615,7 @@ export function Dashboard({
             <>
               <div className="nav-label">WORKSPACE</div>{(session.user.role==='Inventory'&&inventoryDispatcher)&&<nav aria-label="Inventory material workflow">{[['Material issuance','/inventory/materials'],['Parent DOs','/inventory/parent-dos'],['Reconciliations','/inventory/reconciliations'],['Gate passes','/inventory/gate-passes'],['Warehouse transfers','/inventory/transfers'],['Replacements','/inventory/replacements']].map(([title,path])=><button key={path} onClick={()=>location.assign(path)}><Icon name="file"/><span>{title}</span></button>)}</nav>}
               <nav aria-label="Main navigation">
-                {session.user.role==='Accounts'&&[['Dashboard','My Workspace'],['IPOs Received','IPOs Received'],['Inventory & PT','Approved Documents'],['Job Closure','Job Closure'],['Physical Documents','Physical Documents']].map(([title,page])=><button key={page} className={(accountsContext||accountsPage)===page?'nav-active':''} onClick={()=>openAccountsPage(page)}><Icon name={page==='My Workspace'?'dashboard':'file'}/><span>{title}</span></button>)}
+                {session.user.role==='Accounts'&&[['Dashboard','My Workspace'],['IPOs Received','IPOs Received'],['Inventory & PT','Approved Documents'],['Job Closure','Job Closure'],['Physical Documents','Physical Documents']].map(([title,page])=><button key={page} className={(accountsContext||accountsPage)===page?'nav-active':''} onClick={()=>openAccountsPage(page)}><Icon name={staffNavigationIcon(title)}/><span>{title}</span></button>)}
                 {session.user.role!=='Accounts'&&<button
                   className={view === "dashboard" ? "nav-active" : ""}
                   aria-current={view === "dashboard" ? "page" : undefined}
@@ -623,7 +624,7 @@ export function Dashboard({
                   <Icon name="dashboard" />
                   Dashboard
                 </button>}
-                {["Accounts"].includes(session.user.role) && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="file"/><span>Alerts</span></button>}
+                {["Accounts"].includes(session.user.role) && <button className={view === "alerts" ? "nav-active" : ""} aria-current={view === "alerts" ? "page" : undefined} onClick={()=>navigate("alerts")}><Icon name="bell"/><span>Alerts</span></button>}
                 {["Admin", "Management", "Coordinator"].includes(
                   session.user.role,
                 ) && (

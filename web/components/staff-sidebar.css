@@ -1,0 +1,18 @@
+/* Operations navigation reference, scoped to staff module sidebars only.
+   Admin and Management sidebars do not carry this marker. */
+aside[data-staff-sidebar]{--staff-nav-bg:var(--pz-secondary-bg);--staff-nav-selected:var(--pz-primary);--staff-nav-text:var(--pz-muted,var(--pz-text-secondary));}
+aside[data-staff-sidebar] nav :is(button,.pz-button),.workspace .sidebar[data-staff-sidebar] nav button{
+ display:grid;grid-template-columns:19px minmax(0,1fr) auto;align-items:start;gap:12px;
+ width:100%;min-height:46px;padding:12px 14px;margin:0;border:1px solid transparent;
+ border-radius:var(--pz-radius-control);text-align:left;background:transparent;
+ color:var(--staff-nav-text);font-size:13px;font-weight:400;line-height:20px;
+ transform:none;box-shadow:none;transition:background-color .15s,color .15s,border-color .15s;
+}
+aside[data-staff-sidebar] nav button svg{width:19px;height:19px;grid-column:1;align-self:start;margin:1px 0 0;flex-shrink:0;transform:none;}
+aside[data-staff-sidebar] nav button>span:not(.sidebar-bucket-count):not(.nb),.workspace .sidebar[data-staff-sidebar] nav .nav-active>span:not(.sidebar-bucket-count):not(.nb){min-width:0;font-size:inherit;font-weight:400;line-height:20px;transform:none;overflow-wrap:break-word;}
+aside[data-staff-sidebar] nav button>.sidebar-bucket-count,aside[data-staff-sidebar] nav button>.nb{grid-column:3;align-self:start;margin:0;font-size:12px;line-height:20px;}
+aside[data-staff-sidebar] nav button:not(:disabled):not(.nav-active):not(.is-active):not(.active):not([aria-current=page]):hover{background:var(--staff-nav-bg);color:var(--pz-text);transform:none;box-shadow:none;}
+aside[data-staff-sidebar] nav button:is(.nav-active,.is-active,.active,[aria-current=page]),.workspace .sidebar[data-staff-sidebar] nav button.nav-active{background:var(--staff-nav-bg);color:var(--staff-nav-selected);font-size:13px;font-weight:400;border-color:transparent;transform:none;box-shadow:none;}
+aside[data-staff-sidebar] nav button:not(:disabled):active{background:var(--pz-selected-bg);border-color:var(--pz-selected-border);transform:none;box-shadow:none;}
+aside[data-staff-sidebar] nav button:focus-visible{outline:2px solid var(--pz-focus);outline-offset:2px;}
+@media(prefers-reduced-motion:reduce){aside[data-staff-sidebar] nav button{transition:none;}}

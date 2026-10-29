@@ -131,7 +131,7 @@ export function ProcurementShell({ session, onLogout, viewingAs, onReturn }: { s
         </div>
       </header>
       <div className="ops-body">
-        <aside className="ops-side">
+        <aside data-staff-sidebar className="ops-side">
           <label className="ops-scope"><small>Showing</small>
             <select aria-label="Region" value={region} onChange={(e) => setRegion(e.target.value)}><option value="">All regions</option>{REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}</select>
             <svg className="i" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>

@@ -1,3 +1,5 @@
+import {Icon} from './Icon.js';
+import {staffNavigationIcon} from './staff-navigation-icons.js';
 import {useEffect,useState} from 'react';
 import {api} from '../api.js';
 import {bucketCounts} from '../workspaces/bucket-counts.js';
@@ -13,5 +15,5 @@ export function SidebarBuckets({department,page,onSelect}:{department:'design'|'
   window.addEventListener('focus',refresh);window.addEventListener('pz:bucket-records',supplied);
   return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('pz:bucket-records',supplied);};
  },[department]);
- return <>{(department==='design'?designBuckets:visibleCoordinationBuckets).map(bucket=><button key={bucket} className={page===bucket?'nav-active':''} aria-current={page===bucket?'page':undefined} onClick={()=>onSelect(bucket)}><span className="sidebar-bucket-label">{bucketLabel(bucket)}</span><span className="sidebar-bucket-count" aria-label={error?'Document count unavailable':counts?`${counts[bucket]} documents`:'Loading document count'} title={error?'Unable to refresh count':undefined}>{error?'—':counts?.[bucket]??'…'}</span></button>)}</>;
+ return <>{(department==='design'?designBuckets:visibleCoordinationBuckets).map(bucket=><button key={bucket} className={page===bucket?'nav-active':''} aria-current={page===bucket?'page':undefined} onClick={()=>onSelect(bucket)}><Icon name={staffNavigationIcon(bucketLabel(bucket))}/><span className="sidebar-bucket-label">{bucketLabel(bucket)}</span><span className="sidebar-bucket-count" aria-label={error?'Document count unavailable':counts?`${counts[bucket]} documents`:'Loading document count'} title={error?'Unable to refresh count':undefined}>{error?'—':counts?.[bucket]??'…'}</span></button>)}</>;
 }
