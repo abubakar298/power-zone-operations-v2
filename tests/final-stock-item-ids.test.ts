@@ -12,7 +12,7 @@ import {selectCatalogueItem} from '../server/masters/catalogue.js';
 test('final stock ID release preserves recorded business, pricing and current wording; colour aliases never guess',async()=>{
  const db=await testDatabase({skipMigrations:true});const pre=await mkdtemp(join(tmpdir(),'pz-pre-final-ids-'));
  try{
-  for(const name of await readdir('migrations'))if(/^\d+_.*\.sql$/.test(name)&&name!=='107_final_stock_item_ids.sql')await copyFile(join('migrations',name),join(pre,name));
+  for(const name of await readdir('migrations'))if(/^\d+_.*\.sql$/.test(name)&&!['107_final_stock_item_ids.sql','144_vpd_final_stock_alias.sql'].includes(name))await copyFile(join('migrations',name),join(pre,name));
   await migrate(db.pool,pre);
   // Commercial wording may have changed since the local mapping was approved.
   await db.pool.query(`INSERT INTO inventory_catalogue_versions(item_id,version,payload,rate_key) SELECT item_id,version+1,payload||'{"commercialDescription":"Current live wording retained"}'::jsonb,rate_key FROM inventory_catalogue_current WHERE item_id='CH-11 WAY-DB'`);
@@ -21,7 +21,7 @@ test('final stock ID release preserves recorded business, pricing and current wo
   await migrate(db.pool,undefined,true);
   const afterClient=await db.pool.connect();try{requirePreserved(before,await preservationSnapshot(afterClient,false,before),'final IDs verification');}finally{afterClient.release();}
   const m=await new MastersRepository(db.pool).list();
-  assert.equal(m.catalogue.length,199);assert.equal(m.catalogue.filter(i=>i.payload.finalStockId).length,159);
+  assert.equal(m.catalogue.length,198);assert.equal(m.catalogue.filter(i=>i.payload.finalStockId).length,159);
   assert.equal(new Set(m.catalogue.map(i=>i.item_id)).size,m.catalogue.length);
   const box=m.catalogue.find(i=>i.item_id==='CH-11WAY-DB')!;
   assert.equal(box.payload.commercialDescription,'Current live wording retained');assert.equal(box.rate_key,old.rate_key);assert.equal(box.payload.unit,old.payload.unit);assert.deepEqual(box.payload.stockUnits,['piece']);
