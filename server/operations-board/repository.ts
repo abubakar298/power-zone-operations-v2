@@ -161,7 +161,7 @@ export class OperationsBoardRepository{
    if(previous&&!v.edit)throw new HttpError(409,'The saved batch is locked. Click Edit first.');
    if(previous&&!v.reason)throw new HttpError(422,'Give a reason for changing the saved batch.');
    const selected:WorkflowSite[]=[],versions=new Map<string,number>();
-   for(const stop of [...v.stops].sort((a,b)=>a.siteId.localeCompare(b.siteId))){
+   for(const stop of [...v.stops,...v.cancelledSites].sort((a,b)=>a.siteId.localeCompare(b.siteId))){
     const row=await this.current(c,stop.siteId,true);this.scope(a,row.snapshot);
     if(row.version!==stop.siteVersion)throw new HttpError(409,'A selected site changed. Reload the batch before saving.');
     selected.push(workflowSiteSchema.parse(row.snapshot));versions.set(stop.siteId,row.version);
@@ -171,23 +171,33 @@ export class OperationsBoardRepository{
    if(v.vehicle&&v.vehicle!==previous?.snapshot.vehicle){const matches=vendors.filter(r=>r.kind==='vehicle'&&r.name.toLowerCase()===v.vehicle.toLowerCase());if(matches.length&&!matches.some(r=>r.team===v.team&&r.active))throw new HttpError(422,'Choose a vehicle available in this region.');}
    const stops=validateBatch(v,selected,rows.map(r=>r.snapshot as BatchSnapshot),previous?.snapshot);
    const now=new Date().toISOString(),id=v.id??randomUUID(),number=previous?.snapshot.number??`OPB-${now.slice(0,10).replaceAll('-','')}-${String(rows.length+1).padStart(3,'0')}`;
-   const snapshot:BatchSnapshot={id,number,team:v.team,kind:v.kind,vehicle:v.vehicle,driver:v.driver,labourTeam:v.labourTeam,inventoryReference:v.inventoryReference,stops,createdAt:previous?.snapshot.createdAt??now,updatedAt:now,plannedBy:a.name};
+   const snapshot:BatchSnapshot={id,number,deliveryDate:v.deliveryDate,team:v.team,kind:v.kind,vehicle:v.vehicle,driver:v.driver,labourTeam:v.labourTeam,inventoryReference:v.inventoryReference,stops,createdAt:previous?.snapshot.createdAt??now,updatedAt:now,plannedBy:a.name};
    await c.query('INSERT INTO operations_board_batch_versions(batch_id,version,number,snapshot,request_key,request_sha256,reason,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,v.version+1,number,snapshot,v.requestKey,fingerprint,v.reason||'Initial shared batch plan',actor]);
-   for(const original of selected){
+   for(const original of selected.filter(site=>stops.some(stop=>stop.siteId===site.id))){
     const stop=stops.find(s=>s.siteId===original.id)!,kind=stop.kind??v.kind;let site:WorkflowSite={...original,operationsTeam:original.operationsTeam??v.team,stageStartedAt:original.stageStartedAt??now};
-    if(site.installation!==false){if(kind==='labour'||kind==='both')site={...site,installationPlanDate:stop.plannedDate};else if(!site.installationPlanDate&&site.dispatchDate)site={...site,installationPlanDate:site.dispatchDate};}
+    if(site.installation!==false&&stop.plannedDate)site={...site,installationPlanDate:stop.plannedDate};
     if(kind!=='labour'&&siteBucketForBatch(site)!=='completed'&&site.stage!=='delivered'){
-     if(site.dispatchDate&&site.dispatchDate!==stop.plannedDate){if(!v.reason)throw new HttpError(422,'Give a change reason to revise a saved dispatch date.');site=saveDispatchPlan(site,{dispatchDate:stop.plannedDate,assignments:site.assignments??{}},now,true);}
-     else if(!site.dispatchDate){const required=site.installation?qcTypeForBatch(site)==='ups'?['electrical','delivery']:['structure','electrical','earthing','delivery']:['delivery'];if(required.every(role=>site.assignments?.[role]))site=saveDispatchPlan(site,{dispatchDate:stop.plannedDate,assignments:site.assignments??{}},now);}
+     const date=v.deliveryDate!;
+     if(site.dispatchDate&&site.dispatchDate!==date)site=saveDispatchPlan(site,{dispatchDate:date,assignments:site.assignments??{}},now,true);
+     else if(!site.dispatchDate){const required=site.installation?qcTypeForBatch(site)==='ups'?['electrical','delivery']:['structure','electrical','earthing','delivery']:['delivery'];if(required.every(role=>site.assignments?.[role]))site=saveDispatchPlan(site,{dispatchDate:date,assignments:site.assignments??{}},now);}
     }
     // A site's copy contains only its own stop. Other-team identities never leak
     // through a site snapshot after an individual team reassignment.
     const link={...snapshot,stops:[stop]},links=Array.isArray(site.planningBatches)?site.planningBatches as {id:string}[]:[];
-    const accountsEvent={id:`${id}:${site.id}:schedule`,type:'Batch plan',date:now,ipo:site.ipo,site:site.name,dispatchDate:kind==='labour'?undefined:stop.plannedDate,description:`${number} · ${kind} scheduled · ${stop.plannedDate}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}. Evidence remains pending.`};
-    const updated={...site,planningBatches:[...links.filter(b=>b.id!==id),link],accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],history:[...site.history,{date:now,description:`${number}: ${kind} planned for ${stop.plannedDate}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}.${v.reason?' Reason: '+v.reason:''}`}]};
+    const accountsEvent={id:`${id}:${site.id}:schedule`,type:'Batch plan',date:now,ipo:site.ipo,site:site.name,dispatchDate:kind==='labour'?undefined:v.deliveryDate,description:`${number} · delivery ${v.deliveryDate??'not part of this batch'} · expected installation ${stop.plannedDate||'not applicable'}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}. Evidence remains pending.`};
+    const updated={...site,planningBatches:[...links.filter(b=>b.id!==id),link],accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],history:[...site.history,{date:now,description:`${number}: delivery ${v.deliveryDate??'not part of this batch'}; expected installation ${stop.plannedDate||'not applicable'}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}.${v.reason?' Reason: '+v.reason:''}`}]};
     const version=versions.get(site.id)!+1;
     await c.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,request_sha256,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[site.id,version,updated,'Batch plan',v.reason||'Initial shared batch plan',v.requestKey,fingerprint,actor]);
     await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),site.id,version,previous?'Batch plan changed':'Batch plan',JSON.stringify(previous?['operations-head','management',`${v.team}-operations`,'accounts']:['accounts']),actor]);
+   }
+   for(const cancelled of v.cancelledSites){
+    const original=selected.find(site=>site.id===cancelled.siteId)!;
+    const links=original.planningBatches.filter(batch=>batch.id!==id);
+    const updated={...original,planningBatches:links,accounts:original.accounts.filter(event=>event.id!==`${id}:${original.id}:schedule`),history:[...original.history,{date:now,description:`${number}: site cancelled from batch. Reason: ${v.reason}`}]};
+    if(original.stage!=='delivered'&&previous?.snapshot.deliveryDate===original.dispatchDate&&!links.some(batch=>batch.deliveryDate&&batch.stops.some((stop:any)=>stop.siteId===original.id&&(stop.kind??batch.kind)!=='labour')))delete updated.dispatchDate;
+    const version=versions.get(original.id)!+1;
+    await c.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,request_sha256,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[original.id,version,updated,'Batch site cancelled',v.reason,v.requestKey,fingerprint,actor]);
+    await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),original.id,version,'Batch site cancelled',JSON.stringify(['operations-head','management',`${v.team}-operations`,'accounts']),actor]);
    }
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`operations.board.batch:${id}:${v.version+1}`]);return {...snapshot,version:v.version+1};
   });

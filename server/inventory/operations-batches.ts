@@ -12,7 +12,7 @@ export function inventoryOperationsBatches(batches:{version:number;snapshot:any}
    if(!site.planningBatches?.some((link:any)=>link.id===batch.id&&link.stops?.some((own:any)=>own.siteId===stop.siteId&&own.plannedDate===stop.plannedDate)))continue;
    const matches=sources.filter(source=>source.registeredSiteId===stop.siteId&&source.authorization!=='forecast-only');
    const source=matches.length===1?matches[0]:undefined;
-   stops.push({boardSiteId:stop.siteId,siteId:source?.siteId,name:site.name,ipo:site.ipo,date:stop.plannedDate,work,status:!source||source.installation===null?'approved-boq-required':source.installation===false?'fixed-only':'ready'});
+   stops.push({boardSiteId:stop.siteId,siteId:source?.siteId,name:site.name,ipo:site.ipo,date:batch.deliveryDate??'',work,status:!source||source.installation===null?'approved-boq-required':source.installation===false?'fixed-only':'ready'});
   }
   return stops.length?[{id:batch.id,number:batch.number,version,team:batch.team,vehicle:batch.vehicle??'',driver:batch.driver??'',stops}]:[];
  });

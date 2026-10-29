@@ -8,7 +8,7 @@ const input=()=>batchSchema.parse({version:0,requestKey:randomUUID(),team:'centr
 test('delivered installation sites share a date-only route without times or delivery vehicle',()=>{
  const value=input(),stops=validateBatch(value,sites,[]);assert.equal(stops.length,2);assert.ok(stops.every(s=>s.start===''&&s.end===''));assert.equal(value.vehicle,'');
  assert.throws(()=>validateBatch(value,[{...sites[0],completed:true},sites[1]],[]),/not eligible/);
- assert.throws(()=>validateBatch({...value,kind:'delivery',vehicle:'V',driver:'D'},sites,[]),/not eligible/);
+ assert.throws(()=>validateBatch({...value,kind:'delivery',deliveryDate:'2026-10-28',vehicle:'V',driver:'D'},sites,[]),/not eligible/);
  assert.throws(()=>validateBatch({...value,stops:value.stops.map(s=>({...s,plannedDate:'2026-10-26'}))},sites,[]),/before delivery/);
 });
 test('date-only routes preserve date ordering and shared-resource conflicts with timed legacy bookings',()=>{
@@ -25,4 +25,15 @@ test('UPS dispatch needs electrical and delivery assignments, not earthing',asyn
  const plan={dispatchDate:'2026-10-29',assignments:{electrical:'pz-team',delivery:'delivery-vendor'}};
  const saved=saveDispatchPlan(site,plan,'2026-10-28T10:00:00Z');assert.equal(saved.stage,'awaiting');assert.equal(saved.assignments?.earthing,undefined);
  assert.throws(()=>saveDispatchPlan({...site,projectType:'solar'}, {...plan,assignments:{...plan.assignments,structure:'structure-vendor'}},'2026-10-28T10:00:00Z'),/vendor assignments/);
+});
+
+test('one shared delivery date is independent of per-site installation targets',()=>{
+ const selected=sites.map(s=>({...s,stage:'received'}));
+ const value=batchSchema.parse({...input(),kind:'delivery',vehicle:'V',driver:'D',labourTeam:undefined,deliveryDate:'2026-10-28',stops:input().stops.map((s,n)=>({...s,plannedDate:n?'2026-10-30':'2026-10-29'}))});
+ assert.equal(validateBatch(value,selected,[]).length,2);
+ assert.throws(()=>validateBatch({...value,deliveryDate:undefined},selected,[]),/one delivery date/);
+ assert.throws(()=>validateBatch({...value,deliveryDate:'2026-10-30'},selected,[]),/before batch delivery/);
+ const booked={...value,id:randomUUID(),number:'OLD',createdAt:'',updatedAt:'',plannedBy:''} as BatchSnapshot;
+ assert.throws(()=>validateBatch({...value,stops:value.stops.map(s=>({...s,plannedDate:'2026-11-03'}))},selected,[booked]),/already booked/);
+ assert.equal(validateBatch({...value,deliveryDate:'2026-10-29'},selected,[booked]).length,2);
 });

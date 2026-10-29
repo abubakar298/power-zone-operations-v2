@@ -6,7 +6,7 @@ export function plannedInventoryDelivery(site:Record<string,any>):string|null{
   const stop=Array.isArray(batch.stops)?batch.stops.find((s:any)=>s.siteId===site.id):undefined;
   if(!stop)continue;
   if((stop.kind??batch.kind)==='labour')continue;
-  const date=z.iso.date().safeParse(stop.plannedDate);if(date.success)return date.data;
+  const date=z.iso.date().safeParse(batch.deliveryDate);if(date.success)return date.data;
  }
  if(site.installation!==false)return null;
  const date=z.iso.date().safeParse(site.dispatchDate);return date.success?date.data:null;
@@ -15,5 +15,6 @@ export function plannedInventoryDelivery(site:Record<string,any>):string|null{
 /** Installation planning is distinct from the material delivery route. */
 export function plannedInventoryInstallation(site:Record<string,any>):string|null{
  if(site.installation===false)return null;
+ for(const batch of [...(Array.isArray(site.planningBatches)?site.planningBatches:[])].reverse()){const stop=batch.stops?.find((s:any)=>s.siteId===site.id);const date=z.iso.date().safeParse(stop?.plannedDate);if(date.success)return date.data;}
  const date=z.iso.date().safeParse(site.installationPlanDate??site.dispatchDate);return date.success?date.data:null;
 }
