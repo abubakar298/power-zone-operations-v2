@@ -15,11 +15,11 @@ export function recoveryPdf(report:Report){
 
  };
  autoTable(pdf,{startY:27,margin:{top:27,bottom:18,left:12,right:12},theme:'grid',showHead:'everyPage',rowPageBreak:'avoid',
-  head:[['Site / customer','PO #','Invoice stage','Invoice number','Amount pending\nPKR','Submitted on','Days since\nsubmission']],
-  body:report.items.map(r=>[text([r.site,r.customer].filter(Boolean).join('\n')),text(r.po),text(r.stage),text(r.invoice),r.pending==null?'Amount to confirm':money(r.pending)+(r.review?'\nReview required':''),text(r.submittedOn)||'Not recorded',r.days==null?'Not recorded':String(r.days)]),
+  head:[['SR#','Site / customer','PO #','Invoice stage','Invoice number','Amount pending\nPKR','Submitted on','Days since\nsubmission']],
+  body:report.items.map((r,index)=>[String(index+1),text([r.site,r.customer].filter(Boolean).join('\n')),text(r.po),text(r.stage),text(r.invoice),r.pending==null?'Amount to confirm':money(r.pending)+(r.review?'\nReview required':''),text(r.submittedOn)||'Not recorded',r.days==null?'Not recorded':String(r.days)]),
   styles:{font:'helvetica',fontSize:7,cellPadding:{top:.25,bottom:.25,left:1.6,right:1.6},valign:'top',overflow:'linebreak',lineColor:[223,222,232],lineWidth:.15,textColor:[38,38,49]},headStyles:{fontSize:7.5,fillColor:[237,235,247],textColor:[54,46,85],fontStyle:'bold'},alternateRowStyles:{fillColor:[251,250,254]},
-  columnStyles:{0:{cellWidth:66},1:{cellWidth:35},2:{cellWidth:38},3:{cellWidth:51},4:{cellWidth:33,halign:'right'},5:{cellWidth:29,halign:'center'},6:{cellWidth:21,halign:'center'}},
-  didParseCell:cell=>{if(cell.section==='body'&&cell.column.index===6){cell.cell.styles.textColor=report.items[cell.row.index].color;cell.cell.styles.fontStyle='bold';}},didDrawPage:header,
+  columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:64},2:{cellWidth:33},3:{cellWidth:36},4:{cellWidth:48},5:{cellWidth:33,halign:'right'},6:{cellWidth:29,halign:'center'},7:{cellWidth:21,halign:'center'}},
+  didParseCell:cell=>{if(cell.section==='body'&&cell.column.index===7){cell.cell.styles.textColor=report.items[cell.row.index].color;cell.cell.styles.fontStyle='bold';}},didDrawPage:header,
  });
  const finalY=(pdf as any).lastAutoTable.finalY;
  if(finalY+12>pdf.internal.pageSize.getHeight()-12){pdf.addPage();header();}

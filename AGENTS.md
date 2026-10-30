@@ -19,3 +19,11 @@ Owner instruction, 29 October 2026. Applies across the software and to future do
 - Preserve readable text, item IDs, signatures and stamps. Check actual exported file size and rendered pages.
 - Typical four-copy business DOs should normally remain below 1–2 MB; investigate unusually large output rather than accepting 10–40 MB exports.
 - Use the format’s normal compression for other generated document types; do not alter the content of uploaded signed evidence.
+
+## Serial numbers on document lists: mandatory default
+
+Owner instruction, 31 October 2026. Applies across the software, including PDF downloads and printed document variants.
+
+- Every document containing a list of records or items must include an SR# column.
+- Number the displayed rows in their final sort order, continuously across pages.
+- Retain the SR# column when filters, document copies or export formats change.
