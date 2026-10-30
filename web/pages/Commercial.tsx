@@ -343,7 +343,7 @@ export function Commercial({
       api<{ boqs: any[] }>("/boqs"),
       api<{ quotations: any[] }>("/commercial/quotations"),
     ]);
-    setPolicy(await api<CommercialPolicy>("/commercial/standard-policy"));
+    if (session.user.role !== "Coordinator") setPolicy(await api<CommercialPolicy>("/commercial/standard-policy"));
     setBoqs(b.boqs);
     setQuotes(q.quotations);
     setRevisionRequests(
@@ -522,7 +522,7 @@ export function Commercial({
     if (
       initialQuotationId ||
       (section !== "pricing" && !revisionInfo) ||
-      !policy ||
+      (!policy && session.user.role !== "Coordinator") ||
       revisionLoading ||
       !input.boqRevisionId ||
       savedPrice
@@ -1299,7 +1299,7 @@ export function Commercial({
                   />
                 </label>
               ))}
-              {!savedPrice?.snapshot.policy &&
+              {!sellingOnly && !savedPrice?.snapshot.policy &&
                 savedPrice?.snapshot.input.presentation === "Full Breakup" &&
                 !savedPrice.snapshot.rows.some(
                   (r: any) => r.key === "additional",

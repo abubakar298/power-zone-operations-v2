@@ -126,7 +126,7 @@ test("M1 isolated migration, policy authorization, automatic item prices and imm
       await request(app)
         .get("/api/commercial/standard-policy")
         .set("Cookie", "pz_session=" + token)
-        .expect(role === "Coordinator" ? 200 : 403);
+        .expect(403);
     }
     const m = await new MastersRepository(db.pool).list(),
       brand = (c: string) =>

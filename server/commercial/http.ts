@@ -96,7 +96,7 @@ export function commercialHttp(
       await repo.revisionContext(req.authSession!.user.id, id(req.params.id)),
     ),
   );
-  r.get("/standard-policy", async (req, res) =>
+  r.get("/standard-policy", managementOnly, async (req, res) =>
     res.json(await repo.standardPolicy(req.authSession!.user.id)),
   );
   r.post("/standard-policy", managementOnly, async (req, res) => {

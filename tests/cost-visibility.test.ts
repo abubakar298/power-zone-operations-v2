@@ -38,7 +38,7 @@ test('real authenticated API hides BESS masters/policy and costing while retaini
  const cookie=`pz_session=${token}`;const master=await request(app).get('/api/masters').set('Cookie',cookie).expect(200);assert.equal(master.body.rates.some((r:any)=>isBessEquipment(r)),role!=='Coordinator');
  const history=await request(app).get('/api/masters/rates/history?key=HYB-3P-012').set('Cookie',cookie);assert.equal(history.status,role==='Coordinator'?403:200);
  if(role==='Coordinator'){const writeRate=await request(app).post('/api/masters/rates').set('Cookie',cookie).set('Origin',origin).set('X-CSRF-Token',csrf).send({id:'HYB-3P-012',version:1,values:{rate:'1',status:'Active',notes:'Fixture'}});assert.equal(writeRate.status,403);}
- const policy=await request(app).get('/api/commercial/standard-policy').set('Cookie',cookie).expect(200);assert.equal(policy.body.markups.bess,role==='Coordinator'?undefined:'30');
+ const policy=await request(app).get('/api/commercial/standard-policy').set('Cookie',cookie).expect(role==='Coordinator'?403:200);if(role!=='Coordinator')assert.equal(policy.body.markups.bess,'30');
  const preview=await request(app).post('/api/boqs/preview').set('Cookie',cookie).set('Origin',origin).set('X-CSRF-Token',csrf).send(survey).expect(200);const s=preview.body.snapshot;
  if(role==='Management'){
  const {price,quote}=await import('../server/commercial/engine.js');const {savedQuotationMarkup,workflowHistory}=await import('../server/boq/workflow-history.js');const {Decimal}=await import('decimal.js');

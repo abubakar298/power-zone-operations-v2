@@ -193,10 +193,22 @@ export function restrictedCostView(value: any, commercial = false): any {
   return result;
 }
 
+/** Coordination receives selling results, never the policy used to calculate them.
+ * Server calculations and immutable fingerprints retain the original full snapshot. */
+export function coordinationPricingView(value: any): any {
+  if (value instanceof Date) return value.toJSON();
+  if (Array.isArray(value)) return value.map(coordinationPricingView);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key, entry]) => !["markups", "markup", "itemPricing", "itemCategories", "costUpliftPercent", "preapprovedCostDiscountPercent"].includes(key) && !(key === "policy" && entry && typeof entry === "object"))
+    .map(([key, entry]) => [key, coordinationPricingView(entry)]));
+}
+
 /** Central outbound boundary; evaluated at send time, after route authentication. */
 export const financialVisibility: RequestHandler = (req, res, next) => {
   const json = res.json.bind(res);
   res.json = ((body: any) => {
+    if (req.authSession?.user.role === "Coordinator" && req.originalUrl.startsWith("/api/commercial")) body = coordinationPricingView(body);
     if (canSeeBessCost(req.authSession?.user)) return json(body);
     const path = req.originalUrl;
     if (req.authSession) {
