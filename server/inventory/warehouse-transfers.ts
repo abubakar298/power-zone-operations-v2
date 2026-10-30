@@ -1,3 +1,4 @@
+import {nextWarehouseClosing} from './warehouse-ledger.js';
 import {deferDispatch,dispatchPosted} from './signed-dispatch.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {createHash,randomUUID} from 'node:crypto';
@@ -32,7 +33,7 @@ async function transferNumber(c:PoolClient,id:string){
  await c.query("INSERT INTO document_reference_roots(document_type,family_id,reference) VALUES('TRF',$1,$2)",[id,number]);return number;
 }
 async function finalItem(c:Db,id:string){const row=(await c.query("SELECT item_id,payload FROM inventory_catalogue_final_current WHERE item_id=$1 AND payload->>'finalStockId'='true'",[id])).rows[0];if(!row)throw new HttpError(422,'Select the exact final merged stock ID.');return row;}
-function reviewed(p:Position|null,warehouse:string,itemId:string){if(!p||p.baseline.warehouse!==warehouse||p.baseline.itemId!==itemId||p.currentClosing===null||new Decimal(p.currentClosing).lt(0))throw new HttpError(409,'Verify the existing opening, final item identity, unit and closing for both warehouses. Do not assume zero or create a destination balance.');return p;}
+function reviewed(p:Position|null,warehouse:string,itemId:string){if(!p||p.baseline.warehouse!==warehouse||p.baseline.itemId!==itemId)throw new HttpError(409,'Select the existing final item and matching unit for both warehouses. No item or unit substitution is inferred.');return p;}
 /** Immutable physical transfer. Printing/reading never receives destination stock. */
 export class WarehouseTransferRepository{
  constructor(private pool:Pool){}
@@ -44,7 +45,7 @@ export class WarehouseTransferRepository{
   const source=await authority(sourceWarehouse),destination=await authority(destinationWarehouse);
   const from=source?await warehousePositions(this.pool,source.source_sha256,sourceWarehouse):[],to=destination?await warehousePositions(this.pool,destination.source_sha256,destinationWarehouse):[];
   const finalIds=new Set((await this.pool.query("SELECT item_id FROM inventory_catalogue_final_current WHERE payload->>'finalStockId'='true'")).rows.map(r=>r.item_id));
-  const projected=(p:Position)=>({ledgerKey:p.ledgerKey,itemId:p.baseline.itemId,description:p.baseline.description,unit:p.baseline.unit,ledgerRevision:p.ledgerRevision,reviewedClosing:p.currentClosing!==null&&new Decimal(p.currentClosing).gte(0)});
+  const projected=(p:Position)=>({ledgerKey:p.ledgerKey,itemId:p.baseline.itemId,description:p.baseline.description,unit:p.baseline.unit,ledgerRevision:p.ledgerRevision,reviewedClosing:true});
   return {source:{warehouse:sourceWarehouse,authority:source,positions:from.filter(p=>finalIds.has(p.baseline.itemId)).map(p=>({...projected(p),currentClosing:p.currentClosing}))},destination:{warehouse:destinationWarehouse,authority:destination,positions:to.filter(p=>finalIds.has(p.baseline.itemId)).map(projected)}};
  }
  private async row(actor:string,id:string,c:Db=this.pool,lock=false){
@@ -73,7 +74,7 @@ export class WarehouseTransferRepository{
    if(!sameUnit(from.baseline.unit,to.baseline.unit))throw new HttpError(422,'Source and destination units need a reviewed conversion. No pieces, coils, lengths or metres are converted here.');
    if(sameUnit(from.baseline.unit,'No.')&&!new Decimal(line.quantity).isInteger())throw new HttpError(422,'Whole-item stock must be transferred in whole quantities.');
    if(from.ledgerRevision!==line.sourceLedgerRevision||to.ledgerRevision!==line.destinationLedgerRevision)throw new HttpError(409,'A warehouse balance changed. Refresh before issuing the transfer.');
-   if(new Decimal(from.currentClosing!).lt(line.quantity))throw new HttpError(409,'Verified source warehouse stock is insufficient.');
+   if(from.currentClosing!==null&&new Decimal(from.currentClosing).lt(line.quantity))throw new HttpError(409,'Source warehouse stock is insufficient for the transfer quantity.');
    lines.push({...line,unit:from.baseline.unit,destinationUnit:to.baseline.unit,description:from.baseline.description||line.itemId});
   }
   const id=randomUUID(),number=await transferNumber(c,id),snapshot={sourceWarehouse:input.source.warehouse,destinationWarehouse:input.destination.warehouse,source:input.source,destination:input.destination,reason:input.reason,transport:input.transport,lines,status:'issued',requiresSignedGate:true,stockPosting:false};
@@ -98,7 +99,7 @@ export class WarehouseTransferRepository{
   const positions=new Map<string,Position>();for(const p of [...prepared].sort((a,b)=>a.original.destination_ledger_key.localeCompare(b.original.destination_ledger_key))){const position=reviewed(await warehousePosition(c,input.destinationSourceSha256,p.original.destination_ledger_key,true),transfer.destination_warehouse,p.original.item_id);if(position.baseline.unit!==p.original.destination_unit||!sameUnit(p.original.unit,position.baseline.unit))throw new HttpError(422,'The reviewed destination unit changed. No automatic conversion is allowed.');if(sameUnit(position.baseline.unit,'No.')&&!new Decimal(p.request.quantity).isInteger())throw new HttpError(422,'Whole-item stock must be counted in whole quantities.');if(position.ledgerRevision!==p.request.ledgerRevision)throw new HttpError(409,'Destination warehouse balance changed. Refresh before receiving.');positions.set(p.original.destination_ledger_key,position);}
   const id=randomUUID(),number=await warehouseNumber(c,'IGP',id),snapshot={warehouse:transfer.destination_warehouse,transferId:transfer.id,transferNumber:transfer.number,sourceWarehouse:transfer.source_warehouse,evidence:{id:evidence.id,sha256:evidence.sha256},reason:input.reason,lines:prepared.map(p=>({lineKey:p.request.lineKey,itemId:p.original.item_id,unit:p.original.destination_unit,description:p.original.description,quantity:p.request.quantity})),stockPosting:true};
   await c.query('INSERT INTO inventory_warehouse_transfer_receipts(id,number,transfer_id,evidence_id,snapshot,reason,request_key,request_fingerprint,verified_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[id,number,transfer.id,evidence.id,snapshot,input.reason,input.requestKey,fingerprint(input),actor]);
-  for(const p of prepared){await c.query('INSERT INTO inventory_warehouse_transfer_receipt_lines(receipt_id,transfer_id,line_key,quantity) VALUES($1,$2,$3,$4)',[id,transfer.id,p.request.lineKey,p.request.quantity]);const position=positions.get(p.original.destination_ledger_key)!,before=position.currentClosing!,after=new Decimal(before).plus(p.request.quantity).toString();await c.query("INSERT INTO inventory_warehouse_operational_movements(id,source_sha256,ledger_key,ledger_revision,kind,transfer_id,transfer_line_key,transfer_receipt_id,in_delta,out_delta,closing_before,closing_after,created_by) VALUES($1,$2,$3,$4,'transfer-in',$5,$6,$7,$8,0,$9,$10,$11)",[randomUUID(),input.destinationSourceSha256,p.original.destination_ledger_key,position.ledgerRevision+1,transfer.id,p.request.lineKey,id,p.request.quantity,before,after,actor]);}
+  for(const p of prepared){await c.query('INSERT INTO inventory_warehouse_transfer_receipt_lines(receipt_id,transfer_id,line_key,quantity) VALUES($1,$2,$3,$4)',[id,transfer.id,p.request.lineKey,p.request.quantity]);const position=positions.get(p.original.destination_ledger_key)!,before=position.currentClosing,after=nextWarehouseClosing(before,p.request.quantity,1);await c.query("INSERT INTO inventory_warehouse_operational_movements(id,source_sha256,ledger_key,ledger_revision,kind,transfer_id,transfer_line_key,transfer_receipt_id,in_delta,out_delta,closing_before,closing_after,created_by) VALUES($1,$2,$3,$4,'transfer-in',$5,$6,$7,$8,0,$9,$10,$11)",[randomUUID(),input.destinationSourceSha256,p.original.destination_ledger_key,position.ledgerRevision+1,transfer.id,p.request.lineKey,id,p.request.quantity,before,after,actor]);}
   await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'inventory.transfer.receive:'+transfer.id+':'+id]);return {id,number,stockPosted:true};
  });}
 }

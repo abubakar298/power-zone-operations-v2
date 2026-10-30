@@ -1,3 +1,4 @@
+import {nextWarehouseClosing} from './warehouse-ledger.js';
 import {materialDispatchDraftLink} from './material-dispatch-link.js';
 import {deferDispatch,dispatchPosted} from './signed-dispatch.js';
 import {requireOpenParent} from './parent-open.js';
@@ -129,7 +130,7 @@ export class MaterialStockRepository{
    const positions=new Map<string,NonNullable<Awaited<ReturnType<typeof warehousePosition>>>>();
    for(const key of [...new Set(allocations.map(r=>r.ledger_key))].sort()){
     const p=await warehousePosition(c,input.sourceSha256,key,true);
-    if(!p||p.currentClosing===null)throw new HttpError(409,'The warehouse closing balance needs verification before this receipt.');
+    if(!p)throw new HttpError(409,'This warehouse item and unit are not in the accepted stock register.');
     if(allocations.some(r=>r.ledger_key===key&&r.expectedRevision!==p.ledgerRevision))throw new HttpError(409,'This warehouse balance changed. Refresh before verifying the receipt.');positions.set(key,p);
    }
    const id=randomUUID(),number=await warehouseNumber(c,'IGP',id);
@@ -137,7 +138,7 @@ export class MaterialStockRepository{
    await c.query('INSERT INTO inventory_material_receipts(id,number,draft_id,evidence_id,reason,snapshot,request_key,request_fingerprint,verified_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[id,number,input.draftId,input.evidenceId,input.reason,snapshot,input.requestKey,fingerprint(originalInput),actor]);
    for(const row of allocations){
     await c.query('INSERT INTO inventory_material_receipt_lines(receipt_id,draft_id,dispatch_id,line_key,quantity) VALUES($1,$2,$3,$4,$5)',[id,input.draftId,row.dispatch_id,row.line_key,row.quantity]);
-    const p=positions.get(row.ledger_key)!,before=p.currentClosing!,after=new Decimal(before).plus(row.quantity).toString();
+    const p=positions.get(row.ledger_key)!,before=p.currentClosing,after=nextWarehouseClosing(before,row.quantity,1);
     await c.query("INSERT INTO inventory_warehouse_operational_movements(id,source_sha256,ledger_key,ledger_revision,kind,draft_id,dispatch_id,receipt_id,line_key,in_delta,out_delta,closing_before,closing_after,created_by) VALUES($1,$2,$3,$4,'return-in',$5,$6,$7,$8,$9,0,$10,$11,$12)",[randomUUID(),input.sourceSha256,row.ledger_key,p.ledgerRevision+1,input.draftId,row.dispatch_id,id,row.line_key,row.quantity,before,after,actor]);p.currentClosing=after;p.ledgerRevision++;
    }
    return {id,number,stockPosted:true};
@@ -180,7 +181,7 @@ export class MaterialStockRepository{
     const matching=prepared.filter(p=>p.ledgerKey===key);
     if(matching.some(p=>p.request.ledgerRevision!==position.ledgerRevision))throw new HttpError(409,'This warehouse balance changed. Refresh before issuing material.');
     const total=matching.reduce((n,p)=>n.plus(p.request.quantity),new Decimal(0));
-    if(position.currentClosing===null||new Decimal(position.currentClosing).lt(total))throw new HttpError(409,'Verified warehouse stock is insufficient or its closing balance is unresolved.');
+    if(position.currentClosing!==null&&new Decimal(position.currentClosing).lt(total))throw new HttpError(409,'Recorded warehouse stock is insufficient for this issue quantity.');
     positions.set(key,position);
    }
    const id=randomUUID(),reserved=s.parent&&!(await c.query('SELECT 1 FROM inventory_material_dispatches WHERE draft_id=$1 LIMIT 1',[input.draftId])).rowCount?(await c.query('SELECT number FROM inventory_parent_preparation_references WHERE draft_id=$1',[input.draftId])).rows[0]?.number:undefined,number=reserved??await warehouseNumber(c,s.parent?'PDO':'DO',id);

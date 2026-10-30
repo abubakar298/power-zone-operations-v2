@@ -1,3 +1,4 @@
+import {nextWarehouseClosing} from './warehouse-ledger.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -53,7 +54,7 @@ export class PurchaseReceivingRepository{
    }
    const positions=new Map<string,NonNullable<Awaited<ReturnType<typeof warehousePosition>>>>();
    for(const key of [...new Set(prepared.map(r=>r.ledgerKey))].sort()){
-    const p=await warehousePosition(c,input.sourceSha256,key,true);if(!p||p.currentClosing===null)throw new HttpError(409,'Verify this warehouse closing balance before receiving stock.');
+    const p=await warehousePosition(c,input.sourceSha256,key,true);if(!p)throw new HttpError(409,'This warehouse item and unit are not in the accepted stock register.');
     if(prepared.some(r=>r.ledgerKey===key&&r.request.ledgerRevision!==p.ledgerRevision))throw new HttpError(409,'This warehouse balance changed. Refresh before receiving.');positions.set(key,p);
    }
    const id=randomUUID(),number=await warehouseNumber(c,'IGP',id),snapshot={warehouse:input.warehouse,purchaseRequest:{id:order.id,number:order.number},evidence:{id:evidence.id,sha256:evidence.sha256},reason:input.reason,lines:prepared.map(p=>({itemKey:p.request.itemKey,itemId:p.request.itemId,description:p.description,unit:p.request.unit,quantity:p.request.quantity})),stockPosting:true};
@@ -61,7 +62,7 @@ export class PurchaseReceivingRepository{
    for(const p of prepared){
     const entry=(await c.query("INSERT INTO stock_on_hand_entries(item_key,kind,quantity,unit,request_id,note,created_by) VALUES($1,'receipt',$2,$3,$4,$5,$6) RETURNING id",[p.request.itemKey,p.request.quantity,p.original.unit,input.requestId,input.reason,actor])).rows[0].id,lineId=randomUUID();
     await c.query('INSERT INTO inventory_material_purchase_lines(id,receipt_id,item_key,item_id,unit,quantity,source_sha256,ledger_key,stock_entry_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[lineId,id,p.request.itemKey,p.request.itemId,p.request.unit,p.request.quantity,input.sourceSha256,p.ledgerKey,entry]);
-    const position=positions.get(p.ledgerKey)!,before=position.currentClosing!,after=new Decimal(before).plus(p.request.quantity).toString();
+    const position=positions.get(p.ledgerKey)!,before=position.currentClosing,after=nextWarehouseClosing(before,p.request.quantity,1);
     await c.query("INSERT INTO inventory_warehouse_operational_movements(id,source_sha256,ledger_key,ledger_revision,kind,purchase_receipt_id,purchase_line_id,in_delta,out_delta,closing_before,closing_after,created_by) VALUES($1,$2,$3,$4,'purchase-in',$5,$6,$7,0,$8,$9,$10)",[randomUUID(),input.sourceSha256,p.ledgerKey,position.ledgerRevision+1,id,lineId,p.request.quantity,before,after,actor]);position.currentClosing=after;position.ledgerRevision++;
    }
    const complete=purchaseLines.every(line=>new Decimal(line.received).plus(prepared.find(p=>p.request.itemKey===line.item_key)?.request.quantity??0).gte(line.ordered));

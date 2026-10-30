@@ -62,3 +62,6 @@ export class WarehouseAuthorityRepository{
   });
  }
 }
+
+/** A physical delta never supplies an absent historical opening balance. */
+export function nextWarehouseClosing(before:string|null,quantity:string,direction:1|-1){return before===null?null:new Decimal(before).plus(new Decimal(quantity).mul(direction)).toString();}
