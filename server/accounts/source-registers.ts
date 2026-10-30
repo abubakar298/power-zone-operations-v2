@@ -1,3 +1,4 @@
+import {invoiceSubmissions,applyInvoiceSubmissionBilling,applyInvoiceSubmissionStages} from './invoice-submission-state.js';
 import {latestOperationsStages,projectAccountsSites} from './site-projection.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
@@ -60,9 +61,10 @@ export class AccountsSourceRegisters {
  async billing(actor:string,now=new Date()){
   const record=await this.latest(actor),s=record.snapshot;
   const asOf=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
-  const rows=billingRows(s.registers,s.cables,s.internet,s.evidence).map((r):Record<string,any>=>({...r,band:ageBand(r.date,asOf)}));
+  const submissions=await invoiceSubmissions(this.pool);
+  const rows=applyInvoiceSubmissionBilling(billingRows(s.registers,s.cables,s.internet,s.evidence),submissions).map((r):Record<string,any>=>({...r,band:ageBand(r.date,asOf)}));
   const generalReceipts=s.evidence.generalReceipts??[];
-  return {generalReceipts,asOf,sourceAsOf:record.source_date,sourceVersion:record.version,readOnlySource:true,rows,customers:customerTotals(rows,asOf),queues:invoicingQueues(s.registers),verification:{sourceModified:s.evidence.sourceModified,scope:'Reviewed source invoices; unknown original invoice amounts remain missing.'}};
+  return {generalReceipts,asOf,sourceAsOf:record.source_date,sourceVersion:record.version,readOnlySource:true,rows,customers:customerTotals(rows,asOf),queues:invoicingQueues(applyInvoiceSubmissionStages(s,submissions).registers),verification:{sourceModified:s.evidence.sourceModified,scope:'Reviewed source invoices; unknown original invoice amounts remain missing.'}};
  }
  async sites(actor:string){const r=await this.latest(actor);return {...projectAccountsSites(r.snapshot,await latestOperationsStages(this.pool)),sourceVersion:r.version,readOnlySource:true};}
  async summary(actor:string){

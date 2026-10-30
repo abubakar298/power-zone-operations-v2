@@ -1,6 +1,6 @@
 import {managementProgrammes} from '../director/management-programmes.js';
 import { Router, type RequestHandler } from "express";
-import {invoiceRegister,recordInvoiceEntry,invoiceEntrySchema} from './invoice-entries.js';
+import {invoiceRegister,recordInvoiceEntry,invoiceEntrySchema,recordInvoiceSubmission,invoiceSubmissionSchema} from './invoice-entries.js';
 import {ptEntrySchema} from './pt-entries.js';
 import {paymentRegister,recordPayment,paymentRecordSchema} from './payment-records.js';
 import type {AccountsSourceRegisters} from './source-registers.js';
@@ -48,6 +48,7 @@ export function accountsHttp(
   r.get('/closure-queue',async(req,res)=>res.json({closures:await repo.managementClosureQueue(req.authSession!.user.id)}));
   r.get('/billing',async(req,res)=>res.json(await sources.billing(req.authSession!.user.id)));
   r.get('/invoice-entries',async(req,res)=>res.json(await invoiceRegister(repo.pool,req.authSession!.user.id)));
+  r.post('/invoice-submissions',async(req,res)=>res.status(201).json(await recordInvoiceSubmission(repo.pool,req.authSession!.user.id,parse(invoiceSubmissionSchema,req.body))));
   r.get('/payment-records',async(req,res)=>res.json(await paymentRegister(repo.pool,req.authSession!.user.id)));
   r.post('/payment-records',async(req,res)=>res.status(201).json(await recordPayment(repo.pool,req.authSession!.user.id,parse(paymentRecordSchema,req.body))));
   r.post('/invoice-entries',async(req,res)=>res.status(201).json(await recordInvoiceEntry(repo.pool,req.authSession!.user.id,parse(invoiceEntrySchema,req.body))));

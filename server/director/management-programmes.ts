@@ -1,3 +1,4 @@
+import {invoiceSubmissions,applyInvoiceSubmissionStages} from '../accounts/invoice-submission-state.js';
 import {latestProgrammeHandoffs,applyProgrammeHandoffs} from './programme-handoffs.js';
 import {Decimal} from 'decimal.js';
 import type {Pool} from 'pg';
@@ -123,7 +124,7 @@ export async function managementProgrammes(pool:Pool,actor:string,allowAccounts=
   const identity=await ipoSiteIdentity(pool,row),s=identity.snapshot??row.snapshot,op=row.operations_snapshot;
   records.push({id:row.id,frameworkType:row.framework_type,recordId:row.record_id,customer:row.customer,sourceKey:row.source_key??null,number:row.number,issuedAt:row.issued_at,historicalImport:!!s.historicalImport,orderNumber:s.input?.orderNumber??'',site:s.siteName,siteCode:s.siteCode,poReference:s.input?.poNumber??'',configuration:row.basis.source.key.replace(row.customer+'-UPS-',''),grossContract:s.allocation?.total,delivered:['delivered','completed'].includes(op?.stage),installed:op?.completed===true||op?.stage==='completed',partialDelivery:op?.partialDelivery===true,deliveryDate:op?.deliveryDate,installationDate:op?.completionDate});
  }
- const [stages,invoiceEntries]=await Promise.all([latestProgrammeHandoffs(pool),pool.query('SELECT site_key,pt_reference,milestone FROM accounts_invoice_entries')]);
- const combined=appendIssuedProgrammeSales(source.snapshot,records.map(r=>({...r,delivered:false,installed:false,partialDelivery:false})),source.source_date),result=projectManagementProgrammes(applyProgrammeHandoffs(combined.snapshot,stages,invoiceEntries.rows),source.source_date,source.version);
+ const [stages,invoiceEntries,submissions]=await Promise.all([latestProgrammeHandoffs(pool),pool.query('SELECT site_key,pt_reference,milestone FROM accounts_invoice_entries'),invoiceSubmissions(pool)]);
+ const combined=appendIssuedProgrammeSales(source.snapshot,records.map(r=>({...r,delivered:false,installed:false,partialDelivery:false})),source.source_date),result=projectManagementProgrammes(applyInvoiceSubmissionStages(applyProgrammeHandoffs(combined.snapshot,stages,invoiceEntries.rows),submissions),source.source_date,source.version);
  result.operationsAsOf=stages.map(s=>s.created_at instanceof Date?s.created_at.toISOString():String(s.created_at??'')).filter(Boolean).sort().at(-1);result.issues.push(...combined.issues);return result;
 }

@@ -1,3 +1,4 @@
+import {invoiceSubmissions,submissionMatches,submissionReferences,submissionBillingBasis} from './invoice-submission-state.js';
 import {applyOperationsStages} from './site-projection.js';
 import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
 import {randomUUID} from 'node:crypto';
@@ -19,7 +20,7 @@ export function operationsInvoiceRows(rows:any[],registers:any[]=[]){
   const ups=approved?.kind==='UPS'||s.projectType==='ups';
   const deliveryMilestone=deliveryOnly||!ups&&(approved?.program==='Solar 70'||s.invoiceOnDelivery===true);
   const completionMilestone=!deliveryOnly&&(s.installation===true||ups||approved?.program==='Solar 70');
-  const base={deliveryOnly,key:row.site_id,sourceKind:'Operations',sourceVersion:row.version,site:s.name,ipo:s.ipo,po:s.customerPo??s.po??'',program:s.projectType??'',deliveryDate:s.deliveryDate,installationDate:s.qc?.handover?.date??s.qc?.signoff?.date??s.qcJob?.date,documents:s.documents??[],evidence:(s.documents??[]).flatMap((d:any)=>(d.evidence??[]).filter((f:any)=>z.uuid().safeParse(f.id).success).map((f:any)=>({id:f.id,filename:f.name??'Supporting document',url:`/api/operations-board/sites/${encodeURIComponent(row.site_id)}/files/${f.id}`})))};
+  const base={deliveryOnly,key:row.site_id,sourceKind:'Operations',sourceVersion:row.version,sourceKey:s.sourceKey??(row.site_id.startsWith('registered-')?row.site_id.slice(11):undefined),customer:s.customer,site:s.name,ipo:s.ipo,po:s.customerPo??s.po??'',program:s.projectType??'',deliveryDate:s.deliveryDate,installationDate:s.qc?.handover?.date??s.qc?.signoff?.date??s.qcJob?.date,documents:s.documents??[],evidence:(s.documents??[]).flatMap((d:any)=>(d.evidence??[]).filter((f:any)=>z.uuid().safeParse(f.id).success).map((f:any)=>({id:f.id,filename:f.name??'Supporting document',url:`/api/operations-board/sites/${encodeURIComponent(row.site_id)}/files/${f.id}`})))};
   if(deliveryMilestone&&(s.stage==='delivered'||s.stage==='completed'||s.completed===true))result.push({...base,milestone:'delivery'});
   if(completionMilestone&&(s.completed===true||s.stage==='completed'))result.push({...base,milestone:'completion'});
  }
@@ -89,8 +90,9 @@ export function invoiceSubmissionRows(ready:any[],issued:any[],entries:any[]){
 export async function invoiceRegister(pool:Pool,actor:string){
  const role=await new AccountsRepository(pool).access(actor);
  const {rows,imported,alreadyIssued}=await candidates(pool),entries=(await pool.query('SELECT *,entry_date::text AS entry_date FROM accounts_invoice_entries ORDER BY created_at DESC')).rows;
- const submissionRows=invoiceSubmissionRows(rows,alreadyIssued,entries);
- return {canRecord:['Admin','Accounts'].includes(role),submissionQueues:{deliveryOnly:submissionRows.filter(r=>r.billingStage==='delivery-only'),delivery:submissionRows.filter(r=>r.billingStage==='delivery'),completion:submissionRows.filter(r=>r.billingStage==='completion')},queues:{delivery:rows.filter(r=>r.milestone==='delivery'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='delivery')),completion:rows.filter(r=>r.milestone==='completion'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='completion'))},entries:[...entries,...imported.filter(i=>!entries.some(e=>(e.site_key===i.snapshot.key||e.site_key===i.site_key)&&e.milestone===i.milestone))],importedCount:imported.length};
+ const submissions=await invoiceSubmissions(pool),submissionRows=invoiceSubmissionRows(rows,alreadyIssued,entries).filter(r=>!submissions.some(e=>submissionMatches(r,e)));
+ for(const entry of [...entries,...imported])entry.submissions=submissions.filter(e=>(entry.knownMilestones??[entry.milestone]).some((milestone:string)=>submissionMatches({key:entry.snapshot.sourceKey??entry.site_key,milestone},e))).map(e=>({milestone:e.milestone,date:e.submitted_on}));
+ return {canRecord:['Admin','Accounts'].includes(role),submissions,submissionQueues:{deliveryOnly:submissionRows.filter(r=>r.billingStage==='delivery-only'),delivery:submissionRows.filter(r=>r.billingStage==='delivery'),completion:submissionRows.filter(r=>r.billingStage==='completion')},queues:{delivery:rows.filter(r=>r.milestone==='delivery'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='delivery')),completion:rows.filter(r=>r.milestone==='completion'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='completion'))},entries:[...entries,...imported.filter(i=>!entries.some(e=>(e.site_key===i.snapshot.key||e.site_key===i.site_key)&&e.milestone===i.milestone))],importedCount:imported.length};
 }
 export async function recordInvoiceEntry(pool:Pool,actor:string,input:z.infer<typeof invoiceEntrySchema>){
  return transaction(pool,async c=>{
@@ -108,5 +110,37 @@ export async function recordInvoiceEntry(pool:Pool,actor:string,input:z.infer<ty
   if(duplicate)throw new HttpError(409,'This site milestone already has a recorded invoice.');
   const row=(await c.query('INSERT INTO accounts_invoice_entries(id,source_kind,site_key,source_version,milestone,pt_reference,entry_date,notes,snapshot,request,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *,entry_date::text AS entry_date',[randomUUID(),input.sourceKind,input.siteKey,input.sourceVersion,input.milestone,input.ptReference,input.entryDate,input.notes,source,input,input.requestKey,actor])).rows[0];
   await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'accounts.invoice-entry:'+row.id]);return row;
+ });
+}
+
+export const invoiceSubmissionSchema=invoiceEntrySchema.pick({sourceKind:true,siteKey:true,sourceVersion:true,milestone:true,requestKey:true}).extend({submissionDate:z.iso.date()}).strict();
+export async function recordInvoiceSubmission(pool:Pool,actor:string,raw:unknown,now=new Date()){
+ const input=invoiceSubmissionSchema.parse(raw),today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+ if(input.submissionDate>today)throw new HttpError(422,'Actual submission date cannot be in the future.');
+ return transaction(pool,async c=>{
+  await lockActiveActor(c,actor);const role=await new AccountsRepository(pool).access(actor,c);
+  if(!['Admin','Accounts'].includes(role))throw new HttpError(403,'Accounts invoice submission access required.');
+  await c.query("SELECT pg_advisory_xact_lock(hashtext('accounts.invoice-register'))");
+  const replay=(await c.query('SELECT *,submitted_on::text AS submitted_on FROM accounts_invoice_submissions WHERE request_key=$1',[input.requestKey])).rows[0];
+  if(replay){if(replay.created_by===actor&&Object.entries(input).every(([k,v])=>replay.request[k]===v))return replay;
+   throw new HttpError(409,'Request key already used for another submission.');}
+  await c.query("SELECT pg_advisory_xact_lock(hashtextextended('accounts.source-register',0))");
+  if(input.sourceKind==='Operations')await c.query('SELECT id FROM operations_board_sites WHERE id=$1 FOR UPDATE',[input.siteKey]);
+  const {rows,imported,alreadyIssued}=await candidates(c),entries=(await c.query('SELECT *,entry_date::text AS entry_date FROM accounts_invoice_entries')).rows;
+  const candidate=invoiceSubmissionRows(rows,alreadyIssued,entries).find(r=>r.sourceKind===input.sourceKind&&r.key===input.siteKey&&r.milestone===input.milestone);
+  if(!candidate||candidate.sourceVersion!==input.sourceVersion)throw new HttpError(409,'Invoice or site evidence changed. Refresh and review before marking submitted.');
+  if(!candidate.invoiceCreated||!submissionReferences(candidate.invoiceReferences??[]).length)throw new HttpError(409,'Record the invoice reference before marking it submitted.');
+  const invoice=entries.find(e=>e.id===candidate.invoiceEntryId);
+  if(invoice?.entry_date&&input.submissionDate<invoice.entry_date)throw new HttpError(422,'Submission date cannot be before the recorded invoice date.');
+  const existing=await invoiceSubmissions(c);
+  if(existing.some(e=>submissionMatches(candidate,e)))throw new HttpError(409,'This invoice milestone is already marked submitted.');
+  const source=(await c.query('SELECT version,snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0];
+  const financial=source?billingRows(source.snapshot.registers,source.snapshot.cables,source.snapshot.internet,source.snapshot.evidence):[];
+  const basis=submissionBillingBasis(candidate,source,financial);
+  if(basis.held)throw new HttpError(409,'This reference is linked to another reviewed invoice or milestone. Accounts must confirm its exact site link first.');
+  const references=submissionReferences(candidate.invoiceReferences),id=randomUUID();
+  const snapshot={site:candidate.site,ipo:candidate.ipo,po:candidate.po,customer:basis.customer,billingIds:basis.billingIds,invoiceReferences:references,invoiceEntryId:invoice?.id??null,invoiceDate:invoice?.entry_date??null,sourceKey:basis.key};
+  const saved=(await c.query('INSERT INTO accounts_invoice_submissions(id,source_kind,site_key,source_key,source_version,milestone,invoice_reference,submitted_on,snapshot,request,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *,submitted_on::text AS submitted_on',[id,input.sourceKind,input.siteKey,basis.key,input.sourceVersion,input.milestone,references.join(' / '),input.submissionDate,snapshot,input,input.requestKey,actor])).rows[0];
+  await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'accounts.invoice-submission:'+id]);return saved;
  });
 }
