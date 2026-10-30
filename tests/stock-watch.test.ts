@@ -114,7 +114,7 @@ test("Inverter, battery and BMS watch: shortages alert Abu Bakar once, his order
     for (let i = 0; i < 10; i++) await notifications.deliverOne(delivery as any, "http://127.0.0.1:3000");
     const shortageMail = sent.filter((m) => /Inverter, battery & BMS shortage/.test(m.subject));
     assert.equal(shortageMail.length,0);
-    assert.equal((await notifications.settings()).types.find(t=>t.kind==='Stock shortage').email_enabled,false);
+    assert.equal((await notifications.settings()).types.find((t:{kind:string})=>t.kind==='Stock shortage').email_enabled,false);
     const prior=(await db.pool.query("SELECT id FROM notifications WHERE kind='Stock shortage' LIMIT 1")).rows[0];
     await db.pool.query("INSERT INTO notification_email_queue(id) VALUES($1) ON CONFLICT(id) DO UPDATE SET state='queued'",[prior.id]);
     await notifications.deliverOne(delivery as any,"http://127.0.0.1:3000");

@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {applyOperationsStages,projectAccountsSites} from '../server/accounts/site-projection.js';
 test('current delivery and full-return stages replace stale display values without rewriting original source or payment evidence',()=>{
- const rows=[{key:'delivered',delivered:false,installed:false},{key:'returned',delivered:true,installed:false,deliveryDate:'2026-10-15'}];const before=structuredClone(rows);
+ const rows:{key:string;delivered:boolean;installed:boolean;deliveryDate?:string;completion?:{received:boolean}}[]=[{key:'delivered',delivered:false,installed:false},{key:'returned',delivered:true,installed:false,deliveryDate:'2026-10-15'}];const before=structuredClone(rows);
  const operations=[{site_id:'registered-delivered',version:7,created_at:'2026-10-28',snapshot:{stage:'delivered',completed:false,partial:false,deliveryDate:'2026-10-27'}},{site_id:'registered-returned',version:7,created_at:'2026-10-28',snapshot:{stage:'received',completed:false,partial:false}}];
  const result=applyOperationsStages(rows,operations);assert.equal(result[0].delivered,true);assert.equal(result[1].delivered,false);assert.equal(result[1].deliveryDate,null);assert.deepEqual(rows,before);
  const snapshot={sites:{rows,counts:{}},registers:[{rows:[{key:'delivered',completion:{received:true,receivedAmount:'100.25'},invoiceReferences:['27-10123']}]}]};const displayed=projectAccountsSites(snapshot,operations);

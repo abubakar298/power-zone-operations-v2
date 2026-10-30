@@ -1,3 +1,4 @@
+import {readWorkflowSite} from './operations-snapshot.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -16,9 +17,9 @@ test('full return preserves original evidence, unknown date and stock boundary; 
 });
 test('return decision is regional, versioned, idempotent and creates no stock movement',async()=>{
  const db=await testDatabase();try{const owner=randomUUID(),lead=randomUUID(),qc=randomUUID();for(const [id,role]of[[owner,'Admin'],[lead,'Operations'],[qc,'Operations']])await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[id,id+'@example.invalid',role,role,'isolated']);for(const[id,kind]of[[lead,'lead'],[qc,'qc']])await db.pool.query("INSERT INTO operations_board_access(user_id,kind,team,granted_by) VALUES($1,$2,'central',$3)",[id,kind,owner]);
- const repo=new OperationsBoardRepository(db.pool);await repo.importSource(owner,{sourceSha256:'9'.repeat(64),rows:['central','south'].map(team=>({id:team,ipo:team,name:team,stage:'delivered',installation:true,projectType:'ups',operationsTeam:team,deliveryDate:'2026-10-15'}))});
- const command={action:'delivery-return' as const,...input,version:1,requestKey:randomUUID()};await assert.rejects(repo.command(qc,'central',command),/Operations lead/);await assert.rejects(repo.command(lead,'south',command),/not found/);
- const saved=await repo.command(lead,'central',command);assert.equal(saved.stage,'received');assert.equal(saved.version,2);assert.equal((await repo.command(lead,'central',command)).version,2);assert.equal((await repo.site(owner,'central')).deliveryReturns.length,1);await assert.rejects(repo.command(lead,'central',{...command,requestKey:randomUUID()}),/updated/);
+ const repo=new OperationsBoardRepository(db.pool);await repo.importSource(owner,{sourceSha256:'9'.repeat(64),rows:['central','south'].map(team=>({id:team,ipo:team,name:team,stage:'delivered',installation:true,projectType:'ups',operationsTeam:team as 'central'|'south',deliveryDate:'2026-10-15'}))});
+ const command={action:'delivery-return' as const,...input,edit:false,version:1,requestKey:randomUUID()};await assert.rejects(repo.command(qc,'central',command),/Operations lead/);await assert.rejects(repo.command(lead,'south',command),/not found/);
+ const saved=await repo.command(lead,'central',command);assert.equal(saved.stage,'received');assert.equal(saved.version,2);assert.equal((await repo.command(lead,'central',command)).version,2);assert.equal((await readWorkflowSite(repo,owner,'central')).deliveryReturns.length,1);await assert.rejects(repo.command(lead,'central',{...command,requestKey:randomUUID()}),/updated/);
  for(const table of ['stock_on_hand_entries','internal_purchase_orders','accounts_job_closures'])assert.equal((await db.pool.query('SELECT count(*)::int n FROM '+table)).rows[0].n,0);
  }finally{await db.close();}
 });

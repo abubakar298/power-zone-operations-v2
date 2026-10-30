@@ -23,7 +23,7 @@ test('native read projections retain source, document/history and financial evid
  const before=await contents(),board=new OperationsBoardRepository(db.pool),billing=await repo.billing(accounts);
  assert.equal((await repo.sites(accounts)).counts.archived,34);assert.equal((await repo.summary(accounts))!.counts.active,1);
  assert.deepEqual((await board.sites(admin)).sites.map((s:any)=>s.id),['registered-UBL:SOLAR:315']);assert.equal((await board.physicalDocuments(accounts)).sites.length,1);
- assert.equal((await board.site(admin,'registered-'+archivedLegacySolarKeys[0])).documents[0].label,'Signed DO');assert.equal((await board.history(admin,'registered-'+archivedLegacySolarKeys[0])).versions.length,1);
+ assert.equal((await board.site(admin,'registered-'+archivedLegacySolarKeys[0])).documents?.[0]?.label,'Signed DO');assert.equal((await board.history(admin,'registered-'+archivedLegacySolarKeys[0])).versions.length,1);
  await assert.rejects(board.command(admin,'registered-'+archivedLegacySolarKeys[0],{action:'assign-team',team:'central',version:1,requestKey:randomUUID(),edit:false,reason:'Attempt new work'}),/read-only/);
  const register=await invoiceRegister(db.pool,accounts);assert.equal(register.queues.completion.length,1);assert.equal(register.queues.completion[0].key,'registered-UBL:SOLAR:315');
  assert.deepEqual((await repo.billing(accounts)).generalReceipts,billing.generalReceipts);assert.deepEqual(await contents(),before);

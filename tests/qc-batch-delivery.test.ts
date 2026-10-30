@@ -5,9 +5,9 @@ import{randomUUID}from'node:crypto';
 import{canRecordSiteDelivery}from'../shared/operations-delivery-ready.js';
 import{confirmDelivery,workflowSiteSchema,currentStage,siteBucket}from'../server/operations-board/workflow.js';
 import{OperationsBoardRepository}from'../server/operations-board/repository.js';
-import{batchSchema}from'../server/operations-board/schema.js';
+import{batchSchema,type BoardSite}from'../server/operations-board/schema.js';
 import{testDatabase}from'./database.js';
-const base={id:'site',name:'Fictional UPS',ipo:'TEST',stage:'received',operationsTeam:'central',installation:true,projectType:'ups'};
+const base:BoardSite={id:'site',name:'Fictional UPS',ipo:'TEST',stage:'received',operationsTeam:'central',installation:true,projectType:'ups'};
 const batch={id:'batch',team:'central',kind:'both',deliveryDate:'2026-10-29',stops:[{siteId:'site',kind:'both',plannedDate:'2026-10-30',start:'',end:''}]};
 test('only the exact current dated delivery/both stop makes an unadvanced site eligible; no input mutation',()=>{
  const value={...base,planningBatches:[batch]},before=JSON.stringify(value);
@@ -31,7 +31,7 @@ test('regional QC can record a batch-scheduled UPS delivery with the existing si
   await repo.saveBatch(owner,batchSchema.parse({id:planned.id,team:planned.team,kind:planned.kind,deliveryDate:planned.deliveryDate,vehicle:planned.vehicle,driver:planned.driver,labourTeam:planned.labourTeam,inventoryReference:planned.inventoryReference,version:1,requestKey:randomUUID(),edit:true,reason:'Customer postponed the second site',stops:[{...planned.stops[0],siteVersion:2}],cancelledSites:[{siteId:'cancelled',siteVersion:2}]}));
   const upload=async(siteId:string)=>{const doc=await repo.upload(qc,siteId,{filename:'signed.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7 fictional delivery evidence').toString('base64')}),photo=await repo.upload(qc,siteId,{filename:'material.png',mediaType:'image/png',base64:Buffer.from([137,80,78,71,13,10,26,10,0]).toString('base64')});return{signedDoId:doc.id,materialPhotoId:photo.id};};
   const files=await upload('site'),cancelledFiles=await upload('cancelled');
-  const current=await repo.site(qc,'site'),command={action:'delivery' as const,version:current.version,requestKey:randomUUID(),deliveryDate:'2026-10-29',partial:false,...files};
+  const current=await repo.site(qc,'site'),command={action:'delivery' as const,edit:false,reason:'',version:current.version,requestKey:randomUUID(),deliveryDate:'2026-10-29',partial:false,...files};
   await assert.rejects(repo.command(south,'site',command),/not found/);
   await assert.rejects(repo.command(qc,'site',{...command,materialPhotoId:files.signedDoId}),/photo/);
   await assert.rejects(repo.command(qc,'site',{...command,deliveryDate:'2099-01-01'}),/future/);

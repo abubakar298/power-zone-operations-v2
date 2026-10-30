@@ -22,9 +22,9 @@ test('Operations planning, UPS/Solar/BESS QC, blockers and corrections preserve 
   const command=async(name:string,id:string,value:Record<string,unknown>)=>repo.command(users[name],id,commandSchema.parse({version:(await repo.site(users.owner,id)).version,requestKey:randomUUID(),...value}));
   await assert.rejects(command('lead','ups',{action:'assign-team',team:'central'}),/not found|Only Moaz/);
   for(const row of [...rows,{id:'unknown'}])await command('head',row.id,{action:'assign-team',team:'central'});
-  const vendor=await repo.saveVendor(users.lead,{version:0,requestKey:randomUUID(),name:'Installation vendor',phone:'',roles:['structure','electrical','earthing','delivery'],active:true,reason:''});
+  const vendor=await repo.saveVendor(users.lead,{version:0,requestKey:randomUUID(),kind:'vendor',name:'Installation vendor',phone:'',roles:['structure','electrical','earthing','delivery'],active:true,reason:''});
   const assignments={structure:vendor.id,electrical:'pz-team',earthing:vendor.id,delivery:vendor.id};
-  await assert.rejects(repo.saveVendor(users.qc,{version:0,requestKey:randomUUID(),name:'Forbidden',phone:'',roles:['delivery'],active:true,reason:''}),/Operations lead/);
+  await assert.rejects(repo.saveVendor(users.qc,{version:0,requestKey:randomUUID(),kind:'vendor',name:'Forbidden',phone:'',roles:['delivery'],active:true,reason:''}),/Operations lead/);
   await assert.rejects(command('qc','ups',{action:'plan',dispatchDate:'2026-01-01',assignments}),/Operations lead/);
   await assert.rejects(command('lead','unknown',{action:'plan',dispatchDate:'2026-01-01',assignments}),/scope/);
   await assert.rejects(command('lead','ups',{action:'plan',dispatchDate:'2026-01-01',assignments:{delivery:'pz-team',electrical:'pz-team',earthing:vendor.id}}),/active vendor/);

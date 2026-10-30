@@ -12,7 +12,7 @@ test('paused stock notices preserve source/history, hide bell counts and cancel 
  await db.pool.query("INSERT INTO notifications(id,user_id,source_key,entity_key,kind,title,reference,target,actionable,created_at) VALUES($1,$2,$3,'stock-watch:shortage','Stock shortage','Stock shortage','Preserved shortage evidence','{}',false,now())",[notice,actor,'stock-watch:'+alert]);
  const repo=new NotificationsRepository(db.pool),user={id:actor,role:'Management',email:'stock-pause@example.test',display_name:'Owner'} as any;
  assert.equal((await repo.list(user)).length,0);
- assert.equal((await repo.settings()).types.find(t=>t.kind==='Stock shortage').email_enabled,false);
+ assert.equal((await repo.settings()).types.find((t:{kind:string})=>t.kind==='Stock shortage').email_enabled,false);
  await db.pool.query('INSERT INTO notification_email_queue(id) VALUES($1)',[notice]);
  let sent=0;await repo.deliverOne({configured:true,send:async()=>{sent++;return 'unexpected';}},'http://localhost');assert.equal(sent,0);
  assert.equal((await db.pool.query('SELECT state FROM notification_email_queue WHERE id=$1',[notice])).rows[0].state,'cancelled');
