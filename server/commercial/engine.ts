@@ -1,3 +1,4 @@
+import {selectedScopeDescription} from './selected-scope-description.js';
 import {directProductTaxBasis} from '../boq/direct-products.js';
 import {isSolarPanelProduct} from '../boq/solar-product.js';
 import {
@@ -594,7 +595,10 @@ export function quotationLines(
   const primaryKeys = ["Solar PV Modules", s.lines.find(l=>l.phase==="Structure")?.key ?? s.lines.find(l=>l.key.startsWith("Structure -"))?.key, s.inverterConfig.sku,
     ...(full || D(s.engineering.batteryModules).gt(0) ? [sp?"BAT-LV-05 KW WO BMS":"BAT-HV-05 KW WO BMS"] : []),
     ...(full || D(s.engineering.bms).gt(0) ? [sp?"CH-BMS-LV":"CH-BMS-HV"] : []), "Earthing Bore"];
-  primaryKeys.forEach((key,index)=>{const wording=key?line(key)?.commercialDescription:undefined;if(wording)rows[index].description=wording;});
+  primaryKeys.forEach((key,index)=>{const wording=key?line(key)?.commercialDescription:undefined;
+    if(index<2){const specification=key?s.survey.specifications?.[key]:undefined;if(wording||specification)rows[index].description=selectedScopeDescription(index===0?'solar':'structure',wording||rows[index].description,{brand:brand("solar"),watts:s.survey.panelWattage,structure:s.survey.structure,panels:s.survey.panelQty,specification});}
+    else if(wording)rows[index].description=wording;
+  });
   for(const row of rows){
     const source=s.lines.find(l=>/Earthing Cable/.test(l.key)&&row.description.startsWith(l.key));
     if(source?.commercialDescription)row.description=source.commercialDescription;
