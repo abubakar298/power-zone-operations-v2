@@ -1,3 +1,4 @@
+import {assertPreparationEditable,lockBoqPreparation,preparationState} from './preparation.js';
 import {sentSurveyAwaitingDesign} from '../../shared/sent-survey-requests.js';
 import {frameworkCosting} from './framework-costing.js';
 import { allocateReference } from "../documents/references.js";
@@ -40,10 +41,30 @@ export class BoqRepository {
       )
     ).rows;
   }
+  async preparation(actor:string,revisionId:string,open=false){
+    return transaction(this.pool,async c=>{
+      const user=(await c.query('SELECT role,active FROM users WHERE id=$1 FOR SHARE',[actor])).rows[0];
+      if(!user?.active)throw new HttpError(401,'Your access has ended.');
+      if(!['Coordinator','Admin','Management'].includes(user.role))throw new HttpError(403,'Commercial preparation access required.');
+      const source=(await c.query(`SELECT r.* FROM boq_revisions r WHERE r.id=$1 AND ${ownedCondition('boq','r.id','$2')}`,[revisionId,actor])).rows[0];
+      if(!source)throw new HttpError(404,'BOQ preparation not found.');
+      if(open)await lockBoqPreparation(c,revisionId);
+      const state=await preparationState(c,revisionId);
+      if(!open)return {canEdit:state.canEdit,quoted:state.quoted};
+      if(!state.canEdit)throw new HttpError(409,state.quoted?'A quotation has been created. Use the quotation revision flow to change this BOQ.':'Open the latest preliminary BOQ before editing.');
+      const existing=(await c.query('SELECT d.id FROM boq_preparation_edits e JOIN survey_drafts d ON d.id=e.draft_id WHERE e.source_revision_id=$1 AND e.created_by=$2',[revisionId,actor])).rows[0];
+      if(existing)return {draftId:existing.id};
+      const draftId=randomUUID();
+      await c.query("INSERT INTO survey_drafts(id,owner_id,inputs,base_revision_id,revision_reason,revision_origin) VALUES($1,$2,$3,$4,'Preparation edited before quotation creation','Internal management')",[draftId,actor,source.snapshot.survey,revisionId]);
+      await c.query('INSERT INTO boq_preparation_edits(draft_id,source_revision_id,created_by) VALUES($1,$2,$3)',[draftId,revisionId,actor]);
+      await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'boq.preparation.edit-opened:'+revisionId+':'+draftId]);
+      return {draftId};
+    });
+  }
   async drafts(owner: string) {
     return (
       await this.pool.query(
-        `SELECT d.*,(SELECT jsonb_build_object('designer',u.display_name,'sent_at',h.created_at,'notes',h.inputs->>'notes','attachments',(SELECT jsonb_agg(jsonb_build_object('id',a.id,'filename',a.filename)) FROM survey_uploads a WHERE h.inputs->'uploadIds' ? a.id::text)) FROM design_survey_handoffs h JOIN users u ON u.id=h.created_by WHERE h.draft_id=d.id) AS design_source,s.id AS review_id,s.draft_version AS submitted_version,CASE WHEN s.id IS NULL THEN NULL ELSE COALESCE(v.outcome,'Awaiting review') END AS review_status,v.comments FROM survey_drafts d LEFT JOIN LATERAL(SELECT * FROM boq_review_submissions WHERE draft_id=d.id ORDER BY draft_version DESC LIMIT 1) s ON true LEFT JOIN boq_review_decisions v ON v.submission_id=s.id WHERE d.owner_id=$1 AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? d.id::text) AND d.id NOT IN(SELECT draft_id FROM boq_draft_finalizations) ORDER BY d.updated_at DESC LIMIT 100`,
+        `SELECT d.*,EXISTS(SELECT 1 FROM boq_preparation_edits pe WHERE pe.draft_id=d.id) AS preparation_edit,(SELECT jsonb_build_object('designer',u.display_name,'sent_at',h.created_at,'notes',h.inputs->>'notes','attachments',(SELECT jsonb_agg(jsonb_build_object('id',a.id,'filename',a.filename)) FROM survey_uploads a WHERE h.inputs->'uploadIds' ? a.id::text)) FROM design_survey_handoffs h JOIN users u ON u.id=h.created_by WHERE h.draft_id=d.id) AS design_source,s.id AS review_id,s.draft_version AS submitted_version,CASE WHEN s.id IS NULL THEN NULL ELSE COALESCE(v.outcome,'Awaiting review') END AS review_status,v.comments FROM survey_drafts d LEFT JOIN LATERAL(SELECT * FROM boq_review_submissions WHERE draft_id=d.id ORDER BY draft_version DESC LIMIT 1) s ON true LEFT JOIN boq_review_decisions v ON v.submission_id=s.id WHERE d.owner_id=$1 AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? d.id::text) AND d.id NOT IN(SELECT draft_id FROM boq_draft_finalizations) ORDER BY d.updated_at DESC LIMIT 100`,
         [owner],
       )
     ).rows;
@@ -74,12 +95,14 @@ export class BoqRepository {
       const existingDraft = id
         ? (
             await c.query(
-              "SELECT * FROM survey_drafts WHERE id=$1 AND owner_id=$2 FOR UPDATE",
+              "SELECT d.*,EXISTS(SELECT 1 FROM boq_preparation_edits e WHERE e.draft_id=d.id) AS preparation_edit FROM survey_drafts d WHERE id=$1 AND owner_id=$2 FOR UPDATE",
               [id, owner],
             )
           ).rows[0]
         : undefined;
       if (id && !existingDraft) throw new HttpError(404, "Draft not found.");
+      if(id)await assertPreparationEditable(c,id);
+      if(existingDraft?.preparation_edit)reason="Preparation edited before quotation creation";
       const inferredWorkflow=id?(await c.query("SELECT id FROM project_workflow_records WHERE data->>'coordinationQuotationDraftId'=$1",[id])).rows[0]?.id:null;
       if(workflowId&&inferredWorkflow&&workflowId!==inferredWorkflow)throw new HttpError(409,'This draft is linked to a different reviewed survey.');
       const reviewWorkflow=workflowId??inferredWorkflow;
@@ -212,6 +235,7 @@ export class BoqRepository {
       if(!d)throw new HttpError(404,"Draft not found.");
       const existing=(await c.query("SELECT r.* FROM boq_draft_finalizations f JOIN boq_revisions r ON r.id=f.revision_id WHERE f.draft_id=$1",[id])).rows[0];
       if(existing)return existing;
+      await assertPreparationEditable(c,id);
       if(d.version!==version)throw new HttpError(409,"Draft changed. Save and recalculate before creating a quotation.");
       const survey=surveySchema.parse(d.inputs);
       if(survey.uploadIds.length&&!survey.ocrReviewed)throw new HttpError(400,"Review source documents first.");
@@ -225,6 +249,7 @@ export class BoqRepository {
     });
   }
   async finalize(c: PoolClient, actor: string, d: any, snapshot: BoqSnapshot, managementApproved = true) {
+    await assertPreparationEditable(c,d.id);
     const s = snapshot.survey;
     let boq: string, revision: number, number: string;
     if (d.base_revision_id) {

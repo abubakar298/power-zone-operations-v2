@@ -1,3 +1,4 @@
+import {lockBoqPreparation} from '../boq/preparation.js';
 import {cashDeal} from "./deal.js";
 import { allocateReference, revisedReference, boqIdentity } from "../documents/references.js";
 import {
@@ -612,6 +613,9 @@ export class CommercialRepository {
           );
         return old;
       }
+      const preparation=await lockBoqPreparation(c,preview.boqRevisionId);
+      const newerPreparation=(await c.query(`SELECT 1 FROM boq_preparation_edits e JOIN boq_draft_finalizations f ON f.draft_id=e.draft_id JOIN boq_revisions newer ON newer.id=f.revision_id JOIN boq_revisions current ON current.id=$1 WHERE newer.boq_id=$2 AND newer.revision>current.revision`,[preview.boqRevisionId,preparation.boq_id])).rowCount;
+      if(newerPreparation)throw new HttpError(409,'The BOQ preparation was updated. Reopen pricing for the latest BOQ before creating its quotation.');
       const comparison=(preview.snapshot as any).revision?.comparison;
       if(comparison?.previousPayable && !new Decimal(comparison.previousPayable).eq(comparison.proposedPayable) && !input.acknowledgePriceChange)
         throw new HttpError(409,"Acknowledge the previous and proposed payable change before saving this revision.");

@@ -566,6 +566,7 @@ export function Dashboard({
                     <Icon name="database"/><span className="sidebar-bucket-label">Databases</span>
                   </button>
                 )}
+                {session.user.role === "Coordinator" && <button className={view==="projects"?"nav-active":""} aria-current={view==="projects"?"page":undefined} onClick={()=>{if(navigate("projects"))setProjectContextKey(undefined);}}><Icon name="file"/><span className="sidebar-bucket-label">Projects</span></button>}
                 {session.user.role === "Design" && <>
                 <button className={view==='dashboard'&&departmentPage==='Survey History'?'nav-active':''} aria-current={view==='dashboard'&&departmentPage==='Survey History'?'page':undefined}
                   onClick={() => {
@@ -1200,21 +1201,6 @@ export function Dashboard({
                         : "My Workspace"}
                   </Button>
                 )}
-              {isCoordinator &&
-                currentProjectKey &&
-                ["boqs", "pricing", "quotes", "orders", "operations"].includes(
-                  view,
-                ) && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setProjectContextKey(currentProjectKey);
-                      navigate("projects");
-                    }}
-                  >
-                    View project
-                  </Button>
-                )}
               {canUseLibrary && (
                 <div hidden={view !== "projects" && view !== "documents"}>
                   <CoordinatorLibrary
@@ -1341,9 +1327,9 @@ export function Dashboard({
                       navigate("pricing");
                     }}
                     section={view === "pricing" ? "pricing" : "quotes"}
-                    onRevisionDraft={(id) => {
+                    onRevisionDraft={(id,preparationEdit) => {
                       setRevisionDraftId(id);
-                      navigate("boqs");
+                      navigate(preparationEdit?"newboq":"boqs");
                     }}
                   />
                 ))}

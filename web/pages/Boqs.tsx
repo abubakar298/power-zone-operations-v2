@@ -77,6 +77,7 @@ export function Boqs({
   const [boqFamily, setBoqFamily] = useState(
     initialCniId ? "ci-bess" : initialContext?.family??"solar-hybrid",
   );
+  const [preparationEdit,setPreparationEdit]=useState(false);
   const [dirty, setDirty] = useState(false),
     [cniContext, setCniContext] = useState<any>(initialContext);
   const [masters, setMasters] = useState<any>(),
@@ -213,6 +214,7 @@ export function Boqs({
       .catch(fail);
   }, []);
   function fresh(mode = "Survey") {
+    setPreparationEdit(false);
     if (!confirmLeaveWorkspace()) return false;
     originalControlValues.current={};
     setDirty(false);
@@ -245,11 +247,12 @@ export function Boqs({
     return true;
   }
   function resume(d: any) {
+    setPreparationEdit(d.preparation_edit===true);
     originalControlValues.current={};
     setDirty(false);
     setCreatedCustomerId(undefined);
     setDesignSource(d.design_source);
-    setSourceMode(initialContext?.workflowRecordId || d.base_revision_id ? "Survey" : d.inputs.sourceMode ?? "Survey");
+    setSourceMode(initialContext?.workflowRecordId || d.base_revision_id&&!d.preparation_edit ? "Survey" : d.inputs.sourceMode ?? "Survey");
     setPvInput({
       qty: d.inputs.panelQty ?? 0,
       wattage: d.inputs.panelWattage || "0",
@@ -1239,7 +1242,7 @@ export function Boqs({
         <>
           <div className="panel-heading">
             <h2>
-              {baseRevisionId ? "Revise BOQ" : "Prepare Quotation"}
+              {preparationEdit?"Edit BOQ":baseRevisionId ? "Revise BOQ" : "Prepare Quotation"}
             </h2>
             {/* Retain BOQ-list navigation for other roles; archived from Atif’s quotation entry. */}
             {session.user.role !== "Coordinator" && (
@@ -1257,7 +1260,7 @@ export function Boqs({
             )}
           </div>
           <p>
-            {baseRevisionId
+            {preparationEdit?"Edit this BOQ preparation, then return to pricing. A formal revision is required only after a quotation is created.":baseRevisionId
               ? "This revision uses the existing customer and site. Approval saves a new immutable revision."
               : "Search and select a customer, then enter the site name. Use Revision mode for changes to an existing BOQ."}
           </p>
@@ -1267,7 +1270,7 @@ export function Boqs({
                 Document action
                 <select
                   aria-label="Document action"
-                  value={revisionMode || baseRevisionId ? "revision" : sourceMode === "General quotation" ? "quick" : "new"}
+                  value={revisionMode || baseRevisionId&&!preparationEdit ? "revision" : sourceMode === "General quotation" ? "quick" : "new"}
                   disabled={!!initialContext?.workflowRecordId || !!baseRevisionId}
                   onChange={(e) => {
                     setRevisionMode(e.target.value === "revision");
@@ -1438,8 +1441,8 @@ export function Boqs({
                     }
                   />)}
                 </div>
-          {baseRevisionId && <label>Source BOQ<input aria-label="Source BOQ" readOnly value={records.find(r=>r.id===baseRevisionId)?.number??baseRevisionId}/><small>This revision is linked to the source BOQ and cannot be changed.</small></label>}
-          {baseRevisionId && (
+          {baseRevisionId && <label>Source BOQ<input aria-label="Source BOQ" readOnly value={records.find(r=>r.id===baseRevisionId)?.number??baseRevisionId}/><small>{preparationEdit?"This preparation retains its customer and site.":"This revision is linked to the source BOQ and cannot be changed."}</small></label>}
+          {baseRevisionId && !preparationEdit && (
             <label className="source-label">
               Revision source
               <select
@@ -1550,8 +1553,8 @@ export function Boqs({
                     initial={initial}
                     patch={quantityPatch}
                     inverter={inverter}
-                    quick={!baseRevisionId && sourceMode === "General quotation"}
-                    manual={!!baseRevisionId}
+                    quick={(!baseRevisionId||preparationEdit) && sourceMode === "General quotation"}
+                    manual={!!baseRevisionId&&!preparationEdit}
                     bessOnly={boqFamily === "bess-only"}
                     onInverter={setInverter}
                   />

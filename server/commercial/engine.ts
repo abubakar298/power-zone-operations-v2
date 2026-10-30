@@ -821,7 +821,16 @@ function quoteBase(p:PricingSnapshot,boq:BoqSnapshot,input:QuotationInput,bmsDes
   if (input.descriptions && input.descriptions.length !== lines.length)
     throw new HttpError(400, "Provide one description for each quotation row.");
   lines.forEach((l, i) => {
-    if (input.descriptions) {l.descriptionOverride=input.descriptions[i]!==l.description;l.description = input.descriptions[i];}
+    if (input.descriptions) {
+      let description=input.descriptions[i];
+      // Old generated preview text can survive in an open browser's input array.
+      // Resolve only recognizable unresolved templates; preserve deliberate wording.
+      if((l.group==='solar'||l.group==='structure')&&/Brand to be confirmed|\{(?:Selected structure type|panel quantity|panel wattage|Solar brand)\}/i.test(description)){
+        const solar=boq.selectedBrands.solar,brand=solar.name==='Any of the Above'?solar.alternatives.join(' / '):solar.name;
+        description=selectedScopeDescription(l.group,description,{brand,watts:boq.survey.panelWattage,structure:boq.survey.structure,panels:boq.survey.panelQty}).replace(/( for [\d,.]+ panels)(?: for [\d,.]+ panels)+$/i,'$1');
+      }
+      l.descriptionOverride=description!==l.description;l.description=description;
+    }
   });
   if (
     p.input.taxMode === "Tax Included" &&

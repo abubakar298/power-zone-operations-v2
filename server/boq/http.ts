@@ -32,6 +32,8 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
       throw new HttpError(403, "Refresh and try again.");
     next();
   });
+  r.get('/:id/preparation',async(req,res)=>{const id=z.uuid().parse(req.params.id);res.json(await repo.preparation(req.authSession!.user.id,id));});
+  r.post('/:id/edit-preparation',async(req,res)=>{const id=z.uuid().parse(req.params.id);z.object({}).strict().parse(req.body);res.json(await repo.preparation(req.authSession!.user.id,id,true));});
   r.get("/drafts", async (req, res) =>
     res.json({ drafts: await repo.drafts(req.authSession!.user.id) }),
   );

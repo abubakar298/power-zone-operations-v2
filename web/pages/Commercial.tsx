@@ -272,7 +272,7 @@ export function Commercial({
   initialRevisionId?: string;
   initialFrameworkInput?: Partial<PricingInput>;
   section?: "pricing" | "quotes";
-  onRevisionDraft?: (id: string) => void;
+  onRevisionDraft?: (id: string,preparationEdit?:boolean) => void;
   onRevisionPricing?: (id: string, requestId: string) => void;
   initialRequestId?: string;
   initialQuotationId?: string;
@@ -334,6 +334,8 @@ export function Commercial({
     ),
   );
   const [revisionRequests, setRevisionRequests] = useState<any[]>([]);
+  const [preparationEdit,setPreparationEdit]=useState<{canEdit:boolean;quoted:boolean}>();
+  useEffect(()=>{let active=true;setPreparationEdit(undefined);if(input.boqRevisionId&&!savedQuote)void api<{canEdit:boolean;quoted:boolean}>(`/boqs/${input.boqRevisionId}/preparation`).then(value=>{if(active)setPreparationEdit(value);}).catch(()=>{});return()=>{active=false;};},[input.boqRevisionId,savedQuote]);
   const boqRevisionLocked = Boolean(initialRevisionId) || Boolean(new URLSearchParams(window.location.search).get("pricingPreviewToken")) || boqs.some(b => b.id === input.boqRevisionId && b.from_technical_report === true);
   const directSale =
     (boqs.find((b) => b.id === input.boqRevisionId)?.family ??
@@ -346,11 +348,11 @@ export function Commercial({
     if (session.user.role !== "Coordinator") setPolicy(await api<CommercialPolicy>("/commercial/standard-policy"));
     setBoqs(b.boqs);
     setQuotes(q.quotations);
-    setRevisionRequests(
+    if(session.user.role!=="Coordinator")setRevisionRequests(
       (await api<{ requests: any[] }>("/commercial/revision-requests"))
         .requests,
     );
-    if (manager)
+    if (manager&&session.user.role!=="Coordinator")
       setPrices((await api<{ pricing: any[] }>("/commercial/pricing")).pricing);
   }
   useEffect(() => {
@@ -788,6 +790,7 @@ export function Commercial({
         Commercial pricing uses the selected saved BOQ revision. Atif may approve quotations within the standard discount allowance; Management approves further discounts. Saved versions retain their original
         inputs and amounts.
       </p>
+      {!savedQuote&&!input.revisionRequestId&&onRevisionDraft&&preparationEdit?.canEdit&&<div className="pz-actions"><Button variant="neutral" disabled={busy} onClick={()=>void action(async()=>{const result=await api<{draftId:string}>(`/boqs/${input.boqRevisionId}/edit-preparation`,{csrf:session.csrfToken,body:{}});onRevisionDraft(result.draftId,true);})}>Edit BOQ</Button></div>}
       {dirty && <p role="status">Unsaved quotation preparation changes</p>}
       {revisionInfo && (
         <aside className="detail-panel" aria-label="Requested revision">
@@ -1189,7 +1192,7 @@ export function Commercial({
               )}
             </section>
           )}
-          <section className="detail-panel">
+          {session.user.role!=="Coordinator"&&<section className="detail-panel">
             <details>
               <summary>Saved pricing versions</summary>
               {prices.length ? (
@@ -1207,7 +1210,7 @@ export function Commercial({
                 <p>No pricing saved yet.</p>
               )}
             </details>
-          </section>
+          </section>}
         </>
       )}
       {!manager && section === "pricing" && (
@@ -1582,7 +1585,7 @@ export function Commercial({
           )}
         </>
       )}
-      {!input.revisionRequestId&&!revisionInfo&&!initialFrameworkInput&&!savedQuote?.snapshot?.revision&&!(quotePreview?.snapshot as (QuotationSnapshot & {revision?:unknown}) | undefined)?.revision&&<section className="detail-panel">
+      {session.user.role!=="Coordinator"&&!input.revisionRequestId&&!revisionInfo&&!initialFrameworkInput&&!savedQuote?.snapshot?.revision&&!(quotePreview?.snapshot as (QuotationSnapshot & {revision?:unknown}) | undefined)?.revision&&<section className="detail-panel">
         <h3>Revision requests</h3>
         {revisionRequests.length ? (
           revisionRequests.map((r) => (
