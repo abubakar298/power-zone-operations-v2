@@ -4,3 +4,6 @@
 @media(max-width:700px){.accounts-ui .accounts-worklist-filters.accounts-invoice-filters{grid-template-columns:1fr}.accounts-ui .accounts-invoice-filters>.pz-button{margin-top:0}}
 
 .accounts-ui .accounts-invoice-actions{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
+
+.accounts-recovery-export{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}.accounts-recovery-export>span{padding-top:11px}
+@media(max-width:700px){.accounts-recovery-export{width:100%;justify-content:space-between}}
