@@ -40,7 +40,7 @@ export class SiteMaterialPlanRepository{
  }
  async issued(actor:string,id:string){
   const plan=await this.detail(actor,id),ids=[plan.fixed.id,...(plan.variable?[plan.variable.id]:[])];
-  const rows=(await this.pool.query("SELECT id,number,snapshot,created_at FROM inventory_material_dispatches WHERE draft_id=ANY($1::uuid[]) OR snapshot#>>'{combinedPlan,id}'=$2 ORDER BY created_at DESC,id",[ids,id])).rows;
+  const rows=(await this.pool.query("SELECT id,number,snapshot,created_at FROM inventory_material_dispatches_active WHERE draft_id=ANY($1::uuid[]) OR snapshot#>>'{combinedPlan,id}'=$2 ORDER BY created_at DESC,id",[ids,id])).rows;
   return {dispatches:rows.map(r=>({id:r.id,number:r.number,createdAt:r.created_at,lines:r.snapshot.lines.map((l:any)=>({key:l.key,itemId:l.itemId,unit:l.unit,quantity:l.out})),variable:r.snapshot.lines.some((l:any)=>l.out&&Number(l.out)>0&&materialDocumentPolicy(l).customerUsageSignoff)}))};
  }
  async materialCatalogue(actor:string){return this.drafts.catalogue(actor);}
@@ -74,7 +74,7 @@ export class SiteMaterialPlanRepository{
     if(before.siteId!==input.source.siteId||before.basisId!==input.source.basisId||before.sourceKind!==input.source.sourceKind)throw new HttpError(409,'Keep this preparation linked to its original approved site and BOQ.');
    }
    if(existing){
-    const sent=(await c.query("SELECT l.line_key,l.item_id,l.unit,l.description,sum(l.quantity)::text quantity FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.snapshot#>>'{combinedPlan,id}'=$1 OR d.draft_id=ANY($2::uuid[]) GROUP BY l.line_key,l.item_id,l.unit,l.description",[id,[existing.fixed.id,...(existing.variable?[existing.variable.id]:[])]] )).rows;
+    const sent=(await c.query("SELECT l.line_key,l.item_id,l.unit,l.description,sum(l.quantity)::text quantity FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE d.snapshot#>>'{combinedPlan,id}'=$1 OR d.draft_id=ANY($2::uuid[]) GROUP BY l.line_key,l.item_id,l.unit,l.description",[id,[existing.fixed.id,...(existing.variable?[existing.variable.id]:[])]] )).rows;
     if(sent.length){
      if(input.warehouse!==existing.fixed.snapshot.warehouse)throw new HttpError(409,'Previously issued material must keep its original warehouse.');
      const rows=[...input.fixedLines,...input.variableLines];

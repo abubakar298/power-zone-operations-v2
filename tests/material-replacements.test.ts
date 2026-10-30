@@ -36,7 +36,7 @@ const transport={issuedTo:'Fictional engineer',driver:'Fictional driver',vehicle
 test('replacement OUT works against a completed original DO; faulty return stays held until separate usable inspection credits once',async()=>{
  const db=await testDatabase({skipMigrations:true}),legacy=await mkdtemp(join(tmpdir(),'pz-replacement-legacy-'));try{
   for(const name of await readdir('migrations'))if(/^\d+_[a-z_]+\.sql$/.test(name)&&Number(name.split('_')[0])<=130)await copyFile(join('migrations',name),join(legacy,name));
-  await migrate(db.pool,legacy);
+  await migrate(db.pool,legacy);await db.pool.query("CREATE VIEW inventory_material_dispatches_active AS SELECT * FROM inventory_material_dispatches WHERE coalesce(snapshot->>'cancelled','false')<>'true'; CREATE VIEW inventory_material_dispatch_lines_active AS SELECT l.* FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id");
   const f=await materialStockFixture(db.pool),keeper=randomUUID(),unassigned=randomUUID(),stock=new MaterialStockRepository(db.pool);
   for(const id of [keeper,unassigned])await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,'Fictional keeper','Inventory','isolated')",[id,id+'@example.test']);
   await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$3),($2,'Lahore warehouse','storekeeper',$3)",[f.reviewer,keeper,f.owner]);

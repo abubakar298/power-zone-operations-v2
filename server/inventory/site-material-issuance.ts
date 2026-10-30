@@ -20,7 +20,7 @@ function combinedId(planId:string){const hex=createHash('sha256').update('invent
 export async function issueSavedSite(pool:Pool,plans:SiteMaterialPlanRepository,stock:MaterialStockRepository,actor:string,planId:string,raw:unknown){
  const input=savedSiteIssueSchema.parse(raw),requestFingerprint=digest({planId,...input});
  const plan=await plans.detail(actor,planId);
- const replay=(await pool.query('SELECT id,number,created_by,snapshot FROM inventory_material_dispatches WHERE request_key=$1',[input.requestKey])).rows[0];
+ const replay=(await pool.query('SELECT id,number,created_by,snapshot FROM inventory_material_dispatches_active WHERE request_key=$1',[input.requestKey])).rows[0];
  if(replay){if(replay.created_by!==actor||replay.snapshot.combinedPlan?.requestFingerprint!==requestFingerprint)throw new HttpError(409,'This request belongs to another issuance.');const existing=await stock.dispatch(actor,replay.id);return {id:replay.id,number:replay.number,stockPosted:existing.stockPosted};}
  if(plan.version!==input.version)throw new HttpError(409,'This preparation changed. Refresh before saving its DO.');
  const draftId=combinedId(planId),position=await stock.positions(actor,plan.fixed.snapshot.warehouse);
@@ -36,11 +36,11 @@ export async function issueSavedSite(pool:Pool,plans:SiteMaterialPlanRepository,
   const approved=fixedPreparationRows(source,catalogue,()=>'',{}).filter(r=>r.out!==''&&!materialDocumentPolicy(r).approvedQuantityLocked);
   if(!input.partialDelivery)for(const basis of approved){const entered=fixed.lines.filter((r:any)=>basis.basisLine!==undefined?r.basisLine===basis.basisLine:r.itemId===basis.itemId).reduce((sum:Decimal,r:any)=>sum.plus(r.out||0),new Decimal(0));if(entered.lt(basis.out))throw new HttpError(422,'Fixed items are below the approved BOQ. Select Partial delivery to save a reduced fixed-item issuance.');}
   const moduleIds=[plan.fixed.id,...(variable?[plan.variable!.id]:[])];
-  const prior=(await c.query('SELECT l.line_key,sum(l.quantity)::text quantity FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=ANY($1::uuid[]) GROUP BY l.line_key',[moduleIds])).rows;
+  const prior=(await c.query('SELECT l.line_key,sum(l.quantity)::text quantity FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE d.draft_id=ANY($1::uuid[]) GROUP BY l.line_key',[moduleIds])).rows;
   const rows=[...fixed.lines,...(variable?.lines??[])].filter((r:any)=>r.itemId&&r.out!==''&&new Decimal(r.out).gt(0)&&!materialDocumentPolicy(r).approvedQuantityLocked&&materialDocumentPolicy(r).group!=='non-stock').map((r:any)=>({...r,out:new Decimal(r.out).minus(prior.find(p=>p.line_key===r.key)?.quantity??0).toString()}));
   if(rows.some(r=>new Decimal(r.out).lt(0)))throw new HttpError(409,'A saved quantity is lower than material already dispatched. Review its original DO.');
   const previous=(await c.query('SELECT version,snapshot FROM inventory_material_draft_versions WHERE draft_id=$1 ORDER BY version DESC LIMIT 1',[draftId])).rows[0];
-  const dispatched=(await c.query('SELECT l.line_key,l.item_id,l.unit,l.description,sum(l.quantity)::text quantity FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 GROUP BY l.line_key,l.item_id,l.unit,l.description',[draftId])).rows;
+  const dispatched=(await c.query('SELECT l.line_key,l.item_id,l.unit,l.description,sum(l.quantity)::text quantity FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE d.draft_id=$1 GROUP BY l.line_key,l.item_id,l.unit,l.description',[draftId])).rows;
   for(const sent of dispatched){const row=rows.find(r=>r.key===sent.line_key);if(!row||row.itemId!==sent.item_id||row.unit!==sent.unit||row.description!==sent.description||new Decimal(row.out).lt(sent.quantity))throw new HttpError(409,'Previously issued rows must retain their item, unit and dispatched quantity. Review the saved DO before revising.');}
   const lines=rows.filter(r=>new Decimal(r.out).gt(0)).map(r=>{const remaining=new Decimal(r.out).minus(dispatched.find(d=>d.line_key===r.key)?.quantity??0);const balance=position.positions.find(p=>p.itemId===r.itemId&&p.unit===r.unit);if(remaining.gt(0)&&!balance)throw new HttpError(409,'An entered item has no reviewed warehouse balance.');return {lineKey:r.key,quantity:remaining.toString(),ledgerRevision:balance?.ledgerRevision??0};}).filter(r=>new Decimal(r.quantity).gt(0));
   if(!lines.length)throw new HttpError(409,'The entered quantities already have a DO. Open Preview Documents to download it.');
@@ -59,7 +59,7 @@ export async function issueSavedParent(pool:Pool,repo:import('./material-drafts.
  const input=savedSiteIssueSchema.omit({partialDelivery:true}).parse(raw),draft=await repo.detail(actor,id);
  if(!draft.snapshot.parent||draft.snapshot.kind!=='variable')throw new HttpError(422,'Select a Parent DO preparation.');
  if(draft.version!==input.version)throw new HttpError(409,'This Parent DO changed. Refresh before saving.');
- const replay=(await pool.query('SELECT id,number,draft_id,draft_version,created_by FROM inventory_material_dispatches WHERE request_key=$1',[input.requestKey])).rows[0];
+ const replay=(await pool.query('SELECT id,number,draft_id,draft_version,created_by FROM inventory_material_dispatches_active WHERE request_key=$1',[input.requestKey])).rows[0];
  if(replay){if(replay.created_by!==actor||replay.draft_id!==id||replay.draft_version!==input.version)throw new HttpError(409,'This request belongs to another Parent DO.');const d=await stock.dispatch(actor,replay.id);if(d.snapshot.reason!==input.note)throw new HttpError(409,'This request belongs to another Parent DO.');return {id:d.id,number:d.number,stockPosted:d.stockPosted};}
  const [position,movements]=await Promise.all([stock.positions(actor,draft.snapshot.warehouse),stock.movements(actor,id)]);
  if(!position.authority||position.authority.state!=='active')throw new HttpError(409,'Verify this warehouse balance before issuing material.');

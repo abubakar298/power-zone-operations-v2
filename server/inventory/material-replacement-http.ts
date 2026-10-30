@@ -26,8 +26,8 @@ export function materialReplacementHttp(pool:Pool,requireSession:RequestHandler)
  r.use(async(_req,_res,next)=>{if(!(await pool.query("SELECT to_regclass('public.inventory_material_replacement_usable_releases') IS NOT NULL AS enabled")).rows[0].enabled)throw new HttpError(409,'Replacement records are not enabled in this workspace yet.');next();});
  r.get('/intake',async(req,res)=>{
   const selected=warehouse(req.query.warehouse);await requireWarehouseAccess(actor(req),selected,pool);const scope=await access(pool,actor(req));
-  const docs=(await pool.query('SELECT id,number,warehouse,snapshot,created_at FROM inventory_material_dispatches WHERE warehouse=ANY($1::text[]) ORDER BY created_at DESC,id LIMIT 500',[scope.issueWarehouses])).rows;
-  const allLines=(await pool.query('SELECT dispatch_id,line_key,item_id,unit,description,quantity::text FROM inventory_material_dispatch_lines WHERE dispatch_id=ANY($1::uuid[]) ORDER BY dispatch_id,line_key',[docs.map(d=>d.id)])).rows;
+  const docs=(await pool.query('SELECT id,number,warehouse,snapshot,created_at FROM inventory_material_dispatches_active WHERE warehouse=ANY($1::text[]) ORDER BY created_at DESC,id LIMIT 500',[scope.issueWarehouses])).rows;
+  const allLines=(await pool.query('SELECT dispatch_id,line_key,item_id,unit,description,quantity::text FROM inventory_material_dispatch_lines_active WHERE dispatch_id=ANY($1::uuid[]) ORDER BY dispatch_id,line_key',[docs.map(d=>d.id)])).rows;
   const originals=docs.map(doc=>({id:doc.id,number:doc.number,warehouse:doc.warehouse,date:doc.created_at,sites:(doc.snapshot.sites??[]).map((s:any)=>({siteId:s.siteId,siteName:s.siteName,ipo:s.ipo,orderNumber:s.orderNumber,customer:s.customer})),lines:allLines.filter(l=>l.dispatch_id===doc.id).map(({dispatch_id,...line})=>({...line,siteIds:(doc.snapshot.lines??[]).find((v:any)=>v.key===line.line_key)?.sites??[]}))}));
   res.json({warehouse:selected,originals,stock:await stock.positions(actor(req),selected)});
  });

@@ -30,7 +30,7 @@ export async function stockLedger(pool:Pool,actor:string,input:unknown){
  SELECT 'posted:'||m.id::text,m.created_at::text,b.payload->>'itemId',b.payload->>'description',b.payload->>'warehouse',b.payload->>'unit',m.in_delta::text,m.out_delta::text,
  coalesce(rd.number,rr.number,t.number,p.number,r.number,d.number,''),'',m.kind,''
  FROM inventory_warehouse_operational_movements m JOIN balances b USING(source_sha256,ledger_key)
- LEFT JOIN inventory_material_dispatches d ON d.id=m.dispatch_id
+ LEFT JOIN inventory_material_dispatches_active d ON d.id=m.dispatch_id
  LEFT JOIN inventory_material_receipts r ON r.id=m.receipt_id
  LEFT JOIN inventory_material_purchase_receipts p ON p.id=m.purchase_receipt_id
  LEFT JOIN inventory_warehouse_transfers t ON t.id=m.transfer_id

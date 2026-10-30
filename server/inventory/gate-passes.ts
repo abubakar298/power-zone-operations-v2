@@ -8,9 +8,9 @@ import {HttpError} from '../http/errors.js';
 import {transaction} from '../db/transaction.js';
 import {requireWarehouseAccess} from './warehouse-access.js';
 export const gatePassKind=z.enum(['dispatch','return','purchase','transfer-out','transfer-in','replacement-out','replacement-in']);
-export const gatePassCopySchema=z.object({kind:gatePassKind,documentId:z.uuid(),copyKind:z.enum(['signed-gate','signed-store','signed-customer','customer-signoff']),siteId:z.uuid().optional(),evidenceId:z.uuid(),note:z.string().trim().min(3).max(2000),requestKey:z.uuid()}).strict();
+export const gatePassCopySchema=z.object({kind:gatePassKind,documentId:z.uuid(),copyKind:z.enum(['signed-gate','signed-store','signed-customer','customer-signoff']),siteId:z.uuid().optional(),evidenceId:z.uuid(),note:z.string().trim().min(3).max(2000),requestKey:z.uuid(),documentRevision:z.number().int().positive().optional()}).strict();
 type Kind=z.infer<typeof gatePassKind>;
-const docs=`SELECT 'dispatch' kind,id,number,warehouse,created_at FROM inventory_material_dispatches UNION ALL SELECT 'return',id,number,snapshot->>'warehouse',created_at FROM inventory_material_receipts UNION ALL SELECT 'purchase',id,number,warehouse,created_at FROM inventory_material_purchase_receipts`;
+const docs=`SELECT 'dispatch' kind,id,number,warehouse,created_at FROM inventory_material_dispatches_active UNION ALL SELECT 'return',id,number,snapshot->>'warehouse',created_at FROM inventory_material_receipts UNION ALL SELECT 'purchase',id,number,warehouse,created_at FROM inventory_material_purchase_receipts`;
 export class GatePassRepository{
  constructor(private pool:Pool){}
  private async siteCopySupport(c:Pool|PoolClient=this.pool){return (await c.query("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='inventory_gate_pass_copies' AND column_name='source_site_id') ready")).rows[0].ready as boolean;}
@@ -23,7 +23,7 @@ export class GatePassRepository{
   const warehouses=owner?(await this.pool.query(`SELECT DISTINCT warehouse FROM (${docs}) d UNION SELECT warehouse FROM inventory_warehouse_authority_current ORDER BY warehouse`)).rows.map(r=>r.warehouse):(await this.pool.query("SELECT DISTINCT warehouse FROM inventory_material_access WHERE user_id=$1 AND capability IN('dispatcher','storekeeper') ORDER BY warehouse",[actor])).rows.map(r=>r.warehouse);
   if(!owner&&!warehouses.length)throw new HttpError(403,'Warehouse document access is required.');
   const records=(await this.pool.query(`SELECT d.*, (SELECT count(*)::int FROM inventory_gate_pass_copies c WHERE c.document_kind=d.kind AND c.document_id=d.id AND c.copy_kind IN('signed-gate','signed-store')) signed_copies FROM (${docs}) d WHERE warehouse=ANY($1) ORDER BY created_at DESC,id DESC`,[warehouses])).rows;
-  const dispatches=(await this.pool.query('SELECT id,number,warehouse,snapshot,created_at FROM inventory_material_dispatches WHERE warehouse=ANY($1) ORDER BY created_at DESC,id',[warehouses])).rows;
+  const dispatches=(await this.pool.query('SELECT id,number,warehouse,snapshot,created_at FROM inventory_material_dispatches_active WHERE warehouse=ANY($1) ORDER BY created_at DESC,id',[warehouses])).rows;
   for(const record of records){const dispatch=record.kind==='dispatch'?dispatches.find(d=>d.id===record.id):undefined;if(dispatch){record.parent=!!dispatch.snapshot.parent;record.siteName=dispatch.snapshot.sites.map((site:any)=>site.siteName).join(' · ');record.ipo=dispatch.snapshot.sites.map((site:any)=>site.ipo??'').join(' · ');}}
   const signoffs=dispatches.flatMap(d=>(d.snapshot.sites??[]).filter((site:any)=>site.installation!==false&&d.snapshot.lines.some((line:any)=>line.sites.includes(site.siteId)&&Number(line.out)>0&&materialDocumentPolicy(line).customerUsageSignoff)).map((site:any)=>({kind:'dispatch',id:d.id,number:d.number,warehouse:d.warehouse,created_at:d.created_at,siteId:site.siteId,siteName:site.siteName,ipo:site.ipo??'',signoff:true})));
   const siteCopies=await this.siteCopySupport();
@@ -42,15 +42,18 @@ export class GatePassRepository{
    if(!(await c.query("SELECT to_regclass('public.inventory_warehouse_transfers') IS NOT NULL AND to_regclass('public.inventory_warehouse_transfer_receipts') IS NOT NULL ready")).rows[0].ready)throw new HttpError(404,'Warehouse document not found.');
    row=kind==='transfer-out'?(await c.query('SELECT id,number,snapshot,created_at,source_warehouse warehouse FROM inventory_warehouse_transfers WHERE id=$1',[id])).rows[0]:(await c.query('SELECT r.id,r.number,r.snapshot,r.created_at,t.destination_warehouse warehouse FROM inventory_warehouse_transfer_receipts r JOIN inventory_warehouse_transfers t ON t.id=r.transfer_id WHERE r.id=$1',[id])).rows[0];
   }else{
-   const table=kind==='dispatch'?'inventory_material_dispatches':kind==='return'?'inventory_material_receipts':'inventory_material_purchase_receipts';
+   const table=kind==='dispatch'?'inventory_material_dispatches_active':kind==='return'?'inventory_material_receipts':'inventory_material_purchase_receipts';
    row=(await c.query(`SELECT id,number,snapshot,created_at,${kind==='return'?"snapshot->>'warehouse'":'warehouse'} warehouse FROM ${table} WHERE id=$1`,[id])).rows[0];
   }
   if(!row)throw new HttpError(404,'Warehouse document not found.');await requireWarehouseAccess(actor,row.warehouse,c,true);if(['dispatch','transfer-out','replacement-out','replacement-in'].includes(kind))row.snapshot={...row.snapshot,stockPosting:await dispatchPosted(c,kind as 'dispatch'|'transfer-out'|'replacement-out'|'replacement-in',id)};return row;
  }
- async detail(actor:string,kind:Kind,id:string){const record=await this.record(actor,kind,id),siteCopies=await this.siteCopySupport();return {id:record.id,number:record.number,warehouse:record.warehouse,created_at:record.created_at,parent:!!record.snapshot.parent,kind,copies:(await this.pool.query(`SELECT id,copy_kind,${siteCopies?'source_site_id':'NULL::uuid AS source_site_id'},evidence_id,note,created_at FROM inventory_gate_pass_copies WHERE document_kind=$1 AND document_id=$2 ORDER BY created_at,id`,[kind,id])).rows};}
+ async detail(actor:string,kind:Kind,id:string){const record=await this.record(actor,kind,id),siteCopies=await this.siteCopySupport();return {id:record.id,number:record.number,warehouse:record.warehouse,created_at:record.created_at,parent:!!record.snapshot.parent,documentRevision:record.snapshot.doRevision??1,kind,copies:(await this.pool.query(`SELECT id,copy_kind,${siteCopies?'source_site_id':'NULL::uuid AS source_site_id'},evidence_id,note,created_at FROM inventory_gate_pass_copies WHERE document_kind=$1 AND document_id=$2 ORDER BY created_at,id`,[kind,id])).rows};}
  async attach(actor:string,raw:z.infer<typeof gatePassCopySchema>){const input=gatePassCopySchema.parse(raw),fingerprint=createHash('sha256').update(JSON.stringify(input)).digest('hex');return transaction(this.pool,async c=>{
    await lockActiveActor(c,actor);
-  const record=await this.record(actor,input.kind,input.documentId,c),siteCopies=await this.siteCopySupport(c);
+  if(input.kind==='dispatch')await c.query("SELECT document_id FROM inventory_signed_dispatch_pending WHERE document_kind='dispatch' AND document_id=$1 FOR UPDATE",[input.documentId]);
+  const record=await this.record(actor,input.kind,input.documentId,c);
+  if(input.kind==='dispatch'&&(record.snapshot.doRevision??1)!==(input.documentRevision??1))throw new HttpError(409,'This DO changed. Reopen it and upload the signed copy of the current revision.');
+  const siteCopies=await this.siteCopySupport(c);
   if(!siteCopies&&['customer-signoff','signed-customer'].includes(input.copyKind))throw new HttpError(409,'The document-evidence migration must finish before saving this copy.');
   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.gate.copy.'||$1,0))",[input.requestKey]);
   const replay=(await c.query('SELECT id,fingerprint,created_by FROM inventory_gate_pass_copies WHERE request_key=$1',[input.requestKey])).rows[0];if(replay){if(replay.fingerprint!==fingerprint||replay.created_by!==actor)throw new HttpError(409,'This request belongs to another document copy.');return {id:replay.id,stockPosted:false};}

@@ -79,10 +79,10 @@ export async function latestProgrammeHandoffs(pool:Pool):Promise<ProgrammeHandof
    FROM operations_board_versions ORDER BY site_id,version DESC`),
   pool.query('SELECT site_id,id FROM operations_board_files'),
   pool.query(`SELECT d.snapshot->'sites' AS sites,d.snapshot->'parent' AS parent,d.snapshot->'partialDelivery' AS partial,c.created_at,c.copy_kind,c.source_site_id
-   FROM inventory_gate_pass_copies c JOIN inventory_material_dispatches d ON d.id=c.document_id
+   FROM inventory_gate_pass_copies c JOIN inventory_material_dispatches_active d ON d.id=c.document_id
    JOIN inventory_material_evidence e ON e.id=c.evidence_id AND e.warehouse=c.warehouse
    WHERE c.document_kind='dispatch' AND c.copy_kind IN ('signed-customer','customer-signoff')`),
-  pool.query(`SELECT snapshot->'sites' AS sites,snapshot->'lines' AS lines FROM inventory_material_dispatches`),
+  pool.query(`SELECT snapshot->'sites' AS sites,snapshot->'lines' AS lines FROM inventory_material_dispatches_active`),
  ]);
  return versions.rows.map(v=>{
   const matches=(site:any)=>site.registeredSiteId===v.site_id||!!v.snapshot.origin?.ipoId&&site.siteId===v.snapshot.origin.ipoId;

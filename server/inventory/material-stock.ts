@@ -1,3 +1,4 @@
+import {UnsignedDoRepository} from './unsigned-do.js';
 import {nextWarehouseClosing} from './warehouse-ledger.js';
 import {materialDispatchDraftLink} from './material-dispatch-link.js';
 import {deferDispatch,dispatchPosted} from './signed-dispatch.js';
@@ -33,6 +34,8 @@ export class MaterialStockRepository{
  constructor(private pool:Pool){this.drafts=new MaterialDraftRepository(pool);}
  private async scope(actor:string,warehouse:string,c:Pool|PoolClient=this.pool,printing=false){return requireWarehouseAccess(actor,warehouse,c,printing);}
  private async authority(c:PoolClient,warehouse:string,source:string,version:number){return lockWarehouseAuthority(c,warehouse,source,version);}
+ async unsignedDoDetail(actor:string,id:string){return new UnsignedDoRepository(this.pool).detail(actor,id);}
+ async unsignedDoChange(actor:string,id:string,raw:unknown){return new UnsignedDoRepository(this.pool).change(actor,id,raw);}
  async ledger(actor:string,input:unknown){return stockLedger(this.pool,actor,input);}
  async overview(actor:string){
   const {warehouses}=await this.drafts.warehouses(actor);
@@ -63,13 +66,13 @@ export class MaterialStockRepository{
  }
  async movements(actor:string,draftId:string){
   const draft=await this.drafts.detail(actor,draftId);await this.scope(actor,draft.snapshot.warehouse);
-  const dispatches=(await this.pool.query(`SELECT d.id,d.number,d.draft_version,d.snapshot,d.created_at FROM inventory_material_dispatches d WHERE ${materialDispatchDraftLink} ORDER BY d.created_at,d.id`,[draftId])).rows;for(const d of dispatches){d.stockPosted=await dispatchPosted(this.pool,'dispatch',d.id);d.parent=!!d.snapshot.parent;d.hasSignoffs=d.snapshot.lines.some((row:any)=>Number(row.out)>0&&materialDocumentPolicy(row).customerUsageSignoff);delete d.snapshot;}
+  const dispatches=(await this.pool.query(`SELECT d.id,d.number,d.draft_version,d.snapshot,d.created_at FROM inventory_material_dispatches_active d WHERE ${materialDispatchDraftLink} ORDER BY d.created_at,d.id`,[draftId])).rows;for(const d of dispatches){d.stockPosted=await dispatchPosted(this.pool,'dispatch',d.id);d.parent=!!d.snapshot.parent;d.hasSignoffs=d.snapshot.lines.some((row:any)=>Number(row.out)>0&&materialDocumentPolicy(row).customerUsageSignoff);delete d.snapshot;}
   const receipts=(await this.pool.query(`SELECT id,number,evidence_id,reason,created_at FROM inventory_material_receipts WHERE draft_id=$1 OR snapshot->>'originPreparationId'=$1::text ORDER BY created_at,id`,[draftId])).rows;
-  const lines=(await this.pool.query(`SELECT l.line_key,l.item_id,l.unit,sum(l.quantity)::text prepared,sum(CASE WHEN EXISTS(SELECT 1 FROM inventory_signed_dispatch_pending p WHERE p.document_kind='dispatch' AND p.document_id=d.id AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_postings z WHERE z.document_kind=p.document_kind AND z.document_id=p.document_id)) THEN 0 ELSE l.quantity END)::text issued,coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.line_key=l.line_key AND EXISTS(SELECT 1 FROM inventory_material_dispatches sent WHERE sent.id=r.dispatch_id AND (sent.draft_id=$1 OR sent.snapshot->'combinedPlan'->>'fixedDraftId'=$1::text OR sent.snapshot->'combinedPlan'->>'variableDraftId'=$1::text))),0)::text returned FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) GROUP BY l.line_key,l.item_id,l.unit`,[draftId,draft.snapshot.lines.map((r:any)=>r.key)])).rows;
+  const lines=(await this.pool.query(`SELECT l.line_key,l.item_id,l.unit,sum(l.quantity)::text prepared,sum(CASE WHEN EXISTS(SELECT 1 FROM inventory_signed_dispatch_pending p WHERE p.document_kind='dispatch' AND p.document_id=d.id AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_postings z WHERE z.document_kind=p.document_kind AND z.document_id=p.document_id)) THEN 0 ELSE l.quantity END)::text issued,coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.line_key=l.line_key AND EXISTS(SELECT 1 FROM inventory_material_dispatches_active sent WHERE sent.id=r.dispatch_id AND (sent.draft_id=$1 OR sent.snapshot->'combinedPlan'->>'fixedDraftId'=$1::text OR sent.snapshot->'combinedPlan'->>'variableDraftId'=$1::text))),0)::text returned FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) GROUP BY l.line_key,l.item_id,l.unit`,[draftId,draft.snapshot.lines.map((r:any)=>r.key)])).rows;
   return {dispatches,receipts,lines:lines.map(r=>({...r,issued:new Decimal(r.issued).toString(),returned:new Decimal(r.returned).toString(),outstanding:new Decimal(r.issued).minus(r.returned).toString(),used:null})),siteUseStatus:'Not yet recorded; outstanding includes site use and material still in custody.'};
  }
  async dispatch(actor:string,id:string){
-  const row=(await this.pool.query('SELECT id,number,draft_id,draft_version,warehouse,snapshot,created_at FROM inventory_material_dispatches WHERE id=$1',[id])).rows[0];
+  const row=(await this.pool.query('SELECT id,number,draft_id,draft_version,warehouse,snapshot,created_at FROM inventory_material_dispatches_active WHERE id=$1',[id])).rows[0];
   if(!row)throw new HttpError(404,'Issued material dispatch not found.');await this.scope(actor,row.warehouse,this.pool,true);const posted=await dispatchPosted(this.pool,'dispatch',id);return {...row,stockPosted:posted,snapshot:{...row.snapshot,stockPosting:posted,sites:row.snapshot.sites.map(({items,...site}:any)=>site)}};
  }
  async uploadEvidence(actor:string,raw:z.infer<typeof materialEvidenceInputSchema>){
@@ -95,7 +98,7 @@ export class MaterialStockRepository{
   const originalInput=materialReceiptInputSchema.parse(raw);let input=originalInput;
   const origin=await this.drafts.detail(actor,originalInput.draftId);
   if(originalInput.lines.some(r=>!origin.snapshot.lines.some((l:any)=>l.key===r.lineKey)))throw new HttpError(422,'Select returned rows from this preparation.');
-  const roots=(await this.pool.query(`SELECT DISTINCT d.draft_id FROM inventory_material_dispatches d WHERE ${materialDispatchDraftLink} AND EXISTS(SELECT 1 FROM inventory_material_dispatch_lines l WHERE l.dispatch_id=d.id AND l.line_key=ANY($2::uuid[]))`,[originalInput.draftId,originalInput.lines.map(r=>r.lineKey)])).rows;
+  const roots=(await this.pool.query(`SELECT DISTINCT d.draft_id FROM inventory_material_dispatches_active d WHERE ${materialDispatchDraftLink} AND EXISTS(SELECT 1 FROM inventory_material_dispatch_lines_active l WHERE l.dispatch_id=d.id AND l.line_key=ANY($2::uuid[]))`,[originalInput.draftId,originalInput.lines.map(r=>r.lineKey)])).rows;
   if(roots.length>1)throw new HttpError(409,'These materials have more than one DO preparation. Open the exact issued DO before recording its return.');
   if(roots.length===1)input={...originalInput,draftId:roots[0].draft_id};
   return transaction(this.pool,async c=>{
@@ -113,10 +116,10 @@ export class MaterialStockRepository{
    // The same physical original unit cannot arrive once through ordinary IGP
    // and again as a faulty holding. Replacement returns take these exact line
    // locks too; unrelated warehouse movement paths keep their ledger locks.
-   await c.query(`SELECT l.line_key FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) ORDER BY l.dispatch_id,l.line_key FOR UPDATE OF l`,[input.draftId,input.lines.map(r=>r.lineKey)]);
+   await c.query(`SELECT l.line_key FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) ORDER BY l.dispatch_id,l.line_key FOR UPDATE OF l`,[input.draftId,input.lines.map(r=>r.lineKey)]);
    const replacementsInstalled=(await c.query("SELECT to_regclass('public.inventory_material_replacement_returns') IS NOT NULL AS installed")).rows[0].installed;
    const faultyReturned=replacementsInstalled?"+coalesce((SELECT sum(r.quantity) FROM inventory_material_replacement_returns r JOIN inventory_material_replacement_cases c ON c.id=r.case_id WHERE c.original_dispatch_id=l.dispatch_id AND c.original_line_key=l.line_key),0)":'';
-   const sent=(await c.query(`SELECT l.*,d.created_at,d.warehouse,(coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.dispatch_id=l.dispatch_id AND r.line_key=l.line_key),0)${faultyReturned})::text returned FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_pending p WHERE p.document_kind='dispatch' AND p.document_id=d.id AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_postings z WHERE z.document_kind=p.document_kind AND z.document_id=p.document_id)) ORDER BY d.created_at,d.id,l.line_key`,[input.draftId,draft.snapshot.lines.map((r:any)=>r.key)])).rows;
+   const sent=(await c.query(`SELECT l.*,d.created_at,d.warehouse,(coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.dispatch_id=l.dispatch_id AND r.line_key=l.line_key),0)${faultyReturned})::text returned FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_pending p WHERE p.document_kind='dispatch' AND p.document_id=d.id AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_postings z WHERE z.document_kind=p.document_kind AND z.document_id=p.document_id)) ORDER BY d.created_at,d.id,l.line_key`,[input.draftId,draft.snapshot.lines.map((r:any)=>r.key)])).rows;
    const allocations:any[]=[];
    for(const request of input.lines){
     let remaining=new Decimal(request.quantity);
@@ -149,7 +152,7 @@ export class MaterialStockRepository{
   return transaction(this.pool,async c=>{
    await lockActiveActor(c,actor);
    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.material.issue.request.'||$1,0))",[input.requestKey]);
-   const replay=(await c.query('SELECT id,number,warehouse,request_fingerprint,created_by FROM inventory_material_dispatches WHERE request_key=$1',[input.requestKey])).rows[0];
+   const replay=(await c.query('SELECT id,number,warehouse,request_fingerprint,created_by FROM inventory_material_dispatches_active WHERE request_key=$1',[input.requestKey])).rows[0];
    if(replay){await this.scope(actor,replay.warehouse,c);if(replay.created_by!==actor||replay.request_fingerprint!==fingerprint(input))throw new HttpError(409,'This request belongs to a different warehouse dispatch.');return {id:replay.id,number:replay.number,stockPosted:await dispatchPosted(c,'dispatch',replay.id)};}
    await c.query('SELECT id FROM inventory_material_drafts WHERE id=$1 FOR UPDATE',[input.draftId]);await requireOpenParent(c,input.draftId);
    const draft=await this.drafts.detail(actor,input.draftId,c),s=draft.snapshot;
@@ -173,7 +176,7 @@ export class MaterialStockRepository{
     return {request,row,ledgerKey:warehouseLedgerKey(row.itemId,s.warehouse,row.unit)};
    });
    if(currentSources.some(source=>source.installationOnly)&&prepared.some(p=>!materialDocumentPolicy(p.row).variableDispatch))throw new HttpError(422,'Installation-only batch sites do not require another fixed-equipment delivery. Issue only the required variable materials.');
-   const already=(await c.query(`SELECT l.line_key,sum(l.quantity)::text issued FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches d ON d.id=l.dispatch_id WHERE d.draft_id=$1 GROUP BY l.line_key`,[input.draftId])).rows;
+   const already=(await c.query(`SELECT l.line_key,sum(l.quantity)::text issued FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE d.draft_id=$1 GROUP BY l.line_key`,[input.draftId])).rows;
    for(const p of prepared)if(new Decimal(p.request.quantity).plus(already.find(r=>r.line_key===p.row.key)?.issued??0).gt(p.row.out))throw new HttpError(409,'This prepared quantity has already been dispatched, including partial trips. Refresh the remaining quantity.');
    const positions=new Map<string,NonNullable<Awaited<ReturnType<typeof warehousePosition>>>>();
    for(const key of [...new Set(prepared.map(p=>p.ledgerKey))].sort()){
@@ -184,7 +187,7 @@ export class MaterialStockRepository{
     if(position.currentClosing!==null&&new Decimal(position.currentClosing).lt(total))throw new HttpError(409,'Recorded warehouse stock is insufficient for this issue quantity.');
     positions.set(key,position);
    }
-   const id=randomUUID(),reserved=s.parent&&!(await c.query('SELECT 1 FROM inventory_material_dispatches WHERE draft_id=$1 LIMIT 1',[input.draftId])).rowCount?(await c.query('SELECT number FROM inventory_parent_preparation_references WHERE draft_id=$1',[input.draftId])).rows[0]?.number:undefined,number=reserved??await warehouseNumber(c,s.parent?'PDO':'DO',id);
+   const id=randomUUID(),reserved=s.parent&&!(await c.query('SELECT 1 FROM inventory_material_dispatches_active WHERE draft_id=$1 LIMIT 1',[input.draftId])).rowCount?(await c.query('SELECT number FROM inventory_parent_preparation_references WHERE draft_id=$1',[input.draftId])).rows[0]?.number:undefined,number=reserved??await warehouseNumber(c,s.parent?'PDO':'DO',id);
    const lines=prepared.map(p=>({...p.row,out:p.request.quantity})),snapshot={...s,lines,transport:input.transport,reason:input.reason,status:'issued',requiresSignedGate:true,sourceSha256:input.sourceSha256,authorityVersion:input.authorityVersion,stockPosting:false};
    await c.query('INSERT INTO inventory_material_dispatches(id,number,draft_id,draft_version,source_sha256,warehouse,snapshot,request_key,request_fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[id,number,input.draftId,input.version,input.sourceSha256,s.warehouse,snapshot,input.requestKey,fingerprint(input),actor]);
    for(const p of prepared){

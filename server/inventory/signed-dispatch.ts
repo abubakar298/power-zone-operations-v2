@@ -18,6 +18,7 @@ export async function postSignedDispatch(c:PoolClient,actor:string,kind:string,i
  if(kind==='replacement-in'?copyKind!=='signed-store':!['dispatch','transfer-out','replacement-out'].includes(kind)||copyKind!=='signed-gate')return false;
  const row=(await c.query('SELECT * FROM inventory_signed_dispatch_pending WHERE document_kind=$1 AND document_id=$2 FOR UPDATE',[kind,id])).rows[0];
  if(!row||await dispatchPosted(c,kind as Kind,id))return false;
+ if(kind==='dispatch'&&!(await c.query('SELECT 1 FROM inventory_material_dispatches_active WHERE id=$1',[id])).rowCount)throw new HttpError(409,'This DO was deleted. Select a current DO.');
  await requireWarehouseAccess(actor,row.warehouse,c,true);
  const evidence=(await c.query('SELECT warehouse FROM inventory_material_evidence WHERE id=$1',[evidenceId])).rows[0];if(!evidence||evidence.warehouse!==row.warehouse)throw new HttpError(422,'Upload the signed gate copy for the dispatch warehouse.');
  if(kind!=='replacement-in')await lockWarehouseAuthority(c,row.warehouse,row.source_sha256,row.authority_version);

@@ -64,6 +64,8 @@ export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:Re
    if(!documents.length)throw new HttpError(404,'This Parent DO has no variable-item sign-offs.');
    res.json({documents});
   });
+  r.get('/issued/:id/edit',async(req,res)=>res.json(await stock.unsignedDoDetail(req.authSession!.user.id,uuid(req.params.id))));
+  r.post('/issued/:id/revise',async(req,res)=>res.json(await stock.unsignedDoChange(req.authSession!.user.id,uuid(req.params.id),req.body)));
   r.get('/issued/:id',async(req,res)=>res.json(await stock.dispatch(req.authSession!.user.id,uuid(req.params.id))));
   r.get('/issued/:id/document.pdf',async(req,res)=>{
    const record=await stock.dispatch(req.authSession!.user.id,uuid(req.params.id)),model=issuedDispatchPrintModel(record);

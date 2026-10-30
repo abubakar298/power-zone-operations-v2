@@ -35,7 +35,7 @@ async function tableSnapshot(pool:any,names?:string[]){const tables=names??(awai
 test('warehouse transfers post source OUT once, destination counted partial IN once, preserve history and enforce scoped authority',async()=>{
  const db=await testDatabase({skipMigrations:true}),legacy=await stagedDirectory(false),directory=await stagedDirectory();
  try{
-  await migrate(db.pool,legacy);
+  await migrate(db.pool,legacy);await db.pool.query("CREATE VIEW inventory_material_dispatches_active AS SELECT * FROM inventory_material_dispatches WHERE coalesce(snapshot->>'cancelled','false')<>'true'; CREATE VIEW inventory_material_dispatch_lines_active AS SELECT l.* FROM inventory_material_dispatch_lines l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id");
   const ids=Object.fromEntries(['owner','source','destination','sourceKeeper','destinationKeeper','foreignKeeper','unassigned'].map(k=>[k,randomUUID()]));
   for(const [name,id] of Object.entries(ids))await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[id,id+'@transfer.invalid',name,name==='owner'?'Admin':'Inventory','isolated']);
   for(const [user,warehouse,capability]of [[ids.source,'Lahore warehouse','dispatcher'],[ids.destination,'Karachi warehouse','dispatcher'],[ids.sourceKeeper,'Lahore warehouse','storekeeper'],[ids.destinationKeeper,'Karachi warehouse','storekeeper'],[ids.foreignKeeper,'Multan warehouse','storekeeper']])await db.pool.query('INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,$2,$3,$4)',[user,warehouse,capability,ids.owner]);
