@@ -1,3 +1,4 @@
+import {canRecordSiteDelivery} from '../../shared/operations-delivery-ready.js';
 import {solarStages,bessStages} from '../../shared/operations-stages.js';
 export {solarStages,bessStages} from '../../shared/operations-stages.js';
 import {z} from 'zod';
@@ -46,7 +47,7 @@ export function saveDispatchPlan(site:WorkflowSite,plan:Planning,now:string,edit
  return {...site,...plan,stage:editing?site.stage:'awaiting',planSavedAt:site.planSavedAt??now,stageStartedAt:site.stage==='received'?now:site.stageStartedAt,accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],history:event(site,now,`Dispatch estimated for ${plan.dispatchDate}. Accounts handoff updated.`)};
 }
 export function confirmDelivery(site:WorkflowSite,value:Delivery,now:string):WorkflowSite{
- if(site.stage!=='awaiting')throw new HttpError(409,'Save the dispatch plan before confirming delivery.');
+ if(!canRecordSiteDelivery(site))throw new HttpError(409,'Save the dispatch plan before confirming delivery.');
  validCompletionDate(value.deliveryDate,site.deliveries?.at(-1)?.deliveryDate,now);
  const number=(site.deliveries?.length??0)+1,documentId=`${site.id}:delivery-document:${number}`,savedDelivery={...value,documentId};
  const partial=value.partial,accountsEvent={id:`${site.id}:delivery:${number}`,documentId,type:partial?'Partial delivery update':site.invoiceOnDelivery?'Delivery invoice due':'Delivery update',date:now,ipo:site.ipo,site:site.name,deliveryDate:value.deliveryDate,description:partial?'Part delivered; remaining material pending':site.invoiceOnDelivery?'Delivery completed; ready for Accounts to invoice':'Delivery completed; no delivery invoice milestone',evidence:[value.signedDo.id,value.materialPhoto.id]};
