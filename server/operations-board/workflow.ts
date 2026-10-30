@@ -1,4 +1,4 @@
-import {canRecordSiteDelivery} from '../../shared/operations-delivery-ready.js';
+import {canRecordSiteDelivery,operationsSiteBucket} from '../../shared/operations-delivery-ready.js';
 import {solarStages,bessStages} from '../../shared/operations-stages.js';
 export {solarStages,bessStages} from '../../shared/operations-stages.js';
 import {z} from 'zod';
@@ -31,7 +31,7 @@ export type Delivery=z.infer<typeof delivery>;
 export type Planning={dispatchDate:string;assignments:Record<string,string>;teamMembers?:{id:string;name:string}[]};
 export const qcType=(site:WorkflowSite)=>site.projectType??(/solar/i.test(String(site.type??''))?'solar-bess':/ups/i.test(String(site.type??''))?'ups':'bess');
 export const qcStagesFor=(site:WorkflowSite)=>qcType(site)==='bess'?bessStages:solarStages;
-export const siteBucket=(site:WorkflowSite)=>site.completed||site.qc?.signoff||site.qc?.handover||site.stage==='delivered'&&site.installation===false?'completed':site.stage;
+export const siteBucket=operationsSiteBucket;
 export const today=(now:string)=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now));
 function event(site:WorkflowSite,now:string,description:string){return [...site.history,{date:now,description}];}
 function validCompletionDate(date:string,previous:string|undefined,now:string){if(date>today(now)||previous&&date<previous)throw new HttpError(422,'Enter a date on or after the previous stage and not in the future.');}
@@ -85,4 +85,4 @@ export function completeUpsJob(site:WorkflowSite,value:Entry&{checks:Record<stri
  if(!value.evidence)throw new HttpError(422,'Upload the job QC evidence.');
  return complete({...site,qcJob:{...value,recordedAt:editing?site.qcJob?.recordedAt??now:now},history:event(site,now,`UPS completed as one job on ${value.date}.`)},value,now);
 }
-export function currentStage(site:WorkflowSite){return siteBucket(site)==='completed'?'Completed / physical documents':site.stage==='received'?'Team assignment & dispatch planning':site.stage==='awaiting'?'Awaiting delivery':qcType(site)==='ups'?'UPS job completion':qcStagesFor(site).find(s=>!site.qc?.[s.id])?.label??'Customer sign-off';}
+export function currentStage(site:WorkflowSite){return siteBucket(site)==='completed'?'Completed / physical documents':siteBucket(site)==='received'?'Team assignment & dispatch planning':siteBucket(site)==='awaiting'?'Awaiting delivery':qcType(site)==='ups'?'UPS job completion':qcStagesFor(site).find(s=>!site.qc?.[s.id])?.label??'Customer sign-off';}

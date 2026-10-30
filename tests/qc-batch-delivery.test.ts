@@ -1,8 +1,9 @@
+import {operationsSiteBucket} from '../shared/operations-delivery-ready.js';
 import{test}from'node:test';
 import assert from'node:assert/strict';
 import{randomUUID}from'node:crypto';
 import{canRecordSiteDelivery}from'../shared/operations-delivery-ready.js';
-import{confirmDelivery,workflowSiteSchema}from'../server/operations-board/workflow.js';
+import{confirmDelivery,workflowSiteSchema,currentStage,siteBucket}from'../server/operations-board/workflow.js';
 import{OperationsBoardRepository}from'../server/operations-board/repository.js';
 import{batchSchema}from'../server/operations-board/schema.js';
 import{testDatabase}from'./database.js';
@@ -10,7 +11,7 @@ const base={id:'site',name:'Fictional UPS',ipo:'TEST',stage:'received',operation
 const batch={id:'batch',team:'central',kind:'both',deliveryDate:'2026-10-29',stops:[{siteId:'site',kind:'both',plannedDate:'2026-10-30',start:'',end:''}]};
 test('only the exact current dated delivery/both stop makes an unadvanced site eligible; no input mutation',()=>{
  const value={...base,planningBatches:[batch]},before=JSON.stringify(value);
- assert.equal(canRecordSiteDelivery(value),true);assert.equal(JSON.stringify(value),before);
+ assert.equal(canRecordSiteDelivery(value),true);assert.equal(operationsSiteBucket(value),'awaiting');assert.equal(siteBucket(workflowSiteSchema.parse(value)),'awaiting');assert.equal(currentStage(workflowSiteSchema.parse(value)),'Awaiting delivery');assert.equal(operationsSiteBucket({...value,stage:'delivered'}),'delivered');assert.equal(operationsSiteBucket({...value,completed:true}),'completed');assert.equal(operationsSiteBucket({...value,qc:{signoff:{}}}),'completed');assert.equal(operationsSiteBucket({...value,planningBatches:[{...batch,stops:[{...batch.stops[0],kind:'labour'}]}]}),'received');assert.equal(JSON.stringify(value),before);
  for(const patch of [{planningBatches:[]},{completed:true},{superseded:true},{cancelled:true},{transferred:true},{stage:'delivered'},{planningBatches:[{...batch,deliveryDate:undefined}]},{planningBatches:[{...batch,deliveryDate:'2026-02-30'}]},{planningBatches:[{...batch,team:'south'}]},{planningBatches:[{...batch,cancelled:true}]},{planningBatches:[{...batch,stops:[{...batch.stops[0],siteId:'other'}]}]},{planningBatches:[{...batch,stops:[{...batch.stops[0],kind:'labour'}]}]},{planningBatches:[{...batch,stops:[{...batch.stops[0],cancelled:true}]}]}])assert.equal(canRecordSiteDelivery({...value,...patch}),false,JSON.stringify(patch));
  assert.equal(canRecordSiteDelivery({...base,stage:'awaiting'}),true,'Existing individual dispatch path is retained.');
  assert.equal(canRecordSiteDelivery({...base,planningBatches:[{...batch,kind:'delivery',stops:[{...batch.stops[0],kind:undefined}]}]}),true);
@@ -26,7 +27,7 @@ test('regional QC can record a batch-scheduled UPS delivery with the existing si
   for(const[id,team]of[[qc,'central'],[south,'south']])await db.pool.query("INSERT INTO operations_board_access(user_id,kind,team,granted_by) VALUES($1,'qc',$2,$3)",[id,team,owner]);
   const repo=new OperationsBoardRepository(db.pool);await repo.importSource(owner,{sourceSha256:'d'.repeat(64),rows:['site','cancelled'].map(id=>({...base,id}))});
   const planned=await repo.saveBatch(owner,batchSchema.parse({version:0,requestKey:randomUUID(),team:'central',kind:'both',deliveryDate:'2026-10-29',vehicle:'Fictional route',driver:'Fictional driver',labourTeam:'pz-team',stops:['site','cancelled'].map((siteId,n)=>({siteId,siteVersion:1,order:n+1,kind:'both',plannedDate:'2026-10-30'}))}));
-  assert.equal((await repo.site(qc,'site')).stage,'received','Scheduling still does not rewrite the stored stage.');
+  const scheduled=await repo.site(qc,'site');assert.equal(scheduled.stage,'received','Scheduling still does not rewrite the stored stage.');assert.equal(operationsSiteBucket(scheduled),'awaiting','A dated delivery batch appears in Awaiting delivery even with missing individual assignments.');assert.equal((await repo.sites(qc)).sites.filter(site=>operationsSiteBucket(site)==='awaiting').length,2);
   await repo.saveBatch(owner,batchSchema.parse({id:planned.id,team:planned.team,kind:planned.kind,deliveryDate:planned.deliveryDate,vehicle:planned.vehicle,driver:planned.driver,labourTeam:planned.labourTeam,inventoryReference:planned.inventoryReference,version:1,requestKey:randomUUID(),edit:true,reason:'Customer postponed the second site',stops:[{...planned.stops[0],siteVersion:2}],cancelledSites:[{siteId:'cancelled',siteVersion:2}]}));
   const upload=async(siteId:string)=>{const doc=await repo.upload(qc,siteId,{filename:'signed.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7 fictional delivery evidence').toString('base64')}),photo=await repo.upload(qc,siteId,{filename:'material.png',mediaType:'image/png',base64:Buffer.from([137,80,78,71,13,10,26,10,0]).toString('base64')});return{signedDoId:doc.id,materialPhotoId:photo.id};};
   const files=await upload('site'),cancelledFiles=await upload('cancelled');
@@ -34,7 +35,7 @@ test('regional QC can record a batch-scheduled UPS delivery with the existing si
   await assert.rejects(repo.command(south,'site',command),/not found/);
   await assert.rejects(repo.command(qc,'site',{...command,materialPhotoId:files.signedDoId}),/photo/);
   await assert.rejects(repo.command(qc,'site',{...command,deliveryDate:'2099-01-01'}),/future/);
-  const cancelled=await repo.site(qc,'cancelled');assert.equal(canRecordSiteDelivery(cancelled),false);await assert.rejects(repo.command(qc,'cancelled',{...command,...cancelledFiles,version:cancelled.version,requestKey:randomUUID()}),/dispatch plan/);
+  const cancelled=await repo.site(qc,'cancelled');assert.equal(canRecordSiteDelivery(cancelled),false);assert.equal(operationsSiteBucket(cancelled),'received','Cancelled stops leave the Awaiting delivery bucket.');await assert.rejects(repo.command(qc,'cancelled',{...command,...cancelledFiles,version:cancelled.version,requestKey:randomUUID()}),/dispatch plan/);
   const original=(await db.pool.query('SELECT snapshot FROM operations_board_versions WHERE site_id=$1 AND version=$2',['site',current.version])).rows[0].snapshot;
   const saved=await repo.command(qc,'site',command);assert.equal(saved.stage,'delivered');assert.equal(saved.deliveries!.length,1);assert.equal(saved.documents.at(-1)?.label,'Delivery DO');assert.equal(saved.installationPlanDate,'2026-10-30');
   assert.equal((await repo.command(qc,'site',command)).version,saved.version);await assert.rejects(repo.command(qc,'site',{...command,requestKey:randomUUID()}),/updated/);
