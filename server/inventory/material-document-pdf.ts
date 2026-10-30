@@ -1,3 +1,4 @@
+import{appendSiteAcknowledgements}from'./site-acknowledgement-pdf.js';
 import {Decimal} from 'decimal.js';
 import {jsPDF} from 'jspdf';
 import {autoTable} from 'jspdf-autotable';
@@ -50,5 +51,6 @@ export function materialDocumentPdf(model:MaterialPrintModel,copies:string[]=[''
   });
  }
  drawReportFooter(pdf,printable(model.reference));
+ if(model.acknowledgements?.length)appendSiteAcknowledgements(pdf,model.acknowledgements);
  return Buffer.from(pdf.output('arraybuffer'));
 }

@@ -1,0 +1,18 @@
+import type{jsPDF}from'jspdf';
+import type{SiteAcknowledgement}from'../../shared/site-acknowledgement.js';
+import{logo}from'../reports/brand-assets.js';
+const clean=(s:string)=>s.replace(/[\u2010-\u2015\u2212]/g,'-').replace(/[^\x20-\x7e\n]/g,' ');
+/** Each blank form is one A4 page. Printing never acknowledges completion. */
+export function appendSiteAcknowledgements(pdf:jsPDF,forms:SiteAcknowledgement[]){for(const f of forms){
+ pdf.addPage('a4');pdf.setTextColor(37,45,64);
+ const txt=(x:number,y:number,s:string,size=9,bold=false)=>{pdf.setFont('helvetica',bold?'bold':'normal');pdf.setFontSize(size);pdf.text(clean(s),x,y);};
+ const sec=(y:number,n:number,s:string)=>{pdf.setFillColor(242,240,248);pdf.roundedRect(13,y-5,184,8,1,1,'F');pdf.setTextColor(81,67,148);txt(16,y,n+'. '+s,10);pdf.setTextColor(37,45,64);};
+ const field=(x:number,y:number,label:string,value:string)=>{txt(x,y,label,7);pdf.setFontSize(9);let size=9,lines=pdf.splitTextToSize(clean(value||'________________________________'),85);while(lines.length>2&&size>6){size-=.5;pdf.setFontSize(size);lines=pdf.splitTextToSize(clean(value||'________________________________'),85);}pdf.text(lines,x,y+5);pdf.setDrawColor(217,220,229);pdf.line(x,y+14,x+86,y+14);};
+ pdf.addImage(logo,'PNG',13,12,24,15,'ack-logo','FAST');pdf.setTextColor(81,67,148);txt(44,19,'POWER ZONE',16);pdf.setTextColor(37,45,64);txt(44,25,'ENGINEERING & SERVICES (PVT) LTD',8);txt(150,18,'CUSTOMER COPY',8);txt(150,24,'Complete and sign at site',7);
+ txt(13,39,f.installation===false?'SYSTEM DELIVERY ACKNOWLEDGEMENT':f.panels?'SYSTEM INSTALLATION & COMMISSIONING':'BESS INSTALLATION & COMMISSIONING',13,true);pdf.setTextColor(81,67,148);txt(13,46,'CUSTOMER ACKNOWLEDGEMENT',11);pdf.setTextColor(37,45,64);
+ sec(57,1,'CUSTOMER & SITE DETAILS');field(16,65,'CUSTOMER',f.customer);field(108,65,'BRANCH / SITE',f.site);field(16,87,'CUSTOMER PO',f.customerPo);field(108,87,'IPO / SITE ORDER',[f.ipo,f.orderNumber].filter(Boolean).join(' / '));field(16,109,'SITE ADDRESS',f.address||f.site);field(108,109,'CUSTOMER CONTACT / MOBILE',[f.contact,f.phone].filter(Boolean).join(' / '));
+ sec(135,2,'SYSTEM DETAILS - APPROVED IPO / BOQ');field(16,143,'INVERTER MODEL / RATING',f.inverter);field(108,143,'BATTERY / STORAGE CONFIGURATION',f.battery);field(16,165,'SOLAR PANELS / MODULES',f.panels);field(108,165,'COMPLETION DATE / EARTHING STATUS','');
+ sec(191,3,'COMMISSIONING & PERFORMANCE RECORD');txt(16,200,'Phase    Connected load (kW)                     Description',8,true);for(let i=0;i<3;i++){txt(16,207+i*7,'L'+(i+1)+'       ____________________            __________________________________',8);}txt(16,230,'Test load (kW): ______________    Backup at 100% SOC (hours): ______________',8);txt(16,238,'Remarks: _____________________________________________________________',8);
+ sec(250,4,'CUSTOMER ACKNOWLEDGEMENT & ACCEPTANCE');const words=f.installation===false?'By signing, the customer acknowledges receipt of the system at the site identified above. Delivery does not certify installation or commissioning.': 'By signing, the customer accepts the installed system and confirms testing, commissioning and handover. Operation, battery backup and safety features have been explained. Additional equipment or future load changes beyond the inverter rating are the customer\'s responsibility.';pdf.setFontSize(8);pdf.text(pdf.splitTextToSize(words,180),16,258);
+ txt(16,277,'Customer name / signature & stamp: ____________________   Date: __________',8);txt(16,285,'Installer name / signature: ___________________________   Date: __________',8);txt(13,293,`DO ${f.reference} | ${f.ipo} | Blank form - not completion evidence`,6);
+ }}

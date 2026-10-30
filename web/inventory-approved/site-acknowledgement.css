@@ -1,0 +1,20 @@
+.approved-inventory .pz-ack-sheet{box-sizing:border-box;width:196mm;height:277mm;min-height:277mm;max-width:none;margin:0 auto 14px;padding:10mm 9mm 7mm;background:white;color:#252d40;font:9pt/1.4 Arial,sans-serif;page-break-after:always;position:relative;overflow:hidden}
+.approved-inventory .pz-ack-sheet header{display:grid;grid-template-columns:25mm 1fr 39mm;gap:7mm;align-items:start;border-bottom:1px solid #d9dce5;padding-bottom:7mm;margin-bottom:5mm}
+.approved-inventory .pz-ack-sheet header img{width:25mm;height:auto;object-fit:contain;object-position:top}
+.approved-inventory .pz-ack-sheet header div>strong{display:block;color:#514394;font-size:17pt;font-weight:400;line-height:1.1}
+.approved-inventory .pz-ack-sheet header div>span{display:block;font-size:7pt;margin-top:2mm}.approved-inventory .pz-ack-sheet aside{color:#514394;font-size:9pt}.approved-inventory .pz-ack-sheet small{display:block;color:#657084;font-size:7pt;margin-top:2mm}
+.approved-inventory .pz-ack-sheet h2{font-size:14pt;line-height:1.2;font-weight:500;margin:0 0 2mm}.approved-inventory .pz-ack-sheet h3{font-size:12pt;color:#514394;font-weight:400;margin:0 0 5mm}
+.approved-inventory .pz-ack-sheet h4{font-size:9pt;color:#514394;background:#f2f0f8;font-weight:500;border-radius:2mm;padding:1.7mm 3mm;margin:3.5mm 0 2mm}
+.approved-inventory .ack-grid{display:grid;grid-template-columns:1fr 1fr;gap:2.5mm 6mm}.approved-inventory .ack-field{display:grid;grid-template-rows:4mm auto;align-content:start;min-height:15mm;border-bottom:1px solid #d9dce5;padding-bottom:1mm}
+.approved-inventory .ack-field>span{font-size:6.5pt;color:#657084}.approved-inventory .ack-field>strong{font-size:8.5pt;font-weight:400;overflow-wrap:anywhere;line-height:1.3}
+.approved-inventory .pz-ack-sheet table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:8pt;margin:3mm 0}.approved-inventory .pz-ack-sheet th,.approved-inventory .pz-ack-sheet td{border:1px solid #d9dce5;background:white;text-align:left;vertical-align:top;padding:1.5mm 2mm;height:6mm;color:#252d40}.approved-inventory .pz-ack-sheet th:first-child{width:15mm}.approved-inventory .pz-ack-sheet th:nth-child(2){width:48mm}.approved-inventory .pz-ack-sheet th{font-size:6.5pt;font-weight:400}
+.approved-inventory .ack-test{display:flex;justify-content:space-between;font-size:8pt}.approved-inventory .pz-ack-sheet p{font-size:8.2pt;margin:2mm 0;line-height:1.4}.approved-inventory .ack-notes{padding-bottom:2mm}.approved-inventory .ack-signatures strong{font-size:7pt;font-weight:400;color:#514394}.approved-inventory .ack-signatures p{font-size:7.5pt;margin:2mm 0}.approved-inventory .pz-ack-sheet footer{position:absolute;bottom:3mm;left:9mm;right:9mm;color:#657084;font-size:6pt}
+@media print{.approved-inventory .pz-ack-sheet{margin:0!important;box-shadow:none!important;break-inside:avoid}}
+/* Keep the complete acceptance and both signatures inside one A4 sheet. */
+.approved-inventory .pz-ack-sheet header{padding-bottom:4mm;margin-bottom:3mm}
+.approved-inventory .pz-ack-sheet h3{margin-bottom:3mm}
+.approved-inventory .pz-ack-sheet h4{padding:1.3mm 3mm;margin:2.5mm 0 1.5mm}
+.approved-inventory .ack-grid{gap:2mm 6mm}
+.approved-inventory .ack-field{box-sizing:border-box;min-height:12.5mm;padding-bottom:1mm;grid-template-rows:3.7mm auto}
+.approved-inventory .pz-ack-sheet p{margin:1.6mm 0}
+.approved-inventory .ack-signatures p{margin:1.6mm 0}

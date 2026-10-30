@@ -34,6 +34,7 @@ test('saved site quantities create one replay-safe DO without a second quantity 
   await assert.rejects(plans.issueSaved(f.reviewer,saved.id,{...command,quantities:{cable:'999'}},stock));
   const result=await plans.issueSaved(f.reviewer,saved.id,command,stock),record=await stock.dispatch(f.reviewer,result.id);
   assert.equal(record.snapshot.lines.length,2);assert.equal(record.snapshot.lines.find((r:any)=>r.itemId===fixedId).out,'1');assert.equal(record.snapshot.lines.find((r:any)=>r.itemId==='CH-CBL-AC-16MM/4C-PK').out,'2');assert.equal(result.stockPosted,false);
+  const forms=await stock.acknowledgements(f.reviewer,result.id);assert.equal(forms.length,1);assert.equal(forms[0].siteId,basis.siteId);assert.equal(forms[0].customer,basis.customer);await assert.rejects(stock.acknowledgements(opsUser,result.id),/scope|access|warehouse|assigned/i);
   assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'7');
   assert.equal((await plans.issueSaved(f.reviewer,saved.id,command,stock)).id,result.id);
   await assert.rejects(plans.issueSaved(f.reviewer,saved.id,{...command,requestKey:randomUUID()},stock),/already have a DO/);

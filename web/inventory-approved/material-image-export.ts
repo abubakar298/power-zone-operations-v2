@@ -1,6 +1,6 @@
 /** Decode every logo before capture, including the first customer-copy page. */
 export async function waitForMaterialImages(root:ParentNode){
- await Promise.all([...root.querySelectorAll<HTMLImageElement>('.igp-sheet img')].map(async img=>{
+ await Promise.all([...root.querySelectorAll<HTMLImageElement>('.igp-sheet img, .pz-ack-sheet img')].map(async img=>{
   if(!img.complete)await new Promise<void>((resolve,reject)=>{img.addEventListener('load',()=>resolve(),{once:true});img.addEventListener('error',()=>reject(Error('The document logo could not load. Refresh before downloading.')),{once:true});});
   if(!img.naturalWidth||!img.naturalHeight)throw Error('The document logo could not load. Refresh before downloading.');
   await img.decode();

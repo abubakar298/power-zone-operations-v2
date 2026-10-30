@@ -1,3 +1,4 @@
+import type{SiteAcknowledgement}from'../../shared/site-acknowledgement.js';
 import {Decimal} from 'decimal.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {HttpError} from '../http/errors.js';
@@ -5,7 +6,7 @@ import {materialSiteDocuments,reconcileMaterialDispatch} from './material-dispat
 
 export type MaterialPrintKind='fixed-do'|'variable-do'|'customer-signoff'|'irr';
 export type MaterialPrintRow={documentPolicyVersion?:2;itemId:string;description:string;unit:string;issued:string|null;used:string|null;returned:string|null;group?:string;remark?:string;expectedReturn?:string|null;verifiedReturn?:string|null;remainingReturn?:string|null};
-export type MaterialPrintModel={kind:MaterialPrintKind;status:'draft'|'prepared'|'simulation'|'issued'|'site-record'|'received';context?:{columns:[string,string,string];rows:[string,string,string][]};title:string;reference:string;warehouse:string;sites:{name:string;ipo:string;orderNumber?:string;customer?:string;customerPo?:string}[];rows:MaterialPrintRow[];note:string;issuedLabel:string;omitIssued?:boolean;customerReturnColumn?:boolean;returnWorksheet?:boolean;signatures:string[];stockPosting:boolean;parentDispatch?:boolean;date?:string;transport?:{issuedTo:string;vehicle:string;driver:string;driverIdentity?:string}};
+export type MaterialPrintModel={acknowledgements?:SiteAcknowledgement[];kind:MaterialPrintKind;status:'draft'|'prepared'|'simulation'|'issued'|'site-record'|'received';context?:{columns:[string,string,string];rows:[string,string,string][]};title:string;reference:string;warehouse:string;sites:{name:string;ipo:string;orderNumber?:string;customer?:string;customerPo?:string}[];rows:MaterialPrintRow[];note:string;issuedLabel:string;omitIssued?:boolean;customerReturnColumn?:boolean;returnWorksheet?:boolean;signatures:string[];stockPosting:boolean;parentDispatch?:boolean;date?:string;transport?:{issuedTo:string;vehicle:string;driver:string;driverIdentity?:string}};
 type Draft={number?:string;id:string;version:number;snapshot:{warehouse:string;parent:boolean;kind:'fixed'|'variable';sites:any[];lines:any[];transport?:{issuedTo:string;vehicle:string;driver:string;driverIdentity?:string}}};
 const titles={ 'fixed-do':'Fixed Material Delivery Order','variable-do':'Variable Material Dispatch Order','customer-signoff':'Cable, Pipe and Duct Sign-off',irr:'Installation Reconciliation Report'};
 const signatures={ 'fixed-do':['Warehouse issued by','Customer received by'],'variable-do':['Warehouse issued by','Site team received by'],'customer-signoff':['Site engineer','Customer representative'],irr:['Site engineer','Warehouse return verified by']};
