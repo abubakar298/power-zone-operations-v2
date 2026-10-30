@@ -195,11 +195,10 @@ export function Boqs({
     void load()
       .then(async () => {
         if (initialBoqId) await openSaved(initialBoqId);
-        else if (startNew) fresh();
         else if (initialDraftId) {
           const d = await api<{ drafts: any[] }>("/boqs/drafts");
           const row = d.drafts.find((x) => x.id === initialDraftId);
-          if (row && row.review_status !== "Awaiting review") resume(row);
+          if (row && (!row.review_id || row.review_status !== "Awaiting review")) resume(row);
           else if (showCosting) {
             const reviews = await api<{ reviews: any[] }>("/boqs/reviews");
             const review = reviews.reviews.find(
@@ -208,8 +207,8 @@ export function Boqs({
             );
             if (review) await openReview(review.id);
             else if (row) resume(row);
-          }
-        }
+          } else setError(row ? "This draft has been submitted for review. Open its current workflow stage." : "The linked quotation draft is unavailable. Open the survey request and try again.");
+        } else if (startNew) fresh();
       })
       .catch(fail);
   }, []);

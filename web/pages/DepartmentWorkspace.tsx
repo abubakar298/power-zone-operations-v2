@@ -5931,6 +5931,6 @@ function PoRecordSelect({ session, customers, onOpen, onCancel }: any) {
 
 function SentSurveyQuotation({session,record,onOpen}:{session:Session;record:any;onOpen?:(task:any)=>void}){
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
- async function prepare(){if(busy)return;setBusy(true);setError('');try{const result=await api<any>(`/project-workflow/${record.id}/prepare-sent-quotation`,{csrf:session.csrfToken,body:{version:record.version}});onOpen?.({...result.task,...(!result.task?{target:'boqs',draft_id:result.draftId,kind:'Survey / BOQ'}:{}),workflow_id:result.recordId});}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ async function prepare(){if(busy)return;setBusy(true);setError('');try{const result=await api<any>(`/project-workflow/${record.id}/prepare-sent-quotation`,{csrf:session.csrfToken,body:{version:record.version}});onOpen?.({...result.task,...(!result.task?{draft_id:result.draftId,kind:'Survey / BOQ'}:{}),target:!result.task||result.task.target==='boqs'?'newboq':result.task.target,workflow_id:result.recordId});}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  return <section className="pz-panel"><h3>Sent survey request</h3><p>Awaiting Design. Prepare your own BOQ and quotation for this site while the survey remains pending.</p><Button variant="primary" loading={busy} onClick={()=>void prepare()}>{record.data.sentQuotationDraftId?'Open BOQ / Quotation':'Create BOQ / Quotation'}</Button>{error&&<p className="form-error" role="alert">{error}</p>}</section>;
 }
