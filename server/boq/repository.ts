@@ -1,3 +1,4 @@
+import {sentSurveyAwaitingDesign} from '../../shared/sent-survey-requests.js';
 import {frameworkCosting} from './framework-costing.js';
 import { allocateReference } from "../documents/references.js";
 import { ownedCondition } from "../http/permissions.js";
@@ -86,13 +87,18 @@ export class BoqRepository {
       if(reviewWorkflow){
         const actor=(await c.query('SELECT role,display_name FROM users WHERE id=$1 AND active',[owner])).rows[0];
         const workflow=(await c.query('SELECT * FROM project_workflow_records WHERE id=$1 FOR SHARE',[reviewWorkflow])).rows[0];
-        if(!workflow||workflow.stage!=='design_handed_off'||workflow.route!=='survey-quote'||workflow.data.noFeasibleSolution||(workflow.coordinator_id!==owner&&!['Admin','Management'].includes(actor?.role)))throw new HttpError(403,'Choose your reviewed survey before preparing this quotation.');
+        const ownSentDraft=!!workflow&&workflow.data.sentQuotationDraftId===id&&workflow.data.coordinationPreparedBeforeDesign===true&&(sentSurveyAwaitingDesign(workflow)||!!workflow.data.designHandoffAt);
+        if(!workflow||(!ownSentDraft&&(workflow.stage!=='design_handed_off'||workflow.route!=='survey-quote'))||workflow.data.noFeasibleSolution||(workflow.coordinator_id!==owner&&!['Admin','Management'].includes(actor?.role)))throw new HttpError(403,'Choose your reviewed survey or own sent-request draft before preparing this quotation.');
+        if(ownSentDraft){
+          if(Number(inputs.customerId)!==workflow.customer_id||String(inputs.siteCode).toLowerCase()!==String(workflow.site_code).toLowerCase())throw new HttpError(422,'Use the customer and site linked to this survey request.');
+        }else{
         const review=(await c.query("SELECT snapshot FROM project_workflow_documents WHERE record_id=$1 AND kind='Technical review' ORDER BY created_at DESC LIMIT 1",[reviewWorkflow])).rows[0];
         const baseline=review?.snapshot.boq?.survey??workflow.data.surveyInputs;
         if(!baseline||inputs.family!==baseline.family||Number(inputs.customerId)!==workflow.customer_id||String(inputs.siteCode).toLowerCase()!==String(workflow.site_code).toLowerCase())throw new HttpError(422,'Use the linked customer, site and technically reviewed project type.');
         const before=existingDraft?.inputs??baseline,differences=solutionDifferences(before,inputs);
         if(differences.length&&surveyDeviationConfirmed!==true)throw new HttpError(422,'PV, inverter or battery values differ from the reviewed survey or saved preliminary BOQ. Confirm the changes before saving.');
         solutionReview={workflowId:reviewWorkflow,baseline,before,differences,actorName:actor.display_name};
+        }
       }
       const recordSolutionChange=async(draftId:string,draftVersion:number)=>{
         if(!solutionReview?.differences.length)return null;

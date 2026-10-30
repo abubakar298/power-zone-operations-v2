@@ -1,3 +1,4 @@
+import {sentSurveyAwaitingDesign} from '../../shared/sent-survey-requests.js';
 import {linkCreatedOperationsMaterialSource} from '../inventory/source-links.js';
 import {syncCreatedOperationsHandoff} from '../operations-board/live-ipo-sync.js';
 import {SiteWorkflowRepository} from '../site-workflow/repository.js';
@@ -843,6 +844,30 @@ export class ProjectWorkflowRepository {
   }
   async surveySubmissionGroups(actor: string) {
     return submissionGroups(this, actor);
+  }
+  async prepareSentQuotation(actor:string,id:string,raw:unknown){
+    const input=z.object({version:z.number().int().positive()}).strict().parse(raw);
+    return transaction(this.pool,async c=>{
+      const {u,r}=await this.record(actor,id,c,true);this.requireRole(u,['Coordinator']);
+      // Own commercial preparation is allowed while Design retains its survey stage and evidence.
+      if(r.legacy_type==='ubl')throw new HttpError(403,'Use the preserved UBL workflow for this request.');
+      if(!sentSurveyAwaitingDesign(r))throw new HttpError(409,'This survey is no longer awaiting Design. Open its current stage.');
+      if(r.data.sentQuotationDraftId){
+        const existing=(await c.query('SELECT id FROM survey_drafts WHERE id=$1 AND owner_id=$2',[r.data.sentQuotationDraftId,r.coordinator_id])).rows[0];
+        if(!existing)throw new HttpError(409,'The linked quotation preparation needs review.');
+        const current=await this.decorate(r,u,c);
+        return {recordId:id,draftId:existing.id,task:current.task,repeated:true};
+      }
+      if(r.version!==input.version)throw new HttpError(409,'The survey request changed. Reload before preparing a quotation.');
+      const draftId=randomUUID(),site=(await c.query('SELECT * FROM sites WHERE id=$1 AND customer_id=$2',[r.site_id,r.customer_id])).rows[0];
+      if(!site)throw new HttpError(409,'The linked site is unavailable.');
+      await c.query('INSERT INTO survey_drafts(id,owner_id,inputs) VALUES($1,$2,$3)',[draftId,r.coordinator_id,{customerId:r.customer_id,siteName:site.name,siteCode:site.code,location:site.location??'',sourceMode:'General quotation',brands:{},preparedBy:u.display_name,uploadIds:[],ocrText:'',ocrReviewed:false}]);
+      const data={...r.data,...(r.data.draftId?{designDraftId:r.data.designDraftId??r.data.draftId}:{}),draftId,sentQuotationDraftId:draftId,coordinationQuotationDraftId:draftId,coordinationPreparedBeforeDesign:true};
+      await c.query('UPDATE project_workflow_records SET data=$2,version=version+1,updated_at=now() WHERE id=$1',[id,data]);
+      await c.query("INSERT INTO project_workflow_events(id,record_id,version,action,snapshot,request_key,input_fingerprint,created_by) VALUES($1,$2,$3,'Prepared quotation while awaiting Design',$4,$5,$6,$7)",[randomUUID(),id,r.version+1,{stage:r.stage,data,reason:'Coordinator BOQ/quotation preparation linked to this site; Design survey, completion and evidence unchanged.'},randomUUID(),fingerprint({draftId}),actor]);
+      await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'project.sent-survey.quotation-prepared:'+id+':'+draftId]);
+      return {recordId:id,draftId,repeated:false};
+    });
   }
   async linkQuotationDraft(actor: string, id: string, raw: unknown) {
     const draftId = z.object({ draftId: z.uuid() }).strict().parse(raw).draftId;
@@ -2393,17 +2418,18 @@ export class ProjectWorkflowRepository {
           if (r.route === "survey-quote") {
             const draftId = randomUUID();
             let base: string | null = null;
-            if (data.draftId) {
+            const priorDesignDraftId=data.sentQuotationDraftId?data.designDraftId:data.draftId;
+            if (priorDesignDraftId) {
               base =
                 (
                   await c.query(
                     "SELECT revision_id FROM boq_draft_finalizations WHERE draft_id=$1",
-                    [data.draftId],
+                    [priorDesignDraftId],
                   )
                 ).rows[0]?.revision_id ?? null;
               data.previousDraftIds = [
                 ...(data.previousDraftIds ?? []),
-                data.draftId,
+                priorDesignDraftId,
               ];
             }
             await c.query(
@@ -2437,8 +2463,8 @@ export class ProjectWorkflowRepository {
               frozen,
               false,
             );
-            data.draftId = draftId;
-            data.linkedBoqRevisionId = finalized.id;
+            if(data.sentQuotationDraftId){data.designDraftId=draftId;data.designLinkedBoqRevisionId=finalized.id;}
+            else {data.draftId = draftId;data.linkedBoqRevisionId = finalized.id;}
           } else {
             const doc = await this.document(c, r, actor, "Recommendation", {
               configuration: data.basis?.source ?? r.data.basis?.source,

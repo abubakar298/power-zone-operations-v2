@@ -1,3 +1,4 @@
+import {sentSurveyAwaitingDesign,surveyRequestInCoordination} from '../../shared/sent-survey-requests.js';
 import {UblTechnicalReviewSummary} from '../components/UblTechnicalReviewSummary.js';
 import {FileUpload} from '../ui/FileUpload.js';
 import {DocumentListDetails} from '../components/DocumentListDetails.js';
@@ -509,7 +510,7 @@ export function DepartmentWorkspace({
       department === "coordination" && page === iposSharedBucket
         ? r.stage === "issued" && r.data.ipoShared
         : department === "coordination" && page === coordinationBuckets[0]
-          ? r.stage === "request_review"
+          ? surveyRequestInCoordination(r)
           : page === "Workspace" ||
             (page === "Survey History" && r.route.startsWith("survey")) ||
             page === "Customer & Site Search" ||
@@ -843,7 +844,7 @@ export function DepartmentWorkspace({
             {page === "Workspace"
               ? "Current sites"
               : department === "coordination" && page === coordinationBuckets[0]
-                ? "Survey requests awaiting review and sending to Design"
+                ? "Survey requests"
                 : bucketLabel(page)}
           </h2>
           {department === "design" && page === designBuckets[3] && (
@@ -1027,7 +1028,7 @@ export function DepartmentWorkspace({
                             r.stage === "survey_scheduled" &&
                             !r.data.surveyDispatchId
                               ? "Schedule saved — awaiting dispatch"
-                              : label(r.stage)}
+                              : department === "coordination" && sentSurveyAwaitingDesign(r) ? "Sent survey request - awaiting Design" : label(r.stage)}
                             {department === "design" &&
                               r.stage === "survey_scheduled" &&
                               !r.data.surveyDispatchId && (
@@ -1092,7 +1093,7 @@ export function DepartmentWorkspace({
                                         : department === "coordination" &&
                                             [coordinationBuckets[1], coordinationBuckets[2]].includes(page)
                                           ? "Review"
-                                          : r.nextAction}
+                                          : department === "coordination" && page === coordinationBuckets[0] ? "View" : r.nextAction}
                             </Button>
                             {department === "coordination" && page === coordinationBuckets[2] && r.quotation?.id && <Button variant="success" onClick={()=>setApprovalTarget({quotationId:r.quotation.id,number:r.quotation.number})}>Record Approval</Button>}
                             {groupActionError?.id === r.id && (
@@ -2874,7 +2875,7 @@ function RecordEditor({
       </div>
     );
   if (
-    !design &&
+    !design && !requestReview &&
     ([
       "survey_requested",
       "survey_scheduled",
@@ -2909,6 +2910,7 @@ function RecordEditor({
             <CoordinationTechnicalSummary session={session} detail={detail} />
           )}
         </section>
+        {sentSurveyAwaitingDesign(r)&&<SentSurveyQuotation session={session} record={r} onOpen={onOpen}/>}
         {manager && r.stage !== "survey_requested" && <MiscItemsBoq session={session} recordId={r.id} />}
       </div>
     );
@@ -5925,4 +5927,10 @@ function PoRecordSelect({ session, customers, onOpen, onCancel }: any) {
       )}
     </section>
   );
+}
+
+function SentSurveyQuotation({session,record,onOpen}:{session:Session;record:any;onOpen?:(task:any)=>void}){
+ const [busy,setBusy]=useState(false),[error,setError]=useState('');
+ async function prepare(){if(busy)return;setBusy(true);setError('');try{const result=await api<any>(`/project-workflow/${record.id}/prepare-sent-quotation`,{csrf:session.csrfToken,body:{version:record.version}});onOpen?.({...result.task,...(!result.task?{target:'boqs',draft_id:result.draftId,kind:'Survey / BOQ'}:{}),workflow_id:result.recordId});}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ return <section className="pz-panel"><h3>Sent survey request</h3><p>Awaiting Design. Prepare your own BOQ and quotation for this site while the survey remains pending.</p><Button variant="primary" loading={busy} onClick={()=>void prepare()}>{record.data.sentQuotationDraftId?'Open BOQ / Quotation':'Create BOQ / Quotation'}</Button>{error&&<p className="form-error" role="alert">{error}</p>}</section>;
 }

@@ -162,6 +162,7 @@ export function projectWorkflowHttp(
   r.post("/:id/quotation-master-details", async (req, res) =>
     res.json(await repo.quotationMasterDetails(actor(req), id(req), req.body)),
   );
+  r.post("/:id/prepare-sent-quotation", async (req,res)=>res.json(await repo.prepareSentQuotation(actor(req),id(req),req.body)));
   r.post("/:id/link-quotation-draft", async (req, res) =>
     res.json(await repo.linkQuotationDraft(actor(req), id(req), req.body)),
   );
