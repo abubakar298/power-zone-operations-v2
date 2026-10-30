@@ -20,7 +20,8 @@ import {MaterialDraftRepository} from '../server/inventory/material-drafts.js';
 import {createDashboardSamples} from '../server/coordinator/samples.js';
 import {OperationsRepository} from '../server/operations/repository.js';
 import {SiteWorkflowRepository} from '../server/site-workflow/repository.js';
-test('physical warehouse dispatch posts once, supports partial trips, protects stock and immutable issued rows',async()=>{
+test('physical warehouse dispatch posts once, supports partial trips, protects stock and immutable issued rows',async(t)=>{
+ const expiredClock=t.mock.method(Date,'now',()=>Date.parse('2026-11-09T07:52:11.000Z'));
  const db=await testDatabase();try{
   const f=await materialStockFixture(db.pool,'CH-CBL-AC-16MM/4C-PK'),opsUser=randomUUID(),coord=randomUUID(),keeper=randomUUID();
   for(const [id,role] of [[opsUser,'Operations'],[coord,'Coordinator'],[keeper,'Inventory']])await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[id,id+'@example.test',role,role,'isolated']);
@@ -101,6 +102,7 @@ test('physical warehouse dispatch posts once, supports partial trips, protects s
   assert.equal((await usage.read(f.reviewer,draft.id)).reconciliation?.rows[0].status,'Additional DO / LP evidence or quantity correction needed');
   assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'3','Site use and signed evidence never deduct OUT or credit returns a second time.');
   await assert.rejects(db.pool.query('DELETE FROM inventory_material_site_usage_versions WHERE draft_id=$1',[draft.id]));
+  expiredClock.mock.restore();
   const origin='http://localhost:3000',app=createApp(db.pool,readConfig({NODE_ENV:'test',APP_ORIGIN:origin,DATABASE_URL:db.url,ADMIN_SETUP_TOKEN:'warehouse-stock-local-integration-test-setup-token'}));
   const sessions:Record<string,{cookie:string;csrf:string}>={};
   for(const [name,id] of [['dispatcher',f.reviewer],['keeper',keeper],['coordinator',coord]]){const token=randomBytes(32).toString('base64url'),csrf=randomUUID();await db.pool.query("INSERT INTO auth_sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",[digest(token),id,csrf]);sessions[name]={cookie:'pz_session='+token,csrf};}

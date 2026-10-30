@@ -1,3 +1,4 @@
+import {temporaryNegativeDoBalanceAllowed} from '../../shared/stock-reconciliation-window.js';
 import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
 import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
 import {SignedTransferCopy} from '../inventory-approved/SignedTransferCopy.js';
@@ -57,7 +58,7 @@ export function MaterialReplacements({session,onLogout}:{session:Session;onLogou
  const held=detail?.returns.filter(r=>new Decimal(r.heldQuantity).gt(0))??[],selectedReturn=held.find(r=>r.id===returnId),returnPosition=detail?returnStock.positions.find(p=>p.itemId===detail.snapshot.original.itemId&&p.unit===detail.snapshot.original.unit):undefined;
  const issuer=!!detail&&access?.issueWarehouses.includes(detail.snapshot.warehouse),issueEnabled=issuer&&stock.authority?.state==='active'&&!!activePosition;
  const outRemaining=detail?new Decimal(detail.snapshot.replacementQuantity).minus(detail.snapshot.issuedQuantity).toString():'0';
- const outAllowed=!!detail&&!!activePosition&&issueEnabled&&validQuantity(outQuantity,detail.snapshot.original.unit)&&new Decimal(outQuantity).lte(outRemaining)&&(activePosition.currentClosing==null||new Decimal(outQuantity).lte(activePosition.currentClosing));
+ const outAllowed=!!detail&&!!activePosition&&issueEnabled&&validQuantity(outQuantity,detail.snapshot.original.unit)&&new Decimal(outQuantity).lte(outRemaining)&&(temporaryNegativeDoBalanceAllowed()||activePosition.currentClosing==null||new Decimal(outQuantity).lte(activePosition.currentClosing));
  const releaseBlocked=!!detail&&!!selectedReturn&&serialMismatch(selectedReturn,detail.snapshot),releaseEnabled=!!selectedReturn&&access?.issueWarehouses.includes(selectedReturn.warehouse)&&returnStock.authority?.state==='active'&&!!returnPosition&&!releaseBlocked;
  function reset(){setOriginalId('');setLineKey('');setSiteId('');setQuantity('');setExpected('');setOriginalSerial('');setReason('');setOutQuantity('');setReplacementSerial('');setOutReason('');setTransport(blankTransport());setReturnQuantity('');setReceivedItemId('');setReceivedUnit('');setReceivedSerial('');setReturnReason('');setReturnFile(undefined);setUsableQuantity('');setUsableReason('');setUsableConfirmed(false);setIdentityConfirmed(false);setInspectionFile(undefined);returnUpload.current=undefined;inspectionUpload.current=undefined;}
  function go(next:string,check=true){if(busy||check&&!confirmLeaveWorkspace())return;history.pushState(null,'',next);pathRef.current=next;setPath(next);setPreview(undefined);setError('');if(check)reset();window.scrollTo(0,0);}

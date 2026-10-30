@@ -1,3 +1,4 @@
+import {temporaryNegativeDoBalanceAllowed} from '../../shared/stock-reconciliation-window.js';
 import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
 import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
 import {SignedTransferCopy} from '../inventory-approved/SignedTransferCopy.js';
@@ -59,7 +60,7 @@ export function WarehouseTransfers({session,onLogout}:{session:Session;onLogout:
   try{await loadList();if(sameRecord)await loadDetail(id);}catch(e){setError('The posting is saved; details could not refresh. '+(e as Error).message);}
  }
  async function issue(){if(!intake?.source.authority||!intake.destination.authority)return;setError('');try{
-  const prepared=lines.map(line=>{const from=intake.source.positions.find(p=>p.ledgerKey===line.sourceKey),to=intake.destination.positions.find(p=>p.ledgerKey===line.destinationKey);if(!from||!to||from.itemId!==to.itemId||!sameUnit(from.unit,to.unit)||!positive(line.quantity))throw Error('Select each exact final item, compatible destination position and positive quantity.');if(from.currentClosing!=null&&new Decimal(from.currentClosing).lt(line.quantity))throw Error('Source warehouse stock is insufficient for the transfer quantity.');return {lineKey:line.key,itemId:from.itemId,sourceLedgerKey:from.ledgerKey,destinationLedgerKey:to.ledgerKey,quantity:line.quantity,sourceLedgerRevision:from.ledgerRevision,destinationLedgerRevision:to.ledgerRevision};});
+  const prepared=lines.map(line=>{const from=intake.source.positions.find(p=>p.ledgerKey===line.sourceKey),to=intake.destination.positions.find(p=>p.ledgerKey===line.destinationKey);if(!from||!to||from.itemId!==to.itemId||!sameUnit(from.unit,to.unit)||!positive(line.quantity))throw Error('Select each exact final item, compatible destination position and positive quantity.');if(!temporaryNegativeDoBalanceAllowed()&&from.currentClosing!=null&&new Decimal(from.currentClosing).lt(line.quantity))throw Error('Source warehouse stock is insufficient for the transfer quantity.');return {lineKey:line.key,itemId:from.itemId,sourceLedgerKey:from.ledgerKey,destinationLedgerKey:to.ledgerKey,quantity:line.quantity,sourceLedgerRevision:from.ledgerRevision,destinationLedgerRevision:to.ledgerRevision};});
   const endpoint=(side:Intake['source'])=>({warehouse:side.warehouse,sourceSha256:side.authority!.source_sha256,authorityVersion:side.authority!.version});
   await run({path:apiBase+'/issues',body:{requestKey:crypto.randomUUID(),source:endpoint(intake.source),destination:endpoint(intake.destination),reason,transport,lines:prepared}});
  }catch(e){setError((e as Error).message);}}

@@ -1,3 +1,4 @@
+import {temporaryNegativeDoBalanceAllowed} from './do-negative-balance.js';
 import {nextWarehouseClosing} from './warehouse-ledger.js';
 import {deferDispatch,dispatchPosted} from './signed-dispatch.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
@@ -96,7 +97,7 @@ export class MaterialReplacementsRepository{
    const key=warehouseLedgerKey(row.item_id,row.warehouse,row.unit),position=await warehousePosition(c,input.sourceSha256,key,true);
    if(!position)throw new HttpError(409,'Select the existing exact final item ID and warehouse unit. No item or unit substitution is inferred.');
    if(position.ledgerRevision!==input.ledgerRevision)throw new HttpError(409,'This warehouse balance changed. Refresh before issuing the replacement.');
-   if(position.currentClosing!==null&&new Decimal(position.currentClosing).lt(input.quantity))throw new HttpError(409,'Verified usable stock is insufficient for this replacement. Faulty holdings are not available stock.');
+   if(!temporaryNegativeDoBalanceAllowed()&&position.currentClosing!==null&&new Decimal(position.currentClosing).lt(input.quantity))throw new HttpError(409,'Verified usable stock is insufficient for this replacement. Faulty holdings are not available stock.');
    const id=randomUUID(),number=await warehouseNumber(c,'DO',id),snapshot={requiresSignedGate:true,stockPosting:false,kind:'replacement-out',warehouse:row.warehouse,caseId:row.id,caseVersion:row.version,original:row.current_snapshot.original,sites:row.current_snapshot.sites,lines:[{itemId:row.item_id,unit:row.unit,description:row.current_snapshot.original.description,quantity:input.quantity,serial:input.replacementSerial}],transport:input.transport,reason:input.reason,flags:[...row.current_snapshot.flags,...(!input.replacementSerial?['Replacement serial is unverified; no serial was inferred.']:[])],returnStatus:'Faulty return is separate; this dispatch credits no warehouse IN.'};
    await c.query('INSERT INTO inventory_material_replacement_dispatches(id,number,case_id,case_version,original_dispatch_id,original_line_key,warehouse,source_sha256,ledger_key,quantity,snapshot,request_key,request_fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',[id,number,row.id,row.version,row.original_dispatch_id,row.original_line_key,row.warehouse,input.sourceSha256,key,input.quantity,snapshot,input.requestKey,fingerprint(input),actor]);
    await deferDispatch(c,actor,'replacement-out',id,row.warehouse,input.sourceSha256,input.authorityVersion,[{ledgerKey:key,quantity:input.quantity,kind:'replacement-out',draftId:row.current_snapshot.original.draftId,dispatchId:row.original_dispatch_id,lineKey:row.original_line_key,replacementDispatchId:id}]);

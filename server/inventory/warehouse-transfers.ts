@@ -1,3 +1,4 @@
+import {temporaryNegativeDoBalanceAllowed} from './do-negative-balance.js';
 import {nextWarehouseClosing} from './warehouse-ledger.js';
 import {deferDispatch,dispatchPosted} from './signed-dispatch.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
@@ -74,7 +75,7 @@ export class WarehouseTransferRepository{
    if(!sameUnit(from.baseline.unit,to.baseline.unit))throw new HttpError(422,'Source and destination units need a reviewed conversion. No pieces, coils, lengths or metres are converted here.');
    if(sameUnit(from.baseline.unit,'No.')&&!new Decimal(line.quantity).isInteger())throw new HttpError(422,'Whole-item stock must be transferred in whole quantities.');
    if(from.ledgerRevision!==line.sourceLedgerRevision||to.ledgerRevision!==line.destinationLedgerRevision)throw new HttpError(409,'A warehouse balance changed. Refresh before issuing the transfer.');
-   if(from.currentClosing!==null&&new Decimal(from.currentClosing).lt(line.quantity))throw new HttpError(409,'Source warehouse stock is insufficient for the transfer quantity.');
+   if(!temporaryNegativeDoBalanceAllowed()&&from.currentClosing!==null&&new Decimal(from.currentClosing).lt(line.quantity))throw new HttpError(409,'Source warehouse stock is insufficient for the transfer quantity.');
    lines.push({...line,unit:from.baseline.unit,destinationUnit:to.baseline.unit,description:from.baseline.description||line.itemId});
   }
   const id=randomUUID(),number=await transferNumber(c,id),snapshot={sourceWarehouse:input.source.warehouse,destinationWarehouse:input.destination.warehouse,source:input.source,destination:input.destination,reason:input.reason,transport:input.transport,lines,status:'issued',requiresSignedGate:true,stockPosting:false};

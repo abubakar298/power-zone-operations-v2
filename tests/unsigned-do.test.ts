@@ -19,7 +19,7 @@ import {signDispatch} from './signed-dispatch-fixture.js';
 
 test('unsigned DO edits retain number and audit, deletion releases prepared quantities, signed gate locks edits atomically',async()=>{
  const db=await (process.env.TEST_DIRECT_PGLITE==='true'?directMaterialDatabase():testDatabase());try{
-  const f=await materialStockFixture(db.pool,'CH-CBL-AC-16MM/4C-PK',{canonicalIds:2},[{itemId:'CH-BAT-HV-05 KW',warehouse:'Lahore warehouse',unit:'Nos',description:'HV battery',opening:10,in:0,out:0,closing:10,openingStatus:'Reviewed source',review:''}]),coord=randomUUID(),opsUser=randomUUID(),keeper=randomUUID();
+  const f=await materialStockFixture(db.pool,'CH-CBL-AC-16MM/4C-PK',{canonicalIds:3},[{itemId:'CH-BAT-HV-05 KW',warehouse:'Lahore warehouse',unit:'Nos',description:'HV battery',opening:10,in:0,out:0,closing:10,openingStatus:'Reviewed source',review:''},{itemId:'CH-VPD-63A/2P',warehouse:'Lahore warehouse',unit:'piece',description:'VPD',opening:10,in:0,out:0,closing:10,openingStatus:'Reviewed source',review:''}]),coord=randomUUID(),opsUser=randomUUID(),keeper=randomUUID();
   for(const [id,role] of [[coord,'Coordinator'],[opsUser,'Operations'],[keeper,'Inventory']])await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[id,id+'@saved-issue.example.test',role,role,'isolated']);
   const fixedId='CH-BAT-HV-05 KW';
   await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$3),($2,'Lahore warehouse','storekeeper',$3)",[f.reviewer,keeper,f.owner]);
@@ -27,7 +27,7 @@ test('unsigned DO edits retain number and audit, deletion releases prepared quan
   const issuance=await ops.issue(coord,{ipoId:source.ipoId,notes:'Disposable saved issuance test',requestKey:randomUUID()}),delivery=await ops.planDelivery(opsUser,issuance.id,{version:0,requestKey:randomUUID(),details:{deliveryAddress:'Test site',siteContact:'Test',sitePhone:'0300',deliveryDate:'2026-10-29',deliveryTime:'',instructions:''}});
   await ops.sendToStore(opsUser,issuance.id,delivery.id,randomUUID());await new SiteWorkflowRepository(db.pool).list(opsUser);await db.pool.query("UPDATE site_workflow SET scope='installation' WHERE issuance_id=$1",[issuance.id]);await materialInstallationFixture(db.pool,source.ipoId,f.owner);
   const drafts=new MaterialDraftRepository(db.pool),plans=new SiteMaterialPlanRepository(db.pool),stock=new MaterialStockRepository(db.pool),basis=(await drafts.intake(f.reviewer)).sources.find(s=>s.siteId===source.ipoId)!;
-  const saved=await plans.save(f.reviewer,{version:0,requestKey:randomUUID(),source:{sourceKind:basis.sourceKind,basisId:basis.basisId,basisVersion:1,siteId:basis.siteId},warehouse:'Lahore warehouse',transport:{issuedTo:'Test custodian',vehicle:'TEST',driver:'Test driver',driverIdentity:''},fixedLines:[{key:randomUUID(),itemId:fixedId,description:'HV battery',unit:'Nos',out:'1',sites:[basis.siteId],fixedGroup:'bess'}],variableLines:[{key:randomUUID(),itemId:'CH-CBL-AC-16MM/4C-PK',description:'Cable',unit:'m',out:'2',sites:[basis.siteId],section:'customer'}],variableSupply:'single-site'});
+  const saved=await plans.save(f.reviewer,{version:0,requestKey:randomUUID(),source:{sourceKind:basis.sourceKind,basisId:basis.basisId,basisVersion:1,siteId:basis.siteId},warehouse:'Lahore warehouse',transport:{issuedTo:'Test custodian',vehicle:'TEST',driver:'Test driver',driverIdentity:''},fixedLines:[{key:randomUUID(),itemId:fixedId,description:'HV battery',unit:'Nos',out:'1',sites:[basis.siteId],fixedGroup:'bess'},{key:randomUUID(),itemId:'CH-VPD-63A/2P',description:'VPD',unit:'piece',out:'',sites:[basis.siteId],fixedGroup:'other'}],variableLines:[{key:randomUUID(),itemId:'CH-CBL-AC-16MM/4C-PK',description:'Cable',unit:'m',out:'2',sites:[basis.siteId],section:'customer'}],variableSupply:'single-site'});
   await new WarehouseAuthorityRepository(db.pool).command(f.owner,{warehouse:'Lahore warehouse',version:0,sourceSha256:f.stockSha,state:'active',reason:'Verified isolated baseline',requestKey:randomUUID()});
   const command={version:saved.version,requestKey:randomUUID(),partialDelivery:true,note:'Entered quantities from saved preparation'};
   await assert.rejects(plans.issueSaved(keeper,saved.id,command,stock),/not assigned/);
@@ -58,9 +58,10 @@ test('unsigned DO edits retain number and audit, deletion releases prepared quan
   assert.notEqual(replacement.id,result.id);assert.equal((await plans.issued(f.reviewer,saved.id)).dispatches.length,1);
   const replacementRecord=await stock.dispatch(f.reviewer,replacement.id);
   const revise={...edit,revision:1,requestKey:randomUUID(),lines:replacementRecord.snapshot.lines.map((r:any)=>({key:r.key,itemId:r.itemId,unit:r.unit,out:r.out}))};
-  revise.lines.push({key:newKey,itemId:fixedId,unit:'Nos',out:'1'});
+  await assert.rejects(repo.change(f.reviewer,replacement.id,{...revise,requestKey:randomUUID(),lines:[...revise.lines,{key:newKey,itemId:fixedId,unit:'Nos',out:'1'}]}),/saved material preparation/);
+  revise.lines.push({key:newKey,itemId:'CH-VPD-63A/2P',unit:'piece',out:'1'});
   await repo.change(f.reviewer,replacement.id,revise);
-  assert.equal((await stock.dispatch(f.reviewer,replacement.id)).snapshot.lines.length,3,'Added physical rows are retained on same DO.');
+  const amended=await stock.dispatch(f.reviewer,replacement.id);assert.equal(amended.snapshot.lines.length,3,'Added physical rows are retained on same DO.');const preparedModules=await plans.detail(f.reviewer,saved.id);assert.equal(amended.snapshot.lines.find((r:any)=>r.itemId==='CH-VPD-63A/2P').key,preparedModules.fixed.snapshot.lines.find((r:any)=>r.itemId==='CH-VPD-63A/2P').key,'Missing prepared item keeps its original key for later returns.');
   const gates=new GatePassRepository(db.pool),gate={kind:'dispatch' as const,documentId:replacement.id,copyKind:'signed-gate' as const,evidenceId:evidence.id,note:'Current revised DO gate copy',requestKey:randomUUID()};
   await assert.rejects(gates.attach(keeper,gate),/changed/);
   await gates.attach(keeper,{...gate,documentRevision:2});

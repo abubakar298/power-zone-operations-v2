@@ -1,3 +1,4 @@
+import {temporaryNegativeDoBalanceAllowed} from './do-negative-balance.js';
 import {UnsignedDoRepository} from './unsigned-do.js';
 import {nextWarehouseClosing} from './warehouse-ledger.js';
 import {materialDispatchDraftLink} from './material-dispatch-link.js';
@@ -184,11 +185,11 @@ export class MaterialStockRepository{
     const matching=prepared.filter(p=>p.ledgerKey===key);
     if(matching.some(p=>p.request.ledgerRevision!==position.ledgerRevision))throw new HttpError(409,'This warehouse balance changed. Refresh before issuing material.');
     const total=matching.reduce((n,p)=>n.plus(p.request.quantity),new Decimal(0));
-    if(position.currentClosing!==null&&new Decimal(position.currentClosing).lt(total))throw new HttpError(409,'Recorded warehouse stock is insufficient for this issue quantity.');
+    if(!temporaryNegativeDoBalanceAllowed()&&position.currentClosing!==null&&new Decimal(position.currentClosing).lt(total))throw new HttpError(409,'Recorded warehouse stock is insufficient for this issue quantity.');
     positions.set(key,position);
    }
    const id=randomUUID(),reserved=s.parent&&!(await c.query('SELECT 1 FROM inventory_material_dispatches_active WHERE draft_id=$1 LIMIT 1',[input.draftId])).rowCount?(await c.query('SELECT number FROM inventory_parent_preparation_references WHERE draft_id=$1',[input.draftId])).rows[0]?.number:undefined,number=reserved??await warehouseNumber(c,s.parent?'PDO':'DO',id);
-   const lines=prepared.map(p=>({...p.row,out:p.request.quantity})),snapshot={...s,lines,transport:input.transport,reason:input.reason,status:'issued',requiresSignedGate:true,sourceSha256:input.sourceSha256,authorityVersion:input.authorityVersion,stockPosting:false};
+   const lines=prepared.map(p=>({...p.row,out:p.request.quantity})),snapshot={...s,lines,transport:input.transport,reason:input.reason,status:'issued',requiresSignedGate:true,allowNegativeBalance:temporaryNegativeDoBalanceAllowed(),sourceSha256:input.sourceSha256,authorityVersion:input.authorityVersion,stockPosting:false};
    await c.query('INSERT INTO inventory_material_dispatches(id,number,draft_id,draft_version,source_sha256,warehouse,snapshot,request_key,request_fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[id,number,input.draftId,input.version,input.sourceSha256,s.warehouse,snapshot,input.requestKey,fingerprint(input),actor]);
    for(const p of prepared){
     await c.query('INSERT INTO inventory_material_dispatch_lines(dispatch_id,line_key,source_sha256,ledger_key,item_id,unit,description,quantity) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,p.row.key,input.sourceSha256,p.ledgerKey,p.row.itemId,p.row.unit,p.row.description,p.request.quantity]);
