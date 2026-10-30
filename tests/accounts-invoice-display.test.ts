@@ -1,6 +1,6 @@
 import{test}from'node:test';
 import assert from'node:assert/strict';
-import{invoiceCategory,invoiceType}from'../shared/accounts-invoice-display.js';
+import{invoiceCategory,invoiceType,isSubmittedInvoicePending,matchesInvoiceFilters}from'../shared/accounts-invoice-display.js';
 import{applyInvoiceSubmissionBilling}from'../server/accounts/invoice-submission-state.js';
 test('one site retains distinct advance, balance, cable and internet obligations',()=>{
  const rows=[
@@ -23,4 +23,23 @@ test('native submissions retain exact source phase for display without inventing
  assert.deepEqual(events,before);
  assert.equal(invoiceCategory({id:'system:MBL:1',category:'System'}),'ups');
  assert.equal(invoiceType({id:'submission:ups',sourceKey:'MBL:338:1/60',category:'System · completion'}),'Installation / Completion Invoice');
+});
+
+test('submitted pending includes unknown balances but excludes settled and unsubmitted invoices',()=>{
+ const base={invoice:'27-10590',submission:'Submitted'};
+ assert.equal(isSubmittedInvoicePending({...base,pending:null}),true);
+ assert.equal(isSubmittedInvoicePending({...base,pending:'100.50'}),true);
+ assert.equal(isSubmittedInvoicePending({...base,pending:'0'}),false);
+ assert.equal(isSubmittedInvoicePending({...base,pending:null,receiptConfirmed:true}),false);
+ assert.equal(isSubmittedInvoicePending({...base,pending:'0',receiptHold:'Review source'}),true);
+ assert.equal(isSubmittedInvoicePending({...base,pending:'100',submission:'Unconfirmed'}),false);
+});
+test('customer invoice filters preserve separate milestones and ancillary invoices',()=>{
+ const rows=[{id:'UBL:SOLAR:345',category:'System · advance'},{id:'UBL:SOLAR:345',category:'System · completion'},{category:'Internet'},{category:'Extra cable'}];
+ for(const [index,stage] of ['50% Advance Invoice','Balance Invoice','Internet Invoice','Extra Cable Invoice'].entries()){
+  assert.deepEqual(rows.filter(r=>matchesInvoiceFilters(r,'',stage)),[rows[index]]);
+ }
+ assert.equal(rows.filter(r=>matchesInvoiceFilters(r,'solar','')).length,2);
+ assert.equal(rows.filter(r=>matchesInvoiceFilters(r,'internet','Balance Invoice')).length,0);
+ assert.equal(rows.filter(r=>matchesInvoiceFilters(r,'','')).length,4);
 });

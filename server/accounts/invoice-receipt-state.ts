@@ -1,3 +1,4 @@
+import {isSubmittedInvoicePending} from '../../shared/accounts-invoice-display.js';
 import type {Pool,PoolClient}from'pg';
 import{Decimal}from'decimal.js';
 import{invoiceIdentity}from'./billing-model.js';
@@ -14,7 +15,7 @@ export function applyInvoiceReceipts(rows:Row[],events:Row[]):Row[]{return rows.
  if(pending.lt(0))return {...row,receiptVersion:matching.length,receiptHold:'Recorded receipts exceed their frozen opening balance; Accounts review required.'};
  return {...row,pending:pending.toFixed(2),receiptConfirmed:pending.isZero(),receiptVersion:matching.length,operationalReceived:received.toFixed(2),receiptSourceKey:first.snapshot.sourceKey??null,receiptMilestone:first.snapshot.milestone??null,lastPaymentDate:matching.at(-1)!.payment_date};
 });}
-export function awaitingInvoicePayments(rows:Row[],legacyPending:Row[]){const held=new Set(legacyPending.map(r=>r.id));return rows.filter(r=>r.submission==='Submitted'&&!held.has(r.id)&&!!r.invoice&&(!!r.receiptHold||(r.pending==null?r.receiptConfirmed!==true:new Decimal(r.pending).gt(0))));}
+export function awaitingInvoicePayments(rows:Row[],legacyPending:Row[]){const held=new Set(legacyPending.map(r=>r.id));return rows.filter(r=>!held.has(r.id)&&isSubmittedInvoicePending(r));}
 /** Keep exact linked programme phases in step with actual receipts; ambiguous
  * historical references are never guessed from a site name. */
 export function applyReceiptProgramme(snapshot:Row,rows:Row[]):Row{

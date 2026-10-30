@@ -375,3 +375,11 @@
 .accounts-ipo-phase-table .accounts-epc-part th small{font-weight:400;white-space:pre-line}
 
 .accounts-ui .accounts-secondary-navigation{margin:16px 0 0;color:var(--pz-muted);font-size:13px}.accounts-ui .accounts-secondary-navigation>summary{min-height:44px;align-content:center;cursor:pointer;padding:0 12px}
+
+/* Receivables filters keep labels on one track and inputs/actions on the next. */
+.accounts-receivable-filters{grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}
+.accounts-receivable-filters>.pz-button{align-self:start;margin-top:25px}
+.accounts-invoice-table tbody td{vertical-align:top}
+.accounts-invoice-table td>strong{display:block;min-height:1.5rem}
+@media(max-width:1100px){.accounts-receivable-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.accounts-receivable-filters{grid-template-columns:minmax(0,1fr)}.accounts-receivable-filters>.pz-button{margin-top:0}}
