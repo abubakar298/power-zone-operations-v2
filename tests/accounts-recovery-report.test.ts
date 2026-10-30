@@ -32,3 +32,11 @@ test('compressed selectable report paginates repeated headers and long site/invo
  assert.ok(pdf.getNumberOfPages()>1);assert.ok(bytes.length<500_000);mkdirSync('/tmp/pz-recovery-report',{recursive:true});writeFileSync('/tmp/pz-recovery-report/recovery-sample.pdf',bytes);writeFileSync('/tmp/pz-recovery-report/report.json',JSON.stringify(report));
  console.log('PDF pages:',pdf.getNumberOfPages(),'bytes:',bytes.length);
 });
+
+test('recovery export sorts oldest submissions first, keeps unknown ages last and omits IPO metadata',()=>{
+ const base={site:'Sample Branch',customer:'Sample Bank',invoice:'SAMPLE-INV',submission:'Submitted',category:'System · completion',pending:'100',ipo:'CHP-NOT-IN-PDF',orderNumber:'ORDER-NOT-IN-PDF'};
+ const rows=['2026-10-24','','2026-10-01','2026-10-16'].map(date=>({...base,date})),before=JSON.stringify(rows);
+ const report=recoveryReport(rows,'2026-10-31');
+ assert.deepEqual(report.items.map(row=>row.days),[30,15,7,null]);assert.equal(JSON.stringify(rows),before);
+ assert.doesNotMatch(JSON.stringify(report),/CHP-NOT-IN-PDF|ORDER-NOT-IN-PDF/);
+});
