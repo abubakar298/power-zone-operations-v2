@@ -41,7 +41,7 @@ export class SiteMaterialPlanRepository{
  async issued(actor:string,id:string){
   const plan=await this.detail(actor,id),ids=[plan.fixed.id,...(plan.variable?[plan.variable.id]:[])];
   const rows=(await this.pool.query("SELECT id,number,snapshot,created_at FROM inventory_material_dispatches WHERE draft_id=ANY($1::uuid[]) OR snapshot#>>'{combinedPlan,id}'=$2 ORDER BY created_at DESC,id",[ids,id])).rows;
-  return {dispatches:rows.map(r=>({id:r.id,number:r.number,createdAt:r.created_at,variable:r.snapshot.lines.some((l:any)=>l.out&&Number(l.out)>0&&materialDocumentPolicy(l).customerUsageSignoff)}))};
+  return {dispatches:rows.map(r=>({id:r.id,number:r.number,createdAt:r.created_at,lines:r.snapshot.lines.map((l:any)=>({key:l.key,itemId:l.itemId,unit:l.unit,quantity:l.out})),variable:r.snapshot.lines.some((l:any)=>l.out&&Number(l.out)>0&&materialDocumentPolicy(l).customerUsageSignoff)}))};
  }
  async materialCatalogue(actor:string){return this.drafts.catalogue(actor);}
  async issueSaved(actor:string,id:string,input:unknown,stock:import('./material-stock.js').MaterialStockRepository){const {issueSavedSite}=await import('./site-material-issuance.js');return issueSavedSite(this.pool,this,stock,actor,id,input);}
