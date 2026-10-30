@@ -1,11 +1,17 @@
 .library-back-button{margin-bottom:20px;align-self:flex-start}
 .coordinator-library header h2{margin-bottom:6px}
 .coordinator-library header p{margin-top:0}
-.library-search-bar{display:grid;grid-template-columns:minmax(240px,1fr) auto auto;gap:12px;align-items:end}
-.library-search-bar>.pz-button{margin-top:0;min-height:46px}
+.library-search-bar{display:grid;grid-template-columns:minmax(240px,1fr) auto auto;gap:8px 12px;align-items:start}
+.library-search-bar>.pz-field{display:contents}
+.library-search-bar>.pz-field>label{grid-column:1;grid-row:1}
+.library-search-bar>.pz-field>input{grid-column:1;grid-row:2}
+.library-search-bar>.pz-field>small{grid-column:1;grid-row:3}
+.library-search-bar>.pz-button{grid-row:2;margin-top:0;min-height:46px}
+.library-search-bar>.pz-button:nth-of-type(1){grid-column:2}
+.library-search-bar>.pz-button:nth-of-type(2){grid-column:3}
 .library-filter-panel{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:16px;padding:16px;background:var(--pz-surface-subtle,#f7f6fb);border:1px solid var(--pz-border,#e6e3ef);border-radius:12px}
 .coordinator-library table td,.project-documents-table td{vertical-align:top}
 .coordinator-library td strong,.coordinator-library td small,.project-documents-table td strong,.project-documents-table td small{display:block}
 .coordinator-library td small,.project-documents-table td small{margin-top:4px;color:var(--pz-text-secondary,#666475)}
 .coordinator-library td .pz-action-row{align-items:flex-start}
-@media(max-width:700px){.library-search-bar{grid-template-columns:1fr 1fr}.library-search-bar>.pz-field{grid-column:1/-1}.library-search-bar>.pz-button{margin-top:0}.library-filter-panel{grid-template-columns:1fr}}
+@media(max-width:700px){.library-search-bar{grid-template-columns:1fr 1fr}.library-search-bar>.pz-field>label,.library-search-bar>.pz-field>input,.library-search-bar>.pz-field>small{grid-column:1/-1}.library-search-bar>.pz-button{grid-row:4;margin-top:0}.library-search-bar>.pz-button:nth-of-type(1){grid-column:1}.library-search-bar>.pz-button:nth-of-type(2){grid-column:2}.library-filter-panel{grid-template-columns:1fr}}
