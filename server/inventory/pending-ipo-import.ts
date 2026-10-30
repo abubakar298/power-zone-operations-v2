@@ -43,9 +43,9 @@ export async function importPendingIpo(pool:Pool,actor:string,raw:z.infer<typeof
   const candidates=source.snapshot.registers.flatMap((r:any)=>r.rows).filter((r:any)=>r.key===b.sourceKey);
   if(candidates.length!==1)throw new HttpError(409,'The source site identity is missing or ambiguous.');
   if(isArchivedLegacySolar(candidates[0]))throw new HttpError(409,'Archived legacy Solar sites cannot be imported as active IPOs.');
-  const row=candidates[0],bank=String(row.key).split(':')[0].toUpperCase();
+  const row=candidates[0],fullReturn=b.deliveryReturns?.at(-1)?.scope==='full'&&b.stage==='received'&&!b.deliveryDate&&!b.completed,bank=String(row.key).split(':')[0].toUpperCase();
   for(const field of ['cancelled','transferred','delivered','installed','canIssue'])if(row[field]!==undefined&&typeof row[field]!=='boolean')throw new HttpError(422,'Review the source status field '+field+' before importing.');
-  if(!['UBL','MBL'].includes(bank)||row.cancelled===true||row.transferred===true||row.delivered===true||row.installed===true||row.canIssue===false)throw new HttpError(409,'This source position is not an active pending-delivery order.');
+  if(!['UBL','MBL'].includes(bank)||row.cancelled===true||row.transferred===true||row.delivered===true&&!fullReturn||row.installed===true||row.canIssue===false)throw new HttpError(409,'This source position is not an active pending-delivery order.');
   const po=z.string().trim().min(1).max(200).parse(row.po),poDate=historicalPoDate(row.poDate),number=z.string().trim().regex(/^CHP-\d+$/).parse(row.ipo),order=String(row.orderNumber??'').trim(),isUps=row.kind==='UPS';
   if(poDate>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()))throw new HttpError(409,'The source PO date is in the future.');
   if(isUps&&!validOrderPosition(order))throw new HttpError(409,'A shared UPS IPO requires a valid distinct order number.');
@@ -56,7 +56,7 @@ export async function importPendingIpo(pool:Pool,actor:string,raw:z.infer<typeof
   const framework=(await c.query('SELECT f.*,c.short_code FROM project_framework_versions f JOIN customers c ON c.id=f.customer_id WHERE f.id=$1',[input.frameworkId])).rows[0];
   const config=String(row.configuration??''),ups=config.startsWith('0-')?config.slice(2):config;
   if(!framework||String(framework.short_code).toUpperCase()!==bank||!(isUps?framework.payload.type==='bank-ups'&&framework.payload.profile?.configuration===ups:framework.payload.type==='ubl-solar'&&framework.payload.configuration===config))throw new HttpError(409,'The approved framework does not match this source configuration and customer.');
-  if((await c.query('SELECT 1 FROM customer_purchase_orders WHERE customer_id=$1 AND lower(po_number)=lower($2)',[framework.customer_id,po])).rowCount)throw new HttpError(409,'This customer PO already has a saved order. Review its existing identity.');
+  if(!isUps&&(await c.query('SELECT 1 FROM customer_purchase_orders WHERE customer_id=$1 AND lower(po_number)=lower($2)',[framework.customer_id,po])).rowCount)throw new HttpError(409,'This customer PO already has a saved order. Review its existing identity.');
   const siteName=z.string().trim().min(1).max(200).parse(row.site),sourceCode=String(row.siteCode??'').trim();
   const siteCode=bank==='UBL'&&isUps&&sourceCode==='9999'?'0999':sourceCode;
   z.string().min(1).max(30).regex(/^[A-Za-z0-9_-]+$/).parse(siteCode);
@@ -67,7 +67,7 @@ export async function importPendingIpo(pool:Pool,actor:string,raw:z.infer<typeof
   const {r}=await repo.record(actor,created.id,c,true),basis=await frameworkBasis(pool,c,r,framework.id,{reference:po,date:poDate});
   if(row.grossContract==null||!new Decimal(row.grossContract).isFinite()||!new Decimal(row.grossContract).toDecimalPlaces(2).equals(new Decimal(basis.order.allocation.total).toDecimalPlaces(2)))throw new HttpError(409,'The source contract value differs from the approved framework. No IPO was imported.');
   basis.order.input.orderNumber=order;
-  const historical={kind:'verified-register-import' as const,sourceId:source.id,sourceVersion:source.version,sourceSha256:source.source_sha256,sourceKey:row.key,importedBy:actor,reason:input.reason,hideFromIpoShared:true as const};
+  const historical={kind:'verified-register-import' as const,sourceId:source.id,sourceVersion:source.version,sourceSha256:source.source_sha256,sourceKey:row.key,importedBy:actor,reason:input.reason,hideFromIpoShared:true as const,...(isUps?{sharedPoOrder:order}:{})};
   const data={...r.data,basis,bulkHistoricalImport:true,historicalImport:historical,directPoDetails:{values:{orderNumber:order,siteName:r.site_name},source:'Historical source register',originalCustomerEvidenceUploaded:false}};
   const receiptId=randomUUID(),decisionId=randomUUID();
   const receiptInput={reference:po,date:poDate,basisType:'framework',frameworkId:framework.id,ipoNumber:number,confirmationType:'Historical source register',evidenceId:null,reviewed:true,notes:input.reason+' Original customer PO scan not uploaded; source register provenance retained.',historicalImport:historical};

@@ -12,7 +12,7 @@ export async function approvedMaterialIdentity(c:Pool|PoolClient,ipoId:string){
  const ipo=(await c.query('SELECT i.id,i.number,i.snapshot,p.po_number AS saved_po_reference FROM internal_purchase_orders i JOIN customer_purchase_orders p ON p.id=i.customer_po_id WHERE i.id=$1',[ipoId])).rows[0];
  if(!ipo)throw new HttpError(409,'The approved IPO is unavailable.');
  if((await c.query("SELECT 1 FROM test_workflow_archives WHERE records->'localPreviewDocumentIds' ? $1::text UNION ALL SELECT 1 FROM archived_sample_ipos WHERE ipo_id=$1::uuid AND restored_at IS NULL",[ipoId])).rowCount)throw new HttpError(409,'This IPO is archived.');
- const correction=await ipoSiteIdentity(c,ipo);if(correction.snapshot)ipo.snapshot=correction.snapshot;
+ const correction=await ipoSiteIdentity(c,ipo);if(correction.snapshot)ipo.snapshot=correction.snapshot;if(correction.approvedPoReference)ipo.saved_po_reference=correction.approvedPoReference;
  const po=(value:unknown)=>typeof value==='string'?value.trim().replace(/\s+/g,' ').toLowerCase():'';
  if(po(ipo.snapshot.input?.poNumber)&&po(ipo.snapshot.input.poNumber)!==po(ipo.saved_po_reference))throw new HttpError(409,'Approved IPO identity needs review: po-mismatch with its saved customer PO reference.');
  return ipo;
@@ -41,7 +41,7 @@ export async function approvedMaterialIdentities(c:Pool|PoolClient,ipoIds:string
  for(const row of rows){try{
   if(row.archived)throw new HttpError(409,'This IPO is archived.');
   const ipo={id:row.id,number:row.number,snapshot:row.snapshot,saved_po_reference:row.saved_po_reference};
-  const correction=applyIpoSiteIdentity(ipo,correctionsById.get(row.id));if(correction.snapshot)ipo.snapshot=correction.snapshot;
+  const correction=applyIpoSiteIdentity(ipo,correctionsById.get(row.id));if(correction.snapshot)ipo.snapshot=correction.snapshot;if(correction.approvedPoReference)ipo.saved_po_reference=correction.approvedPoReference;
   const po=(value:unknown)=>typeof value==='string'?value.trim().replace(/\s+/g,' ').toLowerCase():'';
   if(po(ipo.snapshot.input?.poNumber)&&po(ipo.snapshot.input.poNumber)!==po(ipo.saved_po_reference))throw new HttpError(409,'Approved IPO identity needs review: po-mismatch with its saved customer PO reference.');
   result.set(row.id,ipo);

@@ -42,7 +42,7 @@ export class OperationsBoardRepository{
  async sites(actor:string){
   const access=await this.access(actor);if(access.kind==='accounts')throw new HttpError(403,'Accounts can view document tracking only.');
   const rows=(await this.pool.query(latest)).rows;
-  return {sites:rows.filter(r=>!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>({...r.snapshot,version:r.version})),access};
+  return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>({...r.snapshot,version:r.version})),access};
  }
  async site(actor:string,id:string){const a=await this.access(actor),r=await this.current(this.pool,id);this.scope(a,r.snapshot);return {...r.snapshot,version:r.version};}
  async history(actor:string,id:string,before?:number){
@@ -55,7 +55,7 @@ export class OperationsBoardRepository{
   const access=await this.access(actor),rows=(await this.pool.query(latest)).rows;
   if(!rows.length)throw new HttpError(409,'The reviewed Operations site register has not been imported.');
   // Deliberately project documents, not vendors, blockers or arbitrary snapshot data.
-  return {sites:rows.filter(r=>!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head','accounts'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>{
+  return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head','accounts'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>{
    const s=r.snapshot;return {id:r.site_id,name:s.name,ipo:s.ipo,completed:s.completed===true,version:r.version,documents:s.documents??[],evidencePending:s.evidencePending===true};
   })};
  }

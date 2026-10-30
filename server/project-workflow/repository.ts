@@ -3151,7 +3151,7 @@ export class ProjectWorkflowRepository {
     basis: any,
     receipt: any,
     decisionId: string,
-    historical?:{kind:'verified-register-import';sourceId:string;sourceVersion:number;sourceSha256:string;sourceKey:string;importedBy:string;reason:string;hideFromIpoShared:true},
+    historical?:{kind:'verified-register-import';sourceId:string;sourceVersion:number;sourceSha256:string;sourceKey:string;importedBy:string;reason:string;hideFromIpoShared:true;sharedPoOrder?:string},
   ) {
     if(historical){const importer=(await c.query('SELECT active,role FROM users WHERE id=$1',[historical.importedBy])).rows[0];if(!importer?.active||!['Admin','Management'].includes(importer.role))throw new HttpError(403,'Historical IPO import requires active Management authorisation.');}
     const prior = (
@@ -3233,7 +3233,9 @@ export class ProjectWorkflowRepository {
         original_ipo_reference: reference,
       };
     }
-    if (
+    const sharedHistoricalPo=!!historical?.sharedPoOrder;
+    if(sharedHistoricalPo&&(!['MBL-UPS-6-5','MBL-UPS-6-10','UBL-UPS-6-10'].includes(basis.source.key)||historical!.sharedPoOrder!==basis.order.input.orderNumber||!/^([1-9][0-9]{0,5})\/([1-9][0-9]{0,5})$/.test(historical!.sharedPoOrder!)))throw new HttpError(409,'Historical shared PO order must match the approved UPS framework and exact order.');
+    if (!sharedHistoricalPo&&
       (
         await c.query(
           "SELECT 1 FROM customer_purchase_orders WHERE customer_id=$1 AND lower(po_number)=lower($2)",
@@ -3338,7 +3340,7 @@ export class ProjectWorkflowRepository {
       peachtree: ptDetail(basis.order,basis.boq,await this.approvedPanelQuantity(r,c)),
     };
     await c.query(
-      "INSERT INTO customer_purchase_orders(id,quotation_id,boq_revision_id,customer_id,po_number,document_id,input,created_by) VALUES($1,$2,$3,$4,$5,NULL,$6,$7)",
+      "INSERT INTO customer_purchase_orders(id,quotation_id,boq_revision_id,customer_id,po_number,document_id,input,created_by,shared_order_number) VALUES($1,$2,$3,$4,$5,NULL,$6,$7,$8)",
       [
         po,
         basis.source.type === "quotation" ? basis.source.id : null,
@@ -3347,6 +3349,7 @@ export class ProjectWorkflowRepository {
         receipt.input.reference,
         input,
         r.coordinator_id,
+        historical?.sharedPoOrder??null,
       ],
     );
     await c.query(
