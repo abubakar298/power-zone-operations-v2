@@ -19,7 +19,11 @@ export function warehouseTransferHttp(pool:Pool,requireSession:RequestHandler){
  const name=(value:unknown)=>{const v=z.string().trim().min(1).max(200).safeParse(value);if(!v.success)throw new HttpError(400,'Choose a warehouse.');return v.data;};
  async function access(actor:string){
   const a=await gates.access(actor);if(a.kind==='unassigned')throw new HttpError(403,'Warehouse document access is required.');
-  const all=(await pool.query('SELECT DISTINCT warehouse FROM inventory_warehouse_authority_current ORDER BY warehouse')).rows.map(v=>v.warehouse as string);
+  const all=(await pool.query(`SELECT DISTINCT warehouse FROM (
+   SELECT payload->>'warehouse' AS warehouse FROM inventory_warehouse_source_balances
+   WHERE source_sha256=(SELECT source_sha256 FROM inventory_warehouse_sources ORDER BY (coalesce(metadata->>'canonicalIds','') ~ '^[1-9][0-9]*$') DESC,created_at DESC,source_sha256 LIMIT 1)
+   UNION SELECT warehouse FROM inventory_warehouse_authority_current
+  ) known WHERE warehouse IS NOT NULL AND btrim(warehouse)<>'' ORDER BY warehouse`)).rows.map(v=>v.warehouse as string);
   const sourceWarehouses=a.kind==='management'?all:(await pool.query("SELECT DISTINCT warehouse FROM inventory_material_access WHERE user_id=$1 AND capability='dispatcher' ORDER BY warehouse",[actor])).rows.map(v=>v.warehouse as string);
   return {enabled:await ready(),kind:a.kind,warehouses:all,readWarehouses:a.kind==='management'?all:a.warehouses,sourceWarehouses,receiptWarehouses:sourceWarehouses};
  }

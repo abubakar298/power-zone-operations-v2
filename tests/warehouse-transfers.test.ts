@@ -46,6 +46,14 @@ test('warehouse transfers post source OUT once, destination counted partial IN o
   await warehouse.importSource(ids.owner,{sourceSha256:sourceSha,catalogueSha256:catalogueSha,reviewSourceSha256:reviewSha,finalItemIds:[item],source:{meta:{fictional:true},balances:[balance('Lahore warehouse',100),balance('Karachi warehouse',10),balance('Karachi warehouse',2,'coil'),balance('Multan warehouse',null),balance('Islamabad warehouse',-1)],events:[]}});
   const oldGates=new GatePassRepository(db.pool);assert.equal((await oldGates.list(ids.sourceKeeper)).records.length,0,'Old130 GatePasses remains available without transfer tables.');
   const before=await tableSnapshot(db.pool);await migrate(db.pool,directory,true);assert.deepEqual(await tableSnapshot(db.pool,Object.keys(before)),before,'131 preserves every preexisting table and row.');
+  const beforeChoices=await tableSnapshot(db.pool),choiceApp=express();
+  choiceApp.use('/api/warehouse-transfers',warehouseTransferHttp(db.pool,(req,_res,next)=>{req.authSession={user:{id:ids.source,email:'isolated@transfer.invalid',display_name:'source',role:'Inventory'},csrfToken:'isolated',tokenHash:'isolated',expiresAt:new Date(Date.now()+60000)};next();}));
+  const choice=(await request(choiceApp).get('/api/warehouse-transfers/access').expect(200)).body;
+  assert.deepEqual(choice.sourceWarehouses,['Lahore warehouse']);
+  assert.deepEqual(choice.warehouses,['Islamabad warehouse','Karachi warehouse','Lahore warehouse','Multan warehouse'],'Known destinations remain selectable before warehouse authority activation.');
+  assert.deepEqual(choice.receiptWarehouses,['Lahore warehouse'],'Listing a destination never grants its receiving permission.');
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_authority_versions')).rows[0].n,0);
+  assert.deepEqual(await tableSnapshot(db.pool,Object.keys(beforeChoices)),beforeChoices,'Destination selection only reads names; no activation, transfer, or stock mutation.');
   const authority=new WarehouseAuthorityRepository(db.pool);for(const name of ['Lahore warehouse','Karachi warehouse','Multan warehouse','Islamabad warehouse'])await authority.command(ids.owner,{warehouse:name,version:0,sourceSha256:sourceSha,state:'active',reason:'Fictional reviewed baseline',requestKey:randomUUID()});
   const repo=new WarehouseTransferRepository(db.pool),stock=new MaterialStockRepository(db.pool),fromKey=warehouseLedgerKey(item,'Lahore warehouse','m'),toKey=warehouseLedgerKey(item,'Karachi warehouse','m');
   const original=(await db.pool.query('SELECT * FROM inventory_warehouse_source_balances ORDER BY ledger_key')).rows;
