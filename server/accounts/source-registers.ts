@@ -1,3 +1,4 @@
+import{invoiceCorrections,applyInvoiceCorrections}from'./invoice-correction-state.js';
 import{invoiceReceipts,applyInvoiceReceipts}from'./invoice-receipt-state.js';
 import {invoiceSubmissions,applyInvoiceSubmissionBilling,applyInvoiceSubmissionStages} from './invoice-submission-state.js';
 import {latestOperationsStages,projectAccountsSites} from './site-projection.js';
@@ -63,7 +64,7 @@ export class AccountsSourceRegisters {
   const record=await this.latest(actor),s=record.snapshot;
   const asOf=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
   const submissions=await invoiceSubmissions(this.pool);
-  const rows=applyInvoiceReceipts(applyInvoiceSubmissionBilling(billingRows(s.registers,s.cables,s.internet,s.evidence),submissions),await invoiceReceipts(this.pool)).map((r):Record<string,any>=>({...r,band:ageBand(r.date,asOf)}));
+  const rows=applyInvoiceReceipts(applyInvoiceCorrections(applyInvoiceSubmissionBilling(billingRows(s.registers,s.cables,s.internet,s.evidence),submissions),await invoiceCorrections(this.pool)),await invoiceReceipts(this.pool)).map((r):Record<string,any>=>({...r,band:ageBand(r.date,asOf)}));
   const generalReceipts=s.evidence.generalReceipts??[];
   return {generalReceipts,asOf,sourceAsOf:record.source_date,sourceVersion:record.version,readOnlySource:true,rows,customers:customerTotals(rows,asOf),queues:invoicingQueues(applyInvoiceSubmissionStages(s,submissions).registers),verification:{sourceModified:s.evidence.sourceModified,scope:'Reviewed source invoices; unknown original invoice amounts remain missing.'}};
  }
@@ -74,3 +75,4 @@ export class AccountsSourceRegisters {
   return r?{asOf:r.snapshot.sites.asOf,importId:r.source_sha256,sourceVersion:r.version,counts:projectAccountsSites(r.snapshot,await latestOperationsStages(this.pool)).counts}:null;
  }
 }
+

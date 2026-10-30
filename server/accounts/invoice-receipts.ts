@@ -21,7 +21,7 @@ export async function recordInvoiceReceipt(pool:Pool,actor:string,raw:unknown,no
   if(replay){if(replay.created_by===actor&&Object.entries(input).every(([k,v])=>replay.request[k]===v))return replay;throw new HttpError(409,'This request key belongs to a different payment.');}
   const register=await paymentRegisterData(c),row=register.awaiting.find(r=>r.id===input.sourceRowId);
   if(!row||register.sourceVersion!==input.sourceVersion||row.receiptVersion!==input.receiptVersion)throw new HttpError(409,'The invoice balance or payment records changed. Refresh before saving.');
-  if(row.receiptHold)throw new HttpError(409,row.receiptHold);
+  if(row.receiptHold||row.invoiceCorrectionHold)throw new HttpError(409,row.receiptHold??row.invoiceCorrectionHold);
   if(row.pending!=null&&input.outstandingBefore!==undefined)throw new HttpError(422,'Keep the existing outstanding balance unchanged; enter only the amount received.');
   if(row.pending==null&&!input.outstandingBefore)throw new HttpError(422,'Confirm the current outstanding balance from PT before recording the first payment.');
   const outstanding=new Decimal(row.pending??input.outstandingBefore!),amount=new Decimal(input.amount);
@@ -39,3 +39,4 @@ export async function recordInvoiceReceipt(pool:Pool,actor:string,raw:unknown,no
   await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'accounts.invoice-receipt:'+saved.id]);return saved;
  });
 }
+
