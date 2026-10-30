@@ -24,7 +24,7 @@ import './operations-board/operations-board.css';
 import './parent-dos.css';
 
 type StockItem={itemId:string;description:string;units:string[]};
-type Intake={operationsBatches?:InventoryBatch[];access:{owner:boolean;warehouses:string[]};sources:MaterialSource[];registeredPending?:{siteId:string;ipo:string;siteName:string;customer:string;linkStatus:string}[];catalogue:StockItem[];aliases?:Record<string,string>;warehouses:string[]};
+type Intake={operationsBatches?:InventoryBatch[];access:{owner:boolean;warehouses:string[]};sources:MaterialSource[];registeredPending?:{siteId:string;ipo:string;siteName:string;customer:string;dispatchDate?:string|null;linkStatus:string}[];catalogue:StockItem[];aliases?:Record<string,string>;warehouses:string[]};
 type Draft={id:string;version:number;snapshot:{warehouse:string;sites:MaterialSource[];kind:'fixed'|'variable';parent:boolean;lines:MaterialDraftInput['lines'];transport:MaterialDraftInput['transport']};created_at:string};
 type Slot=Omit<MaterialDraftInput['lines'][number],'section'>&{section:'customer'|'internal'};
 const base='/inventory/parent-dos';
