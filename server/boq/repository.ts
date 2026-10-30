@@ -41,6 +41,7 @@ export class BoqRepository {
       )
     ).rows;
   }
+  async itemsForActor(actor:string,id:string){const row=(await this.pool.query(`SELECT r.id FROM boq_revisions r WHERE r.id=$1 AND ${ownedCondition('boq','r.id','$2')}`,[id,actor])).rows[0];if(!row)throw new HttpError(404,'BOQ not found.');return this.get(id);}
   async preparation(actor:string,revisionId:string,open=false){
     return transaction(this.pool,async c=>{
       const user=(await c.query('SELECT role,active FROM users WHERE id=$1 FOR SHARE',[actor])).rows[0];

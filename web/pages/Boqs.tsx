@@ -55,6 +55,7 @@ export function Boqs({
   initialCniId,
   startNew,
   initialBoqId,
+  startRevision,
   initialContext,
 }: {
   session: Session;
@@ -64,6 +65,7 @@ export function Boqs({
   initialCniId?: string;
   startNew?: boolean;
   initialBoqId?: string;
+  startRevision?:boolean;
   initialContext?: any;
 }) {
   const showCosting = session.user.role !== "Coordinator";
@@ -195,7 +197,7 @@ export function Boqs({
   useEffect(() => {
     void load()
       .then(async () => {
-        if (initialBoqId) await openSaved(initialBoqId);
+        if (initialBoqId) {const record=await openSaved(initialBoqId);if(startRevision&&record)reviseSaved(record,true);}
         else if (initialDraftId) {
           const d = await api<{ drafts: any[] }>("/boqs/drafts");
           const row = d.drafts.find((x) => x.id === initialDraftId);
@@ -492,6 +494,7 @@ export function Boqs({
       setSaved(record);
       setHistory(h.revisions);
       setView("saved");
+      return record;
     } catch (e) {
       fail(e);
     } finally {
@@ -648,9 +651,9 @@ export function Boqs({
       setBusy(false);
     }
   }
-  function reviseSaved(selected = saved) {
+  function reviseSaved(selected = saved,confirmed=false) {
     if (
-      !confirmTransition(
+      !confirmed&&!confirmTransition(
         "Create BOQ revision draft",
         "A separate editable draft will be created. The approved BOQ remains unchanged.",
       )
@@ -1703,7 +1706,7 @@ export function Boqs({
                 </details>
               )}
               <div className="survey-actions">
-                <button
+                {session.user.role!=="Coordinator"&&<button
                   type="button"
                   disabled={busy}
                   onClick={() => {
@@ -1721,8 +1724,8 @@ export function Boqs({
                   }}
                 >
                   Save BOQ Draft
-                </button>
-                {onPricing&&["Admin","Management","Coordinator"].includes(session.user.role)&&<button type="button" disabled={busy||revisionMode} onClick={event=>{const formElement=event.currentTarget.form;if(formElement?.reportValidity())void calculate(event,true);}}>Calculate &amp; review BOQ</button>}
+                </button>}
+                {onPricing&&["Admin","Management"].includes(session.user.role)&&<button type="button" disabled={busy||revisionMode} onClick={event=>{const formElement=event.currentTarget.form;if(formElement?.reportValidity())void calculate(event,true);}}>Calculate &amp; review BOQ</button>}
                 <button className="primary" disabled={busy || revisionMode} type="submit">
                   {busy ? "Processing…" : onPricing&&["Admin","Management","Coordinator"].includes(session.user.role)?"Enter Pricing":"Calculate & review BOQ"}
                 </button>

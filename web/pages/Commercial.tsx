@@ -1,3 +1,4 @@
+import './commercial-layout.css';
 import {departmentFetch} from '../department-view.js';
 import {prepareReviewedQuotationInput,saveReviewedQuotation} from '../save-reviewed-quotation.js';
 import {RevisionPricingSummary} from '../components/RevisionPricingSummary.js';
@@ -265,6 +266,7 @@ export function Commercial({
   onRevisionPricing,
   initialRequestId,
   initialQuotationId,
+  startQuotationRevision,
   initialPricingId,
   onQuotationSent,
 }: {
@@ -276,6 +278,7 @@ export function Commercial({
   onRevisionPricing?: (id: string, requestId: string) => void;
   initialRequestId?: string;
   initialQuotationId?: string;
+  startQuotationRevision?:boolean;
   initialPricingId?: string;
   onQuotationSent?: () => void;
 }) {
@@ -334,6 +337,8 @@ export function Commercial({
     ),
   );
   const [revisionRequests, setRevisionRequests] = useState<any[]>([]);
+  const [openedProjectRevision,setOpenedProjectRevision]=useState(false);
+  useEffect(()=>{if(startQuotationRevision&&savedQuote&&!openedProjectRevision){setOpenedProjectRevision(true);setRevisionDialog(true);setRevisionReason(savedQuote.workflow_notes??'');setCostingChoice('');}},[startQuotationRevision,savedQuote,openedProjectRevision]);
   const [preparationEdit,setPreparationEdit]=useState<{canEdit:boolean;quoted:boolean}>();
   useEffect(()=>{let active=true;setPreparationEdit(undefined);if(input.boqRevisionId&&!savedQuote)void api<{canEdit:boolean;quoted:boolean}>(`/boqs/${input.boqRevisionId}/preparation`).then(value=>{if(active)setPreparationEdit(value);}).catch(()=>{});return()=>{active=false;};},[input.boqRevisionId,savedQuote]);
   const boqRevisionLocked = Boolean(initialRevisionId) || Boolean(new URLSearchParams(window.location.search).get("pricingPreviewToken")) || boqs.some(b => b.id === input.boqRevisionId && b.from_technical_report === true);
@@ -1051,7 +1056,8 @@ export function Commercial({
                 </p>
               )}
               <div className="table-scroll">
-                <table className="master-table">
+                <table className={sellingOnly?"master-table commercial-price-table":"master-table"}>
+                  {sellingOnly&&<colgroup>{[22,14,9,13,16,11,15].map((width,index)=><col key={index} style={{width:width+'%'}}/>)}</colgroup>}
                   <thead>
                     <tr>
                       {(sellingOnly?['Category','Selling price before discount','Discount (%)','Discount amount','Selling price after discount','Sales tax','Selling including tax']:[
@@ -1064,8 +1070,8 @@ export function Commercial({
                         "Selling after tax",
                       ])
                         .filter(h=>sellingOnly?!['Cost (PKR)','Markup %','Profit (PKR)'].includes(h):financialManager||h!=='Profit (PKR)')
-                        .map((h) => (
-                          <th key={h}>{h}</th>
+                        .map((h,index) => (
+                          <th key={h} className={index?"numeric":undefined}>{h}</th>
                         ))}
                     </tr>
                   </thead>
@@ -1130,7 +1136,7 @@ export function Commercial({
                   </div>
                 </details>
               )}
-              <div className="quote-totals">
+              <div className="quote-totals commercial-aligned-totals">
                 {financialManager && p?.dealAccounting && (
                   <p role="status">
                     {p.dealAccounting.note} Retained GST-equivalent: PKR{" "}

@@ -1,3 +1,4 @@
+import {buildBoqItemsPdf} from './items-report.js';
 import { canSeeBessCost, restrictedCostView } from "../http/cost-visibility.js";
 import { instructionsSchema, externalApprovalSchema } from "./instructions.js";
 import { buildCostingPdf } from "./report.js";
@@ -11,6 +12,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
   const reviews = repo.reviews();
   const r = Router();
   r.use(requireSession);
+  r.use((req,_res,next)=>{if(req.authSession!.user.role==='Coordinator'&&req.path.endsWith('/costing.pdf'))throw new HttpError(403,'Costing documents are not available to Project Coordination. Use the BOQ items preview.');next();});
   r.use((req, _res, next) => {
     if (
       req.method !== "GET" &&
@@ -265,6 +267,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
         ),
       );
   });
+  r.get('/:id/items.pdf',async(req,res)=>{const id=z.uuid().parse(req.params.id),record=await repo.itemsForActor(req.authSession!.user.id,id);res.set({'Content-Type':'application/pdf','Content-Disposition':`inline; filename="${record.number.replace(/[^a-zA-Z0-9._-]/g,'-')}-items.pdf"`,'Cache-Control':'private, no-store'}).send(buildBoqItemsPdf(record));});
   r.get("/:id/costing.pdf", async (req, res) => {
     if (!z.uuid().safeParse(req.params.id).success)
       throw new HttpError(400, "Invalid BOQ.");

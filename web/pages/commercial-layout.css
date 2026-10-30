@@ -1,0 +1,14 @@
+.master-table.commercial-price-table{table-layout:fixed;width:100%;font-variant-numeric:tabular-nums}
+.master-table.commercial-price-table th,.master-table.commercial-price-table td{vertical-align:top;padding:12px;line-height:1.4}
+.master-table.commercial-price-table th{white-space:normal;overflow-wrap:normal}
+.master-table.commercial-price-table .numeric{text-align:right}
+.master-table.commercial-price-table th:first-child,.master-table.commercial-price-table td:first-child{text-align:left}
+.master-table.commercial-price-table td.numeric{white-space:nowrap}
+@media(max-width:850px){.master-table.commercial-price-table{min-width:820px}}
+
+.quote-totals.commercial-aligned-totals p{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:start;gap:12px 24px;margin:0;padding:12px 0;line-height:1.45;font-variant-numeric:tabular-nums}
+.quote-totals.commercial-aligned-totals p strong{text-align:right;white-space:nowrap}
+.quote-totals.commercial-aligned-totals .net-total{padding:12px 0;border-radius:0}
+.quote-totals.commercial-aligned-totals .pz-rounded-total{margin-top:12px;padding:0;gap:8px}
+.quote-totals.commercial-aligned-totals .pz-rounded-total small{line-height:1.45}
+@media(max-width:500px){.quote-totals.commercial-aligned-totals p{grid-template-columns:minmax(0,1fr) max-content;gap:12px;font-size:12px}}

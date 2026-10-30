@@ -1,0 +1,11 @@
+.library-back-button{margin-bottom:20px;align-self:flex-start}
+.coordinator-library header h2{margin-bottom:6px}
+.coordinator-library header p{margin-top:0}
+.library-search-bar{display:grid;grid-template-columns:minmax(240px,1fr) auto auto;gap:12px;align-items:start}
+.library-search-bar>.pz-button{margin-top:25px;min-height:40px}
+.library-filter-panel{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:16px;padding:16px;background:var(--pz-surface-subtle,#f7f6fb);border:1px solid var(--pz-border,#e6e3ef);border-radius:12px}
+.coordinator-library table td,.project-documents-table td{vertical-align:top}
+.coordinator-library td strong,.coordinator-library td small,.project-documents-table td strong,.project-documents-table td small{display:block}
+.coordinator-library td small,.project-documents-table td small{margin-top:4px;color:var(--pz-text-secondary,#666475)}
+.coordinator-library td .pz-action-row{align-items:flex-start}
+@media(max-width:700px){.library-search-bar{grid-template-columns:1fr 1fr}.library-search-bar>.pz-field{grid-column:1/-1}.library-search-bar>.pz-button{margin-top:0}.library-filter-panel{grid-template-columns:1fr}}

@@ -1189,6 +1189,7 @@ export function Dashboard({
                 view !== "dashboard" && (
                   <Button
                     variant="neutral"
+                    className={view==='projects'||view==='documents'?'library-back-button':undefined}
                     onClick={() =>
                       navigate(origin as Parameters<typeof navigate>[0])
                     }
@@ -1204,6 +1205,7 @@ export function Dashboard({
               {canUseLibrary && (
                 <div hidden={view !== "projects" && view !== "documents"}>
                   <CoordinatorLibrary
+                    session={session}
                     initialDocumentId={linkedDocumentId}
                     initialProjectKey={projectContextKey}
                     active={view === "projects" || view === "documents"}
@@ -1316,6 +1318,7 @@ export function Dashboard({
                         ? bucketTask.id
                         : undefined
                     }
+                    startQuotationRevision={bucketTask?.startQuotationRevision===true}
                     initialPricingId={
                       bucketTask?.kind === "Quotation"
                         ? bucketTask.id
@@ -1342,6 +1345,7 @@ export function Dashboard({
                     bucketTask?.kind === "Saved BOQ" ? bucketTask.id : undefined
                   }
                   initialDraftId={revisionDraftId}
+                  startRevision={bucketTask?.reviseBoq===true}
                   initialCniId={
                     bucketTask?.kind === "C&I proposal"
                       ? bucketTask.id

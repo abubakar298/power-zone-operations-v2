@@ -4,10 +4,11 @@ import { ownedCondition } from "../http/permissions.js";
 import { HttpError } from "../http/errors.js";
 // This index deliberately selects metadata, never costing/pricing snapshots or audit payloads.
 export async function projectCatalog(pool: Pool, actor: string) {
+  const technicalOnly=(await pool.query('SELECT role FROM users WHERE id=$1',[actor])).rows[0]?.role==='Coordinator';
   const archived=await archivedDocumentIds(pool);
   const queries = [
     `SELECT d.id,'Survey draft' AS type,d.inputs->>'siteName' AS number,d.version,d.inputs->>'customerId' AS customer_id,d.inputs->>'siteCode' AS site_code,d.inputs->>'siteName' AS site,d.inputs->>'location' AS location,COALESCE(d.inputs->>'family','solar-hybrid') AS family,d.updated_at AS created_at,d.owner_id AS actor_id,'draft' AS resource FROM survey_drafts d WHERE ${ownedCondition("draft", "d.id", "$1")}`,
-    `SELECT r.id,'BOQ' AS type,r.number,r.revision AS version,b.customer_id::text,b.site_id,s.code AS site_code,r.snapshot->'survey'->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,r.created_at,r.created_by AS actor_id,'boq' AS resource FROM boq_revisions r JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("boq", "r.id", "$1")}`,
+    `SELECT r.id,'BOQ' AS type,r.number,r.revision AS version,b.customer_id::text,b.site_id,s.code AS site_code,r.snapshot->'survey'->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,r.created_at,r.created_by AS actor_id,'boq' AS resource,NOT EXISTS(SELECT 1 FROM boq_revisions newer WHERE newer.boq_id=r.boq_id AND newer.revision>r.revision) AS current FROM boq_revisions r JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("boq", "r.id", "$1")}`,
     `SELECT q.id,'Quotation' AS type,q.number,q.version,b.customer_id::text,s.code AS site_code,q.snapshot->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,q.created_at,q.created_by AS actor_id,'quotation' AS resource,q.boq_revision_id,NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS current,EXISTS(SELECT 1 FROM quotation_revision_requests r WHERE r.source_quotation_id=q.id) AS revision_requested,COALESCE((SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1),'Not submitted') AS stage FROM quotation_versions q JOIN boq_revisions r ON r.id=q.boq_revision_id JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("quotation", "q.id", "$1")}`,
     `SELECT v.id,p.id AS proposal_id,'C&I proposal' AS type,v.number,v.version,p.customer_id::text,v.snapshot->>'siteCode' AS site_code,v.snapshot->>'siteName' AS site,'ci-bess' AS family,v.created_at,v.created_by AS actor_id,'cni' AS resource,COALESCE((SELECT a.action FROM cni_proposal_actions a WHERE a.version_id=v.id ORDER BY a.created_at DESC,a.id DESC LIMIT 1),'Saved draft') AS stage FROM cni_proposal_versions v JOIN cni_proposals p ON p.id=v.proposal_id WHERE ${ownedCondition("cni", "p.id", "$1")}`,
     `SELECT i.id,'IPO / PT' AS type,i.number,1 AS version,b.customer_id::text,s.code AS site_code,i.snapshot->>'siteName' AS site,COALESCE(r.snapshot->'survey'->>'family','solar-hybrid') AS family,i.created_at,i.created_by AS actor_id,'ipo' AS resource,i.snapshot->>'quotationId' AS quotation_id FROM internal_purchase_orders i JOIN boq_revisions r ON r.id::text=i.snapshot->>'boqRevisionId' JOIN boqs b ON b.id=r.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("ipo", "i.id", "$1")}`,
@@ -86,7 +87,7 @@ export async function projectCatalog(pool: Pool, actor: string) {
       d.resource === "workflow"
         ? `/api/project-workflow/${d.workflow_id}/documents/${d.id}/pdf`
         : d.resource === "boq"
-          ? `/api/boqs/${id}/costing.pdf`
+          ? `/api/boqs/${id}/${technicalOnly?'items':'costing'}.pdf`
           : d.resource === "quotation"
             ? `/api/commercial/quotations/${id}/quotation.pdf`
             : d.resource === "cni"
@@ -98,6 +99,7 @@ export async function projectCatalog(pool: Pool, actor: string) {
                   : d.resource === "issuance"
                     ? `/api/operations/${id}/report.pdf`
                     : null;
+    if(technicalOnly&&d.resource!=='boq')d.pdf_url=null;
   }
   return {
     documents: documents.sort(

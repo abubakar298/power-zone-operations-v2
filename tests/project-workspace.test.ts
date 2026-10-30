@@ -1,4 +1,7 @@
 import {test} from 'node:test';
+import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
+import {writeFileSync} from 'node:fs';
+import {BoqRepository} from '../server/boq/repository.js';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {testDatabase} from './database.js';
@@ -28,5 +31,11 @@ test('project metadata/history preserves ownership, exact versions, chronologica
  await request(app).get('/api/coordinator/projects').set('Cookie',cookies[owner]).expect(200);
  await request(app).get('/api/coordinator/project').query({key:first.project_key}).set('Cookie',cookies[other]).expect(404);
  await request(app).get('/api/coordinator/project').query({key:first.project_key}).set('Cookie',cookies[owner]).expect(200);
+ const boq=project.documents.find(d=>d.resource==='boq');assert.ok(boq);assert.ok(boq.pdf_url.endsWith('/items.pdf'));assert.ok(project.documents.filter(d=>d.resource!=='boq').every(d=>d.pdf_url===null));
+ const boqRepo=new BoqRepository(db.pool),sourceBoq=await boqRepo.get(boq.id),ownDraft=await boqRepo.draft(owner,undefined,0,sourceBoq.snapshot.survey);for(const url of [`/api/boqs/${boq.id}/costing.pdf`,`/api/boqs/drafts/${ownDraft.id}/costing.pdf`])await request(app).get(url).set('Cookie',cookies[owner]).expect(403);
+ await request(app).get(`/api/boqs/${boq.id}/items.pdf`).set('Cookie',cookies[other]).expect(404);
+ const itemPdf=await request(app).get(`/api/boqs/${boq.id}/items.pdf`).set('Cookie',cookies[owner]).expect(200);const bytes=Buffer.from(itemPdf.body);assert.ok(bytes.length<500000);writeFileSync('/tmp/pz-technical-boq-items.pdf',bytes);const task=getDocument({data:new Uint8Array(bytes),useSystemFonts:true});try{const pdf=await task.promise;let text='';for(let page=1;page<=pdf.numPages;page++)text+=(await(await pdf.getPage(page)).getTextContent()).items.map((i:any)=>i.str??'').join(' ');assert.match(text,/SR#/);assert.match(text,/Description/);assert.match(text,/Qty/);assert.doesNotMatch(text,/Unit Cost|Buying Rate|Total Cost|Subtotal|PKR|Margin|Markup|Per Watt/i);}finally{await task.destroy();}
+ await request(app).get(`/api/boqs/${boq.id}/costing.pdf`).set('Cookie',cookies[admin]).expect(200);
+
  }finally{await db.close();}
 });
