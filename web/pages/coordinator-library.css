@@ -1,8 +1,8 @@
 .library-back-button{margin-bottom:20px;align-self:flex-start}
 .coordinator-library header h2{margin-bottom:6px}
 .coordinator-library header p{margin-top:0}
-.library-search-bar{display:grid;grid-template-columns:minmax(240px,1fr) auto auto;gap:12px;align-items:start}
-.library-search-bar>.pz-button{margin-top:25px;min-height:40px}
+.library-search-bar{display:grid;grid-template-columns:minmax(240px,1fr) auto auto;gap:12px;align-items:end}
+.library-search-bar>.pz-button{margin-top:0;min-height:46px}
 .library-filter-panel{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:16px;padding:16px;background:var(--pz-surface-subtle,#f7f6fb);border:1px solid var(--pz-border,#e6e3ef);border-radius:12px}
 .coordinator-library table td,.project-documents-table td{vertical-align:top}
 .coordinator-library td strong,.coordinator-library td small,.project-documents-table td strong,.project-documents-table td small{display:block}
