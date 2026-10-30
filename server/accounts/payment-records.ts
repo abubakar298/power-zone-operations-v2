@@ -1,4 +1,5 @@
 import{invoiceCorrections,applyInvoiceCorrections}from'./invoice-correction-state.js';
+import{applyMeezanInvoiceValues}from'./meezan-invoice-values.js';
 import{invoiceSubmissions,applyInvoiceSubmissionBilling}from'./invoice-submission-state.js';
 import{invoiceReceipts,applyInvoiceReceipts,awaitingInvoicePayments}from'./invoice-receipt-state.js';
 import {randomUUID} from 'node:crypto';
@@ -17,7 +18,7 @@ export async function paymentRegisterData(db:Pool|PoolClient){
  const entries=(await db.query('SELECT *,payment_date::text AS payment_date FROM accounts_payment_records ORDER BY created_at DESC')).rows;
  const s=source?.snapshot;
  const rows=s?billingRows(s.registers,s.cables,s.internet,s.evidence):[];
- const submitted=applyInvoiceSubmissionBilling(rows,await invoiceSubmissions(db)),corrected=applyInvoiceCorrections(submitted,await invoiceCorrections(db)),pending=paymentQueue(corrected,entries),receipts=await invoiceReceipts(db),current=applyInvoiceReceipts(corrected,receipts);
+ const submitted=applyInvoiceSubmissionBilling(rows,await invoiceSubmissions(db)),corrected=applyInvoiceCorrections(submitted,await invoiceCorrections(db)),pending=paymentQueue(applyMeezanInvoiceValues(corrected),entries),receipts=await invoiceReceipts(db),current=applyMeezanInvoiceValues(applyInvoiceReceipts(corrected,receipts));
  return {sourceVersion:source?.version??0,pending,awaiting:awaitingInvoicePayments(current,pending),internet:current.filter(r=>r.category==='Internet'),invoices:current,entries,receipts};
 }
 export async function paymentRegister(pool:Pool,actor:string){
