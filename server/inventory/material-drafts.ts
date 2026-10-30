@@ -1,3 +1,4 @@
+import {withInventoryReceiving} from '../operations-board/inventory-delivery.js';
 import {warehouseNumber} from './warehouse-access.js';
 import {ParentReconciliationRepository} from './parent-reconciliation.js';
 import approvedParentLedger from './approved-parent-ledger.json' with {type:'json'};
@@ -60,9 +61,9 @@ export class MaterialDraftRepository{
   const links=(await c.query(`SELECT l.*,v.snapshot board,b.snapshot boq FROM inventory_material_source_links l
    JOIN LATERAL(SELECT snapshot FROM operations_board_versions WHERE site_id=l.board_site_id ORDER BY version DESC LIMIT 1)v ON true
    JOIN boq_revisions b ON b.id=l.boq_revision_id`)).rows;
-  const registered=(await c.query('SELECT DISTINCT ON(site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC')).rows;
+  const registered=await withInventoryReceiving(c,(await c.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC')).rows);
   const activeBatches=(await c.query('SELECT DISTINCT ON(batch_id) version,snapshot FROM operations_board_batch_versions ORDER BY batch_id,version DESC')).rows;
-  const installationOnlyBoards=new Set(inventoryOperationsBatches(activeBatches,registered,[]).flatMap(batch=>batch.stops.filter(stop=>stop.work==='labour').map(stop=>stop.boardSiteId)));
+  const installationOnlyBoards=new Set([...inventoryOperationsBatches(activeBatches,registered,[]).flatMap(batch=>batch.stops.filter(stop=>stop.work==='labour').map(stop=>stop.boardSiteId)),...registered.filter(r=>r.snapshot.inventoryReceiving&&r.snapshot.installation===true&&!r.snapshot.completed&&r.snapshot.stage==='delivered').map(r=>r.site_id)]);
   const reference=(number:string,order:string)=>`${number}${order?' · '+order:''}`.trim().replace(/\s+/g,' ').toLowerCase();
   for(const source of confirmed){
    const known=registered.some(r=>reference(r.snapshot.ipo??'','')===reference(source.ipo_number,source.order_number??''));
@@ -70,6 +71,7 @@ export class MaterialDraftRepository{
   }
   const approvedIpos=await approvedMaterialIdentities(c,links.map(link=>link.ipo_id));
   for(const link of links){
+   link.board=registered.find(r=>r.site_id===link.board_site_id)?.snapshot??link.board;
    const ipo=approvedIpos.get(link.ipo_id);if(!ipo||ipo instanceof HttpError){heldIpos.add(link.ipo_id);continue;}
    const s=ipo.snapshot;
    const identity=checkMaterialSourceLink({...link.board,id:link.board_site_id},[{id:ipo.id,number:ipo.number,orderNumber:s.input?.orderNumber??'',poNumber:s.input?.poNumber??'',siteName:s.siteName??''}],(continuations.has(ipo.id)||installationOnlyBoards.has(link.board_site_id))&&link.board.installation===true);
@@ -78,7 +80,7 @@ export class MaterialDraftRepository{
    if(existing)heldIpos.add(ipo.id); // Preserve the stable link basis when a later Store handoff arrives.
    linked.push({installationOnly:installationOnlyBoards.has(link.board_site_id),sourceKind:'linked-ipo',storeHandoffId:existing?.id,registeredSiteId:link.board_site_id,basisId:link.id,basisVersion:1,siteId:ipo.id,ipo:ipo.number,orderNumber:String(s.input?.orderNumber??''),customerPo:String(s.input?.poNumber??''),siteName:s.siteName,customer:String(s.customer?.name??''),installation:link.board.installation===true?true:link.board.installation===false?false:null,dispatchDate:plannedInventoryDelivery({...link.board,id:link.board_site_id}),installationDate:plannedInventoryInstallation(link.board),authorization:'approved-ipo-boq',items:items(link.boq.lines)});
   }
-  return [...confirmed.filter(r=>!heldIpos.has(r.ipo_id)).map(r=>({sourceKind:'store-boq' as const,registeredSiteId:r.registeredSiteId,basisId:r.id,basisVersion:1 as const,siteId:r.ipo_id,ipo:r.ipo_number,dispatchDate:(()=>{const matches=registered.filter(b=>b.snapshot.origin?.ipoId===r.ipo_id&&b.snapshot.origin?.operationsIssuanceId===r.operations_issuance_id);return matches.length===1?plannedInventoryDelivery({...matches[0].snapshot,id:matches[0].site_id}):null;})(),installationDate:(()=>{const matches=registered.filter(b=>b.snapshot.origin?.ipoId===r.ipo_id&&b.snapshot.origin?.operationsIssuanceId===r.operations_issuance_id);return matches.length===1?plannedInventoryInstallation(matches[0].snapshot):null;})(),orderNumber:r.order_number??'',customerPo:r.po_number??'',siteName:String(r.snapshot.siteName),customer:String(r.snapshot.customer?.name??''),installation:r.registeredSiteId?(r.registeredInstallation===true?true:r.registeredInstallation===false?false:null):r.scope==='installation'?true:r.scope==='delivery_only'?false:null,authorization:'approved-store-boq' as const,items:items(r.snapshot.items)})),
+  return [...confirmed.filter(r=>!heldIpos.has(r.ipo_id)).map(r=>({installationOnly:!!r.registeredSiteId&&installationOnlyBoards.has(r.registeredSiteId),sourceKind:'store-boq' as const,registeredSiteId:r.registeredSiteId,basisId:r.id,basisVersion:1 as const,siteId:r.ipo_id,ipo:r.ipo_number,dispatchDate:(()=>{const matches=registered.filter(b=>b.snapshot.origin?.ipoId===r.ipo_id&&b.snapshot.origin?.operationsIssuanceId===r.operations_issuance_id);return matches.length===1?plannedInventoryDelivery({...matches[0].snapshot,id:matches[0].site_id}):null;})(),installationDate:(()=>{const matches=registered.filter(b=>b.snapshot.origin?.ipoId===r.ipo_id&&b.snapshot.origin?.operationsIssuanceId===r.operations_issuance_id);return matches.length===1?plannedInventoryInstallation(matches[0].snapshot):null;})(),orderNumber:r.order_number??'',customerPo:r.po_number??'',siteName:String(r.snapshot.siteName),customer:String(r.snapshot.customer?.name??''),installation:r.registeredSiteId?(r.registeredInstallation===true?true:r.registeredInstallation===false?false:null):r.scope==='installation'?true:r.scope==='delivery_only'?false:null,authorization:'approved-store-boq' as const,items:items(r.snapshot.items)})),
    ...linked,...advance.map(r=>({sourceKind:'headsup' as const,basisId:r.id,basisVersion:1 as const,siteId:r.record_id,ipo:null,dispatchDate:null,siteName:r.site_name,customer:String(r.site.customer??''),installation:null,authorization:'forecast-only' as const,items:items(r.site.items)}))];
  }
  private async stockCatalogue(c:Pool|PoolClient=this.pool){
@@ -164,7 +166,7 @@ export class MaterialDraftRepository{
   // Imported Accounts/Operations positioning is visible without pretending that
   // an IPO label establishes an approved, executable BOQ identity.
   const sources=await this.sources();
-  const boardRows=(await this.pool.query(`SELECT DISTINCT ON(site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC`)).rows;
+  const boardRows=await withInventoryReceiving(this.pool,(await this.pool.query(`SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC`)).rows);
   const batches=(await this.pool.query('SELECT DISTINCT ON(batch_id) version,snapshot FROM operations_board_batch_versions ORDER BY batch_id,version DESC')).rows;
   const operationsBatches=inventoryOperationsBatches(batches,boardRows,sources);
   const registeredPending=boardRows

@@ -15,6 +15,7 @@ export const sourceSiteSchema=z.object({
  projectType:z.enum(['solar-bess','solar','bess','ups','delivery-only']).nullish(),
  operationsTeam:teamSchema.nullish(),
  documents:z.array(document).max(1000).optional(),
+ inventoryReceiving:z.object({dispatchId:z.uuid(),number:z.string(),evidenceId:z.uuid(),name:z.string(),mediaType:z.string(),receivedAt:z.iso.datetime()}).optional(),
 }).passthrough().superRefine((site,ctx)=>{if(site.installation===null&&site.scopePending!==true)ctx.addIssue({code:'custom',message:'Unknown installation scope must remain explicitly flagged.',path:['scopePending']});});
 export const importSchema=z.object({sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),rows:z.array(sourceSiteSchema).min(1).max(20000)}).strict();
 export const movementSchema=z.object({

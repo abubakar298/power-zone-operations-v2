@@ -1,3 +1,4 @@
+import {withInventoryReceiving} from './inventory-delivery.js';
 import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
 import {regionalQcDelegationSql} from './qc-delegation.js';
 import {recordDeliveryReturn} from './delivery-return.js';
@@ -37,11 +38,11 @@ export class OperationsBoardRepository{
   if(lock)await c.query('SELECT id FROM operations_board_sites WHERE id=$1 FOR UPDATE',[id]);
   const row=(await c.query('SELECT version,snapshot FROM operations_board_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1',[id])).rows[0];
   if(!row)throw new HttpError(404,'Operations site not found.');
-  return row as {version:number;snapshot:BoardSite};
+  const [projected]=await withInventoryReceiving(c,[{...row,site_id:id}]);return projected as {version:number;snapshot:BoardSite};
  }
  async sites(actor:string){
   const access=await this.access(actor);if(access.kind==='accounts')throw new HttpError(403,'Accounts can view document tracking only.');
-  const rows=(await this.pool.query(latest)).rows;
+  const rows=await withInventoryReceiving(this.pool,(await this.pool.query(latest)).rows);
   return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>({...r.snapshot,version:r.version})),access};
  }
  async site(actor:string,id:string){const a=await this.access(actor),r=await this.current(this.pool,id);this.scope(a,r.snapshot);return {...r.snapshot,version:r.version};}
@@ -104,10 +105,10 @@ export class OperationsBoardRepository{
  async download(actor:string,id:string,fileId:string){
   const a=await this.access(actor),site=await this.current(this.pool,id);this.scope(a,site.snapshot,true);
   if(a.kind==='accounts'){
-   const linked=(site.snapshot.documents??[]).some((d:any)=>(d.evidence??[]).some((f:any)=>f.id===fileId));
+   const linked=site.snapshot.inventoryReceiving?.evidenceId===fileId||(site.snapshot.documents??[]).some((d:any)=>(d.evidence??[]).some((f:any)=>f.id===fileId));
    if(!linked)throw new HttpError(404,'Document file not found.');
   }
-  const file=(await this.pool.query('SELECT filename,media_type,content FROM operations_board_files WHERE site_id=$1 AND id=$2',[id,fileId])).rows[0];
+  const file=(await this.pool.query('SELECT filename,media_type,content FROM operations_board_files WHERE site_id=$1 AND id=$2',[id,fileId])).rows[0]??(site.snapshot.inventoryReceiving?.evidenceId===fileId?(await this.pool.query('SELECT original_name AS filename,media_type,content FROM inventory_material_evidence WHERE id=$1',[fileId])).rows[0]:undefined);
   if(!file)throw new HttpError(404,'Document file not found.');
   await this.pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'operations.board.download:'+fileId]);return file;
  }
