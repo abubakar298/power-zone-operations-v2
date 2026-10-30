@@ -66,6 +66,7 @@ export function Boqs({
   initialBoqId?: string;
   initialContext?: any;
 }) {
+  const showCosting = session.user.role !== "Coordinator";
   const [masterDetailsDirty,setMasterDetailsDirty]=useState(!!initialContext?.workflowRecordId);
   const [liveSolution,setLiveSolution]=useState<any>(initialContext??{});
   const [solutionRevision,setSolutionRevision]=useState<{reference:string;actorName:string}|null>(null);
@@ -175,7 +176,7 @@ export function Boqs({
         api("/masters"),
         api<{ boqs: any[] }>("/boqs"),
         api<{ drafts: any[] }>("/boqs/drafts"),
-        api<{ reviews: any[] }>("/boqs/reviews"),
+        showCosting ? api<{ reviews: any[] }>("/boqs/reviews") : Promise.resolve({reviews: []}),
       ]);
       setMasters(m);
       setRecords(b.boqs);
@@ -199,7 +200,7 @@ export function Boqs({
           const d = await api<{ drafts: any[] }>("/boqs/drafts");
           const row = d.drafts.find((x) => x.id === initialDraftId);
           if (row && row.review_status !== "Awaiting review") resume(row);
-          else {
+          else if (showCosting) {
             const reviews = await api<{ reviews: any[] }>("/boqs/reviews");
             const review = reviews.reviews.find(
               (r) =>
@@ -458,6 +459,7 @@ export function Boqs({
     }
   }
   async function openReview(id: string) {
+    if (!showCosting) return;
     setInstructions(blankInstructions());
     setApprovalEvidence([]);
     setExternalApprover("");
@@ -810,11 +812,9 @@ export function Boqs({
             </button>
           </div>
           <p>
-            Select a site or create a new one, review the costing, then save an
-            immutable BOQ revision, then prepare its quotation for Management
-            approval.
+            {showCosting ? "Select a site or create a new one, review the costing, then save an immutable BOQ revision and prepare its quotation for Management approval." : "Select a site or create a new one, complete its BOQ and prepare its quotation for Management approval."}
           </p>
-          <section className="detail-panel review-workspace">
+          {showCosting && <section className="detail-panel review-workspace">
             <h3>
               {["Admin", "Management"].includes(session.user.role)
                 ? "Costing review inbox"
@@ -863,7 +863,7 @@ export function Boqs({
                 </table>
               </div>
             )}
-          </section>
+          </section>}
           <section className="detail-panel">
             <h3>Survey drafts</h3>
             {drafts.length === 0 ? (
@@ -926,7 +926,7 @@ export function Boqs({
             )}
           </section>
         </>
-      ) : view === "review" ? (
+      ) : view === "review" && showCosting ? (
         <>
           <div className="panel-heading">
             <h2>
@@ -1229,12 +1229,12 @@ export function Boqs({
               </button>
             ))}
           </section>}
-          <BoqCosting
+          {showCosting && <BoqCosting
             pdfUrl={`/api/boqs/${saved.id}/costing.pdf`}
             snapshot={saved.snapshot}
             number={saved.number}
             createdAt={saved.created_at}
-          />
+          />}
         </>
       ) : (
         <>
@@ -1729,10 +1729,10 @@ export function Boqs({
           )}
           {preview && (
             <>
-              <BoqCosting
+              {showCosting && <BoqCosting
                 snapshot={preview.snapshot}
                 pdfUrl={`/api/boqs/drafts/${draft?.id}/costing.pdf?fingerprint=${preview.fingerprint}`}
-              />
+              />}
               {["Admin", "Management"].includes(session.user.role) && !(preview.snapshot as any).costVisibility && (
                 <StandardSellingSummary snapshot={preview.snapshot} />
               )}
