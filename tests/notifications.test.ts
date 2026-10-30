@@ -150,6 +150,9 @@ test("reminders and escalation are capped, critical preferences cannot suppress 
   await db.pool.query("UPDATE users SET role='Accounts' WHERE id=$1", [
     owner.id,
   ]);
+  // Isolate the revoked owner's delivery; another recipient's legitimate
+  // escalation may share the same due time and has no defined tie order.
+  await db.pool.query("UPDATE notification_email_queue q SET next_attempt_at=now()+interval '1 hour' FROM notifications n WHERE n.id=q.id AND n.user_id<>$1",[owner.id]);
   let sent = 0;
   await repo.deliverOne(
     {

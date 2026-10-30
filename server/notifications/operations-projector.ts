@@ -10,7 +10,7 @@ export class OperationsNotificationProjector{
   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('operations.notification.projection',0))");
   const policy=(await c.query(`SELECT p.* FROM operations_notification_policy_current p JOIN users u ON u.id=p.reviewed_by AND u.active AND u.role IN('Admin','Management') WHERE p.enabled AND p.activated_at<=$1`,[clock])).rows[0];
   if(!policy)return {enabled:false,created:0,heldBlockerEvents:0};
-  const rows=(await c.query(`SELECT DISTINCT ON(e.created_at,e.id,r.user_id) e.id,e.site_id,e.kind,e.created_at,e.created_by,r.audience,r.user_id,r.version AS route_version,source.snapshot
+  const rows=(await c.query(`SELECT DISTINCT ON(e.created_at,e.id,r.user_id) e.id,e.site_id,e.kind,e.created_at,e.created_by,r.audience,r.user_id,r.version AS route_version,jsonb_build_object('ipo',source.snapshot->>'ipo','name',source.snapshot->>'name') AS snapshot
    FROM operations_board_events e
    JOIN operations_board_versions source ON source.site_id=e.site_id AND source.version=e.site_version
    JOIN LATERAL(SELECT snapshot FROM operations_board_versions WHERE site_id=e.site_id ORDER BY version DESC LIMIT 1) current_site ON true

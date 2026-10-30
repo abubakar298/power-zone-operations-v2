@@ -1,3 +1,4 @@
+import{readFile}from'node:fs/promises';
 import {test} from 'node:test';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';
 import {testDatabase} from './database.js';import {NotificationsRepository} from '../server/notifications/repository.js';import {activateWorkflowHandoffs} from '../server/notifications/handoff-activation.js';
 test('forward-only reviewed handoffs route Accounts, Inventory and regional QC, without activating overdue or stock alerts',async()=>{
@@ -10,7 +11,7 @@ test('forward-only reviewed handoffs route Accounts, Inventory and regional QC, 
  await assert.rejects(activateWorkflowHandoffs(db.pool,ids.wrong,input),/Management/);
  const policy=await activateWorkflowHandoffs(db.pool,ids.owner,input);assert.equal((await activateWorkflowHandoffs(db.pool,ids.owner,input)).version,policy.version);
  const site='isolated-handoff-site';await db.pool.query('INSERT INTO operations_board_sites(id,created_by) VALUES($1,$2)',[site,ids.owner]);
- const snapshot={id:site,name:'Example site',ipo:'EXAMPLE',operationsTeam:'central',stage:'awaiting',planningBatches:[],documents:[],completed:false};
+ const snapshot={id:site,retainedEvidence:'isolated-large-unrelated-history'.repeat(16000),name:'Example site',ipo:'EXAMPLE',operationsTeam:'central',stage:'awaiting',planningBatches:[],documents:[],completed:false};
  for(const [version,action,doc] of [[1,'plan',false],[2,'Document movement:do',true]] as const){await db.pool.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[site,version,{...snapshot,documents:doc?[{id:'do',label:'Signed DO',location:'With delivery driver'}]:[]},action,doc?JSON.stringify({location:'With delivery driver'}):'Isolated real save',randomUUID(),ids.owner]);await db.pool.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),site,version,doc?'Physical document updated':'Dispatch plan','[]',ids.owner]);}
  const notices=new NotificationsRepository(db.pool);await db.pool.query("UPDATE notification_settings SET email_enabled=true,activated_at=now()-interval '1 day'");await notices.sync();await notices.sync();
  const list=(name:string,role:string)=>notices.list({id:ids[name],role} as any);
@@ -36,6 +37,14 @@ test('forward-only reviewed handoffs route Accounts, Inventory and regional QC, 
  await db.pool.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[site,version,{...snapshot,completed:complete,documents:[{id:'do',label:'Signed DO',location:'With delivery driver'}],planningBatches:version===5?[{kind:'both',stops:[{kind:'labour'}]}]:[]},action,'Isolated saved decision',randomUUID(),ids.owner]);
  await db.pool.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),site,version,kind,'[]',ids.owner]);}
  await notices.sync();await notices.sync();
+ // Both SQL projections must return byte-identical handoffs, including cutoff,
+ // installation-only routing and signed-copy events, despite unrelated large history.
+ const eventRows=async()=>(await db.pool.query('SELECT row_to_json(e)::text AS value FROM workflow_handoff_events e ORDER BY source_key')).rows;
+ const optimized=await eventRows();
+ await db.pool.query(await readFile('migrations/143_signed_dispatch_notification_timing.sql','utf8'));
+ assert.deepEqual(await eventRows(),optimized);
+ await db.pool.query((await readFile('migrations/155_notification_memory_bounds.sql','utf8')).split('CREATE INDEX notification_email_ready')[0]);
+ assert.deepEqual(await eventRows(),optimized);
  const acc=await list('accounts','Accounts'),qc=await list('central','Operations');
  for(const kind of ['IPO issued to Accounts','Material dispatched','Signed gate DO saved','Physical document update','Site completed'])assert.ok(acc.some(n=>n.kind===kind),kind);
  assert.equal(acc.filter(n=>n.kind==='IPO issued to Accounts').length,1,'historical IPO not replayed');

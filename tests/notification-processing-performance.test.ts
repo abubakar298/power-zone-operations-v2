@@ -12,9 +12,9 @@ test('unchanged projection avoids duplicate insert attempts, evaluates resolutio
  const queries:string[]=[];const measuredPool={connect:async()=>{const c=await db.pool.connect();return {query:(sql:any,...args:any[])=>{queries.push(typeof sql==='string'?sql:sql.text);return (c.query as any)(sql,...args);},release:()=>c.release()};}};
  const measured=new NotificationsRepository(measuredPool as any);const start=performance.now();await measured.sync();const elapsed=performance.now()-start;
  assert.deepEqual(await notices(),baseline);assert.deepEqual(await queue(),mail);assert.deepEqual((await db.pool.query('SELECT * FROM notification_attempt_probe')).rows,[]);assert.deepEqual((await db.pool.query('SELECT row_to_json(a)::text row FROM audit_log a ORDER BY id')).rows,business);
- assert.equal(queries.filter(q=>q.includes('FROM notification_events')).length,2);assert.equal(queries.filter(q=>q.includes('WITH current_events AS MATERIALIZED')).length,1);assert.equal((await db.pool.query("SELECT count(*)::int n FROM notifications WHERE read_at IS NOT NULL")).rows[0].n,1);
+ assert.equal(queries.filter(q=>q.includes('FROM notification_events')).length,1);assert.equal(queries.filter(q=>q.includes('WITH current_events AS MATERIALIZED')).length,1);assert.equal((await db.pool.query("SELECT count(*)::int n FROM notifications WHERE read_at IS NOT NULL")).rows[0].n,1);
  assert.ok(baseline.length>=243);assert.equal((await db.pool.query("SELECT count(*)::int n FROM notifications WHERE kind IN('Reminder','Escalation')")).rows[0].n,2);
- console.log(JSON.stringify({fixtureEvents:241,notices:baseline.length,unchangedSyncMs:Number(elapsed.toFixed(2)),duplicateInsertAttempts:0,fullEventViewScans:2,basis:'Disposable native PostgreSQL only; not production latency'}));
+ console.log(JSON.stringify({fixtureEvents:241,notices:baseline.length,unchangedSyncMs:Number(elapsed.toFixed(2)),duplicateInsertAttempts:0,fullEventViewScans:1,basis:'Disposable native PostgreSQL only; not production latency'}));
  // New work is still projected once; historical acknowledgements and queued mail remain.
  await db.pool.query("INSERT INTO audit_log(user_id,target_user_id,action) VALUES($1,$2,'account.activated')",[users.manager,users.owner]);await measured.sync();const after=await notices();assert.equal(after.length,baseline.length+1);assert.equal((await db.pool.query("SELECT count(*)::int n FROM notifications WHERE read_at IS NOT NULL")).rows[0].n,1);assert.equal((await db.pool.query("SELECT count(*)::int n FROM notification_attempt_probe WHERE kind='notifications'")).rows[0].n,1);
  for(const t of ['internal_purchase_orders','stock_on_hand_entries','accounts_job_closures'])assert.equal((await db.pool.query('SELECT count(*)::int n FROM '+t)).rows[0].n,0);
@@ -27,5 +27,15 @@ test('a concurrent projection skips without waiting, then processes new work exa
  const current=await db.pool.connect();await current.query('BEGIN');await current.query('SELECT pg_advisory_xact_lock(742019032)');const repo=new NotificationsRepository(db.pool);
  try{const start=performance.now();await repo.sync();assert.ok(performance.now()-start<2000,'A duplicate sweep must skip rather than wait for the held projector lock');assert.equal((await db.pool.query('SELECT count(*)::int n FROM notifications')).rows[0].n,0);}finally{await current.query('ROLLBACK');current.release();}
  await repo.sync();await repo.sync();assert.equal((await db.pool.query('SELECT count(*)::int n FROM notifications WHERE user_id=$1',[owner])).rows[0].n,1);assert.equal((await db.pool.query("SELECT count(*)::int n FROM audit_log WHERE action='account.activated'")).rows[0].n,1);
+ }finally{await db.close();}
+});
+
+test('empty inboxes and empty email queues avoid the live notification source view',async()=>{
+ const db=await testDatabase();try{
+ const id=randomUUID();await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,'isolated','Accounts','isolated')",[id,id+'@example.test']);
+ const queries:string[]=[];const measured={query:(sql:any,...args:any[])=>{queries.push(String(sql));return(db.pool.query as any)(sql,...args);},connect:async()=>{const c=await db.pool.connect();return{query:(sql:any,...args:any[])=>{queries.push(String(sql));return(c.query as any)(sql,...args);},release:()=>c.release()};}};
+ const repo=new NotificationsRepository(measured as any);assert.deepEqual(await repo.list({id,role:'Accounts'} as any),[]);
+ await repo.deliverOne({configured:true,send:async()=>{throw Error('No message should be sent');}},'https://example.test');
+ assert.equal(queries.filter(q=>q.includes('notification_events')).length,0);
  }finally{await db.close();}
 });

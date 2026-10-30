@@ -24,11 +24,19 @@ export class NotificationsRepository {
       // a duplicate sweep or tie up a database connection waiting for it.
       const lock=await c.query("SELECT pg_try_advisory_xact_lock(742019032) AS acquired");
       if(!lock.rows[0].acquired)return;
+      // Limit the sweep's working memory independently of foreground reads.
+      await c.query("SET LOCAL work_mem='512kB'");
       const operationsClock=new Date().toISOString();
       await new OperationsNotificationProjector().sync(c,operationsClock);
       await new OperationsIncidentProjector().sync(c,operationsClock);
+      // Evaluate current authorization once, retaining only reference metadata.
+      await c.query(`CREATE TEMP TABLE notification_sync_events ON COMMIT DROP AS
+       SELECT source_key,entity_key,kind,reference,actor_id,created_at,owner_id,audience,target,actionable
+       FROM notification_events WHERE kind<>'Stock shortage'`);
+      await c.query('CREATE INDEX ON notification_sync_events(source_key)');
+      await c.query('CREATE INDEX ON notification_sync_events(entity_key,created_at)');
       await c.query(`WITH eligible_events AS MATERIALIZED (
-   SELECT e.* FROM notification_events e CROSS JOIN notification_settings s WHERE e.kind<>'Stock shortage' AND e.created_at>=s.activated_at
+   SELECT e.* FROM notification_sync_events e CROSS JOIN notification_settings s WHERE e.kind<>'Stock shortage' AND e.created_at>=s.activated_at
    ) INSERT INTO notifications(id,user_id,source_key,entity_key,kind,title,reference,actor_id,target,actionable,created_at)
    SELECT gen_random_uuid(),u.id,e.source_key,e.entity_key,e.kind,
     CASE WHEN e.kind IN('Submitted','Approval requested') THEN 'Quotation approval required' WHEN e.kind='Approved' THEN 'Quotation approved' WHEN e.kind='Changes requested' THEN 'Revision requested' ELSE e.kind END,
@@ -42,7 +50,7 @@ export class NotificationsRepository {
       // Evaluate the expensive live event view once for both resolution paths.
       // Read-state, audience, deadline and immutable source semantics are unchanged.
       await c.query(`WITH current_events AS MATERIALIZED (
-   SELECT source_key,entity_key,created_at FROM notification_events
+   SELECT source_key,entity_key,created_at FROM notification_sync_events
    ) UPDATE notifications n SET resolved_at=now() WHERE n.resolved_at IS NULL AND (
    ((n.source_key LIKE 'operations-notice:%' OR n.source_key LIKE 'handoff:%') AND NOT EXISTS(SELECT 1 FROM current_events e WHERE e.source_key=n.source_key))
    OR (n.actionable AND (
@@ -68,9 +76,11 @@ export class NotificationsRepository {
     });
   }
   async list(user: User, id?: string, cursor?: { time: string; id: string }) {
+    // Empty/new inboxes must not plan or execute the cross-department event view.
+    if(!(await this.pool.query("SELECT 1 FROM notifications WHERE user_id=$1 AND kind<>'Stock shortage' AND ($2::uuid IS NULL OR id=$2) LIMIT 1",[user.id,id??null])).rowCount)return [];
     return (
       await this.pool.query(
-        `WITH inbox_events AS MATERIALIZED (SELECT source_key,audience,owner_id FROM notification_events e WHERE $2 IN('Admin','Management') OR (e.audience='owner' AND e.owner_id=$1 AND $2='Coordinator') OR (e.audience IN('security','assigned') AND e.owner_id=$1) OR e.audience=$2), inbox AS (SELECT COUNT(*) FILTER(WHERE n.read_at IS NULL AND n.resolved_at IS NULL) OVER()::integer AS unread_count,n.id,n.kind,COALESCE(t.title,n.title) AS title,n.reference,n.target,n.actionable,n.created_at,n.read_at,n.resolved_at,COALESCE(u.display_name,'Power Zone') AS actor FROM notifications n JOIN inbox_events e ON e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1) LEFT JOIN notification_types t ON t.kind=n.kind LEFT JOIN users u ON u.id=n.actor_id WHERE n.user_id=$1 AND n.kind<>'Stock shortage' AND ($3::uuid IS NULL OR n.id=$3) AND ((e.audience='management' AND $2 IN('Admin','Management')) OR (e.audience='owner' AND e.owner_id=$1 AND $2 IN('Admin','Management','Coordinator')) OR (e.audience IN('security','assigned') AND e.owner_id=$1) OR e.audience=$2 OR (n.kind='Escalation' AND $2 IN('Admin','Management'))) ) SELECT * FROM inbox WHERE ($4::timestamptz IS NULL OR (created_at,id)<($4::timestamptz,$5::uuid)) ORDER BY created_at DESC,id DESC LIMIT 100`,
+        `WITH candidates AS MATERIALIZED (SELECT * FROM notifications WHERE user_id=$1 AND kind<>'Stock shortage' AND ($3::uuid IS NULL OR id=$3)), inbox_events AS MATERIALIZED (SELECT source_key,audience,owner_id FROM notification_events e WHERE e.source_key IN(SELECT split_part(split_part(source_key,'/reminder',1),'/escalation',1) FROM candidates) AND ( $2 IN('Admin','Management') OR (e.audience='owner' AND e.owner_id=$1 AND $2='Coordinator') OR (e.audience IN('security','assigned') AND e.owner_id=$1) OR e.audience=$2)), inbox AS (SELECT COUNT(*) FILTER(WHERE n.read_at IS NULL AND n.resolved_at IS NULL) OVER()::integer AS unread_count,n.id,n.kind,COALESCE(t.title,n.title) AS title,n.reference,n.target,n.actionable,n.created_at,n.read_at,n.resolved_at,COALESCE(u.display_name,'Power Zone') AS actor FROM candidates n JOIN inbox_events e ON e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1) LEFT JOIN notification_types t ON t.kind=n.kind LEFT JOIN users u ON u.id=n.actor_id WHERE n.user_id=$1 AND n.kind<>'Stock shortage' AND ($3::uuid IS NULL OR n.id=$3) AND ((e.audience='management' AND $2 IN('Admin','Management')) OR (e.audience='owner' AND e.owner_id=$1 AND $2 IN('Admin','Management','Coordinator')) OR (e.audience IN('security','assigned') AND e.owner_id=$1) OR e.audience=$2 OR (n.kind='Escalation' AND $2 IN('Admin','Management'))) ) SELECT * FROM inbox WHERE ($4::timestamptz IS NULL OR (created_at,id)<($4::timestamptz,$5::uuid)) ORDER BY created_at DESC,id DESC LIMIT 100`,
         [
           user.id,
           user.role,
@@ -158,13 +168,18 @@ export class NotificationsRepository {
   async deliverOne(delivery: EmailDelivery, origin: string) {
     if (!delivery.configured) return;
     return transaction(this.pool, async (c) => {
+      if(!(await c.query("SELECT 1 FROM notification_email_queue q WHERE q.state='queued' AND q.next_attempt_at<=now() AND EXISTS(SELECT 1 FROM notification_settings WHERE email_enabled) LIMIT 1")).rowCount)return;
       const row = (
-        await c.query(`SELECT q.*,COALESCE(t.title,n.title) AS title,n.reference,n.target,n.user_id,n.resolved_at,n.kind,n.created_at,t.critical,t.email_enabled AS type_enabled,u.email,u.active,u.role,u.display_name, e.audience,e.owner_id,e.source_key AS event_source_key,e.kind AS event_kind,COALESCE(a.display_name,'Power Zone') AS actor,
-    COALESCE(p.email_enabled,true) AS opted_in,s.email_enabled AS enabled FROM notification_email_queue q JOIN notifications n ON n.id=q.id JOIN notification_events e ON e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1) JOIN notification_types t ON t.kind=n.kind JOIN users u ON u.id=n.user_id LEFT JOIN users a ON a.id=n.actor_id LEFT JOIN notification_preferences p ON p.user_id=u.id CROSS JOIN notification_settings s WHERE q.state='queued' AND q.next_attempt_at<=now() ORDER BY q.next_attempt_at FOR UPDATE OF q SKIP LOCKED LIMIT 1`)
+        await c.query(`WITH candidate AS MATERIALIZED (
+     SELECT * FROM notification_email_queue WHERE state='queued' AND next_attempt_at<=now()
+     AND EXISTS(SELECT 1 FROM notification_settings WHERE email_enabled)
+     ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 1
+    ) SELECT q.*,COALESCE(t.title,n.title) AS title,n.reference,n.target,n.user_id,n.resolved_at,n.kind,n.created_at,t.critical,t.email_enabled AS type_enabled,u.email,u.active,u.role,u.display_name, e.audience,e.owner_id,e.source_key AS event_source_key,e.kind AS event_kind,COALESCE(a.display_name,'Power Zone') AS actor,
+    COALESCE(p.email_enabled,true) AS opted_in,s.email_enabled AS enabled FROM candidate q JOIN notifications n ON n.id=q.id LEFT JOIN notification_events e ON e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1) JOIN notification_types t ON t.kind=n.kind JOIN users u ON u.id=n.user_id LEFT JOIN users a ON a.id=n.actor_id LEFT JOIN notification_preferences p ON p.user_id=u.id CROSS JOIN notification_settings s`)
       ).rows[0];
       if (!row) return;
       if (!row.enabled) return;
-      const authorized = notificationRecipientAllowed(row) &&
+      const authorized = !!row.event_source_key && notificationRecipientAllowed(row) &&
         (!row.event_source_key.startsWith('operations-notice:') || await operationsNotificationRecipientAllowed(c,row.event_source_key,row.user_id));
       if (
         row.kind==='Stock shortage' ||

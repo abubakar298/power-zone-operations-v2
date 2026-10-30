@@ -1,4 +1,5 @@
 import {NotificationsRepository} from "./notifications/repository.js";
+import {notificationWorker} from "./notifications/worker.js";
 import { archiveConfirmedTestWorkflow } from "./maintenance/archive-test-workflow.js";
 import { AccountsRepository } from "./onboarding/repository.js";
 import { ResendDelivery } from "./email/delivery.js";
@@ -47,8 +48,10 @@ cleanup.unref();
 const accounts = new AccountsRepository(pool),
   delivery = new ResendDelivery(config);
 const notifications=new NotificationsRepository(pool);
-let syncing=false;
-const notificationTimer=setInterval(()=>{if(syncing)return;syncing=true;void notifications.sync().then(()=>notifications.deliverOne(delivery,config.origin)).catch(()=>console.error("Notification processing interrupted.")).finally(()=>{syncing=false;});},10000);
+const processNotifications=notificationWorker(async()=>{
+ await notifications.sync();await notifications.deliverOne(delivery,config.origin);
+},(error,retryMs)=>console.error(JSON.stringify({event:'notification.processing.interrupted',code:(error as {code?:string})?.code??'UNAVAILABLE',retryMs})));
+const notificationTimer=setInterval(()=>{void processNotifications();},30000);
 notificationTimer.unref();
 // Owner paused stock-shortage alerts; retain the stock-watch page and saved history.
 let delivering = false;

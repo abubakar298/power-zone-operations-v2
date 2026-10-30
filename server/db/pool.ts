@@ -12,7 +12,7 @@ export function createPool(config: Config) {
     // Bound avoidable per-query memory on the small production database.
     // Startup options apply to every newly opened pooled connection.
     options: '-c jit=off -c work_mem=1MB -c max_parallel_workers_per_gather=0',
-    max: 10, connectionTimeoutMillis: 5000, idleTimeoutMillis: 30000,
+    max: 4, connectionTimeoutMillis: 10000, idleTimeoutMillis: 30000,
     statement_timeout: 10000, application_name: 'power-zone-v2',
   });
   // pg-pool handles idle-client errors, but checked-out clients can also lose
