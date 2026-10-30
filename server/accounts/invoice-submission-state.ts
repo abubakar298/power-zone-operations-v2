@@ -26,11 +26,11 @@ export function applyInvoiceSubmissionBilling(rows:Row[],events:Row[]):Row[]{
  const result=rows.map(row=>{
   const matches=events.filter(e=>(e.snapshot.billingIds??[]).includes(row.id)&&e.snapshot.customer===row.customer);
   if(matches.length!==1)return row;
-  return {...row,submission:'Submitted',date:matches[0].submitted_on,dateBasis:'Days since verified submission'};
+  return {...row,submissionId:matches[0].id,submission:'Submitted',date:matches[0].submitted_on,dateBasis:'Days since verified submission'};
  });
  for(const e of events){
   if(result.some(r=>(e.snapshot.billingIds??[]).includes(r.id)&&e.snapshot.customer===r.customer))continue;
-  result.push({id:'submission:'+e.id,customer:e.snapshot.customer,category:e.milestone==='delivery'?'System · delivery':'System · completion',ipo:e.snapshot.ipo??'',site:e.snapshot.site??'',invoice:e.invoice_reference,amount:null,pending:null,receiptConfirmed:false,date:e.submitted_on,dateBasis:'Days since verified submission',submission:'Submitted',notes:'Existing PT invoice submitted. Original invoice amount and unpaid balance are not loaded; no amounts or payments inferred.',minimum:false});
+  result.push({id:'submission:'+e.id,submissionId:e.id,customer:e.snapshot.customer,category:e.milestone==='delivery'?'System · delivery':'System · completion',ipo:e.snapshot.ipo??'',site:e.snapshot.site??'',invoice:e.invoice_reference,amount:null,pending:null,receiptConfirmed:false,date:e.submitted_on,dateBasis:'Days since verified submission',submission:'Submitted',notes:'Existing PT invoice submitted. Original invoice amount and unpaid balance are not loaded; no amounts or payments inferred.',minimum:false});
  }
  return result;
 }

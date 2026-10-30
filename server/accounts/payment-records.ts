@@ -1,3 +1,5 @@
+import{invoiceSubmissions,applyInvoiceSubmissionBilling}from'./invoice-submission-state.js';
+import{invoiceReceipts,applyInvoiceReceipts,awaitingInvoicePayments}from'./invoice-receipt-state.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
@@ -9,16 +11,17 @@ import {lockActiveActor} from '../auth/actor-lock.js';
 import {HttpError} from '../http/errors.js';
 
 export const paymentRecordSchema=z.object({sourceRowId:z.string().min(1).max(500),sourceVersion:z.number().int().positive(),transactionId:z.string().trim().min(1).max(200),paymentDate:z.iso.date(),requestKey:z.uuid()}).strict();
-async function readRegister(db:Pool|PoolClient){
+export async function paymentRegisterData(db:Pool|PoolClient){
  const source=(await db.query('SELECT version,snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0];
  const entries=(await db.query('SELECT *,payment_date::text AS payment_date FROM accounts_payment_records ORDER BY created_at DESC')).rows;
  const s=source?.snapshot;
  const rows=s?billingRows(s.registers,s.cables,s.internet,s.evidence):[];
- return {sourceVersion:source?.version??null,pending:paymentQueue(rows,entries),entries};
+ const pending=paymentQueue(rows,entries),receipts=await invoiceReceipts(db),submitted=applyInvoiceSubmissionBilling(rows,await invoiceSubmissions(db)),current=applyInvoiceReceipts(submitted,receipts);
+ return {sourceVersion:source?.version??0,pending,awaiting:awaitingInvoicePayments(current,pending),entries,receipts};
 }
 export async function paymentRegister(pool:Pool,actor:string){
  const role=await new AccountsRepository(pool).access(actor);
- return {...await readRegister(pool),canRecord:['Admin','Accounts'].includes(role)};
+ return {...await paymentRegisterData(pool),canRecord:['Admin','Accounts'].includes(role)};
 }
 export async function recordPayment(pool:Pool,actor:string,input:z.infer<typeof paymentRecordSchema>){
  return transaction(pool,async db=>{
@@ -31,7 +34,7 @@ export async function recordPayment(pool:Pool,actor:string,input:z.infer<typeof 
    if(previous.created_by===actor&&Object.entries(input).every(([k,v])=>previous.request[k]===v))return previous;
    throw new HttpError(409,'Request key already used.');
   }
-  const register=await readRegister(db),source=register.pending.find(r=>r.id===input.sourceRowId);
+  const register=await paymentRegisterData(db),source=register.pending.find(r=>r.id===input.sourceRowId);
   if(!source||register.sourceVersion!==input.sourceVersion)throw new HttpError(409,'Payment source changed or transaction details were already recorded. Refresh the queue.');
   const row=(await db.query('INSERT INTO accounts_payment_records(id,source_row_id,source_version,transaction_id,payment_date,snapshot,request,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
    [randomUUID(),input.sourceRowId,input.sourceVersion,input.transactionId,input.paymentDate,source,input,input.requestKey,actor])).rows[0];

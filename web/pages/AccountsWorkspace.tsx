@@ -560,7 +560,7 @@ export function AccountsWorkspace({
               ['Job Closure',preparationReports.length,'Job Closure','Ready, drafts and returned jobs'],
               ['Awaiting Management',data.closures.filter((c:any)=>c.stage==='Awaiting Management').length,'Awaiting Management',`${data.closures.filter((c:any)=>c.stage==='Closed').length} jobs closed`],
               ['Invoices to Submit',invoiceQueueCount??(queueCountError?'—':'…'),'Invoices to Submit',queueCountError?'Count unavailable · open queue':'Delivery and completion invoices'],
-              ['Payments to Record',paymentQueueCount??(queueCountError?'—':'…'),'Payments to Record',queueCountError?'Count unavailable · open queue':'Transaction ID and payment date pending'],
+              ['Payments to Record',paymentQueueCount??(queueCountError?'—':'…'),'Payments to Record',queueCountError?'Count unavailable · open queue':'Awaiting payment and receipt details'],
             ].map(([label,count,destination,hint])=><Button key={String(label)} variant="neutral" className="stage-card" onClick={()=>navigate(String(destination))}><strong>{count}</strong><span>{label}</span><small>{hint}</small></Button>)}
           </div>
 
