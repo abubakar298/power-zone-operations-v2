@@ -1,0 +1,7 @@
+.department-workspace table :is(th,td){vertical-align:top}
+.customer-site-register table{width:100%}
+.customer-site-register td strong,.customer-site-register td small{display:block}
+.customer-site-register td small{margin-top:4px;color:var(--pz-text-secondary,#666475)}
+.customer-site-register .site-row-actions{display:flex;flex-wrap:nowrap;align-items:flex-start;gap:8px}
+.customer-site-register .site-row-actions .pz-button{width:auto;flex:0 0 auto;white-space:nowrap;margin:0;min-height:38px;padding:8px 10px}
+.customer-site-register td:last-child{width:1%}

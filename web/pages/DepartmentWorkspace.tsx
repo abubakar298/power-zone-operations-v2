@@ -1,3 +1,5 @@
+import {CustomerSiteRegister} from '../components/CustomerSiteRegister.js';
+import './department-lists.css';
 import {sentSurveyAwaitingDesign,surveyRequestInCoordination} from '../../shared/sent-survey-requests.js';
 import {UblTechnicalReviewSummary} from '../components/UblTechnicalReviewSummary.js';
 import {FileUpload} from '../ui/FileUpload.js';
@@ -234,7 +236,7 @@ export function DepartmentWorkspace({
     [notice, setNotice] = useState("");
   const [headsupRefresh, setHeadsupRefresh] = useState(0);
   const [siteCodeTarget,setSiteCodeTarget]=useState<any>();
-  const [customerEditId,setCustomerEditId]=useState<number>(),[customerEditChoice,setCustomerEditChoice]=useState('');
+  const [customerEditId,setCustomerEditId]=useState<number>();
   const [quotationReview, setQuotationReview] = useState<any>();
   const [approvalTarget,setApprovalTarget]=useState<any>();
   async function approvalRecorded(){setApprovalTarget(undefined);setQuotationReview(undefined);await load();window.dispatchEvent(new CustomEvent("pz:workflow-completed",{detail:{message:"Approval recorded — moved to Ready to Send."}}));}
@@ -650,7 +652,7 @@ export function DepartmentWorkspace({
       />
     );
   return (
-    <div className="pz-stack">
+    <div className="pz-stack department-workspace">
       <ErrorText error={error} />
       {notice && <p role="status">{notice}</p>}
       {manager && (
@@ -860,6 +862,7 @@ export function DepartmentWorkspace({
               }
             </p>
           )}
+          {!(department === "coordination" && page === "Customer & Site Search") && (
           <WorkspaceFilters
             key={`${department}-${page}`}
             rows={page === iposSharedBucket ? rows.filter((r) => r.stage === "issued" && r.data.ipoShared).map((r) => ({...r, site: `${r.site} ${r.siteCode}`})) : page === "Workspace" ? departmentTasks : rows}
@@ -880,85 +883,14 @@ export function DepartmentWorkspace({
                     : "Search tasks"
             }
           />
-          {department === "coordination" &&
-            page === "Customer & Site Search" && (
-              <section className="pz-panel">
-                <h3>Master customer and site register</h3>
-                {customerEditId!==undefined?<EditCustomer key={customerEditId} customerId={customerEditId} session={session} onCancel={()=>setCustomerEditId(undefined)} onSaved={async()=>{setRefs(await api<any>('/project-workflow/references'));await load();setCustomerEditId(undefined);}}/>:<div className="pz-form-grid"><CustomerSearchSelect customers={refs.customers.map((c:any)=>({...c,status:'Active'}))} value={customerEditChoice} onChange={setCustomerEditChoice} label="Select customer to edit"/><div className="pz-action-row"><Button variant="neutral" disabled={!customerEditChoice} onClick={()=>setCustomerEditId(Number(customerEditChoice))}>Edit Customer</Button></div></div>}
-                {siteCodeTarget&&<SiteCodeUpdate site={siteCodeTarget} session={session} onCancel={()=>setSiteCodeTarget(undefined)} onSaved={async()=>{const latest=await api<any>("/project-workflow/references");setRefs(latest);await load();setSiteCodeTarget(undefined);}}/>}
-                <div className="pz-table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Customer</th>
-                        <th>Site / code</th>
-                        <th>Location</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {refs.sites
-                        .filter((site: any) => {
-                          const c = refs.customers.find(
-                            (c: any) => c.id === site.customer_id,
-                          );
-                          return (
-                            c &&
-                            (!filters.search ||
-                              [
-                                c.short_code,
-                                c.name,
-                                site.name,
-                                site.code,
-                                site.location,
-                              ]
-                                .join(" ")
-                                .toLowerCase()
-                                .includes(filters.search.toLowerCase()))
-                          );
-                        })
-                        .map((site: any) => {
-                          const c = refs.customers.find(
-                              (c: any) => c.id === site.customer_id,
-                            ),
-                            record = rows.find((r) => r.siteId === site.id);
-                          return (
-                            <tr key={site.id}>
-                              <td>
-                                {c.short_code} · {c.name}
-                              </td>
-                              <td>
-                                {site.name} · {site.code}
-                              </td>
-                              <td>{site.location}</td>
-                              <td>
-                                <Button
-                                  onClick={() => {
-                                    if (record)
-                                      void open(record.id).catch((e) =>
-                                        setError(e.message),
-                                      );
-                                    else {
-                                      setSelectedSite(site);
-                                      setCreating("Create survey request");
-                                    }
-                                  }}
-                                >
-                                  {record
-                                    ? "Open workflow"
-                                    : "Create workflow for this site"}
-                                </Button>
-                                {canWriteMaster(session.user.role,"sites",String(site.id))&&<Button variant="neutral" onClick={()=>setSiteCodeTarget(site)}>Update Branch Code</Button>}
-                                {canWriteMaster(session.user.role,'customers',String(c.id))&&<Button variant="neutral" onClick={()=>setCustomerEditId(c.id)}>Edit Customer</Button>}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
+          )}
+          {department === "coordination" && page === "Customer & Site Search" && <section className="pz-panel pz-stack">
+            <h3>Master customer and site register</h3>
+            {customerEditId!==undefined&&<EditCustomer key={customerEditId} customerId={customerEditId} session={session} onCancel={()=>setCustomerEditId(undefined)} onSaved={async()=>{setRefs(await api<any>('/project-workflow/references'));await load();setCustomerEditId(undefined);}}/>}
+            {siteCodeTarget&&<SiteCodeUpdate site={siteCodeTarget} session={session} onCancel={()=>setSiteCodeTarget(undefined)} onSaved={async()=>{setRefs(await api<any>('/project-workflow/references'));await load();setSiteCodeTarget(undefined);}}/>}
+            <CustomerSiteRegister session={session} customers={refs.customers} sites={refs.sites} records={rows} onEditCustomer={setCustomerEditId} onEditSite={setSiteCodeTarget} onWorkflow={(site,record)=>{if(record)void open(record.id).catch(e=>setError(e.message));else{setSelectedSite(site);setCreating("Create survey request");}}}/>
+          </section>}
+
 
           {department === "coordination" && page === coordinationBuckets[5] && (
             <CustomerFollowupList
@@ -971,7 +903,7 @@ export function DepartmentWorkspace({
             />
           )}
           {department === "coordination" && page === iposSharedBucket && <IposSharedList records={visible} onPreview={(id) => void open(id).catch((e) => setError(e.message))} />}
-          {page !== iposSharedBucket && !readyToSend && !(
+          {page !== "Customer & Site Search" && page !== iposSharedBucket && !readyToSend && !(
             department === "coordination" && page === coordinationBuckets[5]
           ) &&
             (department !== "design" || page !== designBuckets[1]) && (
