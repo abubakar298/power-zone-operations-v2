@@ -8,9 +8,9 @@ export function recoveryAge(date:unknown,asOf:string){
 }
 export function recoveryReport(rows:Record<string,any>[],asOf:string){
  const items=rows.filter(isSubmittedInvoicePending).map(r=>({
-  site:String(r.site??''),ipo:String(r.ipo??''),customer:String(r.customer??''),po:String(r.po??r.customerPo??''),
+  site:String(r.site??''),customer:String(r.customer??''),po:String(r.po??r.customerPo??''),
   stage:invoiceType(r),invoice:String(r.invoice??''),pending:r.pending==null?null:new Decimal(r.pending).toFixed(2),
   submittedOn:String(r.date??''),...recoveryAge(r.date,asOf),review:!!r.receiptHold||!!r.invoiceCorrectionHold,
- }));
+ })).sort((a,b)=>(b.days??-1)-(a.days??-1));
  return {asOf,items,total:items.reduce((sum,r)=>sum.plus(r.pending??0),new Decimal(0)).toFixed(2),unknownAmounts:items.filter(r=>r.pending==null).length};
 }
