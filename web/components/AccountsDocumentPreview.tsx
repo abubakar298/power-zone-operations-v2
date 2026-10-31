@@ -2,7 +2,7 @@ import {departmentFetch} from '../department-view.js';
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/Button.js";
 import {downloadName,filenameFromDisposition} from '../../shared/download-name.js';
-import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import pdfWorker from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 
 /** Read-only authenticated document preview. Existing endpoints enforce access. */
 export function DocumentPreview({
@@ -61,7 +61,7 @@ export function DocumentPreview({
           image.src = String(reader.result);
           host.current?.replaceChildren(image);
         } else {
-          const pdf = await import("pdfjs-dist");
+          const pdf = await import("pdfjs-dist/legacy/build/pdf.mjs");
           pdf.GlobalWorkerOptions.workerSrc = pdfWorker;
           task = pdf.getDocument({ data: await blob.arrayBuffer() });
           const doc = await task.promise;

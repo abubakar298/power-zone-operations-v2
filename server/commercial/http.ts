@@ -9,7 +9,7 @@ import { CommercialRepository } from "./repository.js";
 import { buildQuotationPdf, buildQuotationComparisonPdf } from "./report.js";
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
-const quotationPdfWorkerPath=createRequire(import.meta.url).resolve('pdfjs-dist/build/pdf.worker.min.mjs');
+const quotationPdfWorkerPath=createRequire(import.meta.url).resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs');
 const quotationPreviewDownloads=new Map<string,{actor:string;bytes:Buffer;expires:number;context:any}>();
 const pricingPreviewContexts=new Map<string,{actor:string;input:unknown;expires:number}>();
 export function registerPricingPreviewContext(token:string,actor:string,input:unknown){pricingPreviewContexts.set(z.uuid().parse(token),{actor,input:pricingSchema.parse(input),expires:Date.now()+90*60*1000});}

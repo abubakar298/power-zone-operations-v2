@@ -125,7 +125,7 @@ export function QuotationView({
             (await response.json()).message ?? "Unable to load quotation PDF.",
           );
         const data = await response.arrayBuffer();
-        const pdf = await import("pdfjs-dist");
+        const pdf = await import("pdfjs-dist/legacy/build/pdf.mjs");
         pdf.GlobalWorkerOptions.workerSrc = pdfWorker;
         task = pdf.getDocument({ data });
         const document = await task.promise;

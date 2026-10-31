@@ -1,5 +1,5 @@
 import { createWorker } from "tesseract.js";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import pdfWorker from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 export async function extractText(file: File, progress: (s: string) => void, tableMode=false, maxPdfPages=5) {
   if (file.type === "text/plain")
     return { text: await file.text(), confidence: null };
@@ -50,7 +50,7 @@ export async function extractText(file: File, progress: (s: string) => void, tab
         return { text: d.text, confidence: d.confidence };
       } finally { image.close(); }
     }
-    const pdf = await import("pdfjs-dist");
+    const pdf = await import("pdfjs-dist/legacy/build/pdf.mjs");
     pdf.GlobalWorkerOptions.workerSrc = pdfWorker;
     const loadingTask = pdf.getDocument({ data: await file.arrayBuffer() });
     const doc = await loadingTask.promise;

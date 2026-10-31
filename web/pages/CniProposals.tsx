@@ -385,6 +385,7 @@ export function CniProposals({
                 "Original values loaded above. Saving creates a new immutable version.",
               );
 }}>Revise Quotation</button>}</div></section>
+      {!followupPreview&&action==='Approved'&&<QuotationDispatch key={current.id} session={session} cniVersionId={current.id}/>}
       {!followupPreview&&recordingApproval&&action==='Approval requested'&&<QuotationApproval session={session} cniId={detail.id} onApproved={async()=>{window.dispatchEvent(new CustomEvent('pz:workflow-completed',{detail:{message:'Approval recorded — moved to Ready to Send.'}}));onBack();}}/>}
       {!followupPreview&&editingReview&&<section className="pz-panel"><h2>Revision Settings</h2>{notice&&<p role="status">{notice}</p>}{revisionForm}</section>}
     </>}
@@ -501,7 +502,7 @@ export function CniProposals({
               />
             )}
           {action === "Approved" && (
-            <QuotationDispatch session={session} cniVersionId={current.id} />
+            <QuotationDispatch key={current.id} session={session} cniVersionId={current.id} />
           )}
           <SharePdf
             url={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`}

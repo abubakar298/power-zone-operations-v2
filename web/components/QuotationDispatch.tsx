@@ -28,14 +28,14 @@ export function QuotationDispatch({
       .catch((e) => setError(e.message));
   }, [quotationId, cniVersionId]);
   return (
-    <section className="detail-panel">
-      <h4>Dispatch Approved Quotation</h4>
+    <section className="pz-panel pz-stack" aria-label="Dispatch Approved Quotation">
+      <h3>Dispatch Approved Quotation</h3>
       {record ? (
         <p role="status">
           Marked sent to {record.recipient}: {record.notes}
         </p>
       ) : (
-        <form
+        <form className="pz-stack"
           onSubmit={async (e) => {
             e.preventDefault();
             setBusy(true);
@@ -64,6 +64,7 @@ export function QuotationDispatch({
             Approval does not mean the quotation has been sent. Confirm only
             after you send it yourself or hand it to the salesperson.
           </p>
+          <div className="pz-form-grid">
           <Field id="dispatch-recipient" label="Sent to">
             <select
               id="dispatch-recipient"
@@ -83,8 +84,9 @@ export function QuotationDispatch({
               onChange={(e) => setNotes(e.target.value)}
             />
           </Field>
+          </div>
           <Field id="dispatch-evidence" label="Dispatch evidence" hint="PDF, PNG or JPEG · maximum 8 MB"><FileUpload selectedFiles={file?[file]:[]} attachments={uploads} onRemoveAttachment={attachment=>setUploads(old=>old.filter(f=>f.id!==attachment.id))} onClear={()=>setFile(undefined)} id="dispatch-evidence" type="file" accept="application/pdf,image/png,image/jpeg" onChange={e=>setFile(e.target.files?.[0])}/></Field>
-          <Button variant="secondary" disabled={!file||busy||uploads.length>=10} onClick={async()=>{setBusy(true);setError('');try{if(!file||file.size>8388608)throw Error('Choose a file up to 8 MB.');const base64=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});const saved=await api<{id:string;filename:string}>('/survey-uploads',{csrf:session.csrfToken,body:{filename:file.name,mime:file.type,base64}});setUploads(old=>[...old,saved]);setFile(undefined);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>Upload Dispatch Evidence</Button>
+          <div className="pz-action-row"><Button variant="secondary" disabled={!file||busy||uploads.length>=10} onClick={async()=>{setBusy(true);setError('');try{if(!file||file.size>8388608)throw Error('Choose a file up to 8 MB.');const base64=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});const saved=await api<{id:string;filename:string}>('/survey-uploads',{csrf:session.csrfToken,body:{filename:file.name,mime:file.type,base64}});setUploads(old=>[...old,saved]);setFile(undefined);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>Upload Dispatch Evidence</Button></div>
           <label>
             <input
               type="checkbox"
@@ -93,13 +95,14 @@ export function QuotationDispatch({
             />{" "}
             I have sent this approved version to the selected recipient.
           </label>
-          <Button
+          <div className="pz-action-row"><Button
+            variant="primary"
             type="submit"
             loading={busy}
             disabled={!confirmed || !notes.trim()}
           >
             Dispatch Approved Quotation
-          </Button>
+          </Button></div>
           {error && (
             <p className="error" role="alert">
               {error}
