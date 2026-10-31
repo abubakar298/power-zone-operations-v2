@@ -159,3 +159,8 @@
 
 /* Count badge on a sidebar entry (Purchase approvals). */
 .sidebar nav .nav-count{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:7px;background:#fdeeee;color:#b91c1c;font-size:10px;font-weight:700;display:grid;place-items:center}
+
+/* Sale prerequisites stay on the same left-aligned track as the form fields. */
+.pz-sale-requirements{margin-top:16px;text-align:left;font-size:13px;color:var(--muted)}
+.pz-sale-requirements ul{margin:8px 0 0;padding-left:20px}
+.pz-sale-requirements li{padding:0;margin:4px 0}

@@ -1,6 +1,6 @@
 import {directPoFields} from '../../shared/direct-po-reading.js';
 import {Field} from '../ui/Field.js';
-const displayOrder=['ipoNumber','orderNumber','siteCode','siteName','siteContact','sitePhone','siteAddress','approvalContact','approvalEmail','approvalDate','approvalSubject','contactPerson','phone','email','billingAddress','paymentContact','paymentPhone'];
+const displayOrder=['ipoNumber','orderNumber','poNumber','siteCode','siteName','siteContact','sitePhone','siteAddress','approvalContact','approvalEmail','approvalDate','approvalSubject','contactPerson','phone','email','billingAddress','paymentContact','paymentPhone'];
 const wideFields=new Set(['siteAddress','billingAddress','email']);
 /** Same aligned controls for the first evidence reading and subsequent record edits. */
 export function DirectPoDetailsFields({values,onChange,disabled=false,onIpoBlur,prefix='direct-po'}:{values:Record<string,string>;onChange:(key:string,value:string)=>void;disabled?:boolean;onIpoBlur?:()=>void|Promise<void>;prefix?:string}){

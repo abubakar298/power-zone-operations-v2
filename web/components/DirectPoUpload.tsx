@@ -7,7 +7,7 @@ import {Field} from '../ui/Field.js';
 import {extractText} from '../ocr.js';
 import {directPoSuggestions,directPoSiteMatches,validOrderPosition,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
 import {useUnsavedChanges} from '../hooks/useUnsavedChanges.js';
-import {ublPoSuggestions} from '../../server/orders/po-extraction.js';
+import {poSuggestions,ublPoSuggestions} from '../../server/orders/po-extraction.js';
 const agreements=['MBL-UPS-6-5','MBL-UPS-6-10','UBL-UPS-6-10'];
 export function DirectPo({refs,session,records,onPrepared,onCancel}:any){
  const [agreement,setAgreement]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[progress,setProgress]=useState(''),[reading,setReading]=useState<any>();
@@ -25,6 +25,7 @@ export function DirectPo({refs,session,records,onPrepared,onCancel}:any){
    if(file.size>8388608)throw Error('Use an evidence attachment up to 8 MB.');
    const extracted=await extractText(file,setProgress,false,emailApproval?25:5),suggestions=directPoSuggestions(extracted.text,customer),identity={code:suggestions.siteCode,name:suggestions.siteName};
    const poRead=ublPoSuggestions(extracted.text);
+   suggestions.poNumber=poRead.poNumber||poSuggestions(extracted.text).poNumber||'';
    if(!suggestions.approvalDate)suggestions.approvalDate=poRead.orderDate??'';
    if(!suggestions.approvalSubject&&poRead.poNumber)suggestions.approvalSubject='Customer PO '+poRead.poNumber;
    const matches=refs.sites.filter((s:any)=>directPoSiteMatches(s,customer.id,identity.code,identity.name,suggestions.siteAddress??'',framework?.configuration_key==='UBL-UPS-6-10'));

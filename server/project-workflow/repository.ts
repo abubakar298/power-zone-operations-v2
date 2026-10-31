@@ -1524,7 +1524,7 @@ export class ProjectWorkflowRepository {
         );
       if(v.action==='save-direct-po-details'){
         this.requireRole(u,['Coordinator']);requireStage(['po_receipt']);requireDirectUps(r);
-        const fields=z.object(Object.fromEntries(directPoFields.map(([key])=>[key,z.string().trim().max(key==='siteAddress'||key==='billingAddress'?1000:200)]))).strict();
+        const fields=z.object(Object.fromEntries(directPoFields.map(([key])=>[key,key==='poNumber'?z.string().trim().max(100).default(''):z.string().trim().max(key==='siteAddress'||key==='billingAddress'?1000:200)]))).strict();
         const saved=z.object({evidenceId:z.uuid(),evidenceType:z.enum(['Customer PO','Email approval','WhatsApp approval']),extracted:fields,sourceText:z.string().max(150000).default('').transform(value=>value.replace(/\u0000/g,'').replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,'\uFFFD')),values:fields,notes:z.string().max(2000)}).strict().parse(input);
         await this.requireFile(c,r,saved.evidenceId,'PO / confirmation');
         if(saved.evidenceType==='Email approval'&&!/^MBL-UPS-/.test(data.basis?.source?.key??''))throw new HttpError(422,'Email approval is available for Meezan Direct PO agreements only.');

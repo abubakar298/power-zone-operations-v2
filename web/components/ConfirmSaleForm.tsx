@@ -61,7 +61,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
       evidenceNotes: [draftValues.approvalSubject,draftValues.approvalContact,draftValues.approvalEmail].filter(Boolean).join(" · "),
       ipoNumber:draftValues.ipoNumber??"",
       orderNumber:draftValues.orderNumber??"",
-      poNumber: initialDirectPo?.amounts.poNumber??"",
+      poNumber: draftValues.poNumber || initialDirectPo?.amounts.poNumber || ublPoSuggestions(savedDirectPo?.sourceText??"").poNumber || poSuggestions(savedDirectPo?.sourceText??"").poNumber || "",
       customerNtn:c.ntn??"",
       customerStrn:c.strn??"",
     }),
@@ -418,13 +418,15 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
         {reviewingDirectPo && <>
           {busy && !currentPreview && <p role="status">Preparing draft IPO and PT preview…</p>}
           {previewPanel}
-          {error && <p className="form-error" role="alert">{error}</p>}
         </>}
-        {savedDirectPo&&!reviewingDirectPo&&<section className="pz-form-section pz-stack">
+        {savedDirectPo&&<section className="pz-form-section pz-stack">
           <div><Button variant="neutral" onClick={()=>{setRecordValues({...savedDirectPo.values,...Object.fromEntries(directPoFields.filter(([key])=>key in input).map(([key])=>[key,input[key]])),approvalDate:input.orderDate});setEditingRecord(!editingRecord);setError('');}}>{editingRecord?'Cancel editing record':'Edit record'}</Button></div>
           {editingRecord&&<><DirectPoDetailsFields prefix="edit-direct-po" values={recordValues} disabled={busy} onChange={(key,value)=>setRecordValues(old=>({...old,[key]:value}))}/><div><Button variant="primary" loading={busy} onClick={async()=>{setBusy(true);setError('');try{await action('save-direct-po-details',{evidenceId:document.id,evidenceType:input.evidenceType,extracted:savedDirectPo.extracted,sourceText:text,values:recordValues,notes:'Atif corrected the saved Direct PO evidence details.'});setInput(old=>({...old,...Object.fromEntries(directPoFields.filter(([key])=>key in old).map(([key])=>[key,recordValues[key]])),orderDate:recordValues.approvalDate}));setEditingRecord(false);setPreviewReviewed(false);setIpoError("");setIpoCheck("");}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>Save corrections</Button></div>{error&&<p role="alert" className="form-error">{error}</p>}</>}
         </section>}
         <form onSubmit={submit} noValidate>
+          {reviewingDirectPo && po && !editingRecord && <fieldset disabled={busy} className="order-fields">
+            {renderField(['poNumber','Customer PO reference'])}
+          </fieldset>}
           {!reviewingDirectPo && <>
           <fieldset disabled={busy} className="order-fields">
             <label>
@@ -601,8 +603,8 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
               Confirm Sale &amp; Issue
             </Button>
           </div>
-          {confirmationRequirements.length > 0 && (
-            <div className="form-note" role="status">
+          {confirmationRequirements.length > 0 && !error && (
+            <div className="pz-sale-requirements" role="status">
               <strong>Before confirming sale:</strong>
               <ul>
                 {confirmationRequirements.map((reason) => (

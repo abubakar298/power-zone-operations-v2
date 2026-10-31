@@ -1,3 +1,4 @@
+import {separateInvoiceRows,applySeparatedInvoiceEvents} from './invoice-components.js';
 import{invoiceCorrections,applyInvoiceCorrections}from'./invoice-correction-state.js';
 import{applyMeezanInvoiceValues}from'./meezan-invoice-values.js';
 import{invoiceReceipts,applyInvoiceReceipts}from'./invoice-receipt-state.js';
@@ -17,7 +18,7 @@ export const accountsSourceSchema=z.object({
  sourceDate:z.iso.date(),
  manifest:z.array(z.object({name:z.string().min(1).max(200),sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).min(1).max(30),
  registers:z.array(register).min(1).max(10),cables:register,internet:register,
- evidence:z.object({rows:z.array(row).max(20000),cableStageAdjustments:z.array(row).max(20000)}).passthrough(),
+ evidence:z.object({rows:z.array(row).max(20000),cableStageAdjustments:z.array(row).max(20000),invoiceComponents:z.array(row).max(20000).optional(),unallocatedCredits:z.array(row).max(20000).optional()}).passthrough(),
  sites:register,
 }).strict();
 export type AccountsSource=z.infer<typeof accountsSourceSchema>;
@@ -34,7 +35,7 @@ export class AccountsSourceRegisters {
   await this.access(actor,true);
   const source=accountsSourceSchema.parse(input);
   // Refuse unreadable monetary inputs before freezing a source version.
-  const rows=billingRows(source.registers,source.cables,source.internet,source.evidence);
+  const rows=separateInvoiceRows(billingRows(source.registers,source.cables,source.internet,source.evidence),source.evidence.invoiceComponents??[]);
   const ids=new Set<string>();
   for(const item of rows){
    if(ids.has(item.id))throw new HttpError(422,'Duplicate source invoice row identity.');
@@ -65,9 +66,10 @@ export class AccountsSourceRegisters {
   const record=await this.latest(actor),s=record.snapshot;
   const asOf=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
   const submissions=await invoiceSubmissions(this.pool);
-  const rows=applyMeezanInvoiceValues(applyInvoiceReceipts(applyInvoiceCorrections(applyInvoiceSubmissionBilling(billingRows(s.registers,s.cables,s.internet,s.evidence),submissions),await invoiceCorrections(this.pool)),await invoiceReceipts(this.pool))).map((r):Record<string,any>=>({...r,band:ageBand(r.date,asOf)}));
+  const corrections=await invoiceCorrections(this.pool),receipts=await invoiceReceipts(this.pool);
+  const rows=applySeparatedInvoiceEvents(applyMeezanInvoiceValues(applyInvoiceReceipts(applyInvoiceCorrections(applyInvoiceSubmissionBilling(billingRows(s.registers,s.cables,s.internet,s.evidence),submissions),corrections),receipts)),s.evidence.invoiceComponents??[],corrections,receipts).map((r):Record<string,any>=>({...r,band:ageBand(r.date,asOf)}));
   const generalReceipts=s.evidence.generalReceipts??[];
-  return {generalReceipts,asOf,sourceAsOf:record.source_date,sourceVersion:record.version,readOnlySource:true,rows,customers:customerTotals(rows,asOf),queues:invoicingQueues(applyInvoiceSubmissionStages(s,submissions).registers),verification:{sourceModified:s.evidence.sourceModified,scope:'Reviewed source invoices; unknown original invoice amounts remain missing.'}};
+  return {unallocatedCredits:s.evidence.unallocatedCredits??[],generalReceipts,asOf,sourceAsOf:record.source_date,sourceVersion:record.version,readOnlySource:true,rows,customers:customerTotals(rows,asOf),queues:invoicingQueues(applyInvoiceSubmissionStages(s,submissions).registers),verification:{sourceModified:s.evidence.sourceModified,scope:'Reviewed source invoices; unknown original invoice amounts remain missing.'}};
  }
  async sites(actor:string){const r=await this.latest(actor);return {...projectAccountsSites(r.snapshot,await latestOperationsStages(this.pool)),sourceVersion:r.version,readOnlySource:true};}
  async summary(actor:string){

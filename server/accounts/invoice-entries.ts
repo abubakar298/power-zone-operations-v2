@@ -9,7 +9,7 @@ import {transaction} from '../db/transaction.js';
 import {HttpError} from '../http/errors.js';
 import {AccountsRepository} from './repository.js';
 import {billingRows,invoicingQueues,invoiceIdentity} from './billing-model.js';
-export const invoiceEntrySchema=z.object({sourceKind:z.enum(['Operations','Source register']),siteKey:z.string().min(1).max(160),sourceVersion:z.number().int().positive(),milestone:z.enum(['delivery','completion']),ptReference:z.string().trim().min(1).max(200),entryDate:z.iso.date(),notes:z.string().trim().max(2000),requestKey:z.uuid()}).strict();
+export const invoiceEntrySchema=z.object({sourceKind:z.enum(['Operations','Source register']),siteKey:z.string().min(1).max(160),sourceVersion:z.number().int().positive(),milestone:z.enum(['delivery','completion']),ptReference:z.string().trim().min(1).max(200).refine(v=>!(/\s+\/\s+|,|\s*&\s*/.test(v)),'Enter one invoice number per record.'),entryDate:z.iso.date(),notes:z.string().trim().max(2000),requestKey:z.uuid()}).strict();
 type Db=Pool|PoolClient;
 export function operationsInvoiceRows(rows:any[],registers:any[]=[]){
  const result:any[]=[];

@@ -1,3 +1,4 @@
+import {unallocatedInvoiceValue} from '../../server/accounts/billing-model.js';
 import {invoiceCategories,invoiceType,isSubmittedInvoicePending,matchesInvoiceFilters} from '../../shared/accounts-invoice-display.js';
 import {useUnsavedChanges,confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 import {AccountsRecordDialog} from '../components/AccountsRecordDialog.js';
@@ -27,7 +28,7 @@ export function AccountsBilling({mode}:{mode:'receivables'|'invoicing'}){
  if(error)return <p role="alert" className="form-error">{error}</p>;
  if(!data)return <p role="status">Loading {mode==='receivables'?'customer receivables':'Operations and Inventory handoffs'}…</p>;
  const rows=data.rows.filter((r:any)=>(customer==='All customers'||r.customer===customer)&&matchesInvoiceFilters(r,category,invoiceStage));
- const sum=(items:any[],key:string)=>items.reduce((n:any,r:any)=>n.plus(r[key]??0),new Decimal(0));
+ const sum=(items:any[],key:string)=>items.reduce((n:any,r:any)=>n.plus(r[key]??0),key==='pending'||key==='amount'?unallocatedInvoiceValue(items,key):new Decimal(0));
  const agedRows=rows.filter((r:any)=>r.submission==='Submitted');
  const pending=sum(agedRows,'pending');
  const groups=bands.map(([id,label],index)=>({id,label,color:colors[index],amount:sum(agedRows.filter((r:any)=>r.band===id),'pending')}));

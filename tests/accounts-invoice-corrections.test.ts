@@ -25,3 +25,19 @@ test('Accounts corrections are audited, versioned, idempotent, phase-specific an
  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_signed_dispatch_postings')).rows[0].n,0);
  }finally{await db.close();}
 });
+
+test('PT amount confirmation preserves submission and records no receipt or payment date',async()=>{
+ const db=await testDatabase();try{
+  const admin=randomUUID(),accounts=randomUUID(),design=randomUUID();for(const[id,role]of[[admin,'Admin'],[accounts,'Accounts'],[design,'Design']])await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$3,$4)',[id,id+'@example.test',role,'isolated']);
+  await new AccountsSourceRegisters(db.pool).import(admin,{sourceDate:'2026-10-30',manifest:[{name:'Isolated PT confirmation',sha256:'b'.repeat(64)}],registers:[{rows:[{key:'test-university',customer:'UBL',kind:'UPS',site:'University invoice',ipo:'IPO-TEST',invoiceReferences:['27-22222'],singleInvoiceSubmitted:true,invoiceStatus:'2026-10-20'}]}],sites:{rows:[]},cables:{rows:[]},internet:{rows:[]},evidence:{rows:[],cableStageAdjustments:[]}},0);
+  const before=await paymentRegisterData(db.pool),row=before.awaiting.find(r=>r.invoice==='27-22222')!;assert.ok(row);assert.equal(row.amount,null);assert.equal(row.pending,null);
+  const input={sourceRowId:row.id,sourceVersion:1,version:0,invoiceReference:row.invoice,submissionDate:row.date,reason:'Verified invoice and unpaid balance in PT',confirmedAmount:'10000',confirmedOutstanding:'10000',requestKey:randomUUID()};
+  await assert.rejects(correctInvoice(db.pool,design,input),/access/);await assert.rejects(correctInvoice(db.pool,accounts,{...input,confirmedOutstanding:'10001'}),/Outstanding cannot exceed/);
+  const saved=await correctInvoice(db.pool,accounts,input);assert.equal((await correctInvoice(db.pool,accounts,input)).id,saved.id);await assert.rejects(correctInvoice(db.pool,accounts,{...input,requestKey:randomUUID()}),/changed/);
+  let current=(await paymentRegisterData(db.pool)).awaiting.find(r=>r.id===row.id)!;assert.equal(current.amount,'10000.00');assert.equal(current.pending,'10000.00');assert.equal(current.submission,'Submitted');assert.equal(current.receiptConfirmed,false);
+  for(const table of ['accounts_invoice_receipts','accounts_payment_records'])assert.equal((await db.pool.query('SELECT count(*)::int n FROM '+table)).rows[0].n,0);
+  await recordInvoiceReceipt(db.pool,accounts,{sourceRowId:row.id,sourceVersion:1,receiptVersion:0,amount:'1000',paymentDate:'2026-10-30',transactionId:'LATER-ACTUAL-RECEIPT',requestKey:randomUUID()});
+  current=(await paymentRegisterData(db.pool)).awaiting.find(r=>r.id===row.id)!;assert.equal(current.pending,'9000.00');assert.equal(current.receiptHold,undefined);
+  await assert.rejects(correctInvoice(db.pool,accounts,{...input,version:1,requestKey:randomUUID()}),/recorded payments/);
+ }finally{await db.close();}
+});

@@ -16,7 +16,8 @@ test('Accounts reviews delivered/completed documents and persists PT invoice ref
  await pool.query("INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,1,$2,'Source imported','Isolated saved fixture',$3,$4)",[id,snapshot,randomUUID(),admin]);
  }
  await page.goto('/accounts/invoicing');
- await expect(page.getByRole('heading',{name:'Delivery Invoices',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Delivery milestone invoices',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:/^Delivery-only/}).click();
  await page.getByRole('row').filter({hasText:'Delivered invoice fixture'}).getByRole('button',{name:'Review',exact:true}).click();
  const dialog=page.getByRole('dialog');await expect(dialog.getByText('Submitted to Accounts',{exact:false})).toBeVisible();
  const download=page.waitForEvent('download');await dialog.getByRole('link',{name:'Signed DO.pdf',exact:true}).click();const downloaded=await download;expect(await downloaded.failure()).toBeNull();expect((await readFile((await downloaded.path())!,'utf8'))).toContain(delivered);
@@ -25,7 +26,7 @@ test('Accounts reviews delivered/completed documents and persists PT invoice ref
  await dialog.getByRole('button',{name:'Save invoice record',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'PT invoice reference recorded.'})).toBeVisible();
  await page.reload();await page.locator('summary').filter({hasText:'Recorded PT invoices'}).click();await expect(page.getByRole('cell',{name:/PT-E2E-100/})).toBeVisible();await expect(page.getByText('Recorded in PT; signed document reviewed.',{exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:/27-19999/})).toBeVisible();await expect(page.getByRole('cell',{name:/27-29999/})).toBeVisible();await expect(page.getByText(/site records linked to existing invoice references/)).toBeVisible();
  expect((await page.request.post('/api/accounts-workspace/invoice-entries',{headers,data:{sourceKind:'Operations',siteKey:delivered,sourceVersion:1,milestone:'delivery',ptReference:'DUPLICATE',entryDate:'2026-10-29',notes:'',requestKey:randomUUID()}})).status()).toBe(409);
- await page.getByRole('button',{name:/Completed · Not Yet Invoiced/}).click();await page.getByRole('row').filter({hasText:'Completed invoice fixture'}).getByRole('button',{name:'Review',exact:true}).click();await expect(page.getByRole('dialog').getByRole('link',{name:'IRR and sign-off.pdf',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:/^Installation \/ completion/}).click();await page.getByRole('row').filter({hasText:'Completed invoice fixture'}).getByRole('button',{name:'Review',exact:true}).click();await expect(page.getByRole('dialog').getByRole('link',{name:'IRR and sign-off.pdf',exact:true})).toBeVisible();
  await page.screenshot({path:'test-results/accounts-invoice-documents.png',fullPage:true});
  await page.getByRole('dialog').getByRole('button',{name:'Record invoice',exact:true}).click();await page.getByLabel('PT invoice reference',{exact:true}).fill('PT-E2E-101');await page.getByLabel('Notes',{exact:true}).fill('Completion invoice entered in PT.');await page.getByRole('button',{name:'Save invoice record',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'PT invoice reference recorded.'})).toBeVisible();
  expect((await pool.query('SELECT count(*)::int n FROM accounts_invoice_entries')).rows[0].n).toBe(2);
@@ -33,8 +34,10 @@ test('Accounts reviews delivered/completed documents and persists PT invoice ref
  await page.screenshot({path:'test-results/accounts-invoice-recorded.png',fullPage:true});
  await login(page.request,'management-release@example.test');await page.goto('/dashboard');
  await page.getByRole('button',{name:'View as',exact:true}).click();await page.getByRole('navigation',{name:'View department workspace'}).getByRole('button',{name:'Accounts',exact:true}).click();
- await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Invoicing',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Delivery Invoices',exact:true})).toBeVisible();
+ await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Dashboard',exact:true}).click();
+ await page.getByRole('button',{name:/Invoices to Submit/}).click();
+ await expect(page.getByRole('heading',{name:'Delivery milestone invoices',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:/^Delivery-only/}).click();
  await page.locator('summary').filter({hasText:'Recorded PT invoices'}).click();await expect(page.getByRole('cell',{name:/PT-E2E-101/})).toBeVisible();
  await page.screenshot({path:'test-results/management-current-accounts.png',fullPage:true});
  await page.getByRole('button',{name:'View as',exact:true}).click();await page.getByRole('navigation',{name:'View department workspace'}).getByRole('button',{name:'Management',exact:true}).click();

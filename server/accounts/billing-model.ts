@@ -52,10 +52,18 @@ export function billingRows(registers:SourceRow[],cables:SourceRow,internet:Sour
  }
  return result;
 }
+/** Preserve a known stage balance while its individual invoice allocations are
+ * unknown. Count it once, never copy it into every invoice row. */
+export function unallocatedInvoiceValue(rows:SourceRow[],key:'pending'|'amount'){
+ const field=key==='pending'?'unallocatedStagePending':'unallocatedStageAmount',groups=new Map<string,SourceRow[]>();
+ for(const row of rows)if(row.legacyStageId&&row[field]!=null)groups.set(row.legacyStageId,[...(groups.get(row.legacyStageId)??[]),row]);
+ return [...groups.values()].filter(group=>group.some(r=>r[key]==null)).reduce((total,group)=>total.plus(Decimal.max(0,new Decimal(group[0][field]).minus(group.reduce<Decimal>((n,r)=>n.plus(r[key]??0),new Decimal(0))))),new Decimal(0));
+}
+export const unallocatedInvoicePending=(rows:SourceRow[])=>unallocatedInvoiceValue(rows,'pending');
 export function customerTotals(rows:SourceRow[],asOf:string){
  return [...new Set(rows.map((r:any)=>r.customer))].map(customer=>{
-  const selected=rows.filter((r:any)=>r.customer===customer),sum=(key:string)=>selected.reduce((n:any,r:any)=>n.plus(r[key]??0),new Decimal(0)).toFixed(2);
-  return{customer,invoiced:sum('amount'),pending:sum('pending'),submittedPending:selected.filter(isSubmittedReceivable).reduce((n:any,r:any)=>n.plus(r.pending??0),new Decimal(0)).toFixed(2),awaitingSubmission:selected.filter((r:any)=>!isSubmittedReceivable(r)).reduce((n:any,r:any)=>n.plus(r.pending??0),new Decimal(0)).toFixed(2),missingInvoiceAmounts:selected.filter((r:any)=>r.amount==null).length,missingPendingAmounts:selected.filter((r:any)=>r.pending==null).length,minimum:selected.some((r:any)=>r.minimum),count:selected.length,bands:ageingBands.map((b:any)=>({...b,amount:selected.filter((r:any)=>isSubmittedReceivable(r)&&ageBand(r.date,asOf)===b.id).reduce((n:any,r:any)=>n.plus(r.pending??0),new Decimal(0)).toFixed(2)}))};
+  const selected=rows.filter((r:any)=>r.customer===customer),sum=(key:string)=>selected.reduce((n:any,r:any)=>n.plus(r[key]??0),key==='pending'||key==='amount'?unallocatedInvoiceValue(selected,key):new Decimal(0)).toFixed(2);
+  return{customer,invoiced:sum('amount'),pending:sum('pending'),unallocatedPending:unallocatedInvoicePending(selected).toFixed(2),submittedPending:selected.filter(isSubmittedReceivable).reduce((n:any,r:any)=>n.plus(r.pending??0),unallocatedInvoicePending(selected.filter(isSubmittedReceivable))).toFixed(2),awaitingSubmission:selected.filter((r:any)=>!isSubmittedReceivable(r)).reduce((n:any,r:any)=>n.plus(r.pending??0),unallocatedInvoicePending(selected.filter((r:any)=>!isSubmittedReceivable(r)))).toFixed(2),missingInvoiceAmounts:selected.filter((r:any)=>r.amount==null).length,missingPendingAmounts:selected.filter((r:any)=>r.pending==null).length,minimum:selected.some((r:any)=>r.minimum),count:selected.length,bands:ageingBands.map((b:any)=>({...b,amount:selected.filter((r:any)=>isSubmittedReceivable(r)&&ageBand(r.date,asOf)===b.id).reduce((n:any,r:any)=>n.plus(r.pending??0),unallocatedInvoicePending(selected.filter((r:any)=>isSubmittedReceivable(r)&&ageBand(r.date,asOf)===b.id))).toFixed(2)}))};
  });
 }
 export function invoicingQueues(registers:SourceRow[]){

@@ -6,7 +6,7 @@ export const directPoFields = [
  ['approvalDate','Approval date'],['approvalSubject','Email subject / approval reference'],
  ['contactPerson','Customer contact'],['phone','Customer contact number'],['email','Customer email'],
  ['billingAddress','Billing address'],['paymentContact','Payment contact'],['paymentPhone','Payment contact number'],
- ['ipoNumber','IPO number'],['orderNumber','Order number (unit / total)'],
+ ['ipoNumber','IPO number'],['orderNumber','Order number (unit / total)'],['poNumber','Customer PO reference'],
 ] as const;
 export type DirectPoValues=Record<typeof directPoFields[number][0],string>;
 export function directPoSuggestions(text:string,customer:any={}):DirectPoValues {
