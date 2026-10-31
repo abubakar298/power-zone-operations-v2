@@ -9,7 +9,7 @@ const shown=(v:unknown)=>v===null||v===undefined||v===''?'Pending':new Intl.Numb
 export function ApprovedParentReconciliation({session}:{session:Session}){
  const [groups,setGroups]=useState<any[]>([]),[drafts,setDrafts]=useState<any[]>([]),[selected,setSelected]=useState(''),[data,setData]=useState<any>(),[error,setError]=useState(''),[reason,setReason]=useState(''),[busy,setBusy]=useState(false),[warehouse,setWarehouse]=useState('all'),[search,setSearch]=useState('');
  async function load(){setError('');try{const [historic,live]=await Promise.all([api<any>('/material-dispatches/parent-reviewed-ledger'),api<any>('/material-dispatches/drafts')]);setGroups(historic.groups);setDrafts(live.drafts.filter((d:any)=>d.snapshot.parent));}catch(e){setError((e as Error).message);}}
- useEffect(()=>{void load();},[]);
+ useEffect(()=>{void load();const draft=new URLSearchParams(location.search).get('draft');if(draft)void open('saved:'+draft);},[]);
  async function open(id:string){setSelected(id);setReason('');setError('');setData(undefined);if(id.startsWith('saved:')){setBusy(true);try{setData(await api('/material-dispatches/drafts/'+id.slice(6)+'/reconciliation'));}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}
  async function act(action:string){if(!data)return;setBusy(true);setError('');try{await api('/material-dispatches/parent-reconciliation',{csrf:session.csrfToken,body:{id:data.draft.id,version:data.state.version,draftVersion:data.draft.version,action,reason,requestKey:crypto.randomUUID()}});setData(await api('/material-dispatches/drafts/'+data.draft.id+'/reconciliation'));setReason('');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  const root=useRef<HTMLElement>(null);

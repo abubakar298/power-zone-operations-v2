@@ -1,3 +1,4 @@
+import {DispatchReconciliationPage} from './DispatchReconciliationPage.js';
 import {ApprovedParentReconciliation} from '../inventory-approved/ApprovedParentReconciliation.js';
 import {SiteLedger} from '../inventory-approved/ApprovedSiteLedger.js';
 import {TemporaryDocuments} from '../inventory-approved/TemporaryDocuments.js';
@@ -27,10 +28,11 @@ export function InventoryRoleGate({session,onLogout}:{session:Session;onLogout:(
  if(kind==='dispatcher'||kind==='management'){
   const props={session,onLogout};
   const content=(()=>{
+  const usagePath=path.split('?')[0].match(/^\/inventory\/materials\/([^/]+)\/usage$/);if(usagePath)return <DispatchReconciliationPage key={usagePath[1]} session={session} id={usagePath[1]}/>;
   if(path.startsWith('/inventory/site-ledger'))return <SiteLedger/>;
   if(path.startsWith('/inventory/temporary-documents'))return <TemporaryDocuments session={session} initialCreate/>;
   if(path.startsWith('/inventory/materials/')||path.split('?')[0]==='/inventory/materials'&&new URLSearchParams(location.search).has('site'))return <SiteMaterials key={path} {...props}/>;
-  if(path.startsWith('/inventory/parent-dos/review'))return <ApprovedParentReconciliation session={session}/>;
+  if(path.startsWith('/inventory/parent-dos/review'))return <ApprovedParentReconciliation key={path} session={session}/>;
   if(path.startsWith('/inventory/parent-dos')||path.split('?')[0]==='/inventory/materials')return <ParentDos key={path} {...props}/>;
   if(path.startsWith('/inventory/reconciliations'))return <ClosingReconciliations/>;
   if(path.startsWith('/inventory/transfers'))return <WarehouseTransfers key={path} {...props}/>;

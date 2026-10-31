@@ -9,6 +9,9 @@ test('dispatch document buckets show exact site evidence, scoped links and align
  await page.route('**/api/procurement/store',r=>r.fulfill({json:{toReceive:[]}}));
  await page.route('**/api/inventory-reviews',r=>r.fulfill({json:{rows:[]}}));
  await page.route('**/api/material-dispatches/document-status',r=>r.fulfill({json:{rows}}));
+ await page.route('**/api/material-dispatches/parent-reviewed-ledger',r=>r.fulfill({json:{groups:[]}}));
+ await page.route('**/api/material-dispatches/drafts',r=>r.fulfill({json:{drafts:[]}}));
+ await page.route('**/api/material-dispatches/drafts/draft-parent/reconciliation',r=>r.fulfill({json:{draft:{id:'draft-parent',version:1,snapshot:{parent:true,sites:[{siteId:'two',siteName:'Pool-only site',ipo:'CHP-222'}],lines:[]}},references:['PDO-LHR-10'],state:{version:0,status:'waiting'},history:[],reports:[],reconciliation:{ready:false,rows:[{key:'line',itemId:'CH-CBL-AC',description:'AC Cable',unit:'m',warehouseOut:'200',used:null,expectedReturn:null,verifiedWarehouseReturn:'0',remaining:null,status:'Site usage pending'}]},management:true}}));
  await page.goto('/inventory');
  const buckets=page.locator('.inventory-dashboard-buckets');
  await buckets.getByRole('button').filter({hasText:'IPOs Received'}).click();await expect(buckets.getByRole('button').filter({hasText:'IPOs Received'}).locator('strong')).toHaveText('2');await expect(page.getByRole('cell',{name:'Partial delivery',exact:true})).toHaveCount(2);await expect(page.getByRole('cell',{name:'Fully dispatched site UBL'})).toHaveCount(0);
@@ -28,5 +31,13 @@ test('dispatch document buckets show exact site evidence, scoped links and align
  await page.setViewportSize({width:390,height:844});
  await page.screenshot({path:'../inventory-document-buckets-mobile.png',fullPage:true});
  const width=await page.evaluate(()=>({body:document.body.scrollWidth,screen:innerWidth}));expect(width.body).toBeLessThanOrEqual(width.screen);
- await page.getByRole('button',{name:'Reconcile',exact:true}).click();await expect(page).toHaveURL(/\/inventory\/parent-dos\/draft-parent$/);
+ await page.getByRole('button',{name:'Reconcile',exact:true}).click();await expect(page).toHaveURL(/\/inventory\/parent-dos\/review\?draft=draft-parent$/);await expect(page.getByRole('button',{name:'Close Parent DO',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'200',exact:true})).toBeVisible();
+});
+test('individual DO reconciliation opens its issued-preparation ledger rather than a guessed site-plan form',async({page})=>{
+ await actors(page.request);await login(page.request);
+ await page.route('**/api/material-dispatches/access',r=>r.fulfill({json:{kind:'management'}}));
+ await page.route('**/api/material-dispatches/drafts/issued-preparation/site-usage',r=>r.fulfill({json:{draft:{id:'issued-preparation',version:1,snapshot:{parent:false,sites:[{siteId:'site',siteName:'Individual issued site',customer:'UBL',ipo:'CHP-163',orderNumber:'165/250'}]}},references:['CPZ-DO-26-0006'],reports:[],reconciliation:{rows:[{key:'one',itemId:'CH-PCS-6',description:'Hybrid inverter',unit:'Nos',warehouseOut:'2',used:null,expectedReturn:null,verifiedWarehouseReturn:'0',remaining:null,status:'Usage pending'}]}}}));
+ await page.goto('/inventory/materials/issued-preparation/usage');
+ await expect(page.getByRole('heading',{name:'Site material reconciliation',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'CPZ-DO-26-0006',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'2',exact:true})).toBeVisible();await expect(page.getByText('Individual issued site',{exact:true})).toBeVisible();
 });
