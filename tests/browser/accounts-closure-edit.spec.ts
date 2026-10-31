@@ -11,6 +11,7 @@ test('Accounts edits a submitted closure into a new Management review version',a
  await page.route('**/api/accounts-workspace/job?*',r=>r.fulfill({json:{...closure.snapshot,history}}));
  await page.route('**/api/accounts-workspace/closures',async r=>{posted=r.request().postDataJSON();closure={...closure,id:'closure-amended',version:3,snapshot:{...closure.snapshot,input:posted,amendment:{reason:posted.amendmentReason}}};history.unshift(closure);await r.fulfill({json:closure});});
  await page.goto('/dashboard#workspace=finance&accountsTab=Awaiting+Management');
+ await expect(page.getByRole('button',{name:'Edit',exact:true})).toBeVisible();const positions=await page.getByRole('table').first().locator('tbody tr').first().getByRole('button').evaluateAll(buttons=>buttons.map(b=>b.getBoundingClientRect().top));expect(positions).toHaveLength(2);expect(Math.abs(positions[0]-positions[1])).toBeLessThan(2);
  await page.getByRole('button',{name:'Edit',exact:true}).click();await expect(page.getByLabel('Inverter actual cost',{exact:true})).toBeEnabled();
  await page.getByLabel('Inverter actual cost',{exact:true}).fill('80100');await page.getByLabel('Reason for correction',{exact:true}).fill('Correct PT inverter cost');
  await expect(page.getByRole('button',{name:'Save closure draft',exact:true})).toHaveCount(0);await expect(page.getByLabel('Attach final PT report',{exact:true})).toHaveCount(0);
