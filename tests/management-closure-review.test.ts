@@ -14,11 +14,11 @@ test('Empty Accounts draft costs remain visibly missing without a financial rend
 test('Phase cost averages exclude missing values, preserve zero and use arithmetic mean',()=>{
  const peers=[{summary:{actual:'100'},input:{actual:{Inverter:'20',BMS:'0'},epcAggregate:'30'}},{summary:{actual:'300'},actualEpc:'50',input:{actual:{Inverter:'60'}}},{summary:{actual:null},input:{actual:{Inverter:'999'}}}];
  const before=JSON.stringify(peers),r=phaseCostComparison(peers);
- assert.deepEqual(r.phases.Inverter,{jobs:2,averageActualCost:'40.00'});
- assert.deepEqual(r.phases.BMS,{jobs:1,averageActualCost:'0.00'});
- assert.deepEqual(r.phases.EPC,{jobs:2,averageActualCost:'40.00'});
- assert.deepEqual(r.phases.Structure,{jobs:0,averageActualCost:null});
- assert.deepEqual(r.total,{jobs:2,averageActualCost:'200.00'});
+ assert.equal(r.phases.Inverter.jobs,2);assert.equal(r.phases.Inverter.averageActualCost,'40.00');assert.equal(r.phases.Inverter.averageActualMarkup,null);
+ assert.equal(r.phases.BMS.jobs,1);assert.equal(r.phases.BMS.averageActualCost,'0.00');
+ assert.equal(r.phases.EPC.jobs,2);assert.equal(r.phases.EPC.averageActualCost,'40.00');
+ assert.equal(r.phases.Structure.jobs,0);assert.equal(r.phases.Structure.averageActualCost,null);
+ assert.equal(r.total.jobs,2);assert.equal(r.total.averageActualCost,'200.00');
  assert.equal(JSON.stringify(peers),before);
 });
 test('Dashboard queues require actual submissions and exclude completed or superseded work',()=>{
@@ -50,4 +50,17 @@ test('EPC selling uses budget weights, keeps zero, preserves pennies and rejects
  assert.equal(closureEpcSelling('100',{},'100'),null);assert.equal(closureEpcSelling('100',budget,'10'),null);
  const zero=closureEpcSelling('0',budget,'874800')!;assert.ok(Object.values(zero).every(v=>v==='0.00'));
  const explicit={'Electrical Labour':'10','Earthing Cost':'20',Deliveries:'30','Installation Cost':'40'};assert.deepEqual(closureEpcSelling('100',budget,'874800',explicit),Object.fromEntries(Object.entries(explicit).map(([k,v])=>[k,Number(v).toFixed(2)])));
+});
+
+test('closed peer averages show monetary markup and cost-weighted percentage, including EPC children and zero costs',()=>{
+ const budget=Object.fromEntries(['Electrical Labour','Earthing Cost','Deliveries','Installation Cost'].map(p=>[p,'25']));
+ const make=(selling:string,cost:string,epc:Record<string,string>)=>({selling,summary:{selling,actual:cost},phaseSelling:{Inverter:selling,EPC:'200'},budget:{EPC:'100'},epcBudget:budget,input:{actual:{Inverter:cost},epc,epcDetails:true,epcAggregate:Object.values(epc).reduce((a,b)=>a+Number(b),0).toString()}});
+ const peers=[make('150','100',{'Electrical Labour':'40','Earthing Cost':'20',Deliveries:'20','Installation Cost':'20'}),make('400','200',{'Electrical Labour':'0','Earthing Cost':'20',Deliveries:'20','Installation Cost':'40'})];
+ const before=JSON.stringify(peers),r=phaseCostComparison(peers);
+ assert.equal(r.phases.Inverter.averageActualMarkup,'125.00');assert.equal(r.phases.Inverter.averageActualMarkupPercent,'83.33');assert.equal(r.total.averageActualMarkup,'125.00');
+ assert.equal(r.epc['Electrical Labour'].markupJobs,2);assert.equal(r.epc['Electrical Labour'].averageActualMarkup,'30.00');assert.equal(r.epc['Electrical Labour'].averageActualMarkupPercent,'150.00');
+ assert.equal(JSON.stringify(peers),before);
+ const missing=phaseCostComparison([{...peers[0],input:{...peers[0].input,epcDetails:false}}]);assert.equal(missing.epc['Electrical Labour'].averageActualMarkup,null);
+ const names=['Solar Panels','Structure','Inverter','Batteries','BMS','EPC'];const html=renderToStaticMarkup(createElement(ClosureComparison,{job:{selling:'1200',budget:Object.fromEntries(names.map(p=>[p,'100'])),phaseSelling:Object.fromEntries(names.map(p=>[p,'200'])),epcBudget:budget,phaseCostComparison:r},actual:Object.fromEntries(names.slice(0,5).map(p=>[p,'80'])),epcAggregate:'80',epc:peers[1].input.epc}));
+ assert.match(html,/<th>Average markup<\/th>/);const electrical=html.split('<tr').find(row=>row.includes('Electrical Labour'))!;assert.ok(electrical.includes('30.00'));assert.ok(electrical.includes('150%'));assert.ok(electrical.includes('2 closed'));
 });

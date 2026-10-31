@@ -329,12 +329,13 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       "Average is weighted by actual cost, not an average of percentages",
     );
 
+    const unrecordedPhaseMarkup={markupJobs:0,averageActualMarkup:null,averageActualMarkupPercent:null};
     const phaseComparison=(await repo.job(users.Management,j.key)).phaseCostComparison;
-    assert.deepEqual(phaseComparison.phases.Inverter,{jobs:2,averageActualCost:'40000.00'});
-    assert.deepEqual(phaseComparison.phases.BMS,{jobs:1,averageActualCost:'0.00'});
-    assert.deepEqual(phaseComparison.phases.EPC,{jobs:2,averageActualCost:'40000.00'});
-    assert.deepEqual(phaseComparison.total,{jobs:2,averageActualCost:'200000.00'});
-    assert.deepEqual(phaseComparison.phases.Structure,{jobs:0,averageActualCost:null});
+    assert.deepEqual(phaseComparison.phases.Inverter,{jobs:2,averageActualCost:'40000.00',...unrecordedPhaseMarkup});
+    assert.deepEqual(phaseComparison.phases.BMS,{jobs:1,averageActualCost:'0.00',...unrecordedPhaseMarkup});
+    assert.deepEqual(phaseComparison.phases.EPC,{jobs:2,averageActualCost:'40000.00',...unrecordedPhaseMarkup});
+    assert.deepEqual(phaseComparison.total,{jobs:2,averageActualCost:'200000.00',markupJobs:2,averageActualMarkup:'85555.00',averageActualMarkupPercent:'42.78'});
+    assert.deepEqual(phaseComparison.phases.Structure,{jobs:0,averageActualCost:null,...unrecordedPhaseMarkup});
     const portfolio = await new UblRepository(db.pool).closedJobs(
       users.Management,
     );
@@ -652,7 +653,7 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       await db.pool.query("INSERT INTO accounts_job_closures(id,job_key,report_version_id,version,stage,snapshot,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",[
         randomUUID(),'ubl:'+peer2.site_id,closed.report_version_id,version,stage,{identity,summary:{actual:'900000',actualMarkup:'100'},input:{actual:{Inverter:'999999'}}},randomUUID(),users.Management
       ]);
-      assert.deepEqual((await repo.job(users.Management,j.key)).phaseCostComparison.phases.Inverter,{jobs:1,averageActualCost:'20000.00'});
+      assert.deepEqual((await repo.job(users.Management,j.key)).phaseCostComparison.phases.Inverter,{jobs:1,averageActualCost:'20000.00',...unrecordedPhaseMarkup});
     }
 
   } finally {

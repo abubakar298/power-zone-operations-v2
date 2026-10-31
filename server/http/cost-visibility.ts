@@ -154,10 +154,10 @@ export function restrictedCostView(value: any, commercial = false): any {
   if (value.phases && typeof value.phases === "object" && !Array.isArray(value.phases) && value.total && typeof value.total === "object" && "averageActualCost" in value.total) {
     result.phases = Object.fromEntries(Object.entries(value.phases).map(([phase, metrics]) => [phase,
       isBessEquipment({name: phase}) && metrics && typeof metrics === "object"
-        ? {...restrictedCostView(metrics, commercial), averageActualCost: null}
+        ? {...restrictedCostView(metrics, commercial), averageActualCost: null, averageActualMarkup:null, averageActualMarkupPercent:null}
         : restrictedCostView(metrics, commercial),
     ]));
-    result.total = {...restrictedCostView(value.total, commercial), averageActualCost: null};
+    result.total = {...restrictedCostView(value.total, commercial), averageActualCost: null, averageActualMarkup:null, averageActualMarkupPercent:null};
   }
   if (
     commercial &&

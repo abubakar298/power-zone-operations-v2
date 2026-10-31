@@ -6,11 +6,21 @@ const value=(v:unknown):Decimal|null=>{
  if(String(v).trim()==='')return null;
  try{const n=new Decimal(v);return n.isFinite()&&n.gte(0)?n:null;}catch{return null;}
 };
-/** Arithmetic mean of recorded phase costs; missing values are never zero. */
+/** Mean markup amount per comparable closed job, with cost-weighted markup %. Missing data stays absent. */
 export function phaseCostComparison(snapshots:any[]){
- const average=(values:unknown[])=>{const costs=values.map(value).filter((v):v is Decimal=>v!==null);return {jobs:costs.length,averageActualCost:costs.length?costs.reduce((s,n)=>s.add(n),new Decimal(0)).div(costs.length).toFixed(2):null};};
  const eligible=snapshots.filter(s=>value(s?.summary?.actual)!==null);
- return {closedJobs:eligible.length,phases:Object.fromEntries(closurePhases.map(p=>[p,average(eligible.map(s=>p==='EPC'?s.actualEpc??s.input?.epcAggregate:s.input?.actual?.[p]))])),total:average(eligible.map(s=>s.summary.actual))};
+ const average=(pairs:{selling:unknown;cost:unknown;recordedMarkup?:unknown}[])=>{
+  const costs=pairs.map(p=>value(p.cost)).filter((v):v is Decimal=>v!==null);
+  const complete=pairs.map(p=>{const selling=value(p.selling),cost=value(p.cost);let markup:Decimal|null=selling!==null&&cost!==null?selling.sub(cost):null;if(markup===null&&p.recordedMarkup!==undefined&&p.recordedMarkup!==null&&String(p.recordedMarkup).trim()!==''){try{const n=new Decimal(p.recordedMarkup as string);if(n.isFinite())markup=n;}catch{}}return {cost,markup};}).filter((p):p is {cost:Decimal;markup:Decimal}=>p.cost!==null&&p.markup!==null);
+  const totalCost=complete.reduce((s,p)=>s.add(p.cost),new Decimal(0)),totalMarkup=complete.reduce((s,p)=>s.add(p.markup),new Decimal(0));
+  return {jobs:costs.length,averageActualCost:costs.length?costs.reduce((s,n)=>s.add(n),new Decimal(0)).div(costs.length).toFixed(2):null,markupJobs:complete.length,averageActualMarkup:complete.length?totalMarkup.div(complete.length).toFixed(2):null,averageActualMarkupPercent:complete.length&&totalCost.gt(0)?totalMarkup.div(totalCost).mul(100).toFixed(2):null};
+ };
+ const epcSelling=eligible.map(s=>closureEpcSelling(s.phaseSelling?.EPC,s.epcBudget,s.budget?.EPC,s.epcSelling));
+ return {closedJobs:eligible.length,
+  phases:Object.fromEntries(closurePhases.map(p=>[p,average(eligible.map(s=>({selling:s.phaseSelling?.[p],cost:p==='EPC'?s.actualEpc??s.input?.epcAggregate:s.input?.actual?.[p]})))])),
+  epc:Object.fromEntries(closureEpcItems.map(p=>[p,average(eligible.map((s,i)=>({selling:epcSelling[i]?.[p],cost:s.input?.epcDetails===false?undefined:s.input?.epc?.[p]})))])),
+  total:average(eligible.map(s=>({selling:s.selling??s.summary?.selling,cost:s.summary.actual,recordedMarkup:s.summary.actualMarkup})))
+ };
 }
 
 export const closureEpcItems=['Electrical Labour','Earthing Cost','Deliveries','Installation Cost'];

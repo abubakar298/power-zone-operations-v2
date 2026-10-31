@@ -11,7 +11,7 @@ test('Management reviews saved closure cards and only currently pending technica
  const closure={id:'closure-fixture',job_key:'ubl:1',stage:'Awaiting Management',version:2,created_at:'2026-10-25T09:00:00Z',snapshot,recorded_by:'Accounts'};
  await page.route('**/api/accounts-workspace',route=>route.fulfill({json:{ipos:[],closures:[closure,{...closure,id:'draft',job_key:'ubl:2',stage:'Draft'}]}}));
  await page.route('**/api/accounts-workspace/closure-queue',route=>route.fulfill({json:{closures:[closure]}}));
- await page.route('**/api/accounts-workspace/job?*',route=>route.fulfill({json:{...snapshot,selling:'9999.00',budget:Object.fromEntries(names.map(p=>[p,'999.00'])),history:[closure],phaseCostComparison:{phases:Object.fromEntries(names.map(p=>[p,{jobs:2,averageActualCost:'90000.00'}])),total:{jobs:2,averageActualCost:'540000.00'}}}}));
+ await page.route('**/api/accounts-workspace/job?*',route=>route.fulfill({json:{...snapshot,selling:'9999.00',budget:Object.fromEntries(names.map(p=>[p,'999.00'])),history:[closure],phaseCostComparison:{phases:Object.fromEntries(names.map(p=>[p,{jobs:2,averageActualCost:'90000.00',markupJobs:2,averageActualMarkup:'110000.00',averageActualMarkupPercent:'122.22'}])),epc:Object.fromEntries(['Electrical Labour','Earthing Cost','Deliveries','Installation Cost'].map(p=>[p,{markupJobs:1,averageActualMarkup:'35000.00',averageActualMarkupPercent:'175.00'}])),total:{jobs:2,averageActualCost:'540000.00',markupJobs:2,averageActualMarkup:'660000.00',averageActualMarkupPercent:'122.22'}}}}));
  await page.route('**/api/inventory-reconciliation/reports',route=>route.fulfill({json:{reports:[]}}));
  const pkg={id:'00000000-0000-4000-8000-000000000001',status:'Submitted for Management',snapshot:{sites:[{recordId:'record1',siteName:'Technical fixture',siteCode:'042'}]}};
  await page.route('**/api/project-workflow/ubl-survey-packages',route=>route.fulfill({json:{packages:[pkg,{...pkg,id:'old-package'}]}}));
@@ -24,11 +24,11 @@ test('Management reviews saved closure cards and only currently pending technica
  await page.getByRole('button',{name:'Review job closure',exact:true}).click();
  const comparison=page.getByRole('region',{name:'Job cost comparison',exact:true});
  await expect(comparison).toHaveCount(1);await expect(comparison).toBeVisible();
- for(const column of ['Budgeted cost','Actual cost','Cost difference','Budgeted markup','Actual markup','Average actual cost'])await expect(comparison.getByRole('columnheader',{name:column,exact:true})).toBeVisible();
+ for(const column of ['Budgeted cost','Actual cost','Cost difference','Budgeted markup','Actual markup','Average markup'])await expect(comparison.getByRole('columnheader',{name:column,exact:true})).toBeVisible();
  for(const phase of ['Electrical Labour','Earthing Cost','Deliveries','Installation Cost'])await expect(comparison.getByRole('rowheader',{name:new RegExp('^'+phase)})).toBeVisible();
  await expect(comparison.getByRole('row').filter({hasText:'Electrical Labour'}).getByRole('cell',{name:'0.00',exact:true})).toBeVisible();
  await expect(comparison.locator('tfoot')).toContainText('480,000.00');await expect(comparison.locator('tfoot')).toContainText('-120,000.00');
- await expect(comparison.getByRole('cell',{name:/^90,000\.00/})).toHaveCount(6);
+ await expect(comparison.getByRole('cell',{name:/^110,000\.00/})).toHaveCount(6);await expect(comparison.getByRole('row').filter({hasText:'Electrical Labour'})).toContainText('175%');
  await expect(page.getByText('Costing breakdown and EPC details',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Save closure draft',exact:true})).toHaveCount(0);
  await page.setViewportSize({width:1280,height:900});

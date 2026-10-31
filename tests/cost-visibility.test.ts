@@ -74,14 +74,14 @@ test('Accounts closure projection hides phase maps and derived mixed-cost averag
  const snapshot={selling:'1200.00',budget:{'Solar Panels':'0.00',Structure:'150.00',Inverter:'400.00',Batteries:'500.00',BMS:'50.00',EPC:'100.00'},
   input:{actual:{'Solar Panels':'0.00',Structure:'150.00',Inverter:'401.00',Batteries:'499.00',BMS:'50.00'},epcAggregate:'100.00'},
   summary:{selling:'1200.00',actual:'1200.00',budget:'1200.00',budgetedMarkup:'0.00',actualMarkup:'0.00',budgetedMarkupPercent:'0.00',actualMarkupPercent:'0.00'},
-  configurationComparison:{closedJobs:2,averageActualMarkupPercent:'20.00'},phaseCostComparison:{total:{jobs:2,averageActualCost:'1200.00'},phases:{Inverter:{jobs:2,averageActualCost:'400.00'},BMS:{jobs:1,averageActualCost:'0.00'},Structure:{jobs:2,averageActualCost:'150.00'},'Solar Panels':{jobs:0,averageActualCost:null}}}};
+  configurationComparison:{closedJobs:2,averageActualMarkupPercent:'20.00'},phaseCostComparison:{total:{jobs:2,averageActualCost:'1200.00',averageActualMarkup:'600',averageActualMarkupPercent:'50'},phases:{Inverter:{jobs:2,averageActualCost:'400.00',averageActualMarkup:'200',averageActualMarkupPercent:'50'},BMS:{jobs:1,averageActualCost:'0.00'},Structure:{jobs:2,averageActualCost:'150.00'},'Solar Panels':{jobs:0,averageActualCost:null}}}};
  const before=JSON.stringify(snapshot),result=restrictedCostView({...snapshot,history:[{snapshot}]});
  for(const value of [result,result.history[0].snapshot]){
   for(const phase of ['Inverter','Batteries','BMS']){assert.equal(value.budget[phase],null);assert.equal(value.input.actual[phase],null);}
   assert.equal(value.budget['Solar Panels'],'0.00');assert.equal(value.input.actual.Structure,'150.00');assert.equal(value.input.epcAggregate,'100.00');
   for(const key of ['actual','budget','actualMarkup','budgetedMarkup','actualMarkupPercent','budgetedMarkupPercent'])assert.equal(value.summary[key],null,key);
   assert.equal(value.summary.selling,'1200.00');assert.equal(value.configurationComparison.closedJobs,2);assert.equal(value.configurationComparison.averageActualMarkupPercent,null);
-  assert.equal(value.phaseCostComparison.total.averageActualCost,null);assert.equal(value.phaseCostComparison.phases.Inverter.averageActualCost,null);assert.equal(value.phaseCostComparison.phases.BMS.averageActualCost,null);
+  assert.equal(value.phaseCostComparison.total.averageActualMarkup,null);assert.equal(value.phaseCostComparison.total.averageActualMarkupPercent,null);assert.equal(value.phaseCostComparison.phases.Inverter.averageActualMarkup,null);assert.equal(value.phaseCostComparison.phases.Inverter.averageActualMarkupPercent,null);assert.equal(value.phaseCostComparison.total.averageActualCost,null);assert.equal(value.phaseCostComparison.phases.Inverter.averageActualCost,null);assert.equal(value.phaseCostComparison.phases.BMS.averageActualCost,null);
   assert.equal(value.phaseCostComparison.phases.Structure.averageActualCost,'150.00');assert.equal(value.phaseCostComparison.phases['Solar Panels'].averageActualCost,null);
  }
  assert.equal(JSON.stringify(snapshot),before,'Redaction never alters authoritative cost snapshots.');
