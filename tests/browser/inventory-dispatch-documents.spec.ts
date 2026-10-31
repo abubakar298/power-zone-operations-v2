@@ -21,6 +21,7 @@ test('dispatch document buckets show exact site evidence, scoped links and align
  await expect(page.getByRole('button',{name:'Reconcile',exact:true})).toHaveCount(0);
  await buckets.getByRole('button').filter({hasText:'Ready for Reconciliation'}).click();
  await page.getByRole('button',{name:'View documents',exact:true}).click();
+ await expect(page.getByRole('dialog')).toBeVisible();await expect(page.getByText('Uploaded by QC',{exact:true})).toHaveCount(2);
  await expect(page.getByRole('link',{name:'Variable Items Sign Off',exact:true})).toHaveAttribute('href','/api/material-dispatches/document-status/ready/evidence/vso');
  await expect(page.getByText(/Receiving documents does not credit returns/)).toBeVisible();await expect(page.getByText('Retrospective · gate copy waived',{exact:true})).toBeVisible();
  const actions=page.locator('.dispatch-document-list tbody .ob-actions button');const firstAction=await actions.nth(0).boundingBox(),secondAction=await actions.nth(1).boundingBox();expect(Math.abs(firstAction!.y-secondAction!.y)).toBeLessThan(2);
@@ -31,6 +32,7 @@ test('dispatch document buckets show exact site evidence, scoped links and align
  await page.setViewportSize({width:390,height:844});
  await page.screenshot({path:'../inventory-document-buckets-mobile.png',fullPage:true});
  const width=await page.evaluate(()=>({body:document.body.scrollWidth,screen:innerWidth}));expect(width.body).toBeLessThanOrEqual(width.screen);
+ await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();await expect(page.getByRole('button',{name:'View documents',exact:true})).toBeFocused();await page.getByRole('button',{name:'View documents',exact:true}).click();await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).not.toBeVisible();
  await page.getByRole('button',{name:'Reconcile',exact:true}).click();await expect(page).toHaveURL(/\/inventory\/parent-dos\/review\?draft=draft-parent$/);await expect(page.getByRole('button',{name:'Close Parent DO',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'200',exact:true})).toBeVisible();
 });
 test('individual DO reconciliation opens its issued-preparation ledger rather than a guessed site-plan form',async({page})=>{
