@@ -3,7 +3,7 @@
 @media(max-width:1000px){.accounts-ui .accounts-worklist-filters.accounts-invoice-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.accounts-ui .accounts-worklist-filters.accounts-invoice-filters{grid-template-columns:1fr}.accounts-ui .accounts-invoice-filters>.pz-button{margin-top:0}}
 
-.accounts-ui .accounts-payment-actions-column{width:25rem;min-width:25rem;vertical-align:top}
+.accounts-ui .accounts-payment-actions-column{width:1%;vertical-align:top}
 .accounts-ui .accounts-invoice-actions{display:flex;width:max-content;gap:8px;align-items:flex-start;flex-wrap:nowrap}
 .accounts-ui .accounts-invoice-actions>.pz-button{flex:0 0 auto;white-space:nowrap;min-height:38px;padding:8px 10px;font-size:13px}
 
