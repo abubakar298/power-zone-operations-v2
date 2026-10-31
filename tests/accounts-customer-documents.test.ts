@@ -1,3 +1,4 @@
+import {groupAccountsCustomerDocuments} from '../shared/accounts-customer-documents.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,randomBytes} from 'node:crypto';
@@ -25,6 +26,10 @@ test('only the exact Management-closed job leaves Approved Documents; completed/
  assert.equal(customerDocumentSiteClosed({site_id:'linked',version:1,snapshot:{}},closed,new Map([['linked',[closedIpo]]]),legacy),true);
  assert.equal(customerDocumentSiteClosed({site_id:'linked',version:1,snapshot:{origin:{ipoId:openIpo}}},closed,new Map([['linked',[closedIpo]]]),legacy),false,'A different current native origin prevents stale-link cross-closure.');
 });
+test('site grouping counts a site once and retains every partial DO and signature file',()=>{
+ const rows=projectCustomerDocuments(customerDocumentReferences([{site_id:'one',version:1,snapshot:{name:'One',ipo:'CHP-163',deliveries:[{signedDo:{id:'11111111-1111-4111-8111-111111111111'}},{signedDo:{id:'22222222-2222-4222-8222-222222222222'}}]}},{site_id:'two',version:1,snapshot:{name:'Two',ipo:'CHP-163',qcJob:{acknowledgement:{id:'33333333-3333-4333-8333-333333333333'}}}}]),[{id:'11111111-1111-4111-8111-111111111111',site_id:'one',filename:'DO1',created_at:'2026-11-01T10:00:00Z',media_type:'application/pdf'},{id:'22222222-2222-4222-8222-222222222222',site_id:'one',filename:'DO2',created_at:'2026-11-01T11:00:00Z',media_type:'application/pdf'},{id:'33333333-3333-4333-8333-333333333333',site_id:'two',filename:'Ack',created_at:'2026-11-01T09:00:00Z',media_type:'application/pdf'}]);
+ const sites=groupAccountsCustomerDocuments(rows);assert.equal(sites.length,2);assert.equal(sites[0].siteId,'one');assert.equal(sites[0].documents.length,2);assert.equal(sites[1].siteId,'two','Shared IPO text does not merge distinct sites.');
+});
 test('Accounts receives and downloads committed QC signed documents without Inventory/PT, gates, returns or IRR; other roles and orphan/cross-site files remain blocked',async()=>{
  const db=await testDatabase();try{
   const sessions:Record<string,string>={},users:Record<string,string>={};
@@ -41,7 +46,7 @@ test('Accounts receives and downloads committed QC signed documents without Inve
   for(const role of ['Inventory','Operations','Coordinator'])await request(app).get('/api/accounts-workspace/customer-documents').set('Cookie',sessions[role]).expect(403);
   const data=(await request(app).get('/api/accounts-workspace/customer-documents').set('Cookie',sessions.Accounts).expect(200)).body;
   assert.equal(data.rows.length,4);assert.deepEqual(new Set(data.rows.map((r:any)=>r.kind)),new Set(['Signed DO','VSO','Acknowledgment']));
-  const count=(await request(app).get('/api/accounts-workspace/customer-documents?summary=1').set('Cookie',sessions.Accounts).expect(200)).body;assert.equal(count.count,data.rows.length);
+  const count=(await request(app).get('/api/accounts-workspace/customer-documents?summary=1').set('Cookie',sessions.Accounts).expect(200)).body;assert.equal(count.count,1);assert.equal(count.documents,4);assert.equal(groupAccountsCustomerDocuments(data.rows)[0].documents.length,4);
   const doc=data.rows.find((r:any)=>r.kind==='VSO');const download=await request(app).get(doc.downloadUrl).set('Cookie',sessions.Accounts).expect(200);assert.equal(download.body.toString(),content.toString());assert.match(download.headers['cache-control'],/no-store/);
   await request(app).get('/api/accounts-workspace/customer-documents/'+'f'.repeat(64)+'/file').set('Cookie',sessions.Accounts).expect(404);
   await request(app).get(doc.downloadUrl).set('Cookie',sessions.Inventory).expect(403);
@@ -50,7 +55,7 @@ test('Accounts receives and downloads committed QC signed documents without Inve
   await db.pool.query('INSERT INTO inventory_reports(id,job_key,created_by)VALUES($1,$2,$3)',[report,jobKey,users.Admin]);
   await db.pool.query("INSERT INTO inventory_report_versions(id,report_id,version,stage,snapshot,request_key,created_by)VALUES($1,$2,1,'Sent to Accounts','{}',$3,$4)",[reportVersion,report,randomUUID(),users.Admin]);
   await db.pool.query("INSERT INTO accounts_job_closures(id,job_key,report_version_id,version,stage,snapshot,request_key,created_by)VALUES($1,$2,$3,1,'Awaiting Management','{}',$4,$5)",[randomUUID(),jobKey,reportVersion,randomUUID(),users.Admin]);
-  assert.equal((await request(app).get('/api/accounts-workspace/customer-documents?summary=1').set('Cookie',sessions.Accounts).expect(200)).body.count,4,'Awaiting approval is not Closed.');
+  assert.equal((await request(app).get('/api/accounts-workspace/customer-documents?summary=1').set('Cookie',sessions.Accounts).expect(200)).body.count,1,'Awaiting approval is not Closed.');
   await db.pool.query("INSERT INTO accounts_job_closures(id,job_key,report_version_id,version,stage,snapshot,request_key,created_by)VALUES($1,$2,$3,2,'Closed','{}',$4,$5)",[randomUUID(),jobKey,reportVersion,randomUUID(),users.Admin]);
   assert.equal((await request(app).get('/api/accounts-workspace/customer-documents?summary=1').set('Cookie',sessions.Accounts).expect(200)).body.count,0,'The exact closed site leaves the active bucket and counter.');
   assert.equal((await request(app).get('/api/accounts-workspace/customer-documents').set('Cookie',sessions.Accounts).expect(200)).body.rows.length,0);

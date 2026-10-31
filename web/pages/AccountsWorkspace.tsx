@@ -563,7 +563,7 @@ export function AccountsWorkspace({
           <div className="stage-grid workspace-buckets accounts-dashboard-buckets">
             {[
               ['IPOs Received',data.ipos.filter((i:any)=>!ptRecorded('IPO',i)).length,'IPOs Received',`${data.ipos.filter((i:any)=>ptRecorded('IPO',i)).length} recorded in PT`],
-              ['Approved Documents',approvedDocumentCount??'—','Approved Documents','QC signed DOs, VSOs and acknowledgments'],
+              ['Approved Documents',approvedDocumentCount??'—','Approved Documents','Sites with QC signed documents'],
               ['Inventory Reconciliations',reports.filter(r=>!ptRecorded('Inventory',r)).length,'Inventory PT Entries',`${reports.filter(r=>ptRecorded('Inventory',r)).length} recorded in PT`],
               ['Job Closure',preparationReports.length,'Job Closure','Ready, drafts and returned jobs'],
               ['Awaiting Management',data.closures.filter((c:any)=>c.stage==='Awaiting Management').length,'Awaiting Management',`${data.closures.filter((c:any)=>c.stage==='Closed').length} jobs closed`],
