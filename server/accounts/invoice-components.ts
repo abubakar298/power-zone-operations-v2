@@ -8,7 +8,7 @@ export function separateInvoiceRows(rows:Row[],components:Row[]=[]):Row[]{
  return rows.flatMap(row=>{
   const stage=row.category==='System · advance'?'advance':row.category==='System · completion'?'completion':undefined;
   let parts=stage?components.filter(c=>c.sourceKey===row.id.slice(0,-stage.length-1)&&c.stage===stage):[];
-  if(!parts.length){const refs=[...new Set(String(row.invoice??'').split(/\s+\/\s+|,\s*|\s*&\s*/).map(v=>v.trim()).filter(Boolean))];if(refs.length<2)return [row];parts=refs.map(invoice=>({sourceKey:row.sourceKey,invoice,amount:null}));}
+  if(!parts.length){const refs=[...new Set(String(row.invoice??'').split(/\s+\/\s+|,\s*|\s*&\s*|\s+(?=\d{2}-\d{4,}(?:-S)?(?:-\d+\/\d+)?(?:\s|$))/).map(v=>v.trim()).filter(Boolean))];if(refs.length<2)return [row];parts=refs.map(invoice=>({sourceKey:row.sourceKey,invoice,amount:null}));}
   if(new Set(parts.map(p=>p.invoice)).size!==parts.length)throw Error('Duplicate invoice component identity.');
   const fullOutstanding=row.pending!=null&&row.amount!=null&&new Decimal(row.pending).eq(row.amount)&&!row.operationalReceived;
   return parts.map(part=>{
