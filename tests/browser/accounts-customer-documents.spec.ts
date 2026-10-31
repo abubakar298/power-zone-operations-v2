@@ -1,0 +1,31 @@
+import {test,expect} from '@playwright/test';
+import {actors,login} from './release-fixtures.js';
+const docs=Array.from({length:13},(_,i)=>({id:'signed-'+i,siteId:'site-'+i,siteName:'QC Site '+(i+1),customer:i%2?'Meezan Bank':'United Bank Limited',ipo:'IPO-'+i,kind:['Signed DO','VSO','Acknowledgment'][i%3],filename:'Signed-customer-'+i+'.pdf',receivedAt:'2026-10-'+String(31-i).padStart(2,'0')+'T10:00:00Z',documentDate:'2026-10-20',source:'QC',sourceVersion:2,downloadUrl:'/api/accounts-workspace/customer-documents/signed-'+i+'/file'}));
+async function mocks(page:any){
+ await page.route('**/api/accounts-workspace', (r:any)=>r.fulfill({json:{ipos:[],closures:[],ptEntries:[{source_kind:'Inventory',source_id:'recorded',source_version:1,pt_reference:'PT-KEPT',entry_date:'2026-10-31'}]}}));
+ await page.route('**/api/accounts-workspace/work-queues',(r:any)=>r.fulfill({json:{invoicesToSubmit:0,paymentsToRecord:0}}));
+ await page.route(/\/api\/accounts-workspace\/customer-documents(?:\?summary=1)?$/,(r:any)=>r.fulfill({json:r.request().url().includes('summary=1')?{count:docs.length}:{rows:docs}}));
+}
+test('QC approved documents are immediate, searchable, limited to ten recent and have no PT action or Inventory dependency',async({page})=>{
+ await actors(page.request);await login(page.request,'accounts-release@example.test');await mocks(page);
+ let inventoryRequests=0;await page.route('**/api/inventory-reconciliation/reports',r=>{inventoryRequests++;return r.fulfill({json:{reports:[]}});});
+ await page.goto('/dashboard#workspace=finance&accountsTab=Approved+Documents');
+ const table=page.locator('.accounts-signed-document-table');await expect(table.locator('tbody tr')).toHaveCount(10);expect(inventoryRequests).toBe(0);await expect(table).toContainText('QC Site 1');await expect(table).not.toContainText('QC Site 13');
+ await expect(page.getByRole('button',{name:'Record PT entry',exact:true})).toHaveCount(0);
+ const toolbar=page.locator('.accounts-signed-document-filters');const controls=await toolbar.locator('input,select,button').evaluateAll(elements=>elements.map(e=>e.getBoundingClientRect().top));expect(Math.max(...controls)-Math.min(...controls)).toBeLessThan(2);
+ await page.getByRole('searchbox',{name:'Search site, IPO or document',exact:true}).fill('QC Site 13');await expect(table.locator('tbody tr')).toHaveCount(1);await page.getByRole('button',{name:'View document',exact:true}).click();
+ const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();await expect(dialog).toContainText('QC Site 13');await expect(dialog.getByRole('link',{name:'View / Download signed document'})).toHaveAttribute('href',docs[12].downloadUrl);
+ await dialog.getByRole('button',{name:'Close record'}).click();await page.getByRole('button',{name:'Clear filters',exact:true}).click();
+ await page.getByRole('combobox',{name:'Document type',exact:true}).selectOption('VSO');await expect(table.locator('tbody tr')).toHaveCount(4);await expect(table).not.toContainText('Acknowledgment');
+ await page.getByRole('combobox',{name:'Customer',exact:true}).selectOption('Meezan Bank');await expect(table.locator('tbody tr')).toHaveCount(2);
+ await page.getByRole('button',{name:'Clear filters',exact:true}).click();await page.screenshot({path:'../qc-accounts-approved-documents-desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:'../qc-accounts-approved-documents-mobile.png',fullPage:true});const widths=await page.evaluate(()=>({body:document.body.scrollWidth,viewport:innerWidth}));expect(widths.body).toBeLessThanOrEqual(widths.viewport);
+});
+test('Accounts dashboard separates QC document count from Inventory reports and retains PT history/actions only in Inventory & PT',async({page})=>{
+ await actors(page.request);await login(page.request,'accounts-release@example.test');await mocks(page);
+ await page.route('**/api/inventory-reconciliation/reports',r=>r.fulfill({json:{reports:[{id:'waiting',job_key:'safe:1',site_name:'Inventory reconciliation pending',version:1,stage:'Sent to Accounts',created_at:'2026-10-30T10:00:00Z'},{id:'recorded',job_key:'safe:2',site_name:'Inventory reconciliation recorded',version:1,stage:'Sent to Accounts',created_at:'2026-10-29T10:00:00Z'}]}}));
+ await page.goto('/dashboard#workspace=finance&accountsTab=My+Workspace');const buckets=page.locator('.accounts-dashboard-buckets');await expect(buckets.getByRole('button').filter({hasText:'Approved Documents'}).locator('strong')).toHaveText('13');await expect(buckets.getByRole('button').filter({hasText:'Inventory Reconciliations'}).locator('strong')).toHaveText('1');
+ await expect(buckets.getByRole('button').nth(5)).toContainText('Invoices to Submit');await expect(buckets.getByRole('button').nth(6)).toContainText('Payments to Record');
+ await page.getByRole('button',{name:'Inventory & PT',exact:true}).click();await expect(page.getByRole('heading',{name:'Inventory Reconciliations · PT Entries'})).toBeVisible();await expect(page.getByRole('button',{name:'Record PT entry',exact:true})).toHaveCount(1);await expect(page.getByRole('table')).toContainText('Inventory reconciliation pending');await expect(page.getByRole('table')).not.toContainText('QC Site');
+ await page.getByRole('button',{name:'Recorded · 1'}).click();await expect(page.getByRole('table')).toContainText('PT-KEPT');await expect(page.getByRole('button',{name:'Record PT entry',exact:true})).toHaveCount(0);
+});

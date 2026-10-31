@@ -1,3 +1,4 @@
+import {AccountsCustomerDocuments} from './AccountsCustomerDocuments.js';
 import {accountsPageName} from '../../shared/accounts-navigation.js';
 import {ProgrammeDashboard} from '../components/ProgrammeDashboard.js';
 import {isClosurePreparationJob} from '../../shared/accounts-closure-queue.js';
@@ -89,6 +90,7 @@ export function AccountsWorkspace({
     ),
     [data, setData] = useState<any>({ ipos: [], closures: [] }),
     [reports, setReports] = useState<any[]>([]),
+    [approvedDocumentCount,setApprovedDocumentCount]=useState<number|null>(null),
     [invoiceQueueCount,setInvoiceQueueCount]=useState<number|null>(null),
     [paymentQueueCount,setPaymentQueueCount]=useState<number|null>(null),
     [queueCountError,setQueueCountError]=useState(false),
@@ -134,8 +136,8 @@ export function AccountsWorkspace({
   const latest = job?.history[0];
   const revisionReason = latest?.stage === "Returned for Revision" ? closureDecisionNote(latest.snapshot) : null;
   const readonly = latest?.stage==="Closed"||latest?.stage==="Awaiting Management"&&!editingSubmitted;
-  const workspaceNeeded = !['Project Tracking','Programme Dashboard','Project Sites','Physical Documents','Receivables','Invoicing','Invoices to Submit','Payments to Record','Project checkpoints','Inventory Reconciliations'].includes(tab);
-  const reportsNeeded = ['My Workspace','Approved Documents','Inventory Recorded in PT','Job Closure'].includes(tab);
+  const workspaceNeeded = !['Project Tracking','Programme Dashboard','Project Sites','Physical Documents','Receivables','Invoicing','Invoices to Submit','Payments to Record','Project checkpoints','Inventory Reconciliations','Approved Documents'].includes(tab);
+  const reportsNeeded = ['My Workspace','Inventory PT Entries','Inventory Recorded in PT','Job Closure'].includes(tab);
   const loadGeneration = useRef(0);
   const actorContext = `${session.user.id}:${session.user.role}`;
   const currentActor = useRef(actorContext);
@@ -151,6 +153,7 @@ export function AccountsWorkspace({
     refresh();window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',visible);
     return()=>{active=false;generation++;window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',visible);};
   },[tab,actorContext]);
+  useEffect(()=>{if(tab!=='My Workspace')return;let active=true,request=0;const refresh=()=>{const current=++request;void api<{count:number}>('/accounts-workspace/customer-documents?summary=1').then(v=>{if(active&&current===request)setApprovedDocumentCount(v.count);}).catch(()=>{if(active&&current===request)setApprovedDocumentCount(null);});};setApprovedDocumentCount(null);refresh();window.addEventListener('focus',refresh);return()=>{active=false;window.removeEventListener('focus',refresh);};},[tab,actorContext]);
   async function load() {
     if (!workspaceNeeded && !reportsNeeded) return;
     const generation = ++loadGeneration.current;
@@ -537,12 +540,13 @@ export function AccountsWorkspace({
       {!managementReview && <div className="pz-action-row">
         {['Job Closure','Awaiting Management','Closed Jobs'].includes(tab)&&!job&&<Field id="closure-status" label="Job status"><select id="closure-status" value={tab} onChange={e=>navigate(e.target.value)}><option value="Job Closure">Ready / In preparation</option><option>Awaiting Management</option><option value="Closed Jobs">Closed</option></select></Field>}
       </div>}
-      {!["My Workspace","Physical Documents","IPOs Received","IPOs Recorded in PT","Approved Documents","Inventory Recorded in PT","Job Closure","Awaiting Management","Closed Jobs","Project Sites","Programme Dashboard","Project Tracking","Payments to Record","IPO Review","Invoicing","Receivables"].includes(tab)&&<h2>{tab==="My Workspace"?"Work queues":tab}</h2>}
+      {!["My Workspace","Physical Documents","IPOs Received","IPOs Recorded in PT","Approved Documents","Inventory PT Entries","Inventory Recorded in PT","Job Closure","Awaiting Management","Closed Jobs","Project Sites","Programme Dashboard","Project Tracking","Payments to Record","IPO Review","Invoicing","Receivables"].includes(tab)&&<h2>{tab==="My Workspace"?"Work queues":tab}</h2>}
       {doDocument&&<AccountsRecordDialog title="Approved Delivery DO" reference={doDocument.record.number??jobLabel(doDocument.record)} subtitle="Delivery-only site" onClose={()=>setDoDocument(undefined)}><section className="accounts-record-section"><h3>Inventory handoff</h3><p>Approved DO · version {doDocument.record.version}. No installation IRR is required for this delivery-only site.</p></section><section className="accounts-record-section"><h3>Approved documents</h3>{doDocument.loading?<p role="status">Loading DO evidence…</p>:doDocument.error?<p role="alert" className="form-error">{doDocument.error}</p>:doDocument.files?.length?<ul className="accounts-file-list">{doDocument.files.map((file:any)=><li key={file.id}><span>{file.filename}</span><a className="pz-button pz-button--secondary" href={'/api/inventory-reconciliation/files/'+file.id} target="_blank" rel="noreferrer">View / Download</a></li>)}</ul>:<p>No digital files are attached to this approved handoff.</p>}</section></AccountsRecordDialog>}
       {ptDocument&&<AccountsRecordDialog title="Record PT Entry" reference={ptDocument.number??jobLabel(ptDocument)} onClose={()=>void closePtEntry()}><p>Confirm the document has been entered in PT, then save its reference here.</p><div className="pz-form-grid"><Field id="pt-entry-reference" label="PT reference (required)"><input id="pt-entry-reference" value={ptEntryReference} onChange={e=>setPtEntryReference(e.target.value)}/></Field><Field id="pt-entry-date" label="Entry date (required)"><input id="pt-entry-date" type="date" value={ptEntryDate} onChange={e=>setPtEntryDate(e.target.value)}/></Field></div><Field id="pt-entry-notes" label="PT entry notes"><textarea id="pt-entry-notes" value={ptEntryNotes} onChange={e=>setPtEntryNotes(e.target.value)}/></Field><Button variant="primary" loading={busy} onClick={()=>void savePtEntry()}>Save PT entry</Button>{error&&errorAction==='pt-entry'&&<p role="alert" className="form-error">{error}</p>}</AccountsRecordDialog>}
       {["Programme Dashboard","Project Tracking"].includes(tab) && <ProgrammeDashboard userId={session.user.id} title="Project Tracking" endpoint="/accounts-workspace/programmes" onOpenSite={row=>{if(row.recordKey?.startsWith('ipo:'))void openIpo(row.recordKey.slice(4));else{setProgrammeSiteKey(row.sourceKey);navigate('Project Sites');}}}/>}
       {tab === "Project Sites" && <><header className="accounts-panel-heading accounts-subpage-heading"><h2>Site Details</h2><Button variant="neutral" onClick={()=>navigate("Project Tracking")}>Back to Project Tracking</Button></header><AccountsImportedSites initialSiteKey={programmeSiteKey} onOpenIpo={id=>void openIpo(id)}/></>}
       {tab === "Physical Documents" && <AccountsPhysicalDocuments/>}
+      {tab === "Approved Documents" && <AccountsCustomerDocuments/>}
       {tab === "Payments to Record" && <><Button variant="neutral" onClick={()=>navigate("My Workspace")}>Back to Dashboard</Button><AccountsPayments/></>}
       {tab === "Project checkpoints" && (
         <ProjectCheckpoints session={session} mode="Accounts" />
@@ -559,7 +563,8 @@ export function AccountsWorkspace({
           <div className="stage-grid workspace-buckets accounts-dashboard-buckets">
             {[
               ['IPOs Received',data.ipos.filter((i:any)=>!ptRecorded('IPO',i)).length,'IPOs Received',`${data.ipos.filter((i:any)=>ptRecorded('IPO',i)).length} recorded in PT`],
-              ['Approved Documents',reports.filter(r=>!ptRecorded('Inventory',r)).length,'Approved Documents',`${reports.filter(r=>ptRecorded('Inventory',r)).length} recorded in PT`],
+              ['Approved Documents',approvedDocumentCount??'—','Approved Documents','QC signed DOs, VSOs and acknowledgments'],
+              ['Inventory Reconciliations',reports.filter(r=>!ptRecorded('Inventory',r)).length,'Inventory PT Entries',`${reports.filter(r=>ptRecorded('Inventory',r)).length} recorded in PT`],
               ['Job Closure',preparationReports.length,'Job Closure','Ready, drafts and returned jobs'],
               ['Awaiting Management',data.closures.filter((c:any)=>c.stage==='Awaiting Management').length,'Awaiting Management',`${data.closures.filter((c:any)=>c.stage==='Closed').length} jobs closed`],
               ['Invoices to Submit',invoiceQueueCount??(queueCountError?'—':'…'),'Invoices to Submit',queueCountError?'Count unavailable · open queue':'Delivery and completion invoices'],
@@ -626,7 +631,7 @@ export function AccountsWorkspace({
                     <td>{jobLabel(r)}</td>
                     <td>Inventory approved · awaiting PT entry</td>
                     <td>
-                      <Button onClick={() => navigate("Approved Documents")}>
+                      <Button onClick={() => navigate("Inventory PT Entries")}>
                         Enter approved documents in PT
                       </Button>
                     </td>
@@ -656,12 +661,12 @@ export function AccountsWorkspace({
           </section>
         </>
       )}
-      {['IPOs Received','IPOs Recorded in PT','Approved Documents','Inventory Recorded in PT'].includes(tab)&&(()=>{
+      {['IPOs Received','IPOs Recorded in PT','Inventory PT Entries','Inventory Recorded in PT'].includes(tab)&&(()=>{
         const kind=tab.startsWith('IPO')?'IPO':'Inventory';
         const recorded=tab.endsWith('Recorded in PT');
         const queueRecords=(kind==='IPO'?data.ipos:reports).filter((r:any)=>kind==='IPO'||!inventoryType||(inventoryType==='delivery'?isDeliveryOnlyDo(r):!isDeliveryOnlyDo(r)));
         const rows=queueRecords.filter((r:any)=>!!ptRecorded(kind,r)===recorded).filter((r:any)=>`${r.number??''} ${r.snapshot?.siteName??r.site_name??''} ${r.job_key??''}`.toLowerCase().includes(search.toLowerCase()));
-        return <><section className="accounts-list-panel accounts-pt-panel"><header className="accounts-panel-heading"><h2>{kind==='IPO'?'IPO Entries':'Inventory Entries'}</h2><div className="accounts-queue-switch"><Button variant="neutral" aria-pressed={!recorded} onClick={()=>navigate(kind==='IPO'?'IPOs Received':'Approved Documents')}>Awaiting PT · {queueRecords.filter((r:any)=>!ptRecorded(kind,r)).length}</Button><Button variant="neutral" aria-pressed={recorded} onClick={()=>navigate(kind==='IPO'?'IPOs Recorded in PT':'Inventory Recorded in PT')}>Recorded · {queueRecords.filter((r:any)=>ptRecorded(kind,r)).length}</Button></div></header><div className="accounts-worklist-filters">
+        return <><section className="accounts-list-panel accounts-pt-panel"><header className="accounts-panel-heading"><h2>{kind==='IPO'?'IPO Entries':'Inventory Reconciliations · PT Entries'}</h2><div className="accounts-queue-switch"><Button variant="neutral" aria-pressed={!recorded} onClick={()=>navigate(kind==='IPO'?'IPOs Received':'Inventory PT Entries')}>Awaiting PT · {queueRecords.filter((r:any)=>!ptRecorded(kind,r)).length}</Button><Button variant="neutral" aria-pressed={recorded} onClick={()=>navigate(kind==='IPO'?'IPOs Recorded in PT':'Inventory Recorded in PT')}>Recorded · {queueRecords.filter((r:any)=>ptRecorded(kind,r)).length}</Button></div></header><div className="accounts-worklist-filters">
 <Field id="pt-document-search" label="Search document or site"><input id="pt-document-search" value={search} onChange={e=>setSearch(e.target.value)}/></Field>{kind==='Inventory'&&<Field id="inventory-document-kind" label="Document type"><select id="inventory-document-kind" value={inventoryType??'all'} onChange={e=>setInventoryType(e.target.value==='all'?null:e.target.value)}><option value="all">All documents</option><option value="installation">IRRs &amp; Variable Items</option><option value="delivery">Delivery-only DOs</option></select></Field>}</div><div className="pz-table-scroll"><table className="accounts-entry-table"><thead><tr><th>Site / IPO</th><th>{recorded?'PT Reference':'Received'}</th><th>Action</th></tr></thead><tbody>{rows.map((r:any)=>{const entry=ptRecorded(kind,r);return <tr key={r.id}><td><strong>{r.snapshot?.siteName||r.site_name||jobLabel(r)}</strong><small>{r.number||r.job_id||r.job_key}{kind==='Inventory'?' · '+accountsDocumentLabel(r):''}</small></td><td>{entry?<>{entry.pt_reference}<small>{String(entry.entry_date).slice(0,10)}</small></>:r.received_at||r.created_at?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Karachi'}).format(new Date(r.received_at||r.created_at)):'Not recorded'}</td><td><Button variant="neutral" onClick={()=>kind==='IPO'?void openIpo(r.id):isDeliveryOnlyDo(r)?void openDeliveryDo(r):navigate('Inventory Reconciliations')}>View documents</Button>{!entry&&<Button variant="secondary" onClick={()=>{setPtDocument({...r,kind});setPtEntryReference('');setPtEntryNotes('');setError('');}}>Record PT entry</Button>}{entry&&kind==='Inventory'&&!isDeliveryOnlyDo(r)&&<Button variant="secondary" onClick={()=>void openJob(r.job_key)}>Prepare job closure</Button>}</td></tr>;})}</tbody></table>{rows.length===0&&<p>{kind==='Inventory'&&inventoryType==='delivery'?'No approved delivery-only DOs have been received yet.':'No documents in this bucket.'}</p>}</div></section></>;
       })()}
       {['Awaiting Management','Closed Jobs'].includes(tab)&&<section className="accounts-list-panel accounts-closure-list"><header className="accounts-panel-heading"><h2>{tab}</h2></header><div className="pz-table-scroll"><table><thead><tr><th>Job / site</th><th>Stage</th><th>Action</th></tr></thead><tbody>{data.closures.filter((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management')).map((c:any)=><tr key={c.id}><td>{jobLabel(c.snapshot)}</td><td>{c.stage}</td><td><div className="pz-action-row"><Button variant="secondary" onClick={()=>void openJob(c.job_key)}>View closure</Button>{c.stage==="Awaiting Management"&&!managementReview&&<Button variant="neutral" onClick={()=>void openJob(c.job_key,true)}>Edit</Button>}</div></td></tr>)}</tbody></table>{!data.closures.some((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management'))&&<div className="accounts-empty"><h3>No jobs in this bucket</h3><p>Jobs appear here as they progress through Management review.</p></div>}</div></section>}

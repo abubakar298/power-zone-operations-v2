@@ -5,7 +5,7 @@ test('independent Accounts pages avoid work queues and load queues only when ope
  await actors(page.request);await login(page.request,'accounts-release@example.test');
  const counts={workspace:0,reports:0};
  page.on('request',request=>{const path=new URL(request.url()).pathname;if(path==='/api/accounts-workspace')counts.workspace++;if(path==='/api/inventory-reconciliation/reports')counts.reports++;});
- for(const tab of ['Programme Dashboard','Project Sites','Physical Documents','Invoicing','Receivables']){
+ for(const tab of ['Programme Dashboard','Project Sites','Physical Documents','Approved Documents','Invoicing']){
   const path='/dashboard#workspace=finance&accountsTab='+encodeURIComponent(tab);
   await page.goto('about:blank');await page.goto(path);await page.waitForLoadState('networkidle');
   await expect(page.getByRole('heading',{name:'Accounts workspace',exact:true})).toBeVisible();
@@ -16,9 +16,11 @@ test('independent Accounts pages avoid work queues and load queues only when ope
  await expect(page.getByRole('heading',{name:'IPO Entries',exact:true})).toBeVisible();
  await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Inventory & PT',exact:true}).click();
  await expect.poll(()=>counts.reports).toBe(1);await page.waitForLoadState('networkidle');expect(counts.workspace).toBe(2);
- await expect(page.getByRole('heading',{name:'Inventory Entries',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Inventory Reconciliations · PT Entries',exact:true})).toBeVisible();
  await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Dashboard',exact:true}).click();
  await expect.poll(()=>counts.reports).toBe(2);await page.waitForLoadState('networkidle');expect(counts.workspace).toBe(3);
+ // Receivables is an owner-approved legacy alias for My Workspace, so it intentionally loads the work queues.
+ await page.goto('about:blank');await page.goto('/dashboard#workspace=finance&accountsTab=Receivables');await expect.poll(()=>counts.reports).toBe(3);await page.waitForLoadState('networkidle');expect(counts.workspace).toBe(4);
 });
 
 test('management refresh skips hidden pages and coalesces focus while requests are pending',async({page})=>{

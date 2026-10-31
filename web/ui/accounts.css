@@ -388,3 +388,9 @@
 .accounts-ui .accounts-closure-list td:last-child{width:1%;vertical-align:top}
 .accounts-ui .accounts-closure-list td:last-child>.pz-action-row{width:max-content;flex-wrap:nowrap;align-items:flex-start}
 .accounts-ui .accounts-closure-list td:last-child>.pz-action-row>.pz-button{flex:0 0 auto;white-space:nowrap}
+
+.accounts-signed-document-filters{display:grid;grid-template-columns:minmax(200px,2fr) repeat(2,minmax(160px,1fr)) auto;gap:16px;align-items:start;margin-bottom:20px}.accounts-signed-document-table{width:100%;min-width:760px;table-layout:fixed}.accounts-signed-document-table th:first-child{width:6%}.accounts-signed-document-table th:nth-child(2){width:30%}.accounts-signed-document-table th:nth-child(3){width:27%}.accounts-signed-document-table th:nth-child(4){width:18%}.accounts-signed-document-table th:nth-child(5){width:19%}.accounts-signed-document-table td{vertical-align:top;overflow-wrap:anywhere}.accounts-signed-document-table td small{display:block;margin-top:4px;color:var(--pz-muted);font-size:12px}.accounts-signed-document-table td .pz-button{white-space:nowrap}
+@media(max-width:1000px){.accounts-signed-document-filters{grid-template-columns:1fr 1fr}}@media(max-width:700px){.accounts-signed-document-filters{grid-template-columns:1fr}}
+
+.accounts-document-clear .pz-button{margin:0!important;height:44px;min-height:44px}
+@media(max-width:700px){.accounts-document-clear label{display:none}}
