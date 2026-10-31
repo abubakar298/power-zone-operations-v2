@@ -486,9 +486,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* One stable comparison track for saved Management closure figures. */
 .pz-closure-comparison{min-width:0}
 .pz-closure-comparison>h3{margin:0}
-.pz-closure-summary{grid-template-columns:repeat(4,minmax(0,1fr));align-items:start}
-.pz-closure-summary>div{display:grid;grid-template-rows:minmax(2.5rem,auto) auto;align-content:start}
-.pz-closure-summary dd{margin:0;font-variant-numeric:tabular-nums;font-weight:600}
+.pz-closure-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:0;align-items:start}
+.pz-closure-comparison .pz-closure-summary>div{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;justify-content:stretch;gap:8px;grid-template-rows:minmax(2.5rem,auto) auto;align-content:start}
+.pz-closure-summary dt{font-weight:600;color:var(--pz-muted);font-size:var(--pz-text-sm)}
+.pz-closure-summary dd{margin:0;white-space:nowrap;overflow-wrap:normal;font-variant-numeric:tabular-nums;font-weight:600}
 .pz-closure-comparison-table{width:100%;min-width:900px}
 .pz-closure-comparison-table :is(th,td){vertical-align:top}
 .pz-closure-comparison-table th:first-child{min-width:140px;text-align:left}

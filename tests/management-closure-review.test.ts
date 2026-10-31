@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {phaseCostComparison} from '../server/accounts/phase-comparison.js';
+import {phaseCostComparison,closureEpcSelling} from '../server/accounts/phase-comparison.js';
 import {awaitingClosures,pendingTechnicalPackages,pendingBoqReviews} from '../web/workspaces/management-reviews.js';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -41,4 +41,13 @@ test('one Management card keeps phase comparisons and EPC breakup without adding
  const electrical=html.split('<tr').find(r=>r.includes('Electrical Labour'))!;assert.ok(electrical.includes('0.00'));assert.ok(!electrical.includes('Not entered'));
  assert.equal(JSON.stringify({job,actual,epc}),before);
  const missing=renderToStaticMarkup(createElement(ClosureComparison,{job,actual,epcAggregate:'80',epc:{}}));assert.ok(missing.split('<tr').find(r=>r.includes('Electrical Labour'))!.includes('Not entered'));assert.ok(missing.split('<tfoot>')[1].includes('480.00'));
+});
+
+test('EPC selling uses budget weights, keeps zero, preserves pennies and rejects missing/mismatched budgets',()=>{
+ const budget={'Electrical Labour':'105000','Earthing Cost':'50000',Deliveries:'105000','Installation Cost':'614800'};
+ const r=closureEpcSelling('1018459.68',budget,'874800')!;
+ assert.deepEqual(r,{'Electrical Labour':'122243.10','Earthing Cost':'58211.00',Deliveries:'122243.11','Installation Cost':'715762.47'});
+ assert.equal(closureEpcSelling('100',{},'100'),null);assert.equal(closureEpcSelling('100',budget,'10'),null);
+ const zero=closureEpcSelling('0',budget,'874800')!;assert.ok(Object.values(zero).every(v=>v==='0.00'));
+ const explicit={'Electrical Labour':'10','Earthing Cost':'20',Deliveries:'30','Installation Cost':'40'};assert.deepEqual(closureEpcSelling('100',budget,'874800',explicit),Object.fromEntries(Object.entries(explicit).map(([k,v])=>[k,Number(v).toFixed(2)])));
 });

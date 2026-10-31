@@ -12,3 +12,16 @@ export function phaseCostComparison(snapshots:any[]){
  const eligible=snapshots.filter(s=>value(s?.summary?.actual)!==null);
  return {closedJobs:eligible.length,phases:Object.fromEntries(closurePhases.map(p=>[p,average(eligible.map(s=>p==='EPC'?s.actualEpc??s.input?.epcAggregate:s.input?.actual?.[p]))])),total:average(eligible.map(s=>s.summary.actual))};
 }
+
+export const closureEpcItems=['Electrical Labour','Earthing Cost','Deliveries','Installation Cost'];
+/** Allocate approved EPC selling by frozen budget weights; cumulative rounding preserves the total. */
+export function closureEpcSelling(selling:unknown,budget:Record<string,unknown>={},expectedBudget?:unknown,explicit?:Record<string,unknown>){
+ const total=value(selling),weights=closureEpcItems.map(n=>value(budget[n]));
+ if(!total)return null;
+ if(explicit){const amounts=closureEpcItems.map(n=>value(explicit[n]));if(amounts.every((v):v is Decimal=>v!==null)&&amounts.reduce((s,v)=>s.add(v),new Decimal(0)).eq(total))return Object.fromEntries(closureEpcItems.map((n,i)=>[n,amounts[i]!.toFixed(2)]));}
+ if(!weights.every((v):v is Decimal=>v!==null))return null;
+ const sum=weights.reduce((s,v)=>s.add(v),new Decimal(0));
+ if(sum.lte(0)||(expectedBudget!==undefined&&(!value(expectedBudget)||!sum.eq(value(expectedBudget)!))))return null;
+ let cumulative=new Decimal(0),allocated=new Decimal(0);
+ return Object.fromEntries(closureEpcItems.map((name,i)=>{cumulative=cumulative.add(weights[i]!);const target=total.mul(cumulative).div(sum).toDecimalPlaces(2,Decimal.ROUND_HALF_UP),amount=target.sub(allocated);allocated=target;return [name,amount.toFixed(2)];}));
+}

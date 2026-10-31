@@ -31,6 +31,10 @@ test('Management reviews saved closure cards and only currently pending technica
  await expect(comparison.getByRole('cell',{name:/^90,000\.00/})).toHaveCount(6);
  await expect(page.getByText('Costing breakdown and EPC details',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Save closure draft',exact:true})).toHaveCount(0);
+ await page.setViewportSize({width:1280,height:900});
+ expect(await comparison.locator('.pz-closure-summary>div').evaluateAll(els=>els.every(el=>getComputedStyle(el).display==='grid'))).toBe(true);
+ expect(await comparison.locator('.pz-closure-summary dd').evaluateAll(els=>els.every(el=>el.scrollWidth<=el.clientWidth+1))).toBe(true);
+ await expect(comparison.getByRole('row').filter({hasText:'Electrical Labour'})).toContainText('50,000.00');
  await page.screenshot({path:'test-results/management-closure-cards.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});
  await expect(comparison).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);

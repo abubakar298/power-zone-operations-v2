@@ -1,11 +1,12 @@
 import {Decimal} from 'decimal.js';
 import {money} from '../numbers.js';
 import {markupPercent} from './ClosurePerformance.js';
-import {closurePhases} from '../../server/accounts/phase-comparison.js';
+import {closurePhases,closureEpcSelling} from '../../server/accounts/phase-comparison.js';
 
 const epcNames=['Electrical Labour','Earthing Cost','Deliveries','Installation Cost'];
 export function ClosureComparison({job,actual,epcAggregate,epc}:{job:any;actual:Record<string,string>;epcAggregate:string;epc?:Record<string,string>}){
  const costs:Record<string,string>={...actual,EPC:epcAggregate};
+ const epcSelling=closureEpcSelling(job.phaseSelling?.EPC,job.epcBudget,job.budget?.EPC,job.epcSelling);
  const epcActual=epc??job.input?.epc??job.history?.[0]?.snapshot.input?.epc??{};
  const valid=(v:any)=>v!==null&&v!==undefined&&v!=='';
  const sum=(values:any[])=>values.every(valid)?values.reduce((s,v)=>s.add(v),new Decimal(0)).toString():null;
@@ -21,9 +22,9 @@ export function ClosureComparison({job,actual,epcAggregate,epc}:{job:any;actual:
  };
  return <section className="pz-panel pz-stack pz-closure-comparison" aria-label="Job cost comparison">
   <h3>Job cost comparison</h3>
-  <dl className="project-facts pz-closure-summary"><div><dt>Selling · excl. GST</dt><dd>{cash(job.selling)}</dd></div><div><dt>Budgeted cost</dt><dd>{cash(budgetTotal)}</dd></div><div><dt>Actual cost</dt><dd>{cash(actualTotal,'Not entered')}</dd></div><div><dt>Cost difference</dt><dd>{cash(difference(budgetTotal,actualTotal),'Not entered')}</dd></div></dl>
+  <dl className="pz-closure-summary"><div><dt>Selling · excl. GST</dt><dd>{cash(job.selling)}</dd></div><div><dt>Budgeted cost</dt><dd>{cash(budgetTotal)}</dd></div><div><dt>Actual cost</dt><dd>{cash(actualTotal,'Not entered')}</dd></div><div><dt>Cost difference</dt><dd>{cash(difference(budgetTotal,actualTotal),'Not entered')}</dd></div></dl>
   <p className="pz-caption">PKR · excluding GST. Cost difference = actual − budget; a positive amount is over budget. Markup percentages are on cost. {job.history?.[0]?.stage==='Awaiting Management'?'Saved Accounts version awaiting your decision.':job.history?.[0]?.stage==='Closed'?'Approved closed-job figures.':'Draft costs are not yet submitted for approval.'}</p>
-  <div className="pz-table-scroll"><table className="master-table pz-closure-comparison-table"><thead><tr><th>Phase / EPC item</th><th>Selling price</th><th>Budgeted cost</th><th>Actual cost</th><th>Cost difference</th><th>Budgeted markup</th><th>Actual markup</th><th>Average actual cost</th></tr></thead><tbody>{closurePhases.flatMap(p=>p==='EPC'?[row(p),...epcNames.map(name=><tr key={'epc-'+name} className="pz-closure-epc-row"><th scope="row"><span>{name}</span><small>EPC breakup</small></th><td className="pz-number">—</td><td className="pz-number">{cash(job.epcBudget?.[name])}</td><td className="pz-number">{cash(epcActual[name],'Not entered')}</td><td className="pz-number">{cash(difference(job.epcBudget?.[name],epcActual[name]),'Not entered')}</td><td className="pz-number">—</td><td className="pz-number">—</td><td className="pz-number">—</td></tr>)]:[row(p)])}</tbody><tfoot>{row('Total')}</tfoot></table></div>
-  <p className="pz-caption">EPC breakup rows are included in the EPC total, not added again. Selling and markup stay at EPC level. Average actual cost uses other Management-approved jobs for the same customer and configuration ({job.identity?.configuration_id||'configuration not recorded'}), excluding this job; missing costs are excluded.</p>
+  <div className="pz-table-scroll"><table className="master-table pz-closure-comparison-table"><thead><tr><th>Phase / EPC item</th><th>Selling price</th><th>Budgeted cost</th><th>Actual cost</th><th>Cost difference</th><th>Budgeted markup</th><th>Actual markup</th><th>Average actual cost</th></tr></thead><tbody>{closurePhases.flatMap(p=>p==='EPC'?[row(p),...epcNames.map(name=><tr key={'epc-'+name} className="pz-closure-epc-row"><th scope="row"><span>{name}</span><small>EPC breakup</small></th><td className="pz-number">{cash(epcSelling?.[name])}</td><td className="pz-number">{cash(job.epcBudget?.[name])}</td><td className="pz-number">{cash(epcActual[name],'Not entered')}</td><td className="pz-number">{cash(difference(job.epcBudget?.[name],epcActual[name]),'Not entered')}</td>{markupCell(epcSelling?.[name],job.epcBudget?.[name])}{markupCell(epcSelling?.[name],epcActual[name])}<td className="pz-number">—</td></tr>)]:[row(p)])}</tbody><tfoot>{row('Total')}</tfoot></table></div>
+  <p className="pz-caption">EPC breakup rows are included in the EPC total, not added again. EPC selling and markup are allocated in proportion to saved budgeted costs; approved totals stay unchanged. Average actual cost uses other Management-approved jobs for the same customer and configuration ({job.identity?.configuration_id||'configuration not recorded'}), excluding this job; missing costs are excluded.</p>
  </section>;
 }
