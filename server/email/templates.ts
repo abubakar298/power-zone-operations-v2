@@ -75,13 +75,14 @@ export function notificationMessage(
   actor: string,
   url: string,
   date?: string,
+  identityDetails?: string[],
 ): Message {
   return brandedMessage(
     to,
     `${title} — ${reference}`,
     title,
     [
-      reference,
+      ...(identityDetails??[reference]),
       `By: ${actor}`,
       ...(date
         ? [

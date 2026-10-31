@@ -1,3 +1,4 @@
+import {closureEmailIdentity} from './closure-identity.js';
 import {OperationsIncidentProjector} from './operations-incidents.js';
 import {OperationsNotificationProjector,operationsNotificationRecipientAllowed} from './operations-projector.js';
 import {notificationRecipientAllowed} from './recipient.js';
@@ -197,13 +198,15 @@ export class NotificationsRepository {
       }
       try {
         const attachments=await quotationApprovalAttachments(c,row);
+        const closureIdentity=await closureEmailIdentity(c,row);
         const message=notificationMessage(
             row.email,
             row.title,
-            row.reference,
+            closureIdentity?.reference??row.reference,
             row.actor,
             `${origin}/dashboard#notification=${row.id}`,
             row.created_at,
+            closureIdentity?.details,
           );
         if(attachments.length)message.attachments=attachments;
         const provider = await delivery.send(message,row.id);
