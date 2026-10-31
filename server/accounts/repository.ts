@@ -45,6 +45,7 @@ export const closureSchema = z
     ptAttachmentId: z.uuid().nullable().optional(),
     operationsEvidenceSignature: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(),
     requestKey: z.uuid(),
+    amendmentReason: z.string().trim().min(3).max(2000).optional(),
   })
   .strict();
 const D = (v: string) => new Decimal(v),
@@ -616,6 +617,7 @@ export class AccountsRepository {
   }
   async saveClosure(actor: string, input: z.infer<typeof closureSchema>) {
     await this.access(actor);
+    if(input.amendmentReason!==undefined)return this.amendSubmittedClosure(actor,input);
     const job = await this.job(actor, input.jobKey);
     if(input.stage==='Awaiting Management'&&job.operationsEvidenceSource&&!job.operationsEvidenceSignature)
       throw new HttpError(409,'The linked Operations QC handover is incomplete. Complete the customer sign-offs and site photograph evidence before submitting closure.');
@@ -757,6 +759,33 @@ export class AccountsRepository {
         "accounts.closure." + input.stage + ":" + row.id,
       ]);
       return row;
+    });
+  }
+  private async amendSubmittedClosure(actor:string,input:z.infer<typeof closureSchema>){
+    if(input.stage!=='Awaiting Management')throw new HttpError(400,'Save the revised closure for Management review.');
+    return transaction(this.pool,async c=>{
+      await lockActiveActor(c,actor);await this.access(actor,c);
+      await c.query('SELECT pg_advisory_xact_lock(hashtext($1))',['closure:'+input.jobKey]);
+      const replay=(await c.query('SELECT * FROM accounts_active_job_closures WHERE request_key=$1',[input.requestKey])).rows[0];
+      if(replay){if(replay.created_by!==actor||fingerprint(replay.snapshot.input)!==fingerprint(input))throw new HttpError(409,'Request key already used.');return replay;}
+      const previous=(await c.query('SELECT * FROM accounts_active_job_closures WHERE job_key=$1 ORDER BY version DESC LIMIT 1',[input.jobKey])).rows[0];
+      if(!previous||previous.stage!=='Awaiting Management'||previous.version!==input.version)throw new HttpError(409,'This closure changed or is already closed. Reload before editing.');
+      await this.currentReport(c,input.jobKey,previous.report_version_id);
+      const original=previous.snapshot.input??{};
+      if(input.acknowledgment!==(original.acknowledgment??'')||input.photos!==(original.photos??'')||(input.ptAttachmentId??null)!==(original.ptAttachmentId??null)||(input.operationsEvidenceSignature??null)!==(previous.snapshot.operationsEvidenceSignature??null))throw new HttpError(409,'Submitted evidence must remain attached. Request a revision to replace signed evidence.');
+      if(Object.keys(input.actual).some(k=>!phases.slice(0,5).includes(k))||Object.keys(input.epc).some(k=>!epcNames.includes(k)))throw new HttpError(400,'Choose the standard PT and EPC categories.');
+      const complete=phases.slice(0,5).every(k=>input.actual[k]!==undefined&&input.actual[k]!=='');
+      const breakdown=epcNames.every(k=>input.epc[k]!==undefined&&input.epc[k]!=='');
+      if(!complete||!input.remarks||input.epcDetails&&!breakdown||!breakdown&&(input.epcAggregate??'')==='')throw new HttpError(400,'Complete actual costs, EPC total and Accounts remarks.');
+      const epcTotal=epcNames.reduce((sum,k)=>sum.add(input.epc[k]||'0'),D('0'));
+      if(breakdown&&(input.epcAggregate??'')!==''&&!epcTotal.eq(input.epcAggregate!))throw new HttpError(400,'EPC category costs must equal the recorded EPC total.');
+      const actualEpc=breakdown?epcTotal:D(input.epcAggregate!);
+      const actualTotal=phases.slice(0,5).reduce((sum,k)=>sum.add(input.actual[k]),actualEpc);
+      const budgetTotal=phases.reduce((sum,k)=>sum.add(previous.snapshot.budget[k]),D('0'));
+      const snapshot={...previous.snapshot,input,complete:true,epcBreakdownComplete:breakdown,actualEpc:m(actualEpc),summary:financialSummary(previous.snapshot.selling,m(budgetTotal),m(actualTotal)),amendment:{previousClosureId:previous.id,previousVersion:previous.version,reason:input.amendmentReason}};
+      const next=(await c.query('SELECT COALESCE(max(version),0)+1 AS next FROM accounts_job_closures WHERE job_key=$1',[input.jobKey])).rows[0].next;
+      const saved=(await c.query("INSERT INTO accounts_job_closures(id,job_key,report_version_id,version,stage,snapshot,request_key,created_by) VALUES($1,$2,$3,$4,'Awaiting Management',$5,$6,$7) RETURNING *",[randomUUID(),input.jobKey,previous.report_version_id,next,snapshot,input.requestKey,actor])).rows[0];
+      await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'accounts.closure.amended:'+saved.id]);return saved;
     });
   }
   async returnReport(

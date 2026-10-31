@@ -211,7 +211,7 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
           users.Admin,
         ],
       );
-    const submitted = await repo.saveClosure(users.Accounts, {
+    let submitted = await repo.saveClosure(users.Accounts, {
       ...evidenceInput,
       version: 1,
       stage: "Awaiting Management",
@@ -221,10 +221,22 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
     assert.equal(submitted.snapshot.operationsEvidenceSource,null);
     assert.ok(submitted.snapshot.evidence.some((e:any)=>e.kind==='Client acknowledgment'));
     assert.ok(submitted.snapshot.evidence.some((e:any)=>e.kind==='Site photographs'));
+    const originalSubmitted=submitted,originalSnapshot=JSON.stringify(submitted.snapshot);
+    const amendment={...evidenceInput,version:submitted.version,stage:'Awaiting Management' as const,actual:{...evidenceInput.actual,Inverter:'770100.00'},amendmentReason:'Correct PT inverter cost',requestKey:randomUUID()};
+    await assert.rejects(repo.saveClosure(users.Inventory,amendment),/Accounts access/);
+    await assert.rejects(repo.saveClosure(users.Accounts,{...amendment,photos:'replacement evidence',requestKey:randomUUID()}),/evidence must remain/);
+    submitted=await repo.saveClosure(users.Accounts,amendment);
+    assert.equal(submitted.version,originalSubmitted.version+1);assert.equal(submitted.stage,'Awaiting Management');assert.equal(submitted.snapshot.input.actual.Inverter,'770100.00');
+    assert.equal((await repo.saveClosure(users.Accounts,amendment)).id,submitted.id);
+    assert.equal(JSON.stringify((await db.pool.query('SELECT snapshot FROM accounts_job_closures WHERE id=$1',[originalSubmitted.id])).rows[0].snapshot),originalSnapshot);
+    assert.deepEqual(submitted.snapshot.evidence,originalSubmitted.snapshot.evidence);assert.deepEqual(submitted.snapshot.budget,originalSubmitted.snapshot.budget);
+    await assert.rejects(repo.saveClosure(users.Accounts,{...amendment,requestKey:randomUUID()}),/changed/);
+    await assert.rejects(repo.decision(users.Management,{id:originalSubmitted.id,version:originalSubmitted.version,decision:'Closed',notes:'Stale review',requestKey:randomUUID()}),/current submitted closure/);
+
     await assert.rejects(
       repo.decision(users.Accounts, {
         id: submitted.id,
-        version: 2,
+        version: submitted.version,
         decision: "Closed",
         notes: "cannot approve myself",
         requestKey: randomUUID(),
@@ -233,26 +245,27 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
     );
     const returned = await repo.decision(users.Management, {
       id: submitted.id,
-      version: 2,
+      version: submitted.version,
       decision: "Returned for Revision",
       notes: "Check PT reference",
       requestKey: randomUUID(),
     });
-    assert.equal(returned.version, 3);
+    assert.equal(returned.version, submitted.version+1);
     const again = await repo.saveClosure(users.Accounts, {
       ...evidenceInput,
-      version: 3,
+      version: returned.version,
       stage: "Awaiting Management",
       requestKey: randomUUID(),
     });
     const closed = await repo.decision(users.Management, {
       id: again.id,
-      version: 4,
+      version: again.version,
       decision: "Closed",
       notes: "Costs and evidence reviewed",
       requestKey: randomUUID(),
     });
     assert.equal(closed.stage, "Closed");
+    await assert.rejects(repo.saveClosure(users.Accounts,{...amendment,version:closed.version,requestKey:randomUUID()}),/already closed/);
     assert.deepEqual(
       (await repo.job(users.Accounts, j.key)).configurationComparison,
       { closedJobs: 0, averageActualMarkupPercent: null },
@@ -343,11 +356,11 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       closed.snapshot.summary.budget,
       closed.snapshot.summary.actual,
     );
-    assert.equal((await repo.job(users.Accounts, j.key)).history.length, 5);
+    assert.equal((await repo.job(users.Accounts, j.key)).history.length, 6);
     await assert.rejects(
       repo.saveClosure(users.Accounts, {
         ...input,
-        version: 5,
+        version: closed.version,
         requestKey: randomUUID(),
       }),
       /read-only/,

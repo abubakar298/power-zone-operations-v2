@@ -116,6 +116,7 @@ export function AccountsWorkspace({
   const selectedIpoSource=selected?data.ipos?.find((r:any)=>r.id===selected.ipo.id):null;
   const ipoReceivedDate=selectedIpoSource?.received_at??selectedIpoSource?.created_at??selected?.ipo?.created_at;
   const ipoReceivedLabel=ipoReceivedDate&&!Number.isNaN(Date.parse(ipoReceivedDate))?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Karachi'}).format(new Date(ipoReceivedDate)):null;
+  const [editingSubmitted,setEditingSubmitted]=useState(false),[amendmentReason,setAmendmentReason]=useState("");
   const input = {
     actual,
     epc,
@@ -127,12 +128,12 @@ export function AccountsWorkspace({
     pt,
     ptAttachmentId,
   };
-  const dirty = (!!job && JSON.stringify(input) !== saved) || (!!selected && !!notes.trim()) || (!!ptDocument && (!!ptEntryReference || !!ptEntryNotes));
+  const dirty = (!!job && (JSON.stringify(input) !== saved||editingSubmitted&&!!amendmentReason.trim())) || (!!selected && !!notes.trim()) || (!!ptDocument && (!!ptEntryReference || !!ptEntryNotes));
   useUnsavedChanges(dirty);
   const manager = ["Admin", "Management"].includes(session.user.role);
   const latest = job?.history[0];
   const revisionReason = latest?.stage === "Returned for Revision" ? closureDecisionNote(latest.snapshot) : null;
-  const readonly = ["Awaiting Management", "Closed"].includes(latest?.stage);
+  const readonly = latest?.stage==="Closed"||latest?.stage==="Awaiting Management"&&!editingSubmitted;
   const workspaceNeeded = !['Project Tracking','Programme Dashboard','Project Sites','Physical Documents','Receivables','Invoicing','Invoices to Submit','Payments to Record','Project checkpoints','Inventory Reconciliations'].includes(tab);
   const reportsNeeded = ['My Workspace','Approved Documents','Inventory Recorded in PT','Job Closure'].includes(tab);
   const loadGeneration = useRef(0);
@@ -267,12 +268,13 @@ export function AccountsWorkspace({
       setBusy(false);
     }
   }
-  async function openJob(key: string) {
+  async function openJob(key: string,editSubmitted=false) {
     setBusy(true);
     try {
       const j = await api<any>(
         "/accounts-workspace/job?key=" + encodeURIComponent(key),
       );
+      setEditingSubmitted(editSubmitted&&j.history[0]?.stage==="Awaiting Management"&&!managementReview);setAmendmentReason("");
       const i = j.history[0]?.snapshot.input;
       const v = {
         actual: i?.actual ?? {},
@@ -441,6 +443,7 @@ export function AccountsWorkspace({
           ptAttachmentId,
           operationsEvidenceSignature: job.operationsEvidenceSignature??null,
           requestKey: crypto.randomUUID(),
+          ...(editingSubmitted?{amendmentReason}:{}),
         },
       });
       await openJob(job.jobKey);
@@ -661,7 +664,7 @@ export function AccountsWorkspace({
         return <><section className="accounts-list-panel accounts-pt-panel"><header className="accounts-panel-heading"><h2>{kind==='IPO'?'IPO Entries':'Inventory Entries'}</h2><div className="accounts-queue-switch"><Button variant="neutral" aria-pressed={!recorded} onClick={()=>navigate(kind==='IPO'?'IPOs Received':'Approved Documents')}>Awaiting PT · {queueRecords.filter((r:any)=>!ptRecorded(kind,r)).length}</Button><Button variant="neutral" aria-pressed={recorded} onClick={()=>navigate(kind==='IPO'?'IPOs Recorded in PT':'Inventory Recorded in PT')}>Recorded · {queueRecords.filter((r:any)=>ptRecorded(kind,r)).length}</Button></div></header><div className="accounts-worklist-filters">
 <Field id="pt-document-search" label="Search document or site"><input id="pt-document-search" value={search} onChange={e=>setSearch(e.target.value)}/></Field>{kind==='Inventory'&&<Field id="inventory-document-kind" label="Document type"><select id="inventory-document-kind" value={inventoryType??'all'} onChange={e=>setInventoryType(e.target.value==='all'?null:e.target.value)}><option value="all">All documents</option><option value="installation">IRRs &amp; Variable Items</option><option value="delivery">Delivery-only DOs</option></select></Field>}</div><div className="pz-table-scroll"><table className="accounts-entry-table"><thead><tr><th>Site / IPO</th><th>{recorded?'PT Reference':'Received'}</th><th>Action</th></tr></thead><tbody>{rows.map((r:any)=>{const entry=ptRecorded(kind,r);return <tr key={r.id}><td><strong>{r.snapshot?.siteName||r.site_name||jobLabel(r)}</strong><small>{r.number||r.job_id||r.job_key}{kind==='Inventory'?' · '+accountsDocumentLabel(r):''}</small></td><td>{entry?<>{entry.pt_reference}<small>{String(entry.entry_date).slice(0,10)}</small></>:r.received_at||r.created_at?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Karachi'}).format(new Date(r.received_at||r.created_at)):'Not recorded'}</td><td><Button variant="neutral" onClick={()=>kind==='IPO'?void openIpo(r.id):isDeliveryOnlyDo(r)?void openDeliveryDo(r):navigate('Inventory Reconciliations')}>View documents</Button>{!entry&&<Button variant="secondary" onClick={()=>{setPtDocument({...r,kind});setPtEntryReference('');setPtEntryNotes('');setError('');}}>Record PT entry</Button>}{entry&&kind==='Inventory'&&!isDeliveryOnlyDo(r)&&<Button variant="secondary" onClick={()=>void openJob(r.job_key)}>Prepare job closure</Button>}</td></tr>;})}</tbody></table>{rows.length===0&&<p>{kind==='Inventory'&&inventoryType==='delivery'?'No approved delivery-only DOs have been received yet.':'No documents in this bucket.'}</p>}</div></section></>;
       })()}
-      {['Awaiting Management','Closed Jobs'].includes(tab)&&<section className="accounts-list-panel accounts-closure-list"><header className="accounts-panel-heading"><h2>{tab}</h2></header><div className="pz-table-scroll"><table><thead><tr><th>Job / site</th><th>Stage</th><th>Action</th></tr></thead><tbody>{data.closures.filter((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management')).map((c:any)=><tr key={c.id}><td>{jobLabel(c.snapshot)}</td><td>{c.stage}</td><td><Button variant="secondary" onClick={()=>void openJob(c.job_key)}>View closure</Button></td></tr>)}</tbody></table>{!data.closures.some((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management'))&&<div className="accounts-empty"><h3>No jobs in this bucket</h3><p>Jobs appear here as they progress through Management review.</p></div>}</div></section>}
+      {['Awaiting Management','Closed Jobs'].includes(tab)&&<section className="accounts-list-panel accounts-closure-list"><header className="accounts-panel-heading"><h2>{tab}</h2></header><div className="pz-table-scroll"><table><thead><tr><th>Job / site</th><th>Stage</th><th>Action</th></tr></thead><tbody>{data.closures.filter((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management')).map((c:any)=><tr key={c.id}><td>{jobLabel(c.snapshot)}</td><td>{c.stage}</td><td><div className="pz-action-row"><Button variant="secondary" onClick={()=>void openJob(c.job_key)}>View closure</Button>{c.stage==="Awaiting Management"&&!managementReview&&<Button variant="neutral" onClick={()=>void openJob(c.job_key,true)}>Edit</Button>}</div></td></tr>)}</tbody></table>{!data.closures.some((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management'))&&<div className="accounts-empty"><h3>No jobs in this bucket</h3><p>Jobs appear here as they progress through Management review.</p></div>}</div></section>}
       {tab === "IPO Review" && (
         <>
           {!selected&&!samplePreview&&<>
@@ -1112,7 +1115,7 @@ export function AccountsWorkspace({
       )}
       {tab === "Job Closure" && job && (
         <article className="detail-panel accounts-closure-form">
-          <header className="accounts-panel-heading"><h3>{jobLabel(job)}</h3><Button variant="neutral" onClick={()=>navigate("Job Closure")}>Back to jobs</Button></header>
+          <header className="accounts-panel-heading"><h3>{jobLabel(job)}</h3><div className="pz-action-row">{latest?.stage==="Awaiting Management"&&!managementReview&&!editingSubmitted&&<Button variant="secondary" disabled={busy} onClick={()=>setEditingSubmitted(true)}>Edit submitted closure</Button>}<Button variant="neutral" onClick={()=>navigate("Job Closure")}>Back to jobs</Button></div></header>{editingSubmitted&&<p className="pz-caption">Edit costs and remarks, then save a new version for Management review. The submitted version and signed evidence remain in history.</p>}
           <p>
             {latest?.stage ?? "New closure"} · {job.basis}
             {latest && <> · Recorded by {latest.recorded_by}</>}
@@ -1128,6 +1131,7 @@ export function AccountsWorkspace({
             {installationDays(job.entry) ?? "Not available"} (inclusive)
           </p>
           {manager && <ClosureComparison job={job} actual={actual} epcAggregate={epcAggregate}/>}
+          {latest?.snapshot.amendment?.reason&&<p className="pz-caption">Latest correction: {latest.snapshot.amendment.reason}</p>}
           <details open={!readonly}><summary>Costing breakdown and EPC details</summary>
           <ClosureCostTables
             job={job}
@@ -1330,14 +1334,14 @@ export function AccountsWorkspace({
                   </a>
                   {e.id === ptAttachmentId
                     ? " · Selected for this closure"
-                    : !readonly && (
+                    : !readonly && !editingSubmitted && (
                         <Button onClick={() => setPtAttachmentId(e.id)}>
                           Use this PT report
                         </Button>
                       )}
                 </p>
               ))}
-            {!readonly && (
+            {!readonly && !editingSubmitted && (
               <Field
                 id="closure-pt-upload"
                 label="Attach final PT report"
@@ -1374,22 +1378,24 @@ export function AccountsWorkspace({
               onChange={(e) => setRemarks(e.target.value)}
             />
           </Field>
+          {editingSubmitted&&<Field id="closure-amendment-reason" label="Reason for correction"><textarea id="closure-amendment-reason" value={amendmentReason} onChange={e=>setAmendmentReason(e.target.value)}/></Field>}
           {!readonly && (
             <div className="pz-action-row">
-              <Button
+              {!editingSubmitted&&<Button
                 variant="secondary"
                 loading={busy}
                 onClick={() => void save("Draft")}
               >
                 Save closure draft
-              </Button>
+              </Button>}
               <Button
                 variant="primary"
-                disabled={busy}
+                disabled={busy||editingSubmitted&&amendmentReason.trim().length<3}
                 onClick={() => void save("Awaiting Management")}
               >
-                Submit closure to Management
+                {editingSubmitted?"Save changes for Management review":"Submit closure to Management"}
               </Button>
+              {editingSubmitted&&<Button variant="neutral" disabled={busy} onClick={()=>void openJob(job.jobKey)}>Cancel editing</Button>}
             </div>
           )}
           {error && errorAction === "closure" && (
@@ -1397,7 +1403,7 @@ export function AccountsWorkspace({
               {error}
             </p>
           )}
-          {manager && latest?.stage === "Awaiting Management" && (
+          {manager && !editingSubmitted && latest?.stage === "Awaiting Management" && (
             <>
               <Field id="closure-decision" label="Management decision note">
                 <textarea
