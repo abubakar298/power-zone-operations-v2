@@ -179,6 +179,7 @@ test("owned documents remain usable; other coordinators and unhanded departments
       `/api/boqs/${boqId}`,
       `/api/boqs/${boqId}/history`,
       `/api/boqs/${boqId}/costing.pdf`,
+      `/api/boqs/${boqId}/items.pdf`,
       `/api/boqs/${boqId}/instructions`,
       `/api/commercial/pricing/${quotation.pricing_id}`,
       `/api/commercial/quotations/${quotation.id}`,
@@ -192,7 +193,7 @@ test("owned documents remain usable; other coordinators and unhanded departments
     ];
     for (const path of readPaths) {
       for (const actor of [admin, management, owner])
-        await request(app).get(path).set("Cookie", actor.cookie).expect(200);
+        await request(app).get(path).set("Cookie", actor.cookie).expect(actor === owner && path.endsWith("/costing.pdf") ? 403 : 200);
       await request(app).get(path).set("Cookie", stranger.cookie).expect(404);
       await request(app).get(path).expect(401);
     }

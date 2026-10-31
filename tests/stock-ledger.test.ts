@@ -9,7 +9,7 @@ test('stock drilldown reads historical totals, filters directions and enforces w
  const db=await testDatabase();try{
  const f=await materialStockFixture(db.pool);
  await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$2)",[f.reviewer,f.owner]);
- const stock=new MaterialStockRepository(db.pool);const overview=await stock.overview(f.reviewer);assert.deepEqual(Object.keys(overview.positions),['Lahore warehouse']);assert.deepEqual(overview.positions['Lahore warehouse'],(await stock.positions(f.reviewer,'Lahore warehouse')).positions);
+ const stock=new MaterialStockRepository(db.pool);const overview=await stock.overview(f.reviewer);assert.deepEqual(Object.keys(overview.positions),['Lahore warehouse']);assert.deepEqual(overview.positions['Lahore warehouse'].map(position=>{assert.ok(position&&typeof position==='object'&&!Array.isArray(position));assert.ok('openingStatus' in position);const {openingStatus,...core}=position;assert.equal(openingStatus,'Reviewed source');return core;}),(await stock.positions(f.reviewer,'Lahore warehouse')).positions);
  const before=await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements');
  const all=await stockLedger(db.pool,f.reviewer,{warehouse:'Lahore warehouse',itemId:'FINAL',unit:'m'});
  assert.equal(all.total,2);assert.equal(all.events.reduce((n:number,e:any)=>n+Number(e.incoming),0),5);assert.equal(all.events.reduce((n:number,e:any)=>n+Number(e.outgoing),0),8);

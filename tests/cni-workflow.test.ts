@@ -68,7 +68,8 @@ test("C&I standard/revision/discount workflow, immutable history and departmenta
  const projectKey=projectIndex.documents.find((d:any)=>d.proposal_id===saved.id).project_key;
  const projectView=(await request(app).get('/api/coordinator/project').query({key:projectKey}).set('Cookie',users.Coordinator.cookie).expect(200)).body;
  assert.equal(projectView.documents.filter((d:any)=>d.resource==='cni').length,2);
- assert.ok(projectView.documents.every((d:any)=>d.pdf_url.includes(d.id)));
+ assert.ok(projectView.documents.every((d:any)=>d.pdf_url===null),'Coordinator project documents expose no C&I/survey preview links; quotation revision remains available through its task');
+ assert.ok(projectView.documents.filter((d:any)=>d.resource==='cni').every((d:any)=>d.task.id===d.proposal_id));
  assert.doesNotMatch(JSON.stringify(projectView),/internal_cost|unitCostBeforeTax|11000000|33000000/);
  await request(app).get('/api/coordinator/project').query({key:projectKey}).set('Cookie',users.OtherCoordinator.cookie).expect(404);
  assert.equal(revised.version,2);assert.equal(revised.snapshot.pricing.payable,"50750000.00");

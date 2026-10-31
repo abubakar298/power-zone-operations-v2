@@ -12,7 +12,7 @@ import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 test('approved catalogue: exact brand identity, shared cable rates, standard/UPS scopes and immutable versions',async()=>{
  const db=await testDatabase();try{
- const repo=new MastersRepository(db.pool);const m=await repo.list();assert.equal(m.catalogue.length,199);
+ const repo=new MastersRepository(db.pool);const m=await repo.list();assert.equal(m.catalogue.length,198);assert.equal(new Set(m.catalogue.map(i=>i.item_id)).size,198);assert.equal(m.catalogue.filter(i=>i.payload.finalStockId).length,159);
  assert.deepEqual(await repo.history('rates','CH-CBL-ERT-10MM/1C-PK'),await repo.history('rates','10mm² Earthing Cable'));
  assert.deepEqual(await repo.history('rates','CH-Cable-6mm 1/C AC'),await repo.history('rates','CH-CBL-AC-6MM/1C-RB-AOB'));
  const brand=(category:string,name?:string)=>m.brands.find((b:any)=>b.category===category&&b.status==='Active'&&(!name||b.name===name))!.id;

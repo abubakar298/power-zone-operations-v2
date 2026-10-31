@@ -50,8 +50,8 @@ test('real authenticated API hides BESS masters/policy and costing while retaini
  }
  if(role==='Coordinator'){
  const draft=(await request(app).post('/api/boqs/drafts').set('Cookie',cookie).set('Origin',origin).set('X-CSRF-Token',csrf).send({version:0,inputs:survey}).expect(200)).body;
- const pdf=await request(app).get(`/api/boqs/drafts/${draft.id}/costing.pdf?fingerprint=${preview.body.fingerprint}`).set('Cookie',cookie).expect(200);
- const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');const task=getDocument({data:new Uint8Array(pdf.body),useSystemFonts:true});const doc=await task.promise;let text='';for(let n=1;n<=doc.numPages;n++)text+=(await(await doc.getPage(n)).getTextContent()).items.map((i:any)=>i.str??'').join(' ');await task.destroy();assert.match(text,/EXCLUDING BESS/);assert.match(text,/Restricted/);for(const l of s.lines.filter((l:any)=>l.phase==='BESS'))assert.equal(l.rate,null);
+ await request(app).get(`/api/boqs/drafts/${draft.id}/costing.pdf?fingerprint=${preview.body.fingerprint}`).set('Cookie',cookie).expect(403);
+ for(const l of s.lines.filter((l:any)=>l.phase==='BESS'))assert.equal(l.rate,null);
  }
 
  if(role==='Coordinator'){assert.equal(s.lines.find((l:any)=>l.phase==='BESS').rate,null);assert.equal(s.summary.some((r:any)=>r.name==='BESS'),false);assert.equal(s.costVisibility,'Excluding BESS');}else{assert.ok(Number(s.lines.find((l:any)=>l.phase==='BESS').rate)>0);assert.ok(s.summary.some((r:any)=>r.name==='BESS'));}

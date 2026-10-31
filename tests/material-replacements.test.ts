@@ -1,3 +1,4 @@
+import {negativeDoWindowEndsAt} from '../shared/stock-reconciliation-window.js';
 import {signDispatch,receiveSigned} from './signed-dispatch-fixture.js';
 import {test} from 'node:test';
 import request from 'supertest';
@@ -126,7 +127,8 @@ test('ordinary and faulty return races cannot count more physical original units
 });
 
 
-test('counted devices stay whole, unknown serial/return expectations stay flagged, and suspended stock cannot post replacements or usable releases',async()=>{
+test('outside the reconciliation window counted devices stay whole, unknown serial/return expectations stay flagged, and suspended stock cannot post replacements or usable releases',async(t)=>{
+ t.mock.method(Date,'now',()=>Date.parse(negativeDoWindowEndsAt));
  const db=await testDatabase();try{
   const f=await materialStockFixture(db.pool),warehouse='Karachi warehouse',unit='No.',reviewSha='d'.repeat(64),sourceSha='e'.repeat(64);
   await f.review.importSource(f.owner,{sourceSha256:reviewSha,catalogueSha256:'b'.repeat(64),catalogue:{rows:[{itemId:'FINAL'}]},source:{groups:[{id:'devices',title:'Devices',warehouse:'Karachi',rows:[{id:'device',item:'Device',itemId:'FINAL',unit,origin:'warehouse_stock',status:'Review needed',dispatch:6,used:6,countedReturn:0,credited:0}]}]}});
