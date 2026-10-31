@@ -17,6 +17,7 @@ test('dispatch document buckets show exact site evidence, scoped links and align
  await page.getByRole('button',{name:'View documents',exact:true}).click();
  await expect(page.getByRole('link',{name:'Variable Items Sign Off',exact:true})).toHaveAttribute('href','/api/material-dispatches/document-status/ready/evidence/vso');
  await expect(page.getByText(/Receiving documents does not credit returns/)).toBeVisible();
+ const actions=page.locator('.dispatch-document-list tbody .ob-actions button');const firstAction=await actions.nth(0).boundingBox(),secondAction=await actions.nth(1).boundingBox();expect(Math.abs(firstAction!.y-secondAction!.y)).toBeLessThan(2);
  const cells=page.locator('.dispatch-document-list tbody tr').first().locator('td');
  for(let i=0;i<await cells.count();i++)await expect(cells.nth(i)).toHaveCSS('vertical-align','top');
  await page.evaluate(()=>window.scrollTo(0,0));
