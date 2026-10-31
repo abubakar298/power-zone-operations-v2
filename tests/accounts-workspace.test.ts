@@ -1,3 +1,4 @@
+import {setClosureComparisonExclusions} from '../server/accounts/comparison-exclusions.js';
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash,randomBytes,randomUUID } from "node:crypto";
@@ -336,6 +337,23 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
     assert.deepEqual(phaseComparison.phases.EPC,{jobs:2,averageActualCost:'40000.00',...unrecordedPhaseMarkup});
     assert.deepEqual(phaseComparison.total,{jobs:2,averageActualCost:'200000.00',markupJobs:2,averageActualMarkup:'85555.00',averageActualMarkupPercent:'42.78'});
     assert.deepEqual(phaseComparison.phases.Structure,{jobs:0,averageActualCost:null,...unrecordedPhaseMarkup});
+    // Owner-requested outliers leave both comparison paths, not the financial record.
+    const excludedKey='ubl:'+peer.site_id;
+    const closureBefore=(await db.pool.query('SELECT id,job_key,stage,snapshot FROM accounts_job_closures ORDER BY id')).rows;
+    await assert.rejects(setClosureComparisonExclusions(db.pool,users.Accounts,{jobKeys:[excludedKey],excluded:true,reason:'Isolated owner instruction'}),/Management/);
+    await setClosureComparisonExclusions(db.pool,users.Management,{jobKeys:[excludedKey],excluded:true,reason:'Isolated owner instruction'});
+    const afterExclusion=await repo.job(users.Management,j.key);
+    assert.deepEqual(afterExclusion.configurationComparison,{closedJobs:1,averageActualMarkupPercent:'50.00'});
+    assert.equal(afterExclusion.phaseCostComparison.phases.Inverter.jobs,1);
+    assert.equal(afterExclusion.phaseCostComparison.phases.Inverter.averageActualCost,'60000.00');
+    assert.deepEqual((await db.pool.query('SELECT id,job_key,stage,snapshot FROM accounts_job_closures ORDER BY id')).rows,closureBefore);
+    assert.equal((await new UblRepository(db.pool).closedJobs(users.Management)).jobs.length,3);
+    await setClosureComparisonExclusions(db.pool,users.Management,{jobKeys:[excludedKey,'ubl:'+peer2.site_id],excluded:true,reason:'Both isolated peer jobs excluded'});
+    const emptyComparison=await repo.job(users.Management,j.key);
+    assert.deepEqual(emptyComparison.configurationComparison,{closedJobs:0,averageActualMarkupPercent:null});
+    assert.equal(emptyComparison.phaseCostComparison.total.averageActualMarkup,null);
+    assert.equal(emptyComparison.phaseCostComparison.total.jobs,0);
+    await setClosureComparisonExclusions(db.pool,users.Management,{jobKeys:[excludedKey,'ubl:'+peer2.site_id],excluded:false,reason:'Restore isolated comparison fixtures'});
     const portfolio = await new UblRepository(db.pool).closedJobs(
       users.Management,
     );

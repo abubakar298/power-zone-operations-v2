@@ -498,3 +498,5 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pz-closure-comparison-table small{display:block;margin-top:4px;color:var(--pz-muted);font-weight:400;white-space:normal}
 .pz-closure-comparison-table .pz-closure-epc-row th{padding-left:var(--pz-space-4);font-weight:400}
 @media(max-width:700px){.pz-closure-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.pz-closure-comparison .pz-closure-per-watt{display:block;margin-top:4px;font-size:var(--pz-text-sm);font-weight:400;color:var(--pz-muted);white-space:nowrap}

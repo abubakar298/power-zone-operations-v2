@@ -1,3 +1,4 @@
+import {closurePvWatts} from '../shared/closure-pv-watts.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {phaseCostComparison,closureEpcSelling} from '../server/accounts/phase-comparison.js';
@@ -63,4 +64,21 @@ test('closed peer averages show monetary markup and cost-weighted percentage, in
  const missing=phaseCostComparison([{...peers[0],input:{...peers[0].input,epcDetails:false}}]);assert.equal(missing.epc['Electrical Labour'].averageActualMarkup,null);
  const names=['Solar Panels','Structure','Inverter','Batteries','BMS','EPC'];const html=renderToStaticMarkup(createElement(ClosureComparison,{job:{selling:'1200',budget:Object.fromEntries(names.map(p=>[p,'100'])),phaseSelling:Object.fromEntries(names.map(p=>[p,'200'])),epcBudget:budget,phaseCostComparison:r},actual:Object.fromEntries(names.slice(0,5).map(p=>[p,'80'])),epcAggregate:'80',epc:peers[1].input.epc}));
  assert.match(html,/<th>Average markup<\/th>/);const electrical=html.split('<tr').find(row=>row.includes('Electrical Labour'))!;assert.ok(electrical.includes('30.00'));assert.ok(electrical.includes('150%'));assert.ok(electrical.includes('2 closed'));
+});
+
+
+test('Closure per-watt figures use saved PV quantities, preserve totals and leave absent wattage unavailable',()=>{
+ assert.deepEqual(closurePvWatts({panelCount:'55',panelWattage:'645',installedWatts:'35000'}),{watts:'35475',basis:'55 panels × 645 W'});
+ assert.equal(closurePvWatts({installedWatts:'35475'})?.watts,'35475');
+ for(const entry of [{},{panelCount:'0',panelWattage:'645'},{installedWatts:'0'},{installedWatts:'NaN'},{panelCount:'-1',panelWattage:'645'}])assert.equal(closurePvWatts(entry),null);
+ const names=['Solar Panels','Structure','Inverter','Batteries','BMS','EPC'];
+ const job={entry:{panelCount:'10',panelWattage:'500'},selling:'60000',phaseSelling:Object.fromEntries(names.map(p=>[p,'10000'])),budget:Object.fromEntries(names.map(p=>[p,'5000'])),epcBudget:{'Electrical Labour':'1250','Earthing Cost':'1250',Deliveries:'1250','Installation Cost':'1250'}};
+ const actual=Object.fromEntries(names.slice(0,5).map(p=>[p,'4000'])),before=JSON.stringify(job);
+ const html=renderToStaticMarkup(createElement(ClosureComparison,{job,actual,epcAggregate:'4000',epc:{'Electrical Labour':'0','Earthing Cost':'1000',Deliveries:'1000','Installation Cost':'2000'}}));
+ assert.ok(html.includes('5,000'));assert.ok(html.includes('10 panels × 500 W'));
+ const firstRow=html.split('<tbody>')[1].split('</tr>')[0];assert.ok(firstRow.includes('5,000.00'));assert.ok(firstRow.includes('1.00 / W'));assert.ok(firstRow.includes('0.80 / W'));assert.ok(firstRow.includes('-0.20 / W'));
+ const electrical=html.split('<tr').find(r=>r.includes('Electrical Labour'))!;assert.ok(electrical.includes('0.00 / W'));
+ const total=html.split('<tfoot>')[1];assert.ok(total.includes('24,000.00'));assert.ok(total.includes('4.80 / W'));
+ assert.equal(JSON.stringify(job),before);
+ const absent=renderToStaticMarkup(createElement(ClosureComparison,{job:{...job,entry:{}},actual,epcAggregate:'4000'}));assert.ok(absent.includes('per-watt figures unavailable'));assert.ok(!absent.includes('/ W</small>'));
 });

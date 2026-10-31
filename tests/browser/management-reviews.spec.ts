@@ -7,7 +7,7 @@ test('Management reviews saved closure cards and only currently pending technica
  const names=['Solar Panels','Structure','Inverter','Batteries','BMS','EPC'];
  const budget=Object.fromEntries(names.map(p=>[p,'100000.00']));
  const actual=Object.fromEntries(names.slice(0,5).map(p=>[p,'80000.00']));
- const snapshot={jobKey:'ubl:1',jobId:'CHP-320',title:'Adda Jahan',identity:{job_id:'CHP-320',customer_code:'UBL',site_name:'Adda Jahan',configuration_id:'35-30-40'},entry:{start:'2026-10-01',end:'2026-10-02'},selling:'1200000.00',phaseSelling:Object.fromEntries(names.map(p=>[p,'200000.00'])),budget,epcBudget:{'Electrical Labour':'25000','Earthing Cost':'25000',Deliveries:'25000','Installation Cost':'25000'},input:{actual,epc:{'Electrical Labour':'0','Earthing Cost':'20000',Deliveries:'20000','Installation Cost':'40000'},epcAggregate:'80000.00',epcDetails:true},actualEpc:'80000.00',summary:{selling:'1200000.00',actual:'480000.00'},basis:'Saved submitted fixture',reconciliation:{},evidence:[]};
+ const snapshot={jobKey:'ubl:1',jobId:'CHP-320',title:'Adda Jahan',identity:{job_id:'CHP-320',customer_code:'UBL',site_name:'Adda Jahan',configuration_id:'35-30-40'},entry:{start:'2026-10-01',end:'2026-10-02',panelCount:'10',panelWattage:'500'},selling:'1200000.00',phaseSelling:Object.fromEntries(names.map(p=>[p,'200000.00'])),budget,epcBudget:{'Electrical Labour':'25000','Earthing Cost':'25000',Deliveries:'25000','Installation Cost':'25000'},input:{actual,epc:{'Electrical Labour':'0','Earthing Cost':'20000',Deliveries:'20000','Installation Cost':'40000'},epcAggregate:'80000.00',epcDetails:true},actualEpc:'80000.00',summary:{selling:'1200000.00',actual:'480000.00'},basis:'Saved submitted fixture',reconciliation:{},evidence:[]};
  const closure={id:'closure-fixture',job_key:'ubl:1',stage:'Awaiting Management',version:2,created_at:'2026-10-25T09:00:00Z',snapshot,recorded_by:'Accounts'};
  await page.route('**/api/accounts-workspace',route=>route.fulfill({json:{ipos:[],closures:[closure,{...closure,id:'draft',job_key:'ubl:2',stage:'Draft'}]}}));
  await page.route('**/api/accounts-workspace/closure-queue',route=>route.fulfill({json:{closures:[closure]}}));
@@ -26,7 +26,11 @@ test('Management reviews saved closure cards and only currently pending technica
  await expect(comparison).toHaveCount(1);await expect(comparison).toBeVisible();
  for(const column of ['Budgeted cost','Actual cost','Cost difference','Budgeted markup','Actual markup','Average markup'])await expect(comparison.getByRole('columnheader',{name:column,exact:true})).toBeVisible();
  for(const phase of ['Electrical Labour','Earthing Cost','Deliveries','Installation Cost'])await expect(comparison.getByRole('rowheader',{name:new RegExp('^'+phase)})).toBeVisible();
- await expect(comparison.getByRole('row').filter({hasText:'Electrical Labour'}).getByRole('cell',{name:'0.00',exact:true})).toBeVisible();
+ await expect(comparison.getByRole('row').filter({hasText:'Electrical Labour'}).locator('.pz-closure-primary').filter({hasText:/^0\.00$/})).toBeVisible();
+ await expect(comparison.locator('.pz-closure-pv-basis')).toContainText('5,000 W');
+ const panelRow=comparison.getByRole('row').filter({has:page.getByRole('rowheader',{name:'Solar Panels',exact:true})});
+ await expect(panelRow).toContainText('20.00 / W');await expect(panelRow).toContainText('16.00 / W');
+ const primaryTops=await panelRow.locator('td .pz-closure-primary').evaluateAll(els=>els.map(el=>el.getBoundingClientRect().top));expect(Math.max(...primaryTops)-Math.min(...primaryTops)).toBeLessThan(1);
  await expect(comparison.locator('tfoot')).toContainText('480,000.00');await expect(comparison.locator('tfoot')).toContainText('-120,000.00');
  await expect(comparison.getByRole('cell',{name:/^110,000\.00/})).toHaveCount(6);await expect(comparison.getByRole('row').filter({hasText:'Electrical Labour'})).toContainText('175%');
  await expect(page.getByText('Costing breakdown and EPC details',{exact:true})).toHaveCount(0);

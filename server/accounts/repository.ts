@@ -454,6 +454,7 @@ export class AccountsRepository {
           (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures ORDER BY job_key,version DESC) j
         JOIN ubl_effective_site_orders o ON j.job_key='ubl:'||o.site_id
         WHERE j.stage='Closed' AND j.job_key<>$1
+          AND NOT EXISTS(SELECT 1 FROM closure_comparison_exclusions x WHERE x.job_key=j.job_key AND x.excluded)
           AND o.configuration_id=(SELECT configuration_id FROM ubl_effective_site_orders WHERE site_id=$2)
       `,
           [key, key.slice(4)],
@@ -489,6 +490,7 @@ export class AccountsRepository {
       LEFT JOIN ubl_effective_site_orders o ON j.job_key='ubl:'||o.site_id
       LEFT JOIN internal_purchase_orders i ON j.job_key='ipo:'||i.id
       WHERE j.stage='Closed' AND j.job_key<>$1
+          AND NOT EXISTS(SELECT 1 FROM closure_comparison_exclusions x WHERE x.job_key=j.job_key AND x.excluded)
         AND COALESCE(j.snapshot->'identity'->>'configuration_id',o.configuration_id,i.snapshot->>'solutionId')=$2
         AND COALESCE(j.snapshot->'identity'->>'customer_code',CASE WHEN o.site_id IS NOT NULL THEN 'UBL' ELSE i.snapshot->'customer'->>'shortCode' END)=$3
     `,[key,comparisonIdentity.configuration_id,comparisonIdentity.customer_code])).rows : [];
