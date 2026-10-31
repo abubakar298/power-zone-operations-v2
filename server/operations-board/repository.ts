@@ -1,3 +1,4 @@
+import {queueOperationsEmails} from '../ipo-email/queue.js';
 import {withInventoryReceiving} from './inventory-delivery.js';
 import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
 import {regionalQcDelegationSql} from './qc-delegation.js';
@@ -329,6 +330,7 @@ export class OperationsBoardRepository{
    }
    if(v.edit){kind='Saved site decision changed';audiences=[...new Set([...audiences,'operations-head','management'])];}
    await c.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,request_sha256,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,row.version+1,snapshot,v.action,v.reason||'Initial decision',v.requestKey,fingerprint,actor]);
+   await queueOperationsEmails(c,actor,site,{...snapshot,id});
    await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),id,row.version+1,kind,JSON.stringify(audiences),actor]);
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`operations.board.${v.action}:${id}:${row.version+1}`]);
    return {...snapshot,version:row.version+1};

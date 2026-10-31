@@ -8,6 +8,8 @@ export interface EmailAttachment {
 }
 export interface Message {
   to: string;
+  cc?: string[];
+  headers?: Record<string,string>;
   subject: string;
   text: string;
   html?: string;
@@ -16,6 +18,7 @@ export interface Message {
 export interface EmailDelivery {
   configured: boolean;
   send(message: Message, id: string): Promise<string>;
+  getMessageId?(providerId: string): Promise<string | null>;
 }
 export function seal(message: Message, key: string) {
   const iv = randomBytes(12);
@@ -71,6 +74,8 @@ export class ResendDelivery implements EmailDelivery {
           ? `${this.config.emailFromName} <${this.config.emailFrom}>`
           : this.config.emailFrom,
         to: [message.to],
+        ...(message.cc?.length ? {cc:message.cc} : {}),
+        ...(message.headers ? {headers:message.headers} : {}),
         subject: message.subject,
         text: message.text,
         ...(message.html ? {html:message.html} : {}),
@@ -83,5 +88,14 @@ export class ResendDelivery implements EmailDelivery {
     const body = (await response.json()) as { id?: string };
     if (!body.id) throw new Error("Email provider response invalid");
     return body.id;
+  }
+  async getMessageId(providerId:string) {
+    if (!this.configured) throw new Error("Email is not configured");
+    const response=await fetch(`https://api.resend.com/emails/${encodeURIComponent(providerId)}`,{
+      signal:AbortSignal.timeout(10000),headers:{Authorization:`Bearer ${this.config.emailApiKey}`},
+    });
+    if(!response.ok)throw new Error("Email reference lookup failed");
+    const body=await response.json() as {message_id?:string};
+    return /^<[^<>\s]+@[^<>\s]+>$/.test(body.message_id??'')?body.message_id!:null;
   }
 }

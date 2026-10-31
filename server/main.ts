@@ -1,3 +1,4 @@
+import {IpoEmailWorker} from './ipo-email/worker.js';
 import {NotificationsRepository} from "./notifications/repository.js";
 import {notificationWorker} from "./notifications/worker.js";
 import { archiveConfirmedTestWorkflow } from "./maintenance/archive-test-workflow.js";
@@ -53,6 +54,10 @@ const processNotifications=notificationWorker(async()=>{
 },(error,retryMs)=>console.error(JSON.stringify({event:'notification.processing.interrupted',code:(error as {code?:string})?.code??'UNAVAILABLE',retryMs})));
 const notificationTimer=setInterval(()=>{void processNotifications();},30000);
 notificationTimer.unref();
+const ipoEmails=new IpoEmailWorker(pool);
+const processIpoEmails=notificationWorker(()=>ipoEmails.deliverOne(delivery),()=>console.error('IPO document email processing interrupted.'));
+const ipoEmailTimer=setInterval(()=>{void processIpoEmails();},30000);
+ipoEmailTimer.unref();
 // Owner paused stock-shortage alerts; retain the stock-watch page and saved history.
 let delivering = false;
 const emails = setInterval(() => {
@@ -74,6 +79,7 @@ function shutdown() {
   clearInterval(cleanup);
   clearInterval(emails);
   clearInterval(notificationTimer);
+  clearInterval(ipoEmailTimer);
   const timeout = setTimeout(() => {
     console.error("Shutdown timed out.");
     process.exit(1);

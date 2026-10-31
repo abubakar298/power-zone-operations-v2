@@ -1,3 +1,4 @@
+import {queueIssuedPo,queueSharedIpo} from '../ipo-email/queue.js';
 import {allocateEditableIpo,manualIpoAvailable} from '../documents/manual-ipo.js';
 import { ipoSiteIdentity } from "./site-identity.js";
 import {archivedDocumentIds} from '../maintenance/archived-documents.js';
@@ -507,6 +508,7 @@ export class OrdersRepository {
         actor,
         `ipo.issue:${id}:quotation:${input.quotationId}:po:${poId}`,
       ]);
+      await queueIssuedPo(c,actor,row,input.documentId);
       if (external)
         await recordExternal(c, actor, null, submissionId!, external);
       return row;
@@ -564,6 +566,7 @@ export class OrdersRepository {
         actor,
         `ipo.accounts.sent:${id}`,
       ]);
+      await queueSharedIpo(c,actor,ipo);
       return row;
     });
   }

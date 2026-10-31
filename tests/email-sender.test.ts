@@ -73,3 +73,14 @@ test('quotation PDF bytes are passed to Resend as a named Base64 attachment',asy
   assert.equal(Buffer.from(body.attachments[0].content,'base64').subarray(0,5).toString(),'%PDF-');
  }finally{globalThis.fetch=previous;}
 });
+
+test('IPO emails preserve fixed CC and thread headers and retrieve the actual provider Message-ID',async()=>{
+ const previous=globalThis.fetch;let body:any;const urls:string[]=[];
+ globalThis.fetch=async(url,options)=>{urls.push(String(url));if(options?.method==='POST'){body=JSON.parse(String(options.body));return new Response(JSON.stringify({id:'provider-reference'}));}return new Response(JSON.stringify({message_id:'<actual-rfc@example.test>'}));};
+ try{
+  const delivery=new ResendDelivery(readConfig(env));
+  await delivery.send({to:'recipient@example.test',cc:['cc@example.test'],subject:'Original IPO subject',text:'Signed document',headers:{'In-Reply-To':'<old@example.test>',References:'<root@example.test> <old@example.test>'}},'ipo-stable-id');
+  assert.deepEqual(body.cc,['cc@example.test']);assert.equal(body.headers['In-Reply-To'],'<old@example.test>');assert.equal(body.headers['Message-ID'],undefined);
+  assert.equal(await delivery.getMessageId('provider-reference'),'<actual-rfc@example.test>');assert.equal(urls[1],'https://api.resend.com/emails/provider-reference');
+ }finally{globalThis.fetch=previous;}
+});

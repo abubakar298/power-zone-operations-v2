@@ -1,3 +1,4 @@
+import {queueIssuedPo,queueSharedIpo} from '../ipo-email/queue.js';
 import {sentSurveyAwaitingDesign} from '../../shared/sent-survey-requests.js';
 import {linkCreatedOperationsMaterialSource} from '../inventory/source-links.js';
 import {syncCreatedOperationsHandoff} from '../operations-board/live-ipo-sync.js';
@@ -3394,6 +3395,11 @@ export class ProjectWorkflowRepository {
       "INSERT INTO ipo_accounts_handoffs(id,ipo_id,created_by) VALUES($1,$2,$3)",
       [randomUUID(), ipo, r.coordinator_id],
     );
+    if(!historical){
+      const emailIpo={id:ipo,number,snapshot};
+      await queueIssuedPo(c,u.id,emailIpo,undefined,receipt.input.evidenceId?receipt.id:undefined);
+      await queueSharedIpo(c,u.id,emailIpo);
+    }
     const headsupAdvance = !!(
       await c.query(
         "SELECT 1 FROM headsup_advance_members WHERE record_id=$1",
