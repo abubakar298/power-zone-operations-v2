@@ -17,6 +17,7 @@ export async function dispatchPosted(c:Pool|PoolClient,kind:Kind,id:string){if(!
  * together; competing uploads lock the same authorized document. */
 export async function postSignedDispatch(c:PoolClient,actor:string,kind:string,id:string,copyKind:string,evidenceId:string){
  if(kind==='replacement-in'?copyKind!=='signed-store':!['dispatch','transfer-out','replacement-out'].includes(kind)||copyKind!=='signed-gate')return false;
+ if(kind==='dispatch'&&(await c.query('SELECT 1 FROM inventory_retrospective_dispatches WHERE dispatch_id=$1',[id])).rowCount)return false;
  const row=(await c.query('SELECT * FROM inventory_signed_dispatch_pending WHERE document_kind=$1 AND document_id=$2 FOR UPDATE',[kind,id])).rows[0];
  if(!row||await dispatchPosted(c,kind as Kind,id))return false;
  if(kind==='dispatch'&&!(await c.query('SELECT 1 FROM inventory_material_dispatches_active WHERE id=$1',[id])).rowCount)throw new HttpError(409,'This DO was deleted. Select a current DO.');

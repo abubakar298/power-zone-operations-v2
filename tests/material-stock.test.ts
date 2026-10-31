@@ -163,5 +163,18 @@ test('physical warehouse dispatch posts once, supports partial trips, protects s
   assert.equal((await drafts.documentStatus(elsewhere)).rows.length,0);await assert.rejects(drafts.documentEvidence(elsewhere,first.id,qcFiles[0]),/not linked/);
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements')).rows[0].n,6);
 
+  const retrospective=randomUUID();
+  await db.pool.query("INSERT INTO inventory_material_dispatches(id,number,draft_id,draft_version,source_sha256,warehouse,snapshot,request_key,request_fingerprint,created_by) SELECT $1,'RETRO-TEST',draft_id,draft_version,source_sha256,warehouse,snapshot,$2,$3,created_by FROM inventory_material_dispatches WHERE id=$4",[retrospective,randomUUID(),'e'.repeat(64),first.id]);
+  await db.pool.query('INSERT INTO inventory_material_dispatch_lines(dispatch_id,line_key,source_sha256,ledger_key,item_id,unit,description,quantity) SELECT $1,line_key,source_sha256,ledger_key,item_id,unit,description,quantity FROM inventory_material_dispatch_lines WHERE dispatch_id=$2',[retrospective,first.id]);
+  await db.pool.query("INSERT INTO inventory_signed_dispatch_pending(document_kind,document_id,warehouse,source_sha256,authority_version,movements,created_by) SELECT document_kind,$1,warehouse,source_sha256,authority_version,movements,created_by FROM inventory_signed_dispatch_pending WHERE document_kind='dispatch' AND document_id=$2",[retrospective,first.id]);
+  assert.ok(!(await drafts.documentStatus(f.reviewer)).rows.some(r=>r.id===retrospective));
+  await db.pool.query("INSERT INTO inventory_retrospective_dispatches(dispatch_id,dispatch_number,warehouse,reason,authority)VALUES($1,'RETRO-TEST','Lahore warehouse','Isolated retrospective document test','Test owner confirmation')",[retrospective]);
+  const retrospectiveRow=(await drafts.documentStatus(f.reviewer)).rows.find(r=>r.id===retrospective)!;assert.equal(retrospectiveRow.retrospective,true);assert.equal(retrospectiveRow.status,'ready');assert.deepEqual(retrospectiveRow.sites[0].documents.map(d=>d.label),['Variable Items Sign Off','Acknowledgment']);
+  const usageBeforeGate=await new MaterialUsageRepository(db.pool).read(f.reviewer,draft.id);assert.ok(usageBeforeGate.dispatch.lines.some((l:{out:string})=>Number(l.out)>0),'Retrospective custody is available for usage reconciliation.');
+  assert.equal((await stock.dispatch(f.reviewer,retrospective)).stockPosted,false,'A documentary waiver is never a warehouse OUT posting.');
+  assert.equal((await stock.unsignedDoDetail(f.reviewer,retrospective)).editable,false);
+  await signDispatch(db.pool,keeper,'dispatch',retrospective);
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements')).rows[0].n,6,'A later gate upload cannot double-post a retrospective OUT.');
+
  }finally{await db.close();}
 });

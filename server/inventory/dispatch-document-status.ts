@@ -1,9 +1,10 @@
+import {dispatchReconciliationEligibleSql} from './dispatch-reconciliation-eligibility.js';
 import type {Pool,PoolClient} from 'pg';
 import {HttpError} from '../http/errors.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import type {DispatchDocument,DispatchDocumentRow} from '../../shared/dispatch-document-status.js';
 type Db=Pool|PoolClient;
-type Dispatch={id:string;number:string;draft_id:string;warehouse:string;created_at:string;snapshot:any};
+type Dispatch={id:string;number:string;draft_id:string;warehouse:string;created_at:string;snapshot:any;retrospective?:boolean};
 type Board={site_id:string;snapshot:any};
 type Copy={document_id:string;source_site_id:string|null;copy_kind:string;evidence_id:string};
 type File={id:string;site_id:string;created_at:string};
@@ -21,10 +22,10 @@ export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies
   const lines=(d.snapshot.lines??[]).filter((l:any)=>Number(l.out??l.quantity)>0);
   const sites=(d.snapshot.sites??[]).filter((s:any)=>lines.some((l:any)=>l.sites?.includes(s.siteId))).map((s:any)=>{
    const board=dispatchBoard(s,boards),b=board?.snapshot;
-   const qcFile=(ref:any,fresh=false)=>ref?.id&&files.some(f=>f.id===ref.id&&f.site_id===board?.site_id&&(!fresh||instant(f.created_at)>=instant(d.created_at)))?{fileId:ref.id as string,source:'qc' as const,boardId:board!.site_id}:undefined;
+   const qcFile=(ref:any,fresh=false)=>ref?.id&&files.some(f=>f.id===ref.id&&f.site_id===board?.site_id&&(!fresh||d.retrospective||instant(f.created_at)>=instant(d.created_at)))?{fileId:ref.id as string,source:'qc' as const,boardId:board!.site_id}:undefined;
    const copy=(kind:string)=>copies.find(c=>c.document_id===d.id&&c.copy_kind===kind&&(kind!=='customer-signoff'||c.source_site_id===s.siteId));
    const documents:DispatchDocument[]=[];
-   if(!d.snapshot.parent){
+   if(!d.snapshot.parent&&!d.retrospective){
     const own=copy('signed-customer');
     const deliveries=b?.deliveries??[],explicit=deliveries.filter((v:any)=>v.dispatchId===d.id),legacy=deliveries.filter((v:any)=>!v.dispatchId);
     const candidate=explicit.length===1?explicit[0]:!explicit.length&&siteDispatches.get(s.siteId)?.length===1&&legacy.length===1?legacy[0]:undefined;
@@ -33,27 +34,27 @@ export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies
     documents.push({label:'Signed DO',...received,...(!received&&deliveries.length?{note:'A signed DO must be linked to this delivery.'}:{})});
    }
    const variable=lines.filter((l:any)=>l.sites?.includes(s.siteId)&&materialDocumentPolicy(l).customerUsageSignoff);
-   if(variable.length){
+   if(variable.length||d.retrospective){
     const own=copy('customer-signoff'),draftIds=[d.draft_id,d.snapshot.combinedPlan?.variableDraftId,d.snapshot.combinedPlan?.fixedDraftId].filter(Boolean);
-    const report=usage.find(u=>draftIds.includes(u.draft_id)&&u.site_id===s.siteId&&u.snapshot.state==='signed'&&u.snapshot.customerEvidenceId&&instant(u.created_at)>=instant(d.created_at)&&variable.every((l:any)=>u.snapshot.lines?.some((v:any)=>v.lineKey===l.key&&v.used!==null)));
+    const report=usage.find(u=>draftIds.includes(u.draft_id)&&u.site_id===s.siteId&&u.snapshot.state==='signed'&&u.snapshot.customerEvidenceId&&(d.retrospective||instant(u.created_at)>=instant(d.created_at))&&variable.every((l:any)=>u.snapshot.lines?.some((v:any)=>v.lineKey===l.key&&v.used!==null)));
     const final=b?.qcJob??b?.qc?.signoff??b?.qc?.handover;
     const historical=b?.documents?.find((v:any)=>v.id===`${board?.site_id}:historical-handover-documents`);
     const reportCopy=report&&copies.find(c=>c.evidence_id===report.snapshot.customerEvidenceId&&c.document_id===d.id&&c.source_site_id===s.siteId);
     const received=own?{fileId:own.evidence_id,source:'warehouse' as const}:reportCopy?{fileId:reportCopy.evidence_id,source:'warehouse' as const}:report?.evidence_warehouse===d.warehouse?{fileId:report.snapshot.customerEvidenceId,source:'warehouse' as const}:qcFile(report?{id:report.snapshot.customerEvidenceId}:undefined)??qcFile(final?.variableSignoff,true)??qcFile(historical?.evidence?.[2],true);
     documents.push({label:'Variable Items Sign Off',...received});
    }
-   if(s.installation===true||b?.installation===true){
+   if(s.installation===true||b?.installation===true||d.retrospective){
     const final=b?.qcJob??b?.qc?.signoff??b?.qc?.handover,historical=b?.documents?.find((v:any)=>v.id===`${board?.site_id}:historical-handover-documents`);
     documents.push({label:'Acknowledgment',...(qcFile(final?.acknowledgement,true)??qcFile(historical?.evidence?.[0],true))});
    }
-   return {siteId:s.siteId,name:s.siteName,customer:s.customer,ipo:[s.ipo,s.orderNumber].filter(Boolean).join(' · '),documents};
+   return {siteId:s.siteId,registeredSiteId:board?.site_id??s.registeredSiteId,dispatchComplete:!d.snapshot.parent&&d.snapshot.kind==='fixed'&&d.snapshot.partialDelivery===false,name:s.siteName,customer:s.customer,ipo:[s.ipo,s.orderNumber].filter(Boolean).join(' · '),documents};
   });
-  return {id:d.id,number:d.number,draftId:d.draft_id,warehouse:d.warehouse,createdAt:new Date(d.created_at).toISOString(),parent:!!d.snapshot.parent,sites,status:sites.length&&sites.every((s:any)=>s.documents.every((v:DispatchDocument)=>v.fileId))?'ready' as const:'awaiting' as const,reconciliationStatus:'Usage and any returns require reconciliation'};
+  return {id:d.id,number:d.number,draftId:d.draft_id,warehouse:d.warehouse,createdAt:new Date(d.created_at).toISOString(),parent:!!d.snapshot.parent,retrospective:!!d.retrospective,sites,status:sites.length&&sites.every((s:any)=>s.documents.every((v:DispatchDocument)=>v.fileId))?'ready' as const:'awaiting' as const,reconciliationStatus:d.retrospective?'Retrospective DO: gate copy waived; usage and returns require reconciliation':'Usage and any returns require reconciliation'};
  });
 }
-export const postedDispatchSql=`SELECT d.id,d.number,d.draft_id,d.warehouse,d.created_at,jsonb_build_object('parent',d.snapshot->'parent','sites',d.snapshot->'sites','lines',d.snapshot->'lines','combinedPlan',d.snapshot->'combinedPlan') snapshot
+export const postedDispatchSql=`SELECT d.id,d.number,d.draft_id,d.warehouse,d.created_at,EXISTS(SELECT 1 FROM inventory_retrospective_dispatches retrospective WHERE retrospective.dispatch_id=d.id) retrospective,jsonb_build_object('kind',d.snapshot->'kind','partialDelivery',d.snapshot->'partialDelivery','parent',d.snapshot->'parent','sites',d.snapshot->'sites','lines',d.snapshot->'lines','combinedPlan',d.snapshot->'combinedPlan') snapshot
  FROM inventory_material_dispatches_active d WHERE ($1::text[] IS NULL OR d.warehouse=ANY($1::text[]))
- AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_pending p WHERE p.document_kind='dispatch' AND p.document_id=d.id AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_postings z WHERE z.document_kind=p.document_kind AND z.document_id=p.document_id)) ORDER BY d.created_at DESC,d.id`;
+ AND ${dispatchReconciliationEligibleSql} ORDER BY d.created_at DESC,d.id`;
 export async function readDispatchDocuments(db:Db,warehouses:string[]|null){
  const dispatches=(await db.query(postedDispatchSql,[warehouses])).rows as Dispatch[];
  if(!dispatches.length)return {rows:[] as DispatchDocumentRow[]};
@@ -78,5 +79,5 @@ export async function dispatchDocumentEvidence(db:Db,rows:DispatchDocumentRow[],
 export async function siteDispatchChoices(db:Db,boardId:string,ipoId?:string){
  const result=await db.query(`SELECT d.id,d.number,d.created_at FROM inventory_material_dispatches_active d
  WHERE coalesce((d.snapshot->>'parent')::boolean,false)=false AND EXISTS(SELECT 1 FROM jsonb_array_elements(d.snapshot->'sites') s WHERE s->>'registeredSiteId'=$1 OR (nullif(s->>'registeredSiteId','') IS NULL AND $2::text IS NOT NULL AND s->>'siteId'=$2))
- AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_pending p WHERE p.document_kind='dispatch' AND p.document_id=d.id AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_postings z WHERE z.document_kind=p.document_kind AND z.document_id=p.document_id)) ORDER BY d.created_at DESC,d.id`,[boardId,ipoId??null]);return result.rows as {id:string;number:string;created_at:string}[];
+ AND ${dispatchReconciliationEligibleSql} ORDER BY d.created_at DESC,d.id`,[boardId,ipoId??null]);return result.rows as {id:string;number:string;created_at:string}[];
 }

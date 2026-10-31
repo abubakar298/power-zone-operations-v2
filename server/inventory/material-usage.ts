@@ -1,3 +1,4 @@
+import {dispatchReconciliationEligibleSql} from './dispatch-reconciliation-eligibility.js';
 import {materialDispatchDraftLink} from './material-dispatch-link.js';
 import {requireOpenParent} from './parent-open.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
@@ -61,7 +62,7 @@ export class MaterialUsageRepository{
  async read(actor:string,draftId:string,client:Pool|PoolClient=this.pool,siteId?:string){
   const draft=await this.usageDraft(actor,draftId,client,siteId),s=draft.snapshot;
   const reports=(await client.query(latestUsage,[draftId])).rows;
-  const issued=(await client.query(`SELECT l.line_key,sum(l.quantity)::text out FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_pending p WHERE p.document_kind='dispatch' AND p.document_id=d.id AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_postings z WHERE z.document_kind=p.document_kind AND z.document_id=p.document_id)) GROUP BY l.line_key`,[draftId,s.lines.map((r:any)=>r.key)])).rows;
+  const issued=(await client.query(`SELECT l.line_key,sum(l.quantity)::text out FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) AND ${dispatchReconciliationEligibleSql} GROUP BY l.line_key`,[draftId,s.lines.map((r:any)=>r.key)])).rows;
   const references=(await client.query(`SELECT d.number FROM inventory_material_dispatches_active d WHERE ${materialDispatchDraftLink} ORDER BY d.created_at,d.id`,[draftId])).rows.map(r=>r.number as string);
   const receipts=(await client.query(`SELECT id,number,evidence_id,snapshot FROM inventory_material_receipts WHERE draft_id=$1 OR snapshot->>'originPreparationId'=$1::text ORDER BY created_at,id`,[draftId])).rows;
   const workLines=s.kind==='fixed'?s.lines.filter((r:any)=>r.itemId&&r.unit&&r.out!==''&&materialDocumentPolicy(r).approvedQuantityLocked):[];

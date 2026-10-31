@@ -45,3 +45,11 @@ test('same PO, IPO text, customer or site name never substitutes for exact nativ
  assert.equal(dispatchBoard({...site,registeredSiteId:undefined},[{site_id:'a',snapshot:{origin:{ipoId:'ipo-one'}}},{site_id:'b',snapshot:{origin:{ipoId:'ipo-one'}}}]),undefined);
  const d=dispatch();d.snapshot.sites=[{...site,installation:false}];assert.equal(dispatchDocumentRows([d],[board({installation:false,deliveries:[delivery]})],[],[file('do')],[])[0].status,'ready');
 });
+test('owner-confirmed retrospective DOs bypass unavailable DO copies but still require VSO and acknowledgment',()=>{
+ const d={...dispatch(),retrospective:true};
+ const before=dispatchDocumentRows([d],[board()],[],[],[])[0];assert.equal(before.status,'awaiting');assert.deepEqual(before.sites[0].documents.map(v=>v.label),['Variable Items Sign Off','Acknowledgment']);
+ const b=board({qcJob:{...ack,variableSignoff:{id:'vso'}}});
+ const older=[file('ack','board-one','2026-10-30T08:00:00Z'),file('vso','board-one','2026-10-30T08:00:00Z')];
+ const ready=dispatchDocumentRows([d],[b],[],older,[])[0];assert.equal(ready.status,'ready');assert.equal(ready.retrospective,true);assert.match(ready.reconciliationStatus,/gate copy waived/);
+ assert.equal(dispatchDocumentRows([dispatch()],[b],[],older,[])[0].status,'awaiting','Normal DOs retain gate/delivery evidence requirements.');
+});
