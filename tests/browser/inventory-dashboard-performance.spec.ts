@@ -7,12 +7,12 @@ test('Inventory shows ready buckets before slow reconciliation, without unused d
  await page.route('**/api/material-dispatches/drafts',async r=>{drafts++;await r.fulfill({json:{drafts:[]}});});
  await page.route('**/api/material-dispatches/intake',r=>r.fulfill({json:{warehouses:['Lahore warehouse'],sources:[{siteId:'one',siteName:'Ready IPO',customer:'UBL',ipo:'IPO-TEST',dispatchDate:'2026-11-01',installationDate:'2026-11-03',authorization:'approved-ipo-boq'}]}}));
  await page.route('**/api/procurement/store',r=>r.fulfill({json:{toReceive:[]}}));
- await page.route('**/api/inventory-reconciliation/reports',r=>r.fulfill({json:{reports:[{id:'r',stage:'saved',has_files:true,created_at:'2026-10-29'}]}}));
+ await page.route('**/api/material-dispatches/document-status',r=>r.fulfill({json:{rows:[{id:'r',number:'DO-1',draftId:'draft',warehouse:'Lahore warehouse',createdAt:'2026-10-29',parent:false,status:'ready',reconciliationStatus:'Usage and returns require reconciliation',sites:[{siteId:'site',name:'Ready site',customer:'UBL',ipo:'CHP-1',documents:[{label:'Signed DO',fileId:'file',source:'qc'}]}]}]}}));
  await page.route('**/api/inventory-reviews',async r=>{await held;await r.fulfill({json:{rows:[]}});});
  await page.goto('/inventory');
  const buckets=page.locator('.inventory-dashboard-buckets');
  await expect(buckets.getByRole('button').filter({hasText:'IPOs Received'})).toContainText('1');
- await expect(buckets.getByRole('button').filter({hasText:'IRRs & Sign-offs Received'})).toContainText('1');
+ await expect(buckets.getByRole('button').filter({hasText:'Ready for Reconciliation'})).toContainText('1');
  await expect(buckets.getByRole('button').filter({hasText:'Parent DOs Waiting'}).locator('strong')).toHaveText('—');
  expect(access).toBe(1);expect(drafts).toBe(0);
  await buckets.getByRole('button').filter({hasText:'IPOs Received'}).click();await expect(page.getByRole('cell',{name:'Ready IPO UBL'})).toBeVisible();

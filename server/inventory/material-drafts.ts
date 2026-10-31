@@ -1,3 +1,4 @@
+import {readDispatchDocuments,dispatchDocumentEvidence} from './dispatch-document-status.js';
 import {withInventoryReceiving} from '../operations-board/inventory-delivery.js';
 import {warehouseNumber} from './warehouse-access.js';
 import {ParentReconciliationRepository} from './parent-reconciliation.js';
@@ -100,6 +101,8 @@ export class MaterialDraftRepository{
   const aliases=Object.fromEntries([...candidates].filter(([,targets])=>targets.size===1&&map.has([...targets][0])).map(([alias,targets])=>[alias,[...targets][0]]));
   return {catalogue:[...map.values()].sort((a,b)=>a.itemId.localeCompare(b.itemId)),aliases,warehouses:[...warehouses].sort()};
  }
+ async documentStatus(actor:string){const access=await this.access(actor);return readDispatchDocuments(this.pool,access.owner?null:access.warehouses);}
+ async documentEvidence(actor:string,id:string,file:string){const data=await this.documentStatus(actor);return dispatchDocumentEvidence(this.pool,data.rows,id,file);}
  parentReconciliation(actor:string,id:string){return new ParentReconciliationRepository(this.pool).read(actor,id);}
  changeParentReconciliation(actor:string,input:unknown){return new ParentReconciliationRepository(this.pool).change(actor,input);}
  async reviewedPools(actor:string){const access=await this.access(actor);return {version:approvedParentLedger.version,preparedAt:approvedParentLedger.preparedAt,groups:approvedParentLedger.groups.filter(g=>access.owner||access.warehouses.includes(g.warehouse+' warehouse'))};}

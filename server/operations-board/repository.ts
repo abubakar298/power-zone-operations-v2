@@ -1,3 +1,4 @@
+import {siteDispatchChoices} from '../inventory/dispatch-document-status.js';
 import {queueOperationsEmails} from '../ipo-email/queue.js';
 import {withInventoryReceiving} from './inventory-delivery.js';
 import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
@@ -46,6 +47,7 @@ export class OperationsBoardRepository{
   const rows=await withInventoryReceiving(this.pool,(await this.pool.query(latest)).rows);
   return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>({...r.snapshot,version:r.version})),access};
  }
+ async deliveryDispatches(actor:string,id:string){const site=await this.site(actor,id);return {dispatches:await siteDispatchChoices(this.pool,id,(site as {origin?:{ipoId?:string}}).origin?.ipoId)};}
  async site(actor:string,id:string){const a=await this.access(actor),r=await this.current(this.pool,id);this.scope(a,r.snapshot);return {...r.snapshot,version:r.version};}
  async history(actor:string,id:string,before?:number){
   const a=await this.access(actor),site=await this.current(this.pool,id);this.scope(a,site.snapshot);
@@ -294,12 +296,19 @@ export class OperationsBoardRepository{
     snapshot=saveDispatchPlan(site,{dispatchDate:v.dispatchDate,assignments:v.assignments,teamMembers},now,v.edit);if(site.installation!==false)snapshot={...snapshot,installationPlanDate:v.dispatchDate};kind='Dispatch plan';audiences=['accounts'];
    }else if(v.action==='delivery-return'){
     snapshot=recordDeliveryReturn(site,v,now);kind='Delivery returned';audiences=['operations-head','management','accounts','inventory'];
-   }else if(v.action==='delivery'){
-    const files=await this.references(c,id,[v.signedDoId,v.materialPhotoId]),value={deliveryDate:v.deliveryDate,signedDo:files.get(v.signedDoId)!,materialPhoto:files.get(v.materialPhotoId)!,partial:v.partial};
+    }else if(v.action==='delivery'){
+    const choices=await siteDispatchChoices(c,id,(site as {origin?:{ipoId?:string}}).origin?.ipoId);
+    if(choices.length&&!v.dispatchId)throw new HttpError(422,'Select the dispatched DO so its signed copy reaches Inventory.');
+    if(v.dispatchId){
+     if(!choices.some(d=>d.id===v.dispatchId))throw new HttpError(422,'Select an actually dispatched DO for this exact site.');
+     const existing=v.edit?site.deliveries?.slice(0,-1):site.deliveries;
+     if(existing?.some(d=>d.dispatchId===v.dispatchId))throw new HttpError(422,'This DO is already linked to a delivery. Edit that delivery instead.');
+    }
+    const files=await this.references(c,id,[v.signedDoId,v.materialPhotoId]),value={...(v.dispatchId?{dispatchId:v.dispatchId}:{}),deliveryDate:v.deliveryDate,signedDo:files.get(v.signedDoId)!,materialPhoto:files.get(v.materialPhotoId)!,partial:v.partial};
     if(!value.materialPhoto.mediaType.startsWith('image/'))throw new HttpError(422,'Upload a photo of the delivered material.');
     if(v.edit){
      const old=site.deliveries?.at(-1);if(!old)throw new HttpError(409,'There is no saved delivery record to edit.');
-     if(v.deliveryDate===old.deliveryDate&&v.signedDoId===old.signedDo.id&&v.materialPhotoId===old.materialPhoto.id&&v.partial===old.partial)throw new HttpError(422,'Nothing changed. Cancel editing or update the delivery record.');
+     if(v.dispatchId===old.dispatchId&&v.deliveryDate===old.deliveryDate&&v.signedDoId===old.signedDo.id&&v.materialPhotoId===old.materialPhoto.id&&v.partial===old.partial)throw new HttpError(422,'Nothing changed. Cancel editing or update the delivery record.');
      if(v.partial!==old.partial)throw new HttpError(422,'Record remaining material as a new delivery instead of changing a saved partial delivery.');
      const qcDates=[...Object.values(site.qc??{}),...(site.qcJob?[site.qcJob]:[])].map(q=>q.date).sort();
      if(qcDates[0]&&v.deliveryDate>qcDates[0])throw new HttpError(422,'Delivery cannot be moved after a recorded QC stage.');

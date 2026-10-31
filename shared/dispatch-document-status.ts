@@ -1,0 +1,2 @@
+export type DispatchDocument={label:'Signed DO'|'Variable Items Sign Off'|'Acknowledgment';fileId?:string;source?:'qc'|'warehouse';boardId?:string;note?:string};
+export type DispatchDocumentRow={id:string;number:string;draftId:string;warehouse:string;createdAt:string;parent:boolean;status:'awaiting'|'ready';reconciliationStatus:string;sites:{siteId:string;name:string;customer:string;ipo:string;documents:DispatchDocument[]}[]};

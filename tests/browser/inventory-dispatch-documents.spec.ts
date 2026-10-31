@@ -1,0 +1,28 @@
+import {test,expect} from '@playwright/test';
+import {actors,login} from './release-fixtures.js';
+test('dispatch document buckets show exact site evidence, scoped links and aligned compact actions',async({page})=>{
+ await actors(page.request);await login(page.request);
+ const rows=[{id:'new',number:'DO-LHR-100',draftId:'draft-new',warehouse:'Lahore warehouse',createdAt:'2026-11-01T08:00:00Z',parent:false,status:'awaiting',reconciliationStatus:'Usage and returns require reconciliation',sites:[{siteId:'one',name:'Partial dispatch site',customer:'UBL',ipo:'CHP-163 · 165/250',documents:[{label:'Signed DO',note:'A signed DO must be linked to this delivery.'},{label:'Variable Items Sign Off'},{label:'Acknowledgment'}]}]}, {id:'ready',number:'PDO-LHR-10',draftId:'draft-parent',warehouse:'Lahore warehouse',createdAt:'2026-10-31T08:00:00Z',parent:true,status:'ready',reconciliationStatus:'Usage and returns require reconciliation',sites:[{siteId:'two',name:'Second site with a longer description to check primary line alignment',customer:'Meezan Bank',ipo:'CHP-222',documents:[{label:'Variable Items Sign Off',fileId:'vso',source:'qc',boardId:'two'},{label:'Acknowledgment',fileId:'ack',source:'qc',boardId:'two'}]}]}];
+ await page.route('**/api/material-dispatches/access',r=>r.fulfill({json:{kind:'management'}}));
+ await page.route('**/api/material-dispatches/intake',r=>r.fulfill({json:{warehouses:['Lahore warehouse'],sources:[]}}));
+ await page.route('**/api/procurement/store',r=>r.fulfill({json:{toReceive:[]}}));
+ await page.route('**/api/inventory-reviews',r=>r.fulfill({json:{rows:[]}}));
+ await page.route('**/api/material-dispatches/document-status',r=>r.fulfill({json:{rows}}));
+ await page.goto('/inventory');
+ const buckets=page.locator('.inventory-dashboard-buckets');
+ await buckets.getByRole('button').filter({hasText:'Awaiting Signed Documents'}).click();
+ await expect(page.getByRole('cell',{name:'DO-LHR-100 Lahore warehouse 2026-11-01'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Reconcile',exact:true})).toHaveCount(0);
+ await buckets.getByRole('button').filter({hasText:'Ready for Reconciliation'}).click();
+ await page.getByRole('button',{name:'View documents',exact:true}).click();
+ await expect(page.getByRole('link',{name:'Variable Items Sign Off',exact:true})).toHaveAttribute('href','/api/material-dispatches/document-status/ready/evidence/vso');
+ await expect(page.getByText(/Receiving documents does not credit returns/)).toBeVisible();
+ const cells=page.locator('.dispatch-document-list tbody tr').first().locator('td');
+ for(let i=0;i<await cells.count();i++)await expect(cells.nth(i)).toHaveCSS('vertical-align','top');
+ await page.evaluate(()=>window.scrollTo(0,0));
+ await page.screenshot({path:'../inventory-document-buckets-desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:'../inventory-document-buckets-mobile.png',fullPage:true});
+ const width=await page.evaluate(()=>({body:document.body.scrollWidth,screen:innerWidth}));expect(width.body).toBeLessThanOrEqual(width.screen);
+ await page.getByRole('button',{name:'Reconcile',exact:true}).click();await expect(page).toHaveURL(/\/inventory\/parent-dos\/draft-parent$/);
+});

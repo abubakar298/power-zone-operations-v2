@@ -41,11 +41,15 @@ test('physical warehouse dispatch posts once, supports partial trips, protects s
   await assert.rejects(issueSigned(f.reviewer,command),/activate/);
   await new WarehouseAuthorityRepository(db.pool).command(f.owner,{warehouse:input.warehouse,version:0,sourceSha256:f.stockSha,state:'active',reason:'Verified test baseline.',requestKey:randomUUID()});
   await assert.rejects(issueSigned(keeper,command),/not assigned/);
-  const prepared=await stock.issue(f.reviewer,command);assert.equal(prepared.stockPosted,false);assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'7','Preparing and printing a DO does not issue stock.');
+  const prepared=await stock.issue(f.reviewer,command);assert.equal(prepared.stockPosted,false);assert.equal((await drafts.documentStatus(f.reviewer)).rows.length,0,'Unsigned prepared DOs do not enter dispatched-document buckets.');assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'7','Preparing and printing a DO does not issue stock.');
   const first=await issueSigned(f.reviewer,command);assert.equal(first.stockPosted,true);assert.deepEqual(await issueSigned(f.reviewer,command),first);
   assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'5');
   const postedLedger=await stock.ledger(f.reviewer,{warehouse:'Lahore warehouse',direction:'out'});assert.equal(postedLedger.total,2);assert.equal(Number(postedLedger.events.find((e:any)=>e.kind==='dispatch-out')?.outgoing),2);
   assert.equal((await stock.dispatch(keeper,first.id)).number,first.number);
+  const awaiting=await drafts.documentStatus(f.reviewer);assert.equal(awaiting.rows.length,1);assert.equal(awaiting.rows[0].id,first.id);assert.equal(awaiting.rows[0].status,'awaiting','Gate proof alone is not customer signoff.');
+  await assert.rejects(drafts.documentStatus(keeper),/not assigned/);await assert.rejects(drafts.documentStatus(coord),/not assigned/);
+  await assert.rejects(drafts.documentEvidence(f.reviewer,first.id,randomUUID()),/not linked/);
+  assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'5','Reading bucket/document status never posts stock.');
   await assert.rejects(issueSigned(f.reviewer,{...command,lines:[{...command.lines[0],quantity:'3'}]}),/different warehouse dispatch/);
   await assert.rejects(issueSigned(f.reviewer,{...command,requestKey:randomUUID()}),/balance changed/);
   const second=await issueSigned(f.reviewer,{...command,requestKey:randomUUID(),lines:[{...command.lines[0],quantity:'3',ledgerRevision:1}]});assert.notEqual(second.number,first.number);
@@ -138,5 +142,26 @@ test('physical warehouse dispatch posts once, supports partial trips, protects s
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements')).rows[0].n,6,'Printing, evidence download and retry do not post stock again.');
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_source_events')).rows[0].n,2);
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM stock_on_hand_entries')).rows[0].n,0);
+  // A QC upload becomes visible to Inventory through exact board/DO identity,
+  // without a second upload, stock posting or closing the reconciliation.
+  const boardId=basis.registeredSiteId!;assert.ok(boardId);
+  const latestBoard=(await db.pool.query('SELECT version,snapshot FROM operations_board_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1',[boardId])).rows[0];
+  const qcFiles=[randomUUID(),randomUUID(),randomUUID()];
+  for(const [i,id] of qcFiles.entries())await db.pool.query('INSERT INTO operations_board_files(id,site_id,filename,media_type,sha256,content,created_by)VALUES($1,$2,$3,$4,$5,$6,$7)',[id,boardId,'fictional-signed-'+i+'.pdf','application/pdf',String(i+4).repeat(64),Buffer.from('%PDF-1.7 fictional signed evidence'),f.owner]);
+  const ref=(id:string)=>({id,name:'Signed site document.pdf',mediaType:'application/pdf'});
+  const qcSnapshot={...latestBoard.snapshot,deliveries:[{deliveryDate:'2026-10-27',dispatchId:first.id,signedDo:ref(qcFiles[0]),materialPhoto:ref(qcFiles[0]),partial:true}],qcJob:{date:'2026-10-28',acknowledgement:ref(qcFiles[1]),variableSignoff:ref(qcFiles[2])}};
+  await db.pool.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by)VALUES($1,$2,$3,$4,$5,$6,$7)',[boardId,latestBoard.version+1,qcSnapshot,'QC fixture','Isolated document bridge test',randomUUID(),f.owner]);
+  const documentBucket=await request(app).get('/api/material-dispatches/document-status').set('Cookie',sessions.dispatcher.cookie).expect(200);
+  const ready=documentBucket.body.rows.find((r:any)=>r.id===first.id);assert.equal(ready.status,'ready');assert.equal(ready.sites[0].documents.find((d:any)=>d.label==='Signed DO').fileId,qcFiles[0]);
+  await request(app).get('/api/material-dispatches/document-status').expect(401);
+  await request(app).get('/api/material-dispatches/document-status').set('Cookie',sessions.keeper.cookie).expect(403);
+  const bridgePath='/api/material-dispatches/document-status/'+first.id+'/evidence/';
+  const signedQc=await request(app).get(bridgePath+qcFiles[0]).set('Cookie',sessions.dispatcher.cookie).expect(200);assert.match(signedQc.headers['cache-control'],/no-store/);
+  await request(app).get(bridgePath+randomUUID()).set('Cookie',sessions.dispatcher.cookie).expect(404);
+  const elsewhere=randomUUID();await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash)VALUES($1,$2,$3,$4,$5)',[elsewhere,elsewhere+'@example.test','Other warehouse','Inventory','isolated']);
+  await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by)VALUES($1,'Karachi warehouse','dispatcher',$2)",[elsewhere,f.owner]);
+  assert.equal((await drafts.documentStatus(elsewhere)).rows.length,0);await assert.rejects(drafts.documentEvidence(elsewhere,first.id,qcFiles[0]),/not linked/);
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements')).rows[0].n,6);
+
  }finally{await db.close();}
 });

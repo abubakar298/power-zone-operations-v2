@@ -19,6 +19,7 @@ export function operationsBoardHttp(repo:OperationsBoardRepository,requireSessio
  r.get('/targets',async(req,res)=>res.json(await repo.targets(req.authSession!.user.id)));
  r.post('/targets',json({limit:'128kb'}),async(req,res)=>res.status(201).json(await repo.saveTargets(req.authSession!.user.id,parse(targetsSchema,req.body))));
  r.get('/sites',async(req,res)=>res.json(await repo.sites(req.authSession!.user.id)));
+ r.get('/sites/:id/delivery-dispatches',async(req,res)=>res.json(await repo.deliveryDispatches(req.authSession!.user.id,siteId(req.params.id))));
  r.get('/sites/:id/history',async(req,res)=>res.json(await repo.history(req.authSession!.user.id,siteId(req.params.id),req.query.before===undefined?undefined:parse(z.coerce.number().int().positive(),req.query.before))));
  r.get('/sites/:id',async(req,res)=>res.json(await repo.site(req.authSession!.user.id,siteId(req.params.id))));
  r.post('/sites/:id/files',async(req,_res,next)=>{await repo.site(req.authSession!.user.id,siteId(req.params.id));next();},json({limit:'36mb'}),async(req,res)=>res.status(201).json(await repo.upload(req.authSession!.user.id,siteId(req.params.id),parse(fileSchema,req.body))));

@@ -7,7 +7,7 @@ import {HttpError} from '../http/errors.js';
 export const fileReferenceSchema=z.object({id:z.uuid(),name:z.string(),mediaType:z.string()});
 const history=z.array(z.object({date:z.string(),description:z.string()}).passthrough());
 const entry=z.object({date:z.iso.date(),evidence:fileReferenceSchema.optional(),additionalEvidence:z.array(fileReferenceSchema).optional(),acknowledgement:fileReferenceSchema.optional(),irr:fileReferenceSchema.optional(),variableSignoff:fileReferenceSchema.optional(),recordedAt:z.string().optional()}).passthrough();
-const delivery=z.object({deliveryDate:z.iso.date(),signedDo:fileReferenceSchema,materialPhoto:fileReferenceSchema,partial:z.boolean(),documentId:z.string().optional()});
+const delivery=z.object({dispatchId:z.uuid().optional(),deliveryDate:z.iso.date(),signedDo:fileReferenceSchema,materialPhoto:fileReferenceSchema,partial:z.boolean(),documentId:z.string().optional()});
 const storedWorkflowSiteSchema=sourceSiteSchema.and(z.object({
  dispatchDate:z.iso.date().optional(),installationPlanDate:z.iso.date().optional(),planSavedAt:z.string().optional(),deliveryDate:z.iso.date().optional(),deliveryRecordedAt:z.string().optional(),stageStartedAt:z.string().optional(),
  assignments:z.record(z.string(),z.string()).optional(),teamMembers:z.array(z.object({id:z.uuid(),name:z.string()})).optional(),qc:z.record(z.string(),entry).optional(),qcJob:entry.optional(),

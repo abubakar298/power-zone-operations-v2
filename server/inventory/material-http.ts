@@ -24,6 +24,8 @@ function requireVersion(value:unknown,current:number){const v=z.coerce.number().
 
 export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:RequestHandler,sitePlans?:SiteMaterialPlanRepository,stock?:MaterialStockRepository,usage?:MaterialUsageRepository,purchases?:PurchaseReceivingRepository,gates?:GatePassRepository){
  const r=Router();r.use(requireSession);
+ r.get('/document-status',async(req,res)=>res.json(await repo.documentStatus(req.authSession!.user.id)));
+ r.get('/document-status/:id/evidence/:file',async(req,res)=>{const file=await repo.documentEvidence(req.authSession!.user.id,z.uuid().parse(req.params.id),z.uuid().parse(req.params.file));res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);});
  r.get('/closing-reviewed',async(req,res)=>{const scope=await repo.warehouses(req.authSession!.user.id);res.json({...closingReviewed,rows:closingReviewed.rows.filter(row=>scope.warehouses.includes(row.warehouse))});});
  r.use((req,_res,next)=>{if(req.method!=='GET'&&!equalSecrets(req.get('X-CSRF-Token')??'',req.authSession!.csrfToken))throw new HttpError(403,'Refresh and try again.');next();});
  if(gates){

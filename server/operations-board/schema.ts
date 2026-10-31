@@ -32,7 +32,7 @@ const completionFields={date:z.iso.date(),evidenceIds:z.array(z.uuid()).max(30).
 export const commandSchema=z.discriminatedUnion('action',[
  commandBase.extend({action:z.literal('assign-team'),team:teamSchema}).strict(),
  commandBase.extend({action:z.literal('plan'),dispatchDate:z.iso.date(),assignments:vendorAssignmentsSchema,teamMemberIds:z.array(z.uuid()).max(50).refine(v=>new Set(v).size===v.length,'Choose each team member once.').optional()}).strict(),
- commandBase.extend({action:z.literal('delivery'),deliveryDate:z.iso.date(),signedDoId:z.uuid(),materialPhotoId:z.uuid(),partial:z.boolean().default(false)}).strict(),
+ commandBase.extend({action:z.literal('delivery'),dispatchId:z.uuid().optional(),deliveryDate:z.iso.date(),signedDoId:z.uuid(),materialPhotoId:z.uuid(),partial:z.boolean().default(false)}).strict(),
  commandBase.extend({action:z.literal('delivery-return'),scope:z.enum(['full','partial']),date:z.iso.date().optional(),dateUnknown:z.boolean(),warehouse:z.string().trim().max(200).default(''),reference:z.string().trim().max(200).default(''),reason:z.string().trim().min(3).max(2000)}).strict(),
  commandBase.extend({action:z.literal('qc'),stageId:z.enum(['civil','electrical','testing','signoff','cabinet','panel','bessTesting','handover']),...completionFields}).strict(),
  commandBase.extend({action:z.literal('ups-job'),...completionFields,checks:z.object({mounting:z.boolean(),electrical:z.boolean(),testingTraining:z.boolean(),signoff:z.boolean()}).strict()}).strict(),
