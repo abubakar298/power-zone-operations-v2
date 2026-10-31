@@ -31,10 +31,24 @@ export function projectCustomerDocuments(refs:Ref[],files:File[]):AccountsCustom
  }
  return [...rows.values()].sort((a,b)=>b.receivedAt.localeCompare(a.receivedAt)||a.id.localeCompare(b.id));
 }
+/** Closure means the latest Management closure decision, not installation completion.
+ * Shared UPS IPO/PO text and site names are never sufficient to hide another site. */
+export function customerDocumentSiteClosed(board:Board,closedJobs:Set<string>,nativeLinks:Map<string,string[]>,legacySolar:Map<string,string>){
+ const s=board.snapshot,origin=s.origin?.ipoId;
+ const hasOrigin=typeof origin==='string'&&uuid.safeParse(origin).success;if(hasOrigin&&closedJobs.has('ipo:'+origin))return true;
+ const linked=nativeLinks.get(board.site_id)??[];if(!hasOrigin&&linked.length===1&&closedJobs.has('ipo:'+linked[0]))return true;
+ if(typeof s.jobKey==='string'&&closedJobs.has(s.jobKey))return true;
+ const candidates=[board.site_id,s.sourceKey,s.key].filter((v):v is string=>typeof v==='string').map(v=>v.replace(/^(?:registered-|received-)/,''));
+ return candidates.some(key=>legacySolar.has(key)&&closedJobs.has(legacySolar.get(key)!));
+}
 /** Caller authorizes Accounts/Management before this metadata-only projection. */
-export async function customerDocuments(pool:Pool){
- const boards=(await pool.query(`SELECT DISTINCT ON(site_id) site_id,version,jsonb_build_object('id',site_id,'name',snapshot->'name','customer',snapshot->'customer','ipo',snapshot->'ipo','program',snapshot->'program','kind',snapshot->'kind','sourceKey',snapshot->'sourceKey','key',snapshot->'key','type',snapshot->'type','projectType',snapshot->'projectType','superseded',snapshot->'superseded','archive',snapshot->'archive','legacySolarArchived',snapshot->'legacySolarArchived','deliveries',snapshot->'deliveries','qcJob',snapshot->'qcJob','qc',jsonb_build_object('signoff',snapshot#>'{qc,signoff}','handover',snapshot#>'{qc,handover}'),'documents',snapshot->'documents') snapshot FROM operations_board_versions ORDER BY site_id,version DESC`)).rows as Board[];
- const refs=customerDocumentReferences(boards),bySite=new Map(boards.filter(b=>!b.snapshot.superseded&&!isArchivedLegacySolar({...b.snapshot,id:b.site_id})).map(b=>[b.site_id,b]));
+export async function customerDocuments(pool:Pool,includeClosed=false){
+ const boards=(await pool.query(`SELECT DISTINCT ON(site_id) site_id,version,jsonb_build_object('id',site_id,'origin',snapshot->'origin','jobKey',snapshot->'jobKey','name',snapshot->'name','customer',snapshot->'customer','ipo',snapshot->'ipo','program',snapshot->'program','kind',snapshot->'kind','sourceKey',snapshot->'sourceKey','key',snapshot->'key','type',snapshot->'type','projectType',snapshot->'projectType','superseded',snapshot->'superseded','archive',snapshot->'archive','legacySolarArchived',snapshot->'legacySolarArchived','deliveries',snapshot->'deliveries','qcJob',snapshot->'qcJob','qc',jsonb_build_object('signoff',snapshot#>'{qc,signoff}','handover',snapshot#>'{qc,handover}'),'documents',snapshot->'documents') snapshot FROM operations_board_versions ORDER BY site_id,version DESC`)).rows as Board[];
+ const [decisions,links,legacy]=await Promise.all([pool.query('SELECT DISTINCT ON(job_key) job_key,stage FROM accounts_active_job_closures ORDER BY job_key,version DESC'),pool.query('SELECT board_site_id,ipo_id FROM inventory_material_source_links'),pool.query('SELECT site_id,legacy_ipo_number FROM ubl_site_orders')]);
+ const closedJobs=new Set<string>(decisions.rows.filter(r=>r.stage==='Closed').map(r=>r.job_key)),nativeLinks=new Map<string,string[]>();for(const l of links.rows)nativeLinks.set(l.board_site_id,[...(nativeLinks.get(l.board_site_id)??[]),l.ipo_id]);
+ const legacySolar=new Map<string,string>(legacy.rows.map(r=>['UBL:SOLAR:'+String(r.legacy_ipo_number).replace(/^CHP-/i,''),'ubl:'+r.site_id]));
+ const activeBoards=includeClosed?boards:boards.filter(b=>!customerDocumentSiteClosed(b,closedJobs,nativeLinks,legacySolar));
+ const refs=customerDocumentReferences(activeBoards),bySite=new Map(activeBoards.filter(b=>!b.snapshot.superseded&&!isArchivedLegacySolar({...b.snapshot,id:b.site_id})).map(b=>[b.site_id,b]));
  const usage=(await pool.query(`SELECT DISTINCT ON(u.draft_id,u.site_id) u.site_id,u.version,u.snapshot,(SELECT jsonb_agg(jsonb_build_object('siteId',s->'siteId','registeredSiteId',s->'registeredSiteId','siteName',s->'siteName','customer',s->'customer','ipo',s->'ipo')) FROM jsonb_array_elements(d.snapshot->'sites') s) sites,d.snapshot->>'warehouse' warehouse FROM inventory_material_site_usage_versions u JOIN LATERAL(SELECT snapshot FROM inventory_material_draft_versions WHERE draft_id=u.draft_id ORDER BY version DESC LIMIT 1)d ON true ORDER BY u.draft_id,u.site_id,u.version DESC`)).rows;
  for(const u of usage){if(u.snapshot.state!=='signed'||!uuid.safeParse(u.snapshot.customerEvidenceId).success)continue;const sources=(u.sites??[]).filter((s:any)=>s.siteId===u.site_id&&s.registeredSiteId&&bySite.has(s.registeredSiteId));if(sources.length!==1)continue;const s=sources[0],b=bySite.get(s.registeredSiteId)!;refs.push({siteId:b.site_id,siteName:String(b.snapshot.name??s.siteName??''),customer:String(b.snapshot.customer??s.customer??''),ipo:String(b.snapshot.ipo??s.ipo??''),kind:'VSO',fileId:u.snapshot.customerEvidenceId,date:u.snapshot.date??null,version:u.version,source:'Site sign-off',warehouse:u.warehouse});}
  if(!refs.length)return {rows:[] as AccountsCustomerDocument[],refs};
@@ -43,7 +57,7 @@ export async function customerDocuments(pool:Pool){
  return {rows:projectCustomerDocuments(refs,[...qc.rows,...warehouse.rows]),refs};
 }
 export async function customerDocumentFile(pool:Pool,id:string){
- const data=await customerDocuments(pool),row=data.rows.find(r=>r.id===id);if(!row)throw new HttpError(404,'This customer-signed document is not available.');
+ const data=await customerDocuments(pool,true),row=data.rows.find(r=>r.id===id);if(!row)throw new HttpError(404,'This customer-signed document is not available.');
  const ref=data.refs.find(r=>r.siteId===row.siteId&&r.kind===row.kind&&createHash('sha256').update(JSON.stringify([r.siteId,r.kind,r.fileId])).digest('hex')===id)!;
  let file=(await pool.query('SELECT filename,media_type,content FROM operations_board_files WHERE id=$1 AND site_id=$2',[ref.fileId,ref.siteId])).rows[0];
  if(!file&&ref.warehouse)file=(await pool.query('SELECT original_name filename,media_type,content FROM inventory_material_evidence WHERE id=$1 AND warehouse=$2',[ref.fileId,ref.warehouse])).rows[0];
