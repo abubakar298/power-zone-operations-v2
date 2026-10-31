@@ -1,3 +1,4 @@
+import {sameInvoiceCustomer} from './invoice-customer-identity.js';
 import {isSubmittedInvoicePending} from '../../shared/accounts-invoice-display.js';
 import type {Pool,PoolClient}from'pg';
 import{Decimal}from'decimal.js';
@@ -9,7 +10,7 @@ export const receiptLedgerKey=(row:Row)=>row.submissionId?'submission:'+row.subm
 export function applyInvoiceReceipts(rows:Row[],events:Row[]):Row[]{return rows.map(row=>{
  const matching=events.filter(e=>e.ledger_key===receiptLedgerKey(row)||e.submission_id&&e.submission_id===row.submissionId&&e.invoice_reference===row.invoice);
  if(!matching.length)return {...row,receiptVersion:0};
- const first=matching[0],sameReference=matching.every(e=>(row.invoiceReferenceAliases??[row.invoice]).includes(e.invoice_reference)&&e.customer===row.customer),sameBalance=row.pending==null?first.snapshot.originalPending==null:first.snapshot.originalPending!=null&&new Decimal(row.pending).eq(first.snapshot.originalPending);
+ const first=matching[0],sameReference=matching.every(e=>(row.invoiceReferenceAliases??[row.invoice]).includes(e.invoice_reference)&&sameInvoiceCustomer(row,e.customer)),sameBalance=row.pending==null?first.snapshot.originalPending==null:first.snapshot.originalPending!=null&&new Decimal(row.pending).eq(first.snapshot.originalPending);
  if(!sameReference||!sameBalance)return {...row,receiptVersion:matching.length,receiptHold:'The source invoice reference or balance changed after recorded receipts. Accounts must reconcile the source before recording more payments.'};
  const received=matching.reduce<Decimal>((n,e)=>n.plus(e.amount),new Decimal(0)),pending=new Decimal(first.baseline_pending).minus(received);
  if(pending.lt(0))return {...row,receiptVersion:matching.length,receiptHold:'Recorded receipts exceed their frozen opening balance; Accounts review required.'};

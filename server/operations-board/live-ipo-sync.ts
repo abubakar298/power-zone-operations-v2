@@ -50,10 +50,10 @@ async function syncInClient(c:PoolClient,actor:string,input:z.infer<typeof input
    // Neither code path acquires these locks in the reverse order.
    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('operations.board.import',0))");
    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('material.source.links',0))");
-   const rows=(await c.query(`SELECT i.id, to_jsonb(i) AS ipo, to_jsonb(p) AS customer_po,
+   const rows=(await c.query(`SELECT i.id, to_jsonb(i) AS ipo, to_jsonb(p) AS customer_po, customer.name AS customer_name, customer.id AS customer_id,
     COALESCE((SELECT jsonb_agg(to_jsonb(o) ORDER BY o.id) FROM operations_boq_issuances o WHERE o.ipo_id=i.id),'[]'::jsonb) AS issuances,
     (EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.records->'localPreviewDocumentIds' ? i.id::text) OR EXISTS(SELECT 1 FROM archived_sample_ipos a WHERE a.ipo_id=i.id AND a.restored_at IS NULL)) AS archived
-    FROM internal_purchase_orders i JOIN customer_purchase_orders p ON p.id=i.customer_po_id
+    FROM internal_purchase_orders i JOIN customer_purchase_orders p ON p.id=i.customer_po_id JOIN customers customer ON customer.id=p.customer_id
     WHERE ($1::uuid[] IS NULL OR i.id=ANY($1::uuid[])) ORDER BY i.created_at,i.id`,[input.ipoIds??null])).rows;
    const boards=(await c.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot,action FROM operations_board_versions ORDER BY site_id,version DESC')).rows;
    const links=(await c.query('SELECT ipo_id,board_site_id FROM inventory_material_source_links')).rows;
@@ -86,7 +86,7 @@ async function syncInClient(c:PoolClient,actor:string,input:z.infer<typeof input
     }
     const label=normal(ipo.number)+(orderNumber?' · '+normal(orderNumber):'');
     const candidates=boards.filter(b=>normal(b.snapshot.ipo)===label||b.snapshot.origin?.ipoId===ipoId).map(b=>b.site_id as string);
-    const position:LiveIpoPosition={ipoId,ipoNumber:ipo.number,orderNumber,siteName:typeof s.siteName==='string'?s.siteName:'',customerPo:typeof s.input?.poNumber==='string'?s.input.poNumber:'',operationsIssuanceId:issuance.id,createdAt:ipo.created_at,
+    const position:LiveIpoPosition={ipoId,ipoNumber:ipo.number,orderNumber,customerName:row.customer_name,customerId:row.customer_id,siteName:typeof s.siteName==='string'?s.siteName:'',customerPo:typeof s.input?.poNumber==='string'?s.input.poNumber:'',operationsIssuanceId:issuance.id,createdAt:ipo.created_at,
      legacy:{id:w.id,stage:w.stage,stageEnteredAt:w.stage_entered_at,scope,siteType,deliveredOn:w.delivered_on,installationCompletedOn:w.installation_completed_on,handedOverOn:w.handed_over_on,closedAt:w.closed_at,expectedDelivery:w.expected_delivery}};
     const plan=planLiveIpoBridge(position,{verifiedLinks,boardSites:boards.map(b=>({id:b.site_id,originIpoId:b.snapshot.origin?.ipoId})),unverifiedBoardCandidateIds:candidates});
     if(plan.action==='hold'){hold(ipoId,plan.reason,plan.boardSiteIds);continue;}

@@ -2,7 +2,7 @@
  * Caller must prove the exact saved Operations handoff and supply existing immutable links.
  */
 export type LiveIpoPosition={
- ipoId:string;ipoNumber:string;orderNumber:string;siteName:string;customerPo:string;
+ ipoId:string;ipoNumber:string;orderNumber:string;siteName:string;customerPo:string;customerName?:string;customerId?:number;
  operationsIssuanceId:string;createdAt:string;legacy:{id:string;stage:string;stageEnteredAt:string;
  scope:'installation'|'delivery_only'|null;siteType:'Solar'|'BESS'|'Solar + BESS'|'UPS'|null;
  deliveredOn:string|null;installationCompletedOn:string|null;handedOverOn:string|null;closedAt:string|null;expectedDelivery:string|null};
@@ -33,7 +33,7 @@ export function planLiveIpoBridge(ipo:LiveIpoPosition,existing:ExistingBridgeIde
  const type=w.scope==='delivery_only'?'delivery-only':({'Solar':'solar','BESS':'bess','Solar + BESS':'solar-bess','UPS':'ups'}as const)[w.siteType??'Solar']??null;
  const projectType=w.siteType===null&&w.scope!=='delivery_only'?null:type;
  return{action:'prepare',ipoId:ipo.ipoId,boardSiteId:id,requiresEvidence:true,site:{
- id,ipo:ipo.ipoNumber+(ipo.orderNumber?' · '+ipo.orderNumber:''),name:ipo.siteName,customerPo:ipo.customerPo,
+ id,...(ipo.customerName?.trim()?{customer:ipo.customerName.trim(),customerId:ipo.customerId}:{}),ipo:ipo.ipoNumber+(ipo.orderNumber?' · '+ipo.orderNumber:''),name:ipo.siteName,customerPo:ipo.customerPo,
  stage,completed,installation:w.scope===null?null:w.scope==='installation',scopePending:w.scope===null,projectType,
  operationsTeam:null,documents:[],deliveries:[],qc:{},history:[],accounts:[],
  evidencePending:completed||delivered,invoiceMilestonePending:true,stageStartedAt:w.stageEnteredAt,

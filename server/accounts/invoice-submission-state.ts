@@ -1,10 +1,21 @@
+import {isMissingInvoiceCustomer} from './invoice-customer-identity.js';
 import type {Pool,PoolClient} from 'pg';
 import {invoiceIdentity} from './billing-model.js';
 type Row=Record<string,any>;
 export const submissionKey=(value:unknown)=>String(value??'').replace(/^registered-/,'').replace(/^live-ipo:/,'issued:');
 export const submissionMilestone=(value:unknown)=>value==='advance'?'delivery':value;
 export const submissionReferences=(values:unknown[])=>[...new Set(values.filter(v=>typeof v==='string'&&v.trim()).map(v=>String(v).trim()))];
-export async function invoiceSubmissions(c:Pool|PoolClient){return (await c.query('SELECT *,submitted_on::text AS submitted_on FROM accounts_invoice_submissions ORDER BY created_at,id')).rows;}
+export async function invoiceSubmissions(c:Pool|PoolClient){
+ // Recover only a missing customer through BOTH exact immutable IPO keys. Shared
+ // IPO numbers, invoice text and site names are never customer-link evidence.
+ const rows=(await c.query(`SELECT s.*,s.submitted_on::text AS submitted_on,customer.name AS linked_customer_name,ipo.id AS linked_ipo_id
+ FROM accounts_invoice_submissions s
+ LEFT JOIN internal_purchase_orders ipo ON s.source_kind='Operations' AND s.source_key='issued:'||ipo.id::text AND s.site_key='live-ipo:'||ipo.id::text
+ LEFT JOIN customer_purchase_orders po ON po.id=ipo.customer_po_id
+ LEFT JOIN customers customer ON customer.id=po.customer_id
+ ORDER BY s.created_at,s.id`)).rows;
+ return rows.map(({linked_customer_name,linked_ipo_id,...event})=>linked_customer_name&&isMissingInvoiceCustomer(event.snapshot.customer)?{...event,snapshot:{...event.snapshot,customer:linked_customer_name,customerLink:{basis:'Exact saved IPO customer',ipoId:linked_ipo_id,originalCustomer:event.snapshot.customer??null}}}:event);
+}
 export function submissionMatches(row:Row,event:Row){return submissionMilestone(row.milestone)===event.milestone&&[row.sourceKey,row.key,row.site_key].filter(Boolean).some(key=>submissionKey(key)===event.source_key);}
 /** Reporting overlay only. Never replace invoice references, quantities or money. */
 export function applyInvoiceSubmissionStages(snapshot:Row,events:Row[]):Row{
@@ -30,7 +41,7 @@ export function applyInvoiceSubmissionBilling(rows:Row[],events:Row[]):Row[]{
  });
  for(const e of events){
   if(result.some(r=>(e.snapshot.billingIds??[]).includes(r.id)&&e.snapshot.customer===r.customer))continue;
-  result.push({id:'submission:'+e.id,sourceKey:e.source_key,billingMilestone:e.milestone,submissionId:e.id,customer:e.snapshot.customer,category:e.milestone==='delivery'?'System · delivery':'System · completion',ipo:e.snapshot.ipo??'',po:e.snapshot.po??'',site:e.snapshot.site??'',invoice:e.invoice_reference,amount:null,pending:null,receiptConfirmed:false,date:e.submitted_on,dateBasis:'Days since verified submission',submission:'Submitted',notes:'Existing PT invoice submitted. Original invoice amount and unpaid balance are not loaded; no amounts or payments inferred.',minimum:false});
+  result.push({id:'submission:'+e.id,sourceKey:e.source_key,billingMilestone:e.milestone,submissionId:e.id,customer:e.snapshot.customer,customerLink:e.snapshot.customerLink,category:e.milestone==='delivery'?'System · delivery':'System · completion',ipo:e.snapshot.ipo??'',po:e.snapshot.po??'',site:e.snapshot.site??'',invoice:e.invoice_reference,amount:null,pending:null,receiptConfirmed:false,date:e.submitted_on,dateBasis:'Days since verified submission',submission:'Submitted',notes:'Existing PT invoice submitted. Original invoice amount and unpaid balance are not loaded; no amounts or payments inferred.',minimum:false});
  }
  return result;
 }

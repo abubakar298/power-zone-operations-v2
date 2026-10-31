@@ -5,10 +5,14 @@ test('Accounts confirms a submitted university invoice amount without recording 
  try{
   const admin=(await pool.query("SELECT id FROM users WHERE email='admin@example.test'")).rows[0].id;
   await new AccountsSourceRegisters(pool).import(admin,{sourceDate:'2026-10-30',manifest:[{name:'Isolated invoice amount',sha256:'e'.repeat(64)}],registers:[{rows:[]}],sites:{rows:[]},cables:{rows:[]},internet:{rows:[]},evidence:{rows:[],cableStageAdjustments:[]}},0);
-  const id=randomUUID(),snapshot={customer:'Iqra University',site:'Iqra University Test',ipo:'IPO-TEST',po:'PO-TEST',billingIds:[],invoiceReferences:['PT-TEST-IQRA'],sourceKey:'iqra-test'};
-  await pool.query("INSERT INTO accounts_invoice_submissions(id,source_kind,site_key,source_key,source_version,milestone,invoice_reference,submitted_on,snapshot,request,request_key,created_by) VALUES($1,'Operations','iqra-test','iqra-test',1,'completion','PT-TEST-IQRA','2026-10-20',$2,'{}',$3,$4)",[id,snapshot,randomUUID(),admin]);
+  const id=randomUUID(),ipo=randomUUID(),po=randomUUID(),customer=(await pool.query('SELECT name FROM customers WHERE id=2')).rows[0].name;
+  await pool.query("INSERT INTO customer_purchase_orders(id,customer_id,po_number,input,created_by) VALUES($1,2,'SIM-IQRA-PO','{}',$2)",[po,admin]);
+  await pool.query("INSERT INTO internal_purchase_orders(id,customer_po_id,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,'SIM-IQRA-IPO','{}',$3,$4,$5)",[ipo,po,'a'.repeat(64),randomUUID(),admin]);
+  const snapshot={customer:'Customer not recorded',site:'Iqra University Test',ipo:'IPO-TEST',po:'PO-TEST',billingIds:[],invoiceReferences:['PT-TEST-IQRA'],sourceKey:'issued:'+ipo};
+  await pool.query("INSERT INTO accounts_invoice_submissions(id,source_kind,site_key,source_key,source_version,milestone,invoice_reference,submitted_on,snapshot,request,request_key,created_by) VALUES($1,'Operations',$2,$3,1,'completion','PT-TEST-IQRA','2026-10-20',$4,'{}',$5,$6)",[id,'live-ipo:'+ipo,'issued:'+ipo,snapshot,randomUUID(),admin]);
   await page.goto('/dashboard#workspace=finance&accountsTab=Payments+to+Record');
   const row=page.getByRole('row').filter({hasText:'PT-TEST-IQRA'});
+  await expect(row).toContainText(customer);await expect(row).not.toContainText('Customer not recorded');await page.getByLabel('Customer',{exact:true}).selectOption(customer);
   await expect(row.getByRole('button')).toHaveCount(3);const actions=await row.getByRole('button').evaluateAll(buttons=>buttons.map(button=>{const box=button.getBoundingClientRect();return {top:box.top,left:box.left,right:box.right};}));expect(Math.max(...actions.map(a=>a.top))-Math.min(...actions.map(a=>a.top))).toBeLessThan(2);expect(actions[1].left).toBeGreaterThan(actions[0].right);expect(actions[2].left).toBeGreaterThan(actions[1].right);
   await page.screenshot({path:'test-results/three-invoice-actions-horizontal.png',fullPage:true});await row.getByRole('button',{name:'Confirm PT amounts',exact:true}).click();const dialog=page.getByRole('dialog');
   await expect(dialog.getByLabel('Transaction ID',{exact:true})).toHaveCount(0);await expect(dialog.getByLabel('Payment date',{exact:true})).toHaveCount(0);
