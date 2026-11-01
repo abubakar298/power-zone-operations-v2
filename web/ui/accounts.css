@@ -395,3 +395,13 @@
 .accounts-document-clear .pz-button{margin:0!important;height:44px;min-height:44px}
 @media(max-width:700px){.accounts-document-clear label{display:none}}
 .accounts-site-signed-files{display:grid;gap:16px}.accounts-site-signed-files>div{border:1px solid var(--pz-border);border-radius:var(--pz-radius-control);padding:12px 16px}.accounts-site-signed-files a{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;min-height:44px;line-height:24px;padding:10px 0;font-weight:600;color:var(--pz-primary)}.accounts-site-signed-files small{display:block;color:var(--pz-muted);line-height:1.5;overflow-wrap:anywhere}
+
+/* Physical original tracking: fixed primary tracks and compact horizontal actions. */
+.accounts-documents .accounts-location-grid>.accounts-bucket{display:grid;grid-template-rows:38px 40px minmax(38px,auto);align-items:start;align-content:start;gap:8px}
+.accounts-documents .physical-documents-table{min-width:920px}
+.accounts-documents .physical-documents-table th:first-child{width:48px}
+.accounts-documents .physical-documents-table th:nth-child(2){width:25%}
+.accounts-documents .physical-documents-table th:nth-child(3){width:20%}
+.accounts-documents .physical-documents-table :is(th,td):last-child{width:1%;text-align:left;white-space:nowrap}
+.accounts-documents .physical-documents-table .ob-actions{display:flex;flex-wrap:nowrap;align-items:flex-start;gap:8px}
+.accounts-documents .physical-documents-table .ob-actions>.pz-button{white-space:nowrap;margin-left:0}

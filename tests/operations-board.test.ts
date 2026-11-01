@@ -27,6 +27,7 @@ test('Operations board persists immutable scoped documents, evidence and concurr
   assert.deepEqual(await repo.importSource(users.owner,source),{imported:0,retained:2});
   assert.equal((await repo.sites(users.central)).sites.length,1);assert.equal((await repo.sites(users.southQc)).sites[0].id,'safe-south');assert.equal((await repo.sites(users.head)).sites.length,2);
   await assert.rejects(repo.site(users.southQc,'safe-central'),/not found/);await assert.rejects(repo.sites(users.unassigned),/not assigned/);await assert.rejects(repo.site(users.accounts,'safe-central'),/tracking only/);
+  assert.equal((await repo.physicalDocuments(users.central)).sites.length,1);assert.equal((await repo.physicalDocuments(users.southQc)).sites[0].id,'safe-south');assert.equal((await repo.physicalDocuments(users.head)).sites.length,2);
   const physical=await repo.physicalDocuments(users.accounts);assert.equal(physical.sites.length,2);assert.equal((physical.sites[0] as any).assignments,undefined);
   const content=Buffer.from('%PDF-1.7\nLocal fixture');
   for(const id of [fileId,orphanId])await db.pool.query('INSERT INTO operations_board_files(id,site_id,filename,media_type,sha256,content,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[id,'safe-central','signed.pdf','application/pdf',id===fileId?'a'.repeat(64):'c'.repeat(64),content,users.owner]);
