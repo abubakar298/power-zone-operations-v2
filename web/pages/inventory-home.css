@@ -1,5 +1,5 @@
 .inventory-home-main{gap:22px}
-.inventory-dashboard-buckets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.inventory-dashboard-buckets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
 .inventory-dashboard-buckets>.pz-button{display:grid;grid-template-columns:minmax(0,1fr);justify-content:stretch;grid-template-rows:38px minmax(42px,auto) minmax(24px,auto);align-items:start;align-content:start;justify-items:start;gap:12px;min-height:160px;padding:22px;border:1px solid var(--pz-border);border-radius:12px;background:var(--pz-surface);text-align:left;color:var(--pz-text);box-shadow:0 2px 6px #19244705}
 .inventory-dashboard-buckets>.pz-button>strong{font-size:32px;line-height:38px;font-weight:650;color:var(--pz-primary)}
 .inventory-dashboard-buckets>.pz-button>span{font-size:14px;line-height:21px;font-weight:550;max-width:230px}

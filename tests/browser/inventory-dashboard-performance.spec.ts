@@ -1,22 +1,23 @@
 import {test,expect} from '@playwright/test';
 import {actors,login} from './release-fixtures.js';
-test('Inventory shows ready buckets before slow reconciliation, without unused drafts or duplicate access calls',async({page})=>{
+test('Inventory shows ordered site-flow buckets without Heads-up or redundant Parent reconciliation requests',async({page})=>{
  await actors(page.request);await login(page.request);
- let finish!:()=>void;const held=new Promise<void>(resolve=>{finish=resolve;});let access=0,drafts=0;
+ let access=0,drafts=0,reviews=0;
  await page.route('**/api/material-dispatches/access',async r=>{access++;await r.fulfill({json:{kind:'management'}});});
  await page.route('**/api/material-dispatches/drafts',async r=>{drafts++;await r.fulfill({json:{drafts:[]}});});
  await page.route('**/api/material-dispatches/intake',r=>r.fulfill({json:{warehouses:['Lahore warehouse'],sources:[{siteId:'one',siteName:'Ready IPO',customer:'UBL',ipo:'IPO-TEST',dispatchDate:'2026-11-01',installationDate:'2026-11-03',authorization:'approved-ipo-boq'}]}}));
  await page.route('**/api/procurement/store',r=>r.fulfill({json:{toReceive:[]}}));
  await page.route('**/api/material-dispatches/document-status',r=>r.fulfill({json:{rows:[{id:'r',number:'DO-1',draftId:'draft',warehouse:'Lahore warehouse',createdAt:'2026-10-29',parent:false,status:'ready',reconciliationStatus:'Usage and returns require reconciliation',sites:[{siteId:'site',name:'Ready site',customer:'UBL',ipo:'CHP-1',documents:[{label:'Signed DO',fileId:'file',source:'qc'}]}]}]}}));
- await page.route('**/api/inventory-reviews',async r=>{await held;await r.fulfill({json:{rows:[]}});});
+ await page.route('**/api/inventory-reviews',async r=>{reviews++;await r.fulfill({json:{rows:[]}});});
  await page.goto('/inventory');
  const buckets=page.locator('.inventory-dashboard-buckets');
- await expect(buckets.getByRole('button').filter({hasText:'IPOs Received'})).toContainText('1');
- await expect(buckets.getByRole('button').filter({hasText:'Ready for Reconciliation'})).toContainText('1');
- await expect(buckets.getByRole('button').filter({hasText:'Parent DOs Waiting'}).locator('strong')).toHaveText('—');
+ await expect(buckets.getByRole('button').filter({hasText:'Upcoming Projects'})).toContainText('1');
+ await expect(buckets.getByRole('button').filter({hasText:'Documents Received — Ready to Reconcile'})).toContainText('1');
+ await expect(buckets.getByRole('button')).toHaveCount(4);await expect(buckets.getByRole('button').locator('span')).toHaveText(['Upcoming Projects','Dispatched — Awaiting Documents','Documents Received — Ready to Reconcile','PRAs Received']);
+ await expect(buckets).not.toContainText('Heads-up');await expect(buckets).not.toContainText('Parent DO');await expect(page.getByRole('complementary').getByRole('button',{name:'Parent DO reconciliation',exact:true})).toBeVisible();
  expect(access).toBe(1);expect(drafts).toBe(0);
- await buckets.getByRole('button').filter({hasText:'IPOs Received'}).click();await expect(page.getByRole('cell',{name:'Ready IPO UBL'})).toBeVisible();
+ await buckets.getByRole('button').filter({hasText:'Upcoming Projects'}).click();await expect(page.getByRole('cell',{name:'Ready IPO UBL'})).toBeVisible();
  await expect(page.getByText('Installation planned: 2026-11-03',{exact:true})).toBeVisible();
- finish();await expect(buckets.getByRole('button').filter({hasText:'Parent DOs Waiting'}).locator('strong')).toHaveText('0');
+ expect(reviews).toBe(0);await page.screenshot({path:'test-results/inventory-dashboard-site-flow.png',fullPage:true});
  await expect(page.getByRole('button',{name:'Refresh',exact:true})).toBeEnabled();
 });
