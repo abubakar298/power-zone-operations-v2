@@ -28,7 +28,7 @@ export function InventoryRoleGate({session,onLogout}:{session:Session;onLogout:(
  if(kind==='dispatcher'||kind==='management'){
   const props={session,onLogout};
   const content=(()=>{
-  const usagePath=path.split('?')[0].match(/^\/inventory\/materials\/([^/]+)\/usage$/);if(usagePath)return <DispatchReconciliationPage key={usagePath[1]} session={session} id={usagePath[1]}/>;
+  const usagePath=path.split('?')[0].match(/^\/inventory\/materials\/([^/]+)\/usage\/?$/);if(usagePath)return <DispatchReconciliationPage/>;
   if(path.startsWith('/inventory/site-ledger'))return <SiteLedger/>;
   if(path.startsWith('/inventory/temporary-documents'))return <TemporaryDocuments session={session} initialCreate/>;
   if(path.startsWith('/inventory/materials/')||path.split('?')[0]==='/inventory/materials'&&new URLSearchParams(location.search).has('site'))return <SiteMaterials key={path} {...props}/>;

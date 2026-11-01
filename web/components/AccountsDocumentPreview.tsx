@@ -102,7 +102,7 @@ export function DocumentPreview({
     <section className="ipo-document-preview" aria-label={title}>
       <div className="ipo-preview-heading">
         <h4>{title}</h4>
-        <DocumentDownload url={url} title={title} data={data} />
+        <DocumentDownload url={url} title={title} data={data} downloadFilename={downloadFilename}/>
       </div>
       {compactControls ? <div className="ipo-preview-toolbar" role="group" aria-label={title + " zoom controls"}>
         <div className="ipo-preview-zoom-group">
