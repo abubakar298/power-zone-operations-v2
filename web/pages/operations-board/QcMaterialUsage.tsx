@@ -1,3 +1,4 @@
+import {QcLocalPurchases} from './QcLocalPurchases.js';
 import {useEffect,useState} from 'react';
 import {confirmLeaveWorkspace} from '../../hooks/useUnsavedChanges.js';
 import {api,type Session} from '../../api.js';
@@ -23,6 +24,7 @@ export function QcMaterialUsage({boardId,session}:{boardId:string;session:Sessio
     <label>Material dispatch<select value={rootId} onChange={e=>{if(confirmLeaveWorkspace()){setNotice('');setRootId(e.target.value);}}}>{data.records.map(r=><option key={r.draftId} value={r.draftId}>{r.references.join(', ')||'Approved work'} · {r.parent?'Parent DO pool':r.kind==='fixed'?'Individual DO · fixed':'Individual DO · variable'} · {r.warehouse}</option>)}</select></label>
     <UsageForm key={boardId+':'+root.draftId+':'+(root.report?.version??0)} root={root} evidence={data.evidence} boardId={boardId} session={session} onCancel={()=>setOpen(false)} onSaved={()=>{setNotice('Material usage saved for Inventory reconciliation. Warehouse stock is unchanged.');void load();}}/>
    </>}
+   <QcLocalPurchases key={boardId} boardId={boardId} session={session}/>
   </>}
  </Section>;
 }

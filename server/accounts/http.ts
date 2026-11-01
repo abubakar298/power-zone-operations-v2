@@ -1,3 +1,4 @@
+import {readLocalPurchases} from '../operations-board/local-purchases.js';
 import {groupAccountsCustomerDocuments} from '../../shared/accounts-customer-documents.js';
 import {customerDocuments,customerDocumentFile} from './customer-documents.js';
 import{correctInvoice,invoiceCorrectionSchema}from'./invoice-corrections.js';
@@ -59,6 +60,7 @@ export function accountsHttp(
   r.post('/payment-records',async(req,res)=>res.status(201).json(await recordPayment(repo.pool,req.authSession!.user.id,parse(paymentRecordSchema,req.body))));
   r.post('/invoice-entries',async(req,res)=>res.status(201).json(await recordInvoiceEntry(repo.pool,req.authSession!.user.id,parse(invoiceEntrySchema,req.body))));
   r.get('/sites',async(req,res)=>res.json(await sources.sites(req.authSession!.user.id)));
+  r.get('/site-local-purchases',async(req,res)=>{await repo.access(req.authSession!.user.id);const siteId=parse(z.string().trim().min(1).max(160),req.query.siteId);res.json(await readLocalPurchases(repo.pool,siteId));});
   r.get('/customer-documents',async(req,res)=>{await repo.access(req.authSession!.user.id);const jobKey=req.query.jobKey===undefined?undefined:parse(z.string().trim().min(1).max(100),req.query.jobKey);const data=await customerDocuments(repo.pool,false,jobKey);res.json(req.query.summary==='1'?{count:groupAccountsCustomerDocuments(data.rows).length,documents:data.rows.length}:{rows:data.rows});});
   r.get('/customer-documents/:id/file',async(req,res)=>{await repo.access(req.authSession!.user.id);const id=parse(z.string().regex(/^[a-f0-9]{64}$/),req.params.id),file=await customerDocumentFile(repo.pool,id);res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);});
   r.get('/physical-documents',async(req,res)=>{

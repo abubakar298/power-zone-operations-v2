@@ -1,3 +1,4 @@
+import {readLocalPurchases,saveLocalPurchases,requireLocalPurchaseSite} from './local-purchases.js';
 import {siteDispatchChoices} from '../inventory/dispatch-document-status.js';
 import {queueOperationsEmails} from '../ipo-email/queue.js';
 import {withInventoryReceiving} from './inventory-delivery.js';
@@ -23,6 +24,8 @@ const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'n
 /** Server-owned records; browser role selectors never authorise access. */
 export class OperationsBoardRepository{
  constructor(private pool:Pool){}
+ async localPurchases(actor:string,siteId:string){await requireLocalPurchaseSite(actor,siteId,this.pool);return readLocalPurchases(this.pool,siteId);}
+ async saveLocalPurchases(actor:string,siteId:string,raw:unknown){return saveLocalPurchases(this.pool,actor,siteId,raw);}
  private async access(actor:string,c:Pool|PoolClient=this.pool):Promise<Access>{
   const row=(await c.query(`SELECT u.active,u.role,u.display_name,a.kind,a.team,${regionalQcDelegationSql} AS qc_delegated FROM users u LEFT JOIN operations_board_access a ON a.user_id=u.id WHERE u.id=$1`,[actor])).rows[0];
   if(!row?.active)throw new HttpError(401,'Your access has ended.');

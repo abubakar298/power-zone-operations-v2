@@ -9,3 +9,12 @@
 .qc-usage-table th:nth-child(3){width:72px}
 .qc-usage-table th:nth-child(4):not(:last-child){width:100px}
 .qc-usage-primary{display:flex;align-items:center;min-height:44px;font-variant-numeric:tabular-nums}
+
+.qc-purchase-table{table-layout:fixed;width:100%;min-width:720px}
+.qc-purchase-table th,.qc-purchase-table td{vertical-align:top;text-align:left}
+.qc-purchase-table th:first-child{width:56px}
+.qc-purchase-table th:nth-child(2){width:200px}
+.qc-purchase-table th:nth-child(4){width:120px}
+.qc-purchase-table th:last-child{width:110px}
+.qc-purchase-table input{width:100%;min-height:44px}
+.qc-purchase-table td:nth-child(4) input{text-align:right;font-variant-numeric:tabular-nums}

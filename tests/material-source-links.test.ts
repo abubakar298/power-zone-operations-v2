@@ -1,3 +1,4 @@
+import {readLocalPurchases,saveLocalPurchases} from '../server/operations-board/local-purchases.js';
 import {signDispatch} from './signed-dispatch-fixture.js';
 import request from 'supertest';
 import {createApp} from '../server/app.js';
@@ -113,5 +114,25 @@ test('explicit source links retain the original approved IPO/BOQ, prevent duplic
   assert.equal((await usage.save(qc,zero)).version,3);
 
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements WHERE draft_id=$1',[saved.id])).rows[0].n,2);
+  // Site purchases belong to Accounts and are independent of usage/warehouse custody.
+  const local={version:0,requestKey:randomUUID(),items:[{key:randomUUID(),itemId:'CH-PVC-TAPE',description:'Local insulation tape',quantity:'3'}]};
+  await assert.rejects(saveLocalPurchases(db.pool,inventory,id,local),/assigned QC/);
+  await assert.rejects(saveLocalPurchases(db.pool,southQc,id,local),/assigned team/);
+  await assert.rejects(saveLocalPurchases(db.pool,qc,id,{...local,items:[{...local.items[0],quantity:'0'}]}),/positive quantity/);
+  await assert.rejects(saveLocalPurchases(db.pool,qc,id,{...local,items:[...local.items,{...local.items[0],key:randomUUID()}]}),/item ID once/);
+  const localSaved=await saveLocalPurchases(db.pool,qc,id,local);assert.equal(localSaved.version,1);assert.deepEqual(await saveLocalPurchases(db.pool,qc,id,local),localSaved);
+  const localRead=await readLocalPurchases(db.pool,id);assert.deepEqual(localRead.items,local.items);assert.equal(localRead.destination,'Accounts');
+  const accounts=randomUUID(),accountsToken=randomBytes(32).toString('base64url');await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[accounts,accounts+'@accounts.example.test','Accounts','Accounts','isolated']);
+  await db.pool.query("INSERT INTO auth_sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",[digest(accountsToken),accounts,randomUUID()]);
+  const accountsPurchases=await request(app).get('/api/accounts-workspace/site-local-purchases?siteId='+id).set('Cookie','pz_session='+accountsToken).expect(200);assert.deepEqual(accountsPurchases.body.items,local.items);
+  await request(app).get('/api/accounts-workspace/site-local-purchases?siteId='+id).set('Cookie',sessions[qc].cookie).expect(403);
+  await request(app).post('/api/operations-board/sites/'+id+'/local-purchases').set('Origin',origin).set('Cookie',sessions[qc].cookie).send(local).expect(403);
+
+  assert.equal((await usage.qcSite(qc,id)).records[0].report?.snapshot.localPurchases,undefined);
+  await assert.rejects(saveLocalPurchases(db.pool,qc,id,{...local,requestKey:randomUUID()}),/changed/);
+  await saveLocalPurchases(db.pool,qc,id,{version:1,requestKey:randomUUID(),items:[]});assert.deepEqual((await readLocalPurchases(db.pool,id)).items,[]);
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM operations_site_local_purchase_versions WHERE site_id=$1',[id])).rows[0].n,2,'Removing rows preserves the first saved purchase version.');
+  await assert.rejects(db.pool.query('DELETE FROM operations_site_local_purchase_versions WHERE site_id=$1',[id]));
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements WHERE draft_id=$1',[saved.id])).rows[0].n,2,'Local purchase entry posts no warehouse stock.');
  }finally{await db.close();}
 });
