@@ -5,7 +5,8 @@ export type DispatchDocumentSiteRow={id:string;name:string;customer:string;ipo:s
 /** One exact site across partial deliveries and Parent DOs; any missing required copy keeps it awaiting. */
 export function groupDispatchDocumentSites(rows:DispatchDocumentRow[]):DispatchDocumentSiteRow[]{
  const sites=new Map<string,DispatchDocumentSiteRow>();
- for(const dispatch of [...rows].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||a.id.localeCompare(b.id)))for(const site of dispatch.sites){
+ for(const dispatch of [...rows].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||a.id.localeCompare(b.id)))for(const original of dispatch.sites){
+  const site={...original,documents:original.documents.filter(d=>d.label!=='Acknowledgment')};
   const id=site.registeredSiteId||site.siteId;
   let row=sites.get(id);
   if(!row){row={id,name:site.name,customer:site.customer,ipo:site.ipo,createdAt:dispatch.createdAt,status:'ready',dispatches:[]};sites.set(id,row);}

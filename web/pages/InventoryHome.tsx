@@ -57,6 +57,14 @@ export function InventoryHome({session,onLogout,assignedKind}:{session:Session;o
   ]);
  }catch(e){if(active())setErrors({access:(e as Error).message});}finally{if(active())setLoading(false);}}
  useEffect(()=>{void load();return()=>{loadEpoch.current++;};},[revision,session.user.id,assignedKind]);
+ // QC uploads can arrive while Inventory is open; refresh only the small signed-document projection.
+ useEffect(()=>{
+  if(view!=='dashboard')return;
+  let active=true,generation=0;
+  const refresh=()=>{if(document.visibilityState==='hidden')return;const request=++generation;void api<{rows:DispatchDocumentRow[]}>('/material-dispatches/document-status').then(value=>{if(active&&request===generation){setDocuments(value.rows);setErrors(old=>{const next={...old};delete next.documents;return next;});}}).catch(e=>{if(active&&request===generation)setErrors(old=>({...old,documents:e instanceof Error?e.message:'Unable to refresh signed documents.'}));});};
+  const timer=window.setInterval(refresh,30000);window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);
+  return()=>{active=false;generation++;window.clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);};
+ },[view,session.user.id,assignedKind]);
  function go(path:string){if(confirmLeaveWorkspace())navigateInventory(path);}
  async function logout(){if(!confirmLeaveWorkspace())return;try{await api('/auth/logout',{csrf:session.csrfToken,body:{}});onLogout();}catch(e){setErrors({...errors,logout:(e as Error).message});}}
  const headsup=intake?.sources.filter(s=>s.authorization==='forecast-only');

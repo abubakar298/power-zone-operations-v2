@@ -43,10 +43,6 @@ export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies
     const received=own?{fileId:own.evidence_id,source:'warehouse' as const}:reportCopy?{fileId:reportCopy.evidence_id,source:'warehouse' as const}:report?.evidence_warehouse===d.warehouse?{fileId:report.snapshot.customerEvidenceId,source:'warehouse' as const}:qcFile(report?{id:report.snapshot.customerEvidenceId}:undefined)??qcFile(final?.variableSignoff,true)??qcFile(historical?.evidence?.[2],true);
     documents.push({label:'Variable Items Sign Off',...received});
    }
-   if(s.installation===true||b?.installation===true||d.retrospective){
-    const final=b?.qcJob??b?.qc?.signoff??b?.qc?.handover,historical=b?.documents?.find((v:any)=>v.id===`${board?.site_id}:historical-handover-documents`);
-    documents.push({label:'Acknowledgment',...(qcFile(final?.acknowledgement,true)??qcFile(historical?.evidence?.[0],true))});
-   }
    return {siteId:s.siteId,registeredSiteId:board?.site_id??s.registeredSiteId,dispatchComplete:!d.snapshot.parent&&d.snapshot.kind==='fixed'&&d.snapshot.partialDelivery===false,name:s.siteName,customer:s.customer,ipo:[s.ipo,s.orderNumber].filter(Boolean).join(' · '),documents};
   });
   return {id:d.id,number:d.number,draftId:d.draft_id,warehouse:d.warehouse,createdAt:new Date(d.created_at).toISOString(),parent:!!d.snapshot.parent,retrospective:!!d.retrospective,sites,status:sites.length&&sites.every((s:any)=>s.documents.every((v:DispatchDocument)=>v.fileId))?'ready' as const:'awaiting' as const,reconciliationStatus:d.retrospective?'Retrospective DO: gate copy waived; usage and returns require reconciliation':'Usage and any returns require reconciliation'};

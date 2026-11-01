@@ -12,7 +12,7 @@ const ack={acknowledgement:{id:'ack'}};
 const delivery={signedDo:{id:'do'},dispatchId:'d1'};
 test('actual deliveries require the applicable signed documents, never gate copies, orphan files or IRR presence',()=>{
  const rows=dispatchDocumentRows([dispatch()], [board({deliveries:[delivery],qcJob:ack})],[],[file('do'),file('ack')],[]);
- assert.equal(rows[0].status,'ready');assert.deepEqual(rows[0].sites[0].documents.map(d=>d.label),['Signed DO','Acknowledgment']);
+ assert.equal(rows[0].status,'ready');assert.deepEqual(rows[0].sites[0].documents.map(d=>d.label),['Signed DO']);
  assert.equal(dispatchDocumentRows([dispatch()],[board({qcJob:{irr:{id:'irr'}}})],[{document_id:'d1',source_site_id:null,copy_kind:'signed-gate',evidence_id:'gate'}],[file('irr'),file('do')],[])[0].status,'awaiting');
  assert.equal(dispatchDocumentRows([dispatch()],[board({deliveries:[delivery],qcJob:ack})],[],[file('do','another-site'),file('ack')],[])[0].status,'awaiting');
 });
@@ -32,10 +32,10 @@ test('variable signoff is conditional on what was dispatched and old completion 
  assert.equal(dispatchDocumentRows([d],[board({deliveries:[delivery],qcJob:ack})],[],[file('do'),file('ack')],[u])[0].status,'ready');
  assert.equal(dispatchDocumentRows([d],[board({deliveries:[delivery],qcJob:ack})],[],[file('do'),file('ack')],[{...u,evidence_warehouse:'Karachi warehouse'}])[0].status,'awaiting');
 });
-test('Parent DO uses per-site signoffs and acknowledgments, no customer signature on internal pool; closed pools leave queue',()=>{
+test('Parent DO uses per-site variable signoffs, no customer signature on internal pool; closed pools leave queue',()=>{
  const d=dispatch('parent',[cable],true),b=board({qcJob:{...ack,variableSignoff:{id:'vso'}}});
  const row=dispatchDocumentRows([d],[b],[],[file('ack'),file('vso')],[])[0];assert.equal(row.status,'ready');
- assert.deepEqual(row.sites[0].documents.map(v=>v.label),['Variable Items Sign Off','Acknowledgment']);
+ assert.deepEqual(row.sites[0].documents.map(v=>v.label),['Variable Items Sign Off']);
  assert.match(row.reconciliationStatus,/returns require reconciliation/);
  assert.equal(dispatchDocumentRows([d],[b],[],[file('ack'),file('vso')],[],new Set(['draft'])).length,0);
 });
@@ -45,9 +45,9 @@ test('same PO, IPO text, customer or site name never substitutes for exact nativ
  assert.equal(dispatchBoard({...site,registeredSiteId:undefined},[{site_id:'a',snapshot:{origin:{ipoId:'ipo-one'}}},{site_id:'b',snapshot:{origin:{ipoId:'ipo-one'}}}]),undefined);
  const d=dispatch();d.snapshot.sites=[{...site,installation:false}];assert.equal(dispatchDocumentRows([d],[board({installation:false,deliveries:[delivery]})],[],[file('do')],[])[0].status,'ready');
 });
-test('owner-confirmed retrospective DOs bypass unavailable DO copies but still require VSO and acknowledgment',()=>{
+test('owner-confirmed retrospective DOs bypass unavailable DO copies but still require VSO',()=>{
  const d={...dispatch(),retrospective:true};
- const before=dispatchDocumentRows([d],[board()],[],[],[])[0];assert.equal(before.status,'awaiting');assert.deepEqual(before.sites[0].documents.map(v=>v.label),['Variable Items Sign Off','Acknowledgment']);
+ const before=dispatchDocumentRows([d],[board()],[],[],[])[0];assert.equal(before.status,'awaiting');assert.deepEqual(before.sites[0].documents.map(v=>v.label),['Variable Items Sign Off']);
  const b=board({qcJob:{...ack,variableSignoff:{id:'vso'}}});
  const older=[file('ack','board-one','2026-10-30T08:00:00Z'),file('vso','board-one','2026-10-30T08:00:00Z')];
  const ready=dispatchDocumentRows([d],[b],[],older,[])[0];assert.equal(ready.status,'ready');assert.equal(ready.retrospective,true);assert.match(ready.reconciliationStatus,/gate copy waived/);
@@ -58,9 +58,16 @@ import {groupDispatchDocumentSites} from '../shared/dispatch-document-status.js'
 test('site buckets split mixed Parent DO readiness and retain every partial dispatch without merging shared IPOs',()=>{
  const base=dispatchDocumentRows([{...dispatch(),retrospective:true}],[board({qcJob:{...ack,variableSignoff:{id:'vso'}}})],[],[file('ack'),file('vso')],[])[0];
  const readySite=base.sites[0];
- const second={...readySite,siteId:'ipo-two',registeredSiteId:'board-two',name:readySite.name,ipo:readySite.ipo,documents:[{label:'Acknowledgment' as const}]};
+ const second={...readySite,siteId:'ipo-two',registeredSiteId:'board-two',name:readySite.name,ipo:readySite.ipo,documents:[{label:'Variable Items Sign Off' as const}]};
  const parent={...base,id:'pool',parent:true,status:'awaiting' as const,sites:[readySite,second]};
  let sites=groupDispatchDocumentSites([parent]);assert.equal(sites.length,2);assert.equal(sites.find(s=>s.id==='board-one')?.status,'ready');assert.equal(sites.find(s=>s.id==='board-two')?.status,'awaiting');
  const partial={...base,id:'later',createdAt:'2026-11-02T10:00:00Z',sites:[{...readySite,documents:[{label:'Signed DO' as const}]}]};
  sites=groupDispatchDocumentSites([parent,partial,partial]);const first=sites.find(s=>s.id==='board-one')!;assert.equal(first.status,'awaiting');assert.equal(first.dispatches.length,2);assert.deepEqual(first.dispatches.map(d=>d.dispatch.id),['later','pool']);assert.equal(sites.length,2);
+});
+
+test('Inventory readiness requires applicable DO/VSO only, while QC acknowledgment remains separate',()=>{
+ const fixedOnly=dispatchDocumentRows([dispatch()],[board({deliveries:[delivery]})],[],[file('do')],[])[0];assert.equal(fixedOnly.status,'ready');assert.deepEqual(fixedOnly.sites[0].documents.map(d=>d.label),['Signed DO']);
+ const pooled=dispatchDocumentRows([dispatch('pool',[cable],true)],[board({qcJob:{variableSignoff:{id:'vso'}}})],[],[file('vso')],[])[0];assert.equal(pooled.status,'ready');assert.deepEqual(pooled.sites[0].documents.map(d=>d.label),['Variable Items Sign Off']);
+ const variable=dispatchDocumentRows([dispatch('d1',[fixed,cable])],[board({deliveries:[delivery],qcJob:{variableSignoff:{id:'vso'}}})],[],[file('do'),file('vso')],[])[0];assert.equal(variable.status,'ready');assert.equal(variable.sites[0].documents.length,2);
+ const legacy={...variable,sites:[{...variable.sites[0],documents:[...variable.sites[0].documents,{label:'Acknowledgment' as const}]}]};const grouped=groupDispatchDocumentSites([legacy]);assert.equal(grouped[0].status,'ready');assert.equal(grouped[0].dispatches[0].site.documents.some(d=>d.label==='Acknowledgment'),false);
 });
