@@ -14,6 +14,17 @@ test('historical QC usage reaches one Accounts task, PT then closure, without wa
   await db.pool.query("INSERT INTO operations_board_access(user_id,kind,team,granted_by) VALUES($1,'qc','south',$2)",[south,actor]);
   const boardId='registered-UBL:SOLAR:294',board=new OperationsBoardRepository(db.pool);
   await board.importSource(actor,{sourceSha256:'e'.repeat(64),rows:[{id:boardId,ipo:'CHP-294',name:'Jhudo',customer:'UBL',installation:true,projectType:'solar',stage:'delivered',completed:true,operationsTeam:'central'}]});
+  // A registered historical site can also have a real issued IPO without a source-link row.
+  const nativeIpo=randomUUID(),po=randomUUID(),draftId=randomUUID(),boqId=randomUUID(),revisionId=randomUUID();
+  const siteId=(await db.pool.query('SELECT id FROM sites LIMIT 1')).rows[0].id;
+  await db.pool.query("INSERT INTO survey_drafts(id,owner_id,inputs)VALUES($1,$2,'{}')",[draftId,actor]);
+  await db.pool.query('INSERT INTO boqs(id,draft_id,site_id,customer_id,sequence,created_by)VALUES($1,$2,$3,1,99,$4)',[boqId,draftId,siteId,actor]);
+  await db.pool.query('INSERT INTO boq_revisions(id,boq_id,revision,number,snapshot,created_by)VALUES($1,$2,0,$3,$4,$5)',[revisionId,boqId,'SIM-HIST-WALTON',{lines:[{key:'fixture cable',description:'Source cable',unit:'m',qty:'20'}]},actor]);
+  await db.pool.query("INSERT INTO customer_purchase_orders(id,customer_id,po_number,input,created_by)VALUES($1,1,'SIM-HIST-WALTON','{}',$2)",[po,actor]);
+  await db.pool.query('INSERT INTO internal_purchase_orders(id,customer_po_id,number,snapshot,fingerprint,request_key,created_by)VALUES($1,$2,$3,$4,$5,$6,$7)',[nativeIpo,po,'CHP-345',{customer:{shortCode:'UBL'},siteName:'Walton',boqRevisionId:revisionId},'isolated',randomUUID(),actor]);
+  await board.importSource(actor,{sourceSha256:'f'.repeat(64),rows:[{id:'registered-UBL:SOLAR:345',ipo:'CHP-345',name:'Walton',customer:'UBL',installation:true,projectType:'solar',stage:'delivered',completed:true,operationsTeam:'central'}]});
+  const nativeRead=await new HistoricalQcUsageRepository(db.pool).read(actor,'registered-UBL:SOLAR:345');
+  assert.equal(nativeRead.jobKey,'ipo:'+nativeIpo);assert.equal(nativeRead.lines[0].approved,'20');assert.equal(nativeRead.entry,null);
   const repo=new HistoricalQcUsageRepository(db.pool),initial=await repo.read(actor,boardId);
   assert.equal(initial.entry,null);assert.ok(initial.issued.length);await assert.rejects(repo.read(south,boardId),/assigned team/);
   const entry={start:'',end:'',panelCount:'49',panelWattage:'620',usage:Object.fromEntries(initial.lines.filter(l=>l.group!=='watt').map(l=>[l.key,'0'])),remarks:'Test source actuals',expectedReturns:'',receivedReturns:'',extra:initial.additionalCables.filter(c=>c.used!=='').map(({description,unit,used})=>({description,unit,used}))};

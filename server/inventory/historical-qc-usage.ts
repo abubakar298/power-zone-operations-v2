@@ -43,6 +43,9 @@ export class HistoricalQcUsageRepository{
   let key=legacy.length===1?'ubl:'+legacy[0].site_id:null;
   if(!key&&z.uuid().safeParse(board.origin?.ipoId).success)key='ipo:'+board.origin.ipoId;
   if(!key){const links=(await c.query('SELECT DISTINCT ipo_id FROM inventory_material_source_links WHERE board_site_id=$1',[boardId])).rows;if(links.length===1)key='ipo:'+links[0].ipo_id;}
+  // Registered Operations imports may predate the native IPO source-link row.
+  // Resolve the exact issued IPO number, never a site-name or configuration guess.
+  if(!key){const issued=(await c.query("SELECT id FROM internal_purchase_orders WHERE number=$1 AND snapshot->'customer'->>'shortCode'='UBL' AND snapshot->>'boqRevisionId' IS NOT NULL",['CHP-'+match[1]])).rows;if(issued.length===1)key='ipo:'+issued[0].id;}
   if(!key)throw new HttpError(409,'The historical site needs its exact approved IPO/BOQ link before usage can be entered.');
   return {board,key,ipo:'CHP-'+match[1]};
  }
