@@ -329,10 +329,10 @@ export class OperationsBoardRepository{
    }else if(v.action==='historical-evidence'){
     if(v.category==='handover'&&(!v.acknowledgementId||!v.noVariableItemsUsed&&!v.variableSignoffId))throw new HttpError(422,'Upload the acknowledgement and variable-items sign-off, or confirm no variable items were used.');
     if(v.category==='handover'&&v.noVariableItemsUsed&&v.variableSignoffId)throw new HttpError(422,'Choose no variable items used or a sign-off, not both.');
-    const ids=v.category==='delivery'?[v.signedDoId,v.materialPhotoId]:[v.acknowledgementId,...(v.irrId?[v.irrId]:[]),...(v.variableSignoffId?[v.variableSignoffId]:[])];
-    if(ids.some(id=>!id))throw new HttpError(422,v.category==='delivery'?'Upload the signed DO and material photo.':'Upload the acknowledgement and variable-items sign-off.');
+    const ids=v.category==='delivery'?[v.signedDoId,...(v.materialPhotoId?[v.materialPhotoId]:[])]:[v.acknowledgementId,...(v.irrId?[v.irrId]:[]),...(v.variableSignoffId?[v.variableSignoffId]:[])];
+    if(ids.some(id=>!id))throw new HttpError(422,v.category==='delivery'?'Upload the signed DO.':'Upload the acknowledgement and variable-items sign-off.');
     const files=await this.references(c,id,ids as string[]),references=(ids as string[]).map(file=>files.get(file)!);
-    if(v.category==='delivery'&&!references[1].mediaType.startsWith('image/'))throw new HttpError(422,'Upload a photo of the delivered material.');
+    if(v.category==='delivery'&&references[1]&&!references[1].mediaType.startsWith('image/'))throw new HttpError(422,'Upload a photo of the delivered material.');
     snapshot=attachHistoricalEvidence(site,{category:v.category,date:v.date,files:references,...v.category==='handover'?{completionEvidenceVersion:2,acknowledgement:files.get(v.acknowledgementId!),irr:v.irrId?files.get(v.irrId):undefined,variableSignoff:v.variableSignoffId?files.get(v.variableSignoffId):undefined,noVariableItemsUsed:v.noVariableItemsUsed}:{}},now,v.edit);kind='Existing site evidence recorded';audiences=['accounts'];
    }else if(v.action==='blocker'){
     if(v.edit)throw new HttpError(422,'Resolve the saved blocker or add a new reason.');
