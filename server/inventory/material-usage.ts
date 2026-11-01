@@ -1,3 +1,4 @@
+import {completionEvidence} from '../../shared/qc-completion-evidence.js';
 import {dispatchReconciliationEligibleSql} from './dispatch-reconciliation-eligibility.js';
 import {materialDispatchDraftLink} from './material-dispatch-link.js';
 import {requireOpenParent} from './parent-open.js';
@@ -14,14 +15,14 @@ import {reconcileMaterialDispatch,materialSiteDocuments} from './material-dispat
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 
 const amount=z.union([z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/).transform(v=>new Decimal(v).toString()),z.null()]);
-export const materialUsageInputSchema=z.object({draftId:z.uuid(),siteId:z.uuid(),version:z.number().int().nonnegative(),requestKey:z.uuid(),date:z.iso.date(),state:z.enum(['reported','signed']),reason:z.string().trim().min(3).max(2000),customerEvidenceId:z.uuid().nullable(),internalEvidenceId:z.uuid().nullable(),lines:z.array(z.object({lineKey:z.uuid(),issued:amount,used:amount,returned:amount}).strict()).max(2000)}).strict();
+export const materialUsageInputSchema=z.object({draftId:z.uuid(),siteId:z.uuid(),version:z.number().int().nonnegative(),requestKey:z.uuid(),date:z.iso.date(),state:z.enum(['reported','signed']),reason:z.string().trim().min(3).max(2000),workflowVersion:z.literal(2).optional(),customerEvidenceId:z.uuid().nullable(),internalEvidenceId:z.uuid().nullable(),lines:z.array(z.object({lineKey:z.uuid(),issued:amount,used:amount,returned:amount}).strict()).max(2000)}).strict();
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const latestUsage=`SELECT DISTINCT ON(site_id) * FROM inventory_material_site_usage_versions WHERE draft_id=$1 ORDER BY site_id,version DESC`;
-export function siteUsageEvidenceHolds(row:{key:string;itemId:string;description:string;warehouseOut:string;sites:string[]},parent:boolean,reports:{site_id:string;snapshot:{state:string;lines:{lineKey:string;issued:string|null;used:string|null;returned:string|null}[]}}[]){
+export function siteUsageEvidenceHolds(row:{key:string;itemId:string;description:string;warehouseOut:string;sites:string[]},parent:boolean,reports:{site_id:string;snapshot:{workflowVersion?:2;state:string;lines:{lineKey:string;issued:string|null;used:string|null;returned:string|null}[]}}[]){
  const signed=row.sites.every(siteId=>reports.find(r=>r.site_id===siteId)?.snapshot.state==='signed');
    const holds:string[]=[];
    for(const siteId of row.sites){const entry=reports.find(r=>r.site_id===siteId)?.snapshot.lines.find((l:any)=>l.lineKey===row.key);if(!entry||entry.used===null)continue;
-    if(materialDocumentPolicy(row).installationReconciliation){
+    if(materialDocumentPolicy(row).installationReconciliation&&!(reports.find(r=>r.site_id===siteId)?.snapshot.workflowVersion===2&&materialDocumentPolicy(row).variableDispatch)){
      if(parent&&entry.issued===null)holds.push('Site issued allocation pending');
      if(entry.issued!==null){const expected=new Decimal(entry.issued).minus(entry.used);if(entry.returned!==null&&!expected.equals(entry.returned)||expected.lt(0))holds.push('IRR correction needed');else if(expected.gt(0)&&entry.returned===null)holds.push('Internal return quantity pending');}
     }
@@ -55,9 +56,12 @@ export class MaterialUsageRepository{
  async qcSite(actor:string,boardId:string){
   const board=await requireQcMaterialSite(actor,boardId,this.pool);
   const drafts=(await this.pool.query(`SELECT d.id,v.snapshot FROM inventory_material_drafts d JOIN LATERAL(SELECT snapshot FROM inventory_material_draft_versions WHERE draft_id=d.id ORDER BY version DESC LIMIT 1)v ON true WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(v.snapshot->'sites') s WHERE s->>'registeredSiteId'=$1) ORDER BY d.created_at,d.id`,[boardId])).rows;
-  const records=[];for(const root of drafts){const source=root.snapshot.sites.find((s:any)=>s.registeredSiteId===boardId),data=await this.read(actor,root.id,this.pool,source.siteId);if(!data.reconciliation&&!data.workLines.length)continue;const report=data.reports.find(r=>r.site_id===source.siteId);records.push({draftId:root.id,siteId:source.siteId,parent:root.snapshot.parent,kind:root.snapshot.kind,warehouse:root.snapshot.warehouse,references:data.references,report:report?{version:report.version,snapshot:report.snapshot}:null,lines:[...data.dispatch.lines.filter((l:any)=>l.sites.includes(source.siteId)).map((l:any)=>({key:l.key,itemId:l.itemId,description:l.description,unit:l.unit,issued:root.snapshot.parent?null:l.out,customer:materialDocumentPolicy(l).customerUsageSignoff,work:false})),...data.workLines.filter((l:any)=>l.sites.includes(source.siteId)).map((l:any)=>({key:l.key,itemId:l.itemId,description:l.description,unit:l.unit,issued:l.out,customer:false,work:true}))]});}
+  const handover=board.qcJob??board.qc?.handover??board.qc?.signoff;
+  const typed=handover&&(handover.variableSignoff||typeof handover.noVariableItemsUsed==='boolean')?handover:completionEvidence(board.documents?.find((d:any)=>d.id===boardId+':completion-documents'||d.id===boardId+':historical-handover-documents'));
+  const signedDos=[...new Map([...(board.deliveries??[]).map((d:any)=>d.signedDo),...(board.documents??[]).filter((d:any)=>d.id===boardId+':historical-delivery-documents').flatMap((d:any)=>d.evidence??[])].filter(Boolean).map((f:any)=>[f.id,f])).values()];
+  const records=[];for(const root of drafts){const source=root.snapshot.sites.find((s:any)=>s.registeredSiteId===boardId),data=await this.read(actor,root.id,this.pool,source.siteId);if(!data.reconciliation&&!data.workLines.length)continue;const report=data.reports.find(r=>r.site_id===source.siteId);records.push({draftId:root.id,siteId:source.siteId,parent:root.snapshot.parent,kind:root.snapshot.kind,warehouse:root.snapshot.warehouse,references:data.references,report:report?{version:report.version,snapshot:report.snapshot}:null,lines:[...data.dispatch.lines.filter((l:any)=>l.sites.includes(source.siteId)&&new Decimal(l.out).gt(0)).map((l:any)=>({key:l.key,itemId:l.itemId,description:l.description,unit:l.unit,issued:root.snapshot.parent?null:l.out,customer:materialDocumentPolicy(l).customerUsageSignoff,variable:materialDocumentPolicy(l).variableDispatch,work:false})),...data.workLines.filter((l:any)=>l.sites.includes(source.siteId)).map((l:any)=>({key:l.key,itemId:l.itemId,description:l.description,unit:l.unit,issued:l.out,customer:false,variable:false,work:true}))]});}
   const files=(await this.pool.query('SELECT id,filename,media_type FROM operations_board_files WHERE site_id=$1 ORDER BY created_at DESC,id',[boardId])).rows;
-  return {site:{id:boardId,name:board.name,ipo:board.ipo},records,files,stockPosting:false};
+  return {site:{id:boardId,name:board.name,ipo:board.ipo},records,files,evidence:{signedDos,variableSignoff:typed?.variableSignoff??null,noVariableItemsUsed:typed?.noVariableItemsUsed===true},stockPosting:false};
  }
  async read(actor:string,draftId:string,client:Pool|PoolClient=this.pool,siteId?:string){
   const draft=await this.usageDraft(actor,draftId,client,siteId),s=draft.snapshot;
@@ -92,19 +96,42 @@ export class MaterialUsageRepository{
    const previous=data.reports.find(r=>r.site_id===input.siteId);
    if((previous?.version??0)!==input.version)throw new HttpError(409,'This site usage changed. Refresh before saving.');
    if(new Set(input.lines.map(l=>l.lineKey)).size!==input.lines.length)throw new HttpError(422,'Record each site material row once.');
+   if(input.workflowVersion===2){
+    if(!site.registeredSiteId)throw new HttpError(422,'Link this material record to its Operations site first.');
+    await requireQcMaterialSite(actor,site.registeredSiteId,c,true);
+    const required=[...data.dispatch.lines.filter((l:any)=>l.sites.includes(input.siteId)&&new Decimal(l.out).gt(0)),...data.workLines.filter((l:any)=>l.sites.includes(input.siteId))];
+    if(required.length!==input.lines.length||required.some((l:any)=>!input.lines.some(v=>v.lineKey===l.key)))throw new HttpError(422,'Record every issued item for this site, including explicit zero use.');
+    for(const line of input.lines){
+     const row=required.find((l:any)=>l.key===line.lineKey),policy=row&&materialDocumentPolicy(row);
+     if(!row||line.used===null||line.returned!==null)throw new HttpError(422,'Record measured use only. Warehouse returns are recorded separately.');
+     if(s.parent){if(!policy!.variableDispatch)throw new HttpError(422,'Parent DO site usage is only for variable items.');if(line.issued!==null)throw new HttpError(422,'Do not allocate Parent DO issuance to this site. Record its VSO usage only.');}
+     else if(line.issued!==row.out)throw new HttpError(422,'Issued quantity must match the saved dispatch.');
+     const other=data.reports.filter(r=>r.site_id!==input.siteId).reduce((total,r)=>total.plus(r.snapshot.lines.find((l:any)=>l.lineKey===line.lineKey)?.used??0),new Decimal(0));
+     if(new Decimal(line.used).plus(other).gt(row.out))throw new HttpError(422,'Used quantity exceeds the remaining issued quantity for '+row.itemId+'.');
+    }
+    const board=(await c.query('SELECT snapshot FROM operations_board_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1',[site.registeredSiteId])).rows[0]?.snapshot;
+    const signedDos=(board?.deliveries??[]).map((d:any)=>d.signedDo?.id).concat((board?.documents??[]).filter((d:any)=>d.id===site.registeredSiteId+':historical-delivery-documents').flatMap((d:any)=>(d.evidence??[]).map((f:any)=>f.id)));
+    const handover=board?.qcJob??board?.qc?.handover??board?.qc?.signoff;
+    const vso=handover&&(handover.variableSignoff||typeof handover.noVariableItemsUsed==='boolean')?handover:completionEvidence(board?.documents?.find((d:any)=>d.id===site.registeredSiteId+':completion-documents'||d.id===site.registeredSiteId+':historical-handover-documents'));
+    const variable=required.some((l:any)=>materialDocumentPolicy(l).variableDispatch);
+    if(variable&&!vso?.noVariableItemsUsed&&(!input.customerEvidenceId||input.customerEvidenceId!==vso?.variableSignoff?.id||signedDos.includes(input.customerEvidenceId)))throw new HttpError(422,'Upload a distinct signed VSO in Job Completion before recording variable usage.');
+    if(required.some((l:any)=>!materialDocumentPolicy(l).variableDispatch)&&!signedDos.includes(input.internalEvidenceId))throw new HttpError(422,'Select the customer-signed DO already recorded in Delivery.');
+    if(vso?.noVariableItemsUsed&&input.lines.some(l=>required.some((r:any)=>r.key===l.lineKey&&materialDocumentPolicy(r).variableDispatch)&&new Decimal(l.used!).gt(0)))throw new HttpError(422,'Job Completion declares no variable items used. Correct that declaration before recording variable use.');
+    if(input.state!=='signed')throw new HttpError(422,'Verify the signed documents before saving site usage.');
+   }
    let customer=false,internal=false;
    for(const line of input.lines){
     const row=s.lines.find((v:any)=>v.key===line.lineKey);
     if(!row?.sites.includes(input.siteId)||!row.itemId||!row.unit)throw new HttpError(422,'The usage row needs its original site, final stock ID and recorded unit.');
-    const policy=materialDocumentPolicy(row);if(policy.approvedQuantityLocked&&(s.kind!=='fixed'||line.issued!==row.out))throw new HttpError(422,'The approved non-stock work quantity is locked to its BOQ basis.');if(policy.approvedQuantityLocked&&line.returned!==null&&line.returned!=='0')throw new HttpError(422,'Non-stock work has no warehouse return quantity.');customer ||= policy.customerUsageSignoff;internal ||= policy.installationReconciliation;
+    const policy=materialDocumentPolicy(row);if(policy.approvedQuantityLocked&&(s.kind!=='fixed'||line.issued!==row.out))throw new HttpError(422,'The approved non-stock work quantity is locked to its BOQ basis.');if(policy.approvedQuantityLocked&&line.returned!==null&&line.returned!=='0')throw new HttpError(422,'Non-stock work has no warehouse return quantity.');customer ||= input.workflowVersion===2?policy.variableDispatch&&!!input.customerEvidenceId:policy.customerUsageSignoff;internal ||= input.workflowVersion===2?!policy.variableDispatch:policy.installationReconciliation;
     if(input.state==='signed'&&line.used===null)throw new HttpError(422,'Record measured use, including explicit zero, before attaching signed evidence.');
-    if(s.parent&&policy.customerUsageSignoff&&line.issued!==null&&line.issued!==line.used)throw new HttpError(422,'For parent variable-material supply, the measured quantity issued at site must equal the quantity used.');
+    if(input.workflowVersion!==2&&s.parent&&policy.customerUsageSignoff&&line.issued!==null&&line.issued!==line.used)throw new HttpError(422,'For parent variable-material supply, the measured quantity issued at site must equal the quantity used.');
    }
-   if(input.state==='signed'&&(!input.lines.length||customer&&!input.customerEvidenceId||internal&&!input.internalEvidenceId))throw new HttpError(422,'Attach customer sign-off for cables/pipes/ducts and internal evidence for other reported items.');
+   if(input.state==='signed'&&(!input.lines.length||customer&&!input.customerEvidenceId||internal&&!input.internalEvidenceId))throw new HttpError(422,input.workflowVersion===2?'Attach the signed VSO for variable items and signed DO for fixed items.':'Attach customer sign-off for cables/pipes/ducts and internal evidence for other reported items.');
    for(const id of new Set([input.customerEvidenceId,input.internalEvidenceId].filter(Boolean))){const evidence=(await c.query('SELECT warehouse FROM inventory_material_evidence WHERE id=$1',[id])).rows[0];const siteEvidence=site.registeredSiteId?(await c.query('SELECT id FROM operations_board_files WHERE id=$1 AND site_id=$2',[id,site.registeredSiteId])).rows[0]:null;
     const role=(await c.query('SELECT role FROM users WHERE id=$1',[actor])).rows[0]?.role;
     if(role==='Operations'?!siteEvidence:!siteEvidence&&(!evidence||evidence.warehouse!==s.warehouse))throw new HttpError(422,'The signed evidence must belong to this site or its reviewed warehouse dispatch.');}
-   const snapshot={date:input.date,state:input.state,customerEvidenceId:input.customerEvidenceId,internalEvidenceId:input.internalEvidenceId,lines:input.lines,siteName:site.siteName,ipo:site.ipo,orderNumber:site.orderNumber??'',stockPosting:false};
+   const snapshot={...(input.workflowVersion===2?{workflowVersion:2}:{}),date:input.date,state:input.state,customerEvidenceId:input.customerEvidenceId,internalEvidenceId:input.internalEvidenceId,lines:input.lines,siteName:site.siteName,ipo:site.ipo,orderNumber:site.orderNumber??'',stockPosting:false};
    await c.query('INSERT INTO inventory_material_site_usage_versions(draft_id,site_id,version,snapshot,reason,request_key,request_fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[input.draftId,input.siteId,input.version+1,snapshot,input.reason,input.requestKey,hash(input),actor]);
    return {draftId:input.draftId,siteId:input.siteId,version:input.version+1,stockPosting:false};
   });

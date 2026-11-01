@@ -96,5 +96,22 @@ test('explicit source links retain the original approved IPO/BOQ, prevent duplic
   const held=await repo.intake(inventory);assert.equal(held.sources.some(s=>s.siteId===unlinkedIpo.id),false,'A later Store handoff cannot bypass an unresolved imported identity.');assert.ok(held.registeredPending.some(r=>r.siteId===unlinkedBoard.id));
   await assert.rejects(db.pool.query('DELETE FROM inventory_material_source_links WHERE id=$1',[linked.id]));
   assert.equal((await db.pool.query('SELECT snapshot FROM internal_purchase_orders WHERE id=$1',[ipo.id])).rows[0].snapshot.siteName,ipo.snapshot.siteName);
+  // New QC workflow records usage only, with no invented Parent allocation or warehouse return.
+  await db.pool.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,21,$2,$3,$4,$5,$6)',[id,{...board,stage:'delivered',qcJob:{completionEvidenceVersion:2,variableSignoff:{id:signoff.id}}},'VSO confirmed','isolated fixture',randomUUID(),owner]);
+  const modern={...measured,workflowVersion:2 as const,version:1,requestKey:randomUUID(),lines:[{lineKey:line,issued:null,used:'1.5',returned:null}]};
+  await assert.rejects(usage.save(qc,{...modern,lines:[{...modern.lines[0],used:'3'}]}),/exceeds/);
+  await assert.rejects(usage.save(qc,{...modern,lines:[{...modern.lines[0],issued:'1.5'}]}),/Do not allocate/);
+  await assert.rejects(usage.save(qc,{...modern,lines:[]}),/every issued item/);
+  await assert.rejects(usage.save(lead,modern),/assigned QC/);
+  await assert.rejects(usage.save(qc,{...modern,customerEvidenceId:randomUUID()}),/distinct signed VSO/);
+  const modernSaved=await usage.save(qc,modern);assert.equal(modernSaved.version,2);assert.deepEqual(await usage.save(qc,modern),modernSaved);
+  await assert.rejects(usage.save(qc,{...modern,requestKey:randomUUID()}),/changed/);
+  const modernView=await usage.qcSite(qc,id);assert.equal(modernView.records[0].report?.snapshot.lines[0].issued,null);assert.equal(modernView.evidence.variableSignoff.id,signoff.id);
+  await db.pool.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,22,$2,$3,$4,$5,$6)',[id,{...board,stage:'delivered',qcJob:{noVariableItemsUsed:true}},'No variable use','isolated fixture',randomUUID(),owner]);
+  await assert.rejects(usage.save(qc,{...modern,version:2,requestKey:randomUUID()}),/declares no variable/);
+  const zero={...modern,version:2,requestKey:randomUUID(),customerEvidenceId:null,lines:[{lineKey:line,issued:null,used:'0',returned:null}]};
+  assert.equal((await usage.save(qc,zero)).version,3);
+
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements WHERE draft_id=$1',[saved.id])).rows[0].n,2);
  }finally{await db.close();}
 });
