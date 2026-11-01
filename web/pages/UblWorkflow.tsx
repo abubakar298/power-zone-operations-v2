@@ -130,7 +130,9 @@ export function UblWorkflow({
           "branchCode",
         ])
           if (form[k]) input[k] = form[k];
-        if (a === "po") {
+        if (a === "po" || a === "historical-po") {
+          input.verified=form.verified;
+          if(a==="historical-po")input.approvedTotal=form.approvedTotal;
           input.configuration = form.configuration;
           input.pricingStage = form.pricingStage;
         }
@@ -644,7 +646,7 @@ export function UblWorkflow({
                   checked={form.verified}
                   onChange={(e) => change("verified", e.target.checked)}
                 />
-                Survey findings and the configuration have been reviewed
+                {selected.data.originalOrderPreserved?'The original revised PO and existing IPO confirm this configuration and agreed price':'Survey findings and the configuration have been reviewed'}
               </label>
               <div className="pz-action-row">
                 {act("save", "Save working draft", "secondary")}
@@ -769,6 +771,7 @@ export function UblWorkflow({
                   "Existing job—Revised PO pending",
                 ].includes(selected.stage) &&
                 act("po", "Record actual PO", "primary")}
+              {manager&&selected.data.originalOrderPreserved&&selected.stage==='Existing job—Revised PO pending'&&<><Field id="ubl-historical-po-total" label="Original revised PO total"><input id="ubl-historical-po-total" value={form.approvedTotal??''} onChange={e=>change('approvedTotal',e.target.value)}/></Field>{act('historical-po','Register existing order’s revised PO','primary')}<p>Preserves the existing job. Registers original PO/IPO evidence for Accounts usage; creates no new order, survey, stock movement or financial posting.</p></>}
               {coord &&
                 selected.stage === stages[5] &&
                 act("ipo", "Prepare IPO / PT & send to Accounts", "primary")}

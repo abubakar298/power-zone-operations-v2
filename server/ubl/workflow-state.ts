@@ -16,6 +16,7 @@ export const ublConfigurations = [
   "35-30-40",
 ] as const;
 export type WorkflowAction =
+  | "historical-po"
   | "sample-accept"
   | "sample-return"
   | "sample"
@@ -62,6 +63,10 @@ export function transition(
     if (!data.accountsReviewSample)
       throw new HttpError(409, "No review sample has been received.");
     return stage;
+  }
+  if(action==='historical-po'){
+    if(!manager||!data.originalOrderPreserved||!data.ipoNumber||stage!=='Existing job—Revised PO pending')throw new HttpError(403,'Only Management can register the revised PO for this preserved historical order.');
+    return 'Existing order—Revised PO recorded';
   }
   if (action === "sample") {
     if (!manager)

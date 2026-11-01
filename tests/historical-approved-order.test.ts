@@ -1,0 +1,43 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {testDatabase} from './database.js';
+import {UblWorkflowRepository} from '../server/ubl/workflow-repository.js';
+import {historicalApprovedOrder} from '../server/ubl/historical-approved-order.js';
+import {InventoryRepository} from '../server/inventory/repository.js';
+import {HistoricalQcUsageRepository} from '../server/inventory/historical-qc-usage.js';
+import {OperationsBoardRepository} from '../server/operations-board/repository.js';
+import {AccountsRepository} from '../server/accounts/repository.js';
+import {publicDocument} from '../server/ubl/workflow-state.js';
+test('register an existing revised PO from original evidence without creating another order or rewriting its immutable import',async()=>{
+ const db=await testDatabase();try{
+  const manager=randomUUID(),coordinator=randomUUID();for(const [id,role] of [[manager,'Management'],[coordinator,'Coordinator']])await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash)VALUES($1,$2,$3,$4,$5)',[id,id+'@example.test',role,role,'isolated']);
+  const repo=new UblWorkflowRepository(db.pool);await repo.import(manager,(await repo.sources(manager))[0].sha256);
+  const r=(await db.pool.query("SELECT * FROM ubl_workflow_requests WHERE branch_code='2756'")).rows[0];assert.ok(r);
+  const before=(await db.pool.query("SELECT * FROM ubl_site_orders WHERE legacy_ipo_number='315'")).rows[0],siteKey=String(before.site_id),orders=(await db.pool.query('SELECT count(*) n FROM internal_purchase_orders')).rows[0].n;
+  await db.pool.query('UPDATE ubl_workflow_requests SET site_id=NULL WHERE site_id=$1 AND id<>$2',[before.site_id,r.id]);
+  await db.pool.query("UPDATE ubl_workflow_requests SET site_id=$3,stage='Existing job—Revised PO pending',data=data||$2::jsonb WHERE id=$1",[r.id,JSON.stringify({ipoNumber:'315',originalOrderPreserved:true,technicalVerified:false}),before.site_id]);
+  assert.equal(await historicalApprovedOrder(db.pool,siteKey),null);
+  const input={configuration:'20-20-30',pricingStage:'Revised',poNumber:'ORIGINAL-REVISED-PO',date:'2026-10-15',approvedTotal:'5279116',verified:true,notes:'Entered by Rafiq; original PO and IPO evidence reviewed'};
+  await assert.rejects(repo.action(coordinator,r.id,r.version,'historical-po',input),/original approved|Management/);
+  await assert.rejects(repo.action(manager,r.id,r.version,'historical-po',input),/original revised Customer PO/);
+  await repo.attach(manager,r.id,'Customer PO','Revised PO.pdf','application/pdf',Buffer.from('%PDF-1.7\nOriginal revised PO'));
+  await repo.attach(manager,r.id,'Operations evidence','Original IPO315.pdf','application/pdf',Buffer.from('%PDF-1.7\nExisting original IPO'));
+  await assert.rejects(repo.action(manager,r.id,r.version,'historical-po',{...input,approvedTotal:'1'}),/total must match/);
+  await assert.rejects(repo.action(manager,r.id,r.version,'verify',{...input,verified:true}),/survey report/,'Normal technical verification still needs a survey');
+  await repo.action(manager,r.id,r.version,'historical-po',input);
+  const source=await historicalApprovedOrder(db.pool,siteKey);assert.equal(source.configuration_id,'20-20-30');assert.equal(source.baseline.sellingIncludingGst,'5279116');assert.equal(source.legacy_ipo_number,'315');assert.ok(source.baseline.sellingExcludingGst);
+  const job=await new InventoryRepository(db.pool).job(manager,'ubl:'+siteKey);assert.ok(job.lines.some(l=>l.key==='DC cable red 6mm²'&&l.approved==='135'));
+  const board=new OperationsBoardRepository(db.pool),boardId='registered-UBL:SOLAR:315';await board.importSource(manager,{sourceSha256:'a'.repeat(64),rows:[{id:boardId,ipo:'CHP-315',name:'Sukho',customer:'UBL',installation:true,projectType:'solar',stage:'delivered',completed:true,operationsTeam:'central'}]});
+  const doFile=await board.upload(manager,boardId,{filename:'DO.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7\nDO fixture').toString('base64')}),vso=await board.upload(manager,boardId,{filename:'VSO.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7\nVSO fixture').toString('base64')});
+  await board.command(manager,boardId,{action:'historical-evidence',category:'delivery',version:1,date:'2026-09-30',signedDoId:doFile.id,edit:false,reason:'Original DO',requestKey:randomUUID()});await board.command(manager,boardId,{action:'historical-evidence',category:'handover',version:2,date:'2026-11-02',variableSignoffId:vso.id,edit:false,reason:'Owner VSO',requestKey:randomUUID()});
+  const usage=new HistoricalQcUsageRepository(db.pool),read=await usage.read(manager,boardId);assert.equal(read.jobKey,'ubl:'+siteKey);
+  await usage.save(manager,boardId,{version:read.version,requestKey:randomUUID(),reason:'Entered by Rafiq from original source',verify:true,entry:{start:'',end:'',panelCount:'32',panelWattage:'620',usage:Object.fromEntries(read.lines.filter(l=>l.group!=='watt').map(l=>[l.key,'0'])),remarks:'Owner source',expectedReturns:'',receivedReturns:'',extra:[]}});
+  const accountsJob=await new AccountsRepository(db.pool).job(manager,'ubl:'+siteKey);assert.ok(accountsJob);
+  const saved=(await db.pool.query('SELECT * FROM ubl_workflow_requests WHERE id=$1',[r.id])).rows[0];assert.equal(saved.data.technicalVerified,false);assert.equal(saved.data.historicalOrderVerified,true);assert.equal(saved.data.revisedPoPending,false);
+  assert.deepEqual((await db.pool.query('SELECT * FROM ubl_site_orders WHERE site_id=$1',[before.site_id])).rows[0],before);
+  assert.equal((await db.pool.query('SELECT count(*) n FROM internal_purchase_orders')).rows[0].n,orders);
+  assert.equal((await db.pool.query('SELECT count(*) n FROM inventory_material_dispatches')).rows[0].n,'0');
+  const doc=(await db.pool.query("SELECT snapshot FROM ubl_workflow_documents WHERE request_id=$1 AND kind='Historical approved order'",[r.id])).rows[0];assert.equal(publicDocument(doc.snapshot,'Coordinator').baseline,undefined);
+ }finally{await db.close();}
+});

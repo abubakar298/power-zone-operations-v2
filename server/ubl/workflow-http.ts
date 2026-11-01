@@ -15,6 +15,7 @@ const schema = z
   .object({
     version: z.number().int().positive(),
     action: z.enum([
+      "historical-po",
       "sample-accept",
       "sample-return",
       "sample",
@@ -36,6 +37,7 @@ const schema = z
     ]),
     input: z
       .object({
+        approvedTotal: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
         scheduledSurveyDate: z.iso.date().nullable().optional(),
         actualSurveyDate: z.iso.date().nullable().optional(),
         branchCode: z

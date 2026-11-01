@@ -447,6 +447,18 @@ export class UblWorkflowRepository {
           422,
           "Resolve the missing branch code and canonical site before releasing this request.",
         );
+      if(action==='historical-po'){
+        if(!['Admin','Management'].includes(u.role)||!r.data.originalOrderPreserved||r.stage!=='Existing job—Revised PO pending'||!input.verified||!input.notes?.trim()||!input.poNumber||!input.date||!input.configuration||!input.pricingStage)throw new HttpError(422,'Confirm the original approved configuration, revised PO and historical source reference.');
+        const proof=(await c.query("SELECT kind,filename,id FROM ubl_workflow_attachments WHERE request_id=$1",[id])).rows;
+        if(!proof.some(f=>f.kind==='Customer PO')||!proof.some(f=>f.kind==='Operations evidence'&&/IPO/i.test(f.filename)))throw new HttpError(422,'Attach the original revised Customer PO and original IPO as Operations evidence.');
+        const original=(await c.query('SELECT legacy_ipo_number FROM ubl_site_orders WHERE site_id=$1',[r.site_id])).rows[0];
+        if(!original||String(original.legacy_ipo_number)!==String(r.data.ipoNumber))throw new HttpError(409,'The preserved historical job identity must match the original IPO.');
+        if((await c.query('SELECT 1 FROM customer_purchase_orders WHERE customer_id=$1 AND po_number=$2',[r.customer_id,input.poNumber])).rowCount)throw new HttpError(409,'The revised PO already has a registered order; link that existing source.');
+        if((await c.query('SELECT 1 FROM ubl_site_orders WHERE po_number=$1 AND site_id<>$2',[input.poNumber,r.site_id])).rowCount||(await c.query("SELECT 1 FROM ubl_workflow_requests WHERE id<>$1 AND data->>'poNumber'=$2",[id,input.poNumber])).rowCount)throw new HttpError(409,'This PO is already linked to another site.');
+        const agreed=(await c.query('SELECT snapshot FROM ubl_commercial_history WHERE configuration_id=$1 AND stage=$2',[input.configuration,input.pricingStage])).rows[0]?.snapshot;
+        if(!input.approvedTotal||!agreed||!new Decimal(input.approvedTotal).eq(agreed.totalIncludingGst))throw new HttpError(422,'The original revised PO total must match this approved configuration and price version.');
+        d.configuration=input.configuration;d.pricingStage=input.pricingStage;d.poNumber=input.poNumber;d.poDate=input.date;d.revisedPoPending=false;d.historicalOrderVerified=true;d.historicalOrderVerifiedBy=actor;d.historicalOrderEvidence=proof.map(f=>f.id);d.notes=input.notes;
+      }
       if (action === "save" || action === "verify") {
         if (
           ![
@@ -676,7 +688,7 @@ export class UblWorkflowRepository {
         }
         d.ipoNumber = input.ipoNumber;
       }
-      if (["verify", "ipo", "sample"].includes(action)) {
+      if (["verify", "ipo", "sample", "historical-po"].includes(action)) {
         const h = (
           await c.query(
             "SELECT snapshot FROM ubl_commercial_history WHERE configuration_id=$1 AND stage=$2",
@@ -760,7 +772,8 @@ export class UblWorkflowRepository {
           .div(sample.budgetedCost)
           .mul(100)
           .toFixed(2);
-        if (action !== "sample")
+        if(action==='historical-po')await this.makeDocument(c,actor,r,'Historical approved order',{site,baseline:{...base,sellingExcludingGst:sample.totalSellingExcludingGst},sample,source:'Original revised PO and existing issued IPO; no new order, technical survey, stock or financial posting'},d);
+        if (action !== "sample" && action !== 'historical-po')
           await this.makeDocument(
             c,
             actor,

@@ -1,3 +1,4 @@
+import {historicalApprovedOrder} from '../ubl/historical-approved-order.js';
 import {agreedBoqPvWatts} from '../../shared/closure-pv-watts.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import { phaseCostComparison } from "./phase-comparison.js";
@@ -324,12 +325,7 @@ export class AccountsRepository {
     let phaseSelling: Record<string, string> = {};
     let agreedPv: ReturnType<typeof agreedBoqPvWatts> = null;
     if (/^ubl:\d+$/.test(key)) {
-      const s = (
-        await this.pool.query(
-          "SELECT baseline FROM ubl_effective_site_orders WHERE site_id=$1",
-          [key.slice(4)],
-        )
-      ).rows[0];
+      const s = await historicalApprovedOrder(this.pool,key.slice(4));
       if (!s?.baseline) throw new HttpError(404, "Saved budget unavailable.");
       selling = s.baseline.sellingExcludingGst;
       const document = (
@@ -337,7 +333,7 @@ export class AccountsRepository {
           "SELECT snapshot FROM ubl_site_document_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1",
           [key.slice(4)],
         )
-      ).rows[0];
+      ).rows[0] ?? (s.historicalOrder?{snapshot:s}:null);
       if (document) {
         agreedPv = agreedBoqPvWatts({agreedWatts:document.snapshot.agreedWatts});
         const pt = ublIpoSample({ ...document.snapshot, status: "Active" });

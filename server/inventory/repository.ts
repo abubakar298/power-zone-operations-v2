@@ -1,3 +1,4 @@
+import {historicalApprovedOrder} from '../ubl/historical-approved-order.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import { fingerprint } from "../boq/repository.js";
 import type { Pool, PoolClient } from "pg";
@@ -50,12 +51,7 @@ export class InventoryRepository {
     let lines: InventoryLine[], title: string, jobId: string, source: any;
     let bulk: ReturnType<typeof bulkEntry> = null;
     if (/^ubl:\d+$/.test(key)) {
-      const s = (
-        await this.pool.query(
-          "SELECT * FROM ubl_site_orders WHERE site_id=$1 AND status='Active'",
-          [key.slice(4)],
-        )
-      ).rows[0];
+      const s = await historicalApprovedOrder(this.pool,key.slice(4));
       if (!s?.baseline)
         throw new HttpError(404, "Active job with an approved BOQ not found.");
       jobId = "CHP-" + s.legacy_ipo_number;

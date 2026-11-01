@@ -1,3 +1,4 @@
+import {historicalApprovedOrder} from '../ubl/historical-approved-order.js';
 import {isDeepStrictEqual} from 'node:util';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -41,6 +42,8 @@ export class HistoricalQcUsageRepository{
   if(native)throw new HttpError(409,'Use this site’s existing material dispatch usage form.');
   const legacy=(await c.query('SELECT site_id FROM ubl_site_orders WHERE legacy_ipo_number=$1 AND status=$2',[match[1],'Active'])).rows;
   let key=legacy.length===1?'ubl:'+legacy[0].site_id:null;
+  if(!key){const old=(await c.query('SELECT site_id FROM ubl_site_orders WHERE legacy_ipo_number=$1',[match[1]])).rows;if(old.length===1&&(await historicalApprovedOrder(c,String(old[0].site_id))))key='ubl:'+old[0].site_id;}
+
   if(!key&&z.uuid().safeParse(board.origin?.ipoId).success)key='ipo:'+board.origin.ipoId;
   if(!key){const links=(await c.query('SELECT DISTINCT ipo_id FROM inventory_material_source_links WHERE board_site_id=$1',[boardId])).rows;if(links.length===1)key='ipo:'+links[0].ipo_id;}
   // Registered Operations imports may predate the native IPO source-link row.
