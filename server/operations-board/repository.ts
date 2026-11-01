@@ -327,9 +327,9 @@ export class OperationsBoardRepository{
     snapshot=v.action==='qc'?completeQcStage(site,v.stageId,value,now,v.edit):completeUpsJob(site,{...value,checks:v.checks},now,v.edit);
     kind=snapshot.completed?'Installation completed':'QC stage completed';audiences=snapshot.completed?['accounts']:['operations-head'];
    }else if(v.action==='historical-evidence'){
-    if(v.category==='handover'&&(!v.acknowledgementId||!v.noVariableItemsUsed&&!v.variableSignoffId))throw new HttpError(422,'Upload the acknowledgement and variable-items sign-off, or confirm no variable items were used.');
+    if(v.category==='handover'&&(!v.variableSignoffId&&!v.noVariableItemsUsed||!v.variableSignoffId&&!v.acknowledgementId))throw new HttpError(422,'Upload the available historical sign-off, or an acknowledgement confirming no variable items were used.');
     if(v.category==='handover'&&v.noVariableItemsUsed&&v.variableSignoffId)throw new HttpError(422,'Choose no variable items used or a sign-off, not both.');
-    const ids=v.category==='delivery'?[v.signedDoId,...(v.materialPhotoId?[v.materialPhotoId]:[])]:[v.acknowledgementId,...(v.irrId?[v.irrId]:[]),...(v.variableSignoffId?[v.variableSignoffId]:[])];
+    const ids=v.category==='delivery'?[v.signedDoId,...(v.materialPhotoId?[v.materialPhotoId]:[])]:[...(v.acknowledgementId?[v.acknowledgementId]:[]),...(v.irrId?[v.irrId]:[]),...(v.variableSignoffId?[v.variableSignoffId]:[])];
     if(ids.some(id=>!id))throw new HttpError(422,v.category==='delivery'?'Upload the signed DO.':'Upload the acknowledgement and variable-items sign-off.');
     const files=await this.references(c,id,ids as string[]),references=(ids as string[]).map(file=>files.get(file)!);
     if(v.category==='delivery'&&references[1]&&!references[1].mediaType.startsWith('image/'))throw new HttpError(422,'Upload a photo of the delivered material.');

@@ -13,6 +13,8 @@ test('later historical evidence preserves completion, clocks and financial hando
   await repo.importSource(users.owner,{sourceSha256:'d'.repeat(64),rows:[original,{...original,id:'pending',stage:'received',completed:false},{...original,id:'other'}]});
   const pdf=await repo.upload(users.qc,'historical',{filename:'combined-signoff.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7\nSafe test evidence').toString('base64')});
   const other=await repo.upload(users.owner,'other',{filename:'other.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7\nOther fixture').toString('base64')});
+  const partial=await repo.command(users.owner,'other',{edit:false,reason:'Historical VSO available; acknowledgement not located',action:'historical-evidence',category:'handover',date:'2026-01-02',version:1,requestKey:randomUUID(),variableSignoffId:other.id});
+  assert.equal(partial.documents?.[0].acknowledgement,undefined);assert.equal(partial.documents?.[0].variableSignoff?.id,other.id);assert.equal(partial.completed,true);assert.deepEqual(partial.accounts,original.accounts);assert.equal(partial.deliveryDate,original.deliveryDate);
   const base={edit:false,reason:'',action:'historical-evidence' as const,category:'handover' as const,date:'2026-01-02',version:1,requestKey:randomUUID(),acknowledgementId:pdf.id,irrId:pdf.id,variableSignoffId:pdf.id};
   await assert.rejects(repo.command(users.south,'historical',base),/assigned team/);
   await assert.rejects(repo.command(users.lead,'historical',base),/assigned QC/);
@@ -25,7 +27,7 @@ test('later historical evidence preserves completion, clocks and financial hando
   await assert.rejects(repo.command(users.qc,'historical',{...base,version:2,requestKey:randomUUID(),edit:true}),/reason/);
   const correction=await repo.command(users.qc,'historical',{...base,version:2,requestKey:randomUUID(),edit:true,reason:'Correct document date from signed copy',date:'2026-01-03'});
   assert.equal(correction.documents?.[0].evidenceDate,'2026-01-03');assert.equal(correction.documents?.[0].createdDate,'2026-01-02');assert.equal(correction.deliveryDate,original.deliveryDate);assert.deepEqual(correction.accounts,original.accounts);
-  const events=(await db.pool.query('SELECT kind FROM operations_board_events ORDER BY site_version')).rows;assert.deepEqual(events.map(r=>r.kind),['Existing site evidence recorded','Saved site decision changed']);
+  const events=(await db.pool.query("SELECT kind FROM operations_board_events WHERE site_id='historical' ORDER BY site_version")).rows;assert.deepEqual(events.map(r=>r.kind),['Existing site evidence recorded','Saved site decision changed']);
   const pendingPdf=await repo.upload(users.qc,'pending',{filename:'pending.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7\nPending fixture').toString('base64')});
   await assert.rejects(repo.command(users.qc,'pending',{...base,requestKey:randomUUID(),acknowledgementId:pendingPdf.id,irrId:pendingPdf.id,variableSignoffId:pendingPdf.id}),/already recorded complete/);
   await assert.rejects(repo.command(users.qc,'historical',{edit:false,reason:'',action:'historical-evidence',category:'delivery',version:3,date:'2026-01-01',requestKey:randomUUID(),signedDoId:pdf.id,materialPhotoId:pdf.id}),/photo/);
