@@ -1,3 +1,4 @@
+import {MaterialCorrectionAlerts} from '../components/MaterialCorrectionAlerts.js';
 import {AccountsMaterialCosting} from './AccountsMaterialCosting.js';
 import {AccountsCustomerDocuments} from './AccountsCustomerDocuments.js';
 import {EvidencePreview} from '../components/EvidencePreview.js';
@@ -569,6 +570,7 @@ export function AccountsWorkspace({
       )}
       {message && <p role="status">{message}</p>}
       {data.localSnapshot&&!['Physical Documents','Invoicing'].includes(tab)&&<details className="accounts-data-note"><summary>Local testing copy · {data.ipos.length} received IPOs</summary><p>Saved {data.localSnapshot.sourceSnapshot}. {(data.localSnapshot.limitations??[]).join(' ')} PT and review changes stay in this local copy.</p></details>}
+      {['My Workspace','Material Costing & PT Entry'].includes(tab)&&<MaterialCorrectionAlerts session={session}/>}
       {tab === "My Workspace" && (
         <>
           <div className="stage-grid workspace-buckets accounts-dashboard-buckets" role="group" aria-label="Project accounting work">

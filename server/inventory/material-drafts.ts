@@ -1,3 +1,4 @@
+import {materialCorrectionAlerts} from './material-correction-alerts.js';
 import {readDispatchDocuments,dispatchDocumentEvidence} from './dispatch-document-status.js';
 import {withInventoryReceiving} from '../operations-board/inventory-delivery.js';
 import {warehouseNumber} from './warehouse-access.js';
@@ -107,6 +108,7 @@ export class MaterialDraftRepository{
  changeReturnReconciliation(actor:string,input:unknown){return new ParentReconciliationRepository(this.pool).change(actor,input,true);}
  parentReconciliation(actor:string,id:string){return new ParentReconciliationRepository(this.pool).read(actor,id);}
  changeParentReconciliation(actor:string,input:unknown){return new ParentReconciliationRepository(this.pool).change(actor,input);}
+ async correctionAlerts(actor:string){await this.access(actor);return materialCorrectionAlerts(this.pool);}
  async reviewedPools(actor:string){const access=await this.access(actor);return {version:approvedParentLedger.version,preparedAt:approvedParentLedger.preparedAt,groups:approvedParentLedger.groups.filter(g=>access.owner||access.warehouses.includes(g.warehouse+' warehouse'))};}
  async siteLedger(actor:string){
   const access=await this.access(actor),data=structuredClone(approvedSiteLedger) as any;
