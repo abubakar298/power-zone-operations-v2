@@ -18,10 +18,9 @@ type Kind='dispatch'|'return'|'purchase'|'transfer-out'|'transfer-in'|'replaceme
 type Record={kind:Kind;id:string;number:string;warehouse:string;created_at:string;signed_copies:number;parent?:boolean;siteId?:string;siteName?:string;ipo?:string;signoff?:boolean;documentRevision?:number};
 type Copy={id:string;copy_kind:string;source_site_id:string|null;evidence_id:string;note:string;created_at:string};
 type Queue={kind:string;warehouses:string[];records:Record[];signoffs:Record[]};
-type Bucket='dos'|'irrs'|'purchases'|'transfers'|'replacements';
+type Bucket='dos'|'purchases'|'transfers'|'replacements';
 const buckets:{id:Bucket;title:string;description:string;kinds:Kind[]}[]=[
  {id:'dos',title:'DOs dispatched',description:'Individual and Parent DOs · download and upload signed copies.',kinds:['dispatch']},
- {id:'irrs',title:'IRRs',description:'Customer sign-offs and signed IGPs for material returned from site.',kinds:['return']},
  {id:'purchases',title:'Purchases',description:'Purchase IGPs and signed warehouse receiving copies.',kinds:['purchase']},
  {id:'transfers',title:'Transfers',description:'Transfer DOs, signed gate copies and receiving warehouse copies.',kinds:['transfer-out','transfer-in']},
  {id:'replacements',title:'Replacements',description:'Replacement DOs and verified faulty-return IGPs.',kinds:['replacement-out','replacement-in']}
@@ -35,12 +34,12 @@ export function GatePasses({session,onLogout,limitedAccess=false}:{session:Sessi
  const limited=limitedAccess||data?.kind==='storekeeper';
  useUnsavedChanges(dirty);
  async function load(){try{setData(await api<Queue>('/material-dispatches/gate-passes'));setError('');}catch(e){setError((e as Error).message);}}
- useEffect(()=>{void load();},[]);
+ useEffect(()=>{if(new URLSearchParams(location.search).get('bucket')==='irrs')history.replaceState(null,'','/inventory/gate-passes?bucket=dos');void load();},[]);
  useEffect(()=>{const handler=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',handler);return()=>window.removeEventListener('beforeunload',handler);},[dirty]);
  function leave(){return !busy&&confirmLeaveWorkspace();}
  function clear(){setSelected(undefined);setFile(undefined);setNote('');setError('');setNotice('');if(upload.current)upload.current.value='';}
  function choose(next:Bucket){if(!leave())return;clear();setBucket(next);setSearch('');history.replaceState(null,'','/inventory/gate-passes?bucket='+next);}
- const records=(id:Bucket)=>id==='irrs'?[...(data?.signoffs??[]),...(data?.records.filter(r=>r.kind==='return')??[])]:data?.records.filter(r=>buckets.find(b=>b.id===id)!.kinds.includes(r.kind))??[];
+ const records=(id:Bucket)=>data?.records.filter(r=>buckets.find(b=>b.id===id)!.kinds.includes(r.kind))??[];
  const visible=records(bucket).filter(r=>(!warehouse||r.warehouse===warehouse)&&`${r.number} ${r.siteName??''} ${r.ipo??''} ${r.warehouse}`.toLowerCase().includes(search.toLowerCase()));
  const relevant=(all:Copy[],r:Record)=>all.filter(c=>r.signoff?c.copy_kind==='customer-signoff'&&c.source_site_id===r.siteId:c.copy_kind!=='customer-signoff');
  async function open(r:Record){if(!leave())return;setBusy(true);setError('');try{const detail=await api<{copies:Copy[];parent:boolean;documentRevision:number}>('/material-dispatches/gate-passes/'+r.kind+'/'+r.id);setSelected({...r,parent:detail.parent,documentRevision:detail.documentRevision});setCopies(relevant(detail.copies,r));setFile(undefined);setNote('');setNotice('');setCopyKind(r.signoff?'customer-signoff':['return','purchase','transfer-in','replacement-in'].includes(r.kind)?'signed-store':'signed-gate');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
