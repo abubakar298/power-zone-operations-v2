@@ -20,6 +20,17 @@ export function historicalIssuedMaterials(ipo:string){
  return ledger.groups.flatMap(g=>g.sites.some(s=>s.ipo===ipo)?g.rows.flatMap((r:any)=>
   (r.allocations??[]).filter((a:any)=>a.ipo===ipo&&a.origin==='warehouse_stock').map((a:any,index:number)=>({key:g.id+':'+r.id+':'+index,itemId:r.itemId,description:a.sourceDescription??r.item,unit:r.unit,issued:a.doQty==null?null:String(a.doQty),reference:g.historicalParent?'DO '+g.historicalParent:(a.doSource??g.title),sourceUrl:a.doSource??null}))):[]);
 }
+/** Owner-authorized additions: only cables absent from the saved BOQ, retaining
+ * recorded units/origins. This is usage evidence, never warehouse return credit. */
+export function additionalParentCables(ipo:string){
+ const covered=new Set(['CH-CBL-AC-16MM/4C-PK','CH-CBL-AC-25MM/4C-PK','CH-CBL-DC-6MM/1C-R/PK','CH-CBL-DC-6MM/1C-B/PK','CH-CBL-ERT-2.5MM/1C-PK','CH-CBL-ERT-6MM/1C-PK','CH-CBL-ERT-10MM/1C-PK']);
+ const cables=new Map<string,{description:string;unit:string;used:string;origin:string}>();
+ for(const g of ledger.groups)for(const r of g.rows as any[])if(r.itemId.startsWith('CH-CBL-')&&!covered.has(r.itemId))for(const a of r.allocations??[]){
+  if(a.ipo!==ipo)continue;const key=r.itemId+'|'+r.unit,old=cables.get(key);
+  cables.set(key,{description:r.itemId+' · '+r.item,unit:r.unit,used:a.used==null||old?.used===''?'':new Decimal(old?.used??0).plus(a.used).toString(),origin:old&&old.origin!==a.origin?'Mixed source':a.origin});
+ }
+ return [...cables.values()];
+}
 export class HistoricalQcUsageRepository{
  constructor(private pool:Pool){}
  private async identity(actor:string,boardId:string,c:Pool|PoolClient=this.pool,write=false){
@@ -40,12 +51,14 @@ export class HistoricalQcUsageRepository{
   const previous=(await this.pool.query('SELECT r.id,v.version,v.stage,v.snapshot FROM inventory_reports r JOIN LATERAL(SELECT * FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true WHERE r.job_key=$1',[identity.key])).rows[0];
   const own=previous?.snapshot?.qcUsage?.boardId===boardId;
   const locked=(await this.pool.query(`SELECT 1 FROM accounts_pt_entries WHERE source_kind='Inventory' AND source_id=$1 UNION ALL SELECT 1 FROM (SELECT stage FROM accounts_active_job_closures WHERE job_key=$2 ORDER BY version DESC LIMIT 1) latest WHERE stage IN('Closed','Awaiting Management') LIMIT 1`,[previous?.id??null,identity.key])).rowCount!>0;
-  return {boardId,jobKey:identity.key,ipo:identity.ipo,version:previous?.version??0,locked,issued:historicalIssuedMaterials(identity.ipo),lines:job.lines.map(l=>({key:l.key,description:l.description,unit:l.unit,approved:l.approved,group:l.group})),entry:own?previous.snapshot.entry:null,stage:own?previous.stage:null,stockPosting:false};
+  return {boardId,jobKey:identity.key,ipo:identity.ipo,version:previous?.version??0,locked,additionalCables:additionalParentCables(identity.ipo),issued:historicalIssuedMaterials(identity.ipo),lines:job.lines.map(l=>({key:l.key,description:l.description,unit:l.unit,approved:l.approved,group:l.group})),entry:own?previous.snapshot.entry:null,stage:own?previous.stage:null,stockPosting:false};
  }
  async save(actor:string,boardId:string,raw:unknown){
   const parsed=inputSchema.safeParse(raw);if(!parsed.success)throw new HttpError(422,'Check usage quantities and enter the source reference.');const input=parsed.data;
   const identity=await this.identity(actor,boardId,this.pool,true),job=await new InventoryRepository(this.pool).job(actor,identity.key);
-  if(input.entry.extra.length)throw new HttpError(422,'Local purchases belong in the separate Accounts purchase section.');
+  const cables=additionalParentCables(identity.ipo);
+  if(new Set(input.entry.extra.map(e=>e.description+'|'+e.unit)).size!==input.entry.extra.length||input.entry.extra.some(e=>!cables.some(c=>c.description===e.description&&c.unit===e.unit&&c.used!==''&&e.used===c.used)))throw new HttpError(422,'Additional rows must be the recorded Parent reconciliation cables and quantities. Other extra items are left for later.');
+  if(input.verify&&cables.some(c=>c.used!==''&&!input.entry.extra.some(e=>e.description===c.description&&e.unit===c.unit)))throw new HttpError(422,'Include the recorded additional Parent cables before verifying usage.');
   if(Object.keys(input.entry.usage).some(key=>!job.lines.some(l=>l.key===key&&l.group!=='watt')))throw new HttpError(422,'Usage must refer to this site’s approved BOQ items.');
   if(input.verify&&job.lines.some(l=>l.group==='watt'?!(input.entry.panelCount&&input.entry.panelWattage&&new Decimal(input.entry.panelCount).gt(0)&&new Decimal(input.entry.panelCount).isInteger()&&new Decimal(input.entry.panelWattage).gt(0)):!input.entry.usage[l.key]))throw new HttpError(422,'Enter every actual quantity from the source, including explicit zero. Save a draft if a quantity is unconfirmed.');
   return transaction(this.pool,async c=>{

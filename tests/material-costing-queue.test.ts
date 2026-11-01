@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {projectMaterialCostingQueue} from '../server/accounts/material-costing.js';
-import {historicalIssuedMaterials} from '../server/inventory/historical-qc-usage.js';
+import {historicalIssuedMaterials,additionalParentCables} from '../server/inventory/historical-qc-usage.js';
 test('documents and material statements form one task, completed PT and Management jobs leave the queue',()=>{
  const report={id:'r',job_key:'ubl:68',version:2,stage:'Sent to Accounts',site_name:'Jhudo',job_id:'CHP-294',customer_code:'UBL',created_at:'2026-11-01'};
  const doc={id:'d',jobKey:'ubl:68',siteId:'registered-UBL:SOLAR:294',siteName:'Jhudo',ipo:'CHP-294',customer:'UBL',receivedAt:'2026-11-01'};
@@ -12,6 +12,12 @@ test('documents and material statements form one task, completed PT and Manageme
  assert.deepEqual(projectMaterialCostingQueue([doc],[report],[{job_key:'ubl:68',stage:'Closed'}],[]),[]);
  assert.equal(projectMaterialCostingQueue([doc],[report],[],[{source_id:'r',source_version:1}]).length,1,'New versions must not inherit a prior PT receipt');
  assert.equal(projectMaterialCostingQueue([doc],[],[],[])[0].status,'Awaiting QC usage');
+});
+test('owner-authorized additional usage includes only extra Parent cables with their recorded units',()=>{
+ const cables=additionalParentCables('CHP-294');
+ assert.ok(cables.some(c=>c.description.startsWith('CH-CBL-CNT-1.5MM/2C')&&c.used==='40'&&c.unit==='m'));
+ assert.equal(cables.some(c=>c.description.startsWith('CH-CBL-DC-6MM')),false,'DC already belongs in the screenshot/BOQ rows');
+ assert.ok(cables.every(c=>c.description.startsWith('CH-CBL-')));
 });
 test('shared IPO text never merges different site identities',()=>{
  const d={ipo:'CHP-163',customer:'UBL',receivedAt:'2026-11-01',documents:[]};

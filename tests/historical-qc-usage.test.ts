@@ -16,7 +16,7 @@ test('historical QC usage reaches one Accounts task, PT then closure, without wa
   await board.importSource(actor,{sourceSha256:'e'.repeat(64),rows:[{id:boardId,ipo:'CHP-294',name:'Jhudo',customer:'UBL',installation:true,projectType:'solar',stage:'delivered',completed:true,operationsTeam:'central'}]});
   const repo=new HistoricalQcUsageRepository(db.pool),initial=await repo.read(actor,boardId);
   assert.equal(initial.entry,null);assert.ok(initial.issued.length);await assert.rejects(repo.read(south,boardId),/assigned team/);
-  const entry={start:'',end:'',panelCount:'49',panelWattage:'620',usage:Object.fromEntries(initial.lines.filter(l=>l.group!=='watt').map(l=>[l.key,'0'])),remarks:'Test source actuals',expectedReturns:'',receivedReturns:'',extra:[]};
+  const entry={start:'',end:'',panelCount:'49',panelWattage:'620',usage:Object.fromEntries(initial.lines.filter(l=>l.group!=='watt').map(l=>[l.key,'0'])),remarks:'Test source actuals',expectedReturns:'',receivedReturns:'',extra:initial.additionalCables.filter(c=>c.used!=='').map(({description,unit,used})=>({description,unit,used}))};
   const draft={version:initial.version,entry,reason:'Entered by Rafiq from owner-provided screenshot',verify:false,requestKey:randomUUID()};
   const saved=await repo.save(actor,boardId,draft);assert.equal(saved.stage,'IRR Received');assert.equal((await repo.read(actor,boardId)).entry.panelCount,'49');
   await assert.rejects(repo.save(actor,boardId,{...draft,version:saved.version,verify:true,requestKey:randomUUID()}),/signed DO and distinct VSO/);
