@@ -18,6 +18,7 @@ test('dispatch document buckets show exact site evidence, scoped links and align
  await buckets.getByRole('button').filter({hasText:'Parent DOs Waiting for Reconciliation'}).click();await expect(page.getByRole('cell',{name:'PDO-LHR-10 Updated 2026-10-31'})).toBeVisible();await expect(buckets.getByRole('button').filter({hasText:'Parent DOs Waiting for Reconciliation'}).locator('strong')).toHaveText('1');
  await buckets.getByRole('button').filter({hasText:'Awaiting Signed Documents'}).click();
  await expect(page.getByRole('cell',{name:'DO-LHR-100 Lahore warehouse 2026-11-01'})).toBeVisible();
+ await expect(buckets.getByRole('button').filter({hasText:'Awaiting Signed Documents'}).locator('strong')).toHaveText('2');
  await expect(page.getByRole('button',{name:'Reconcile',exact:true})).toHaveCount(0);
  await buckets.getByRole('button').filter({hasText:'Ready for Reconciliation'}).click();
  await page.getByRole('button',{name:'View documents',exact:true}).click();
@@ -42,4 +43,15 @@ test('individual DO reconciliation opens its issued-preparation ledger rather th
  await page.goto('/inventory/materials/issued-preparation/usage');
  await expect(page.getByRole('heading',{name:'Site material reconciliation',exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'CPZ-DO-26-0006',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'2',exact:true})).toBeVisible();await expect(page.getByText('Individual issued site',{exact:true})).toBeVisible();
+});
+
+test('one site row includes multiple partial DOs while a mixed Parent DO splits sites by their own evidence',async({page})=>{
+ await actors(page.request);await login(page.request);
+ const good={siteId:'a',registeredSiteId:'site-a',name:'First site',customer:'UBL',ipo:'CHP-SHARED',documents:[{label:'Variable Items Sign Off',fileId:'a-vso',source:'qc'},{label:'Acknowledgment',fileId:'a-ack',source:'qc'}]};
+ const missing={...good,siteId:'b',registeredSiteId:'site-b',name:'Second site',documents:[{label:'Variable Items Sign Off'},{label:'Acknowledgment'}]};
+ const base={id:'pool',number:'PDO-TEST',draftId:'draft-pool',warehouse:'Lahore warehouse',createdAt:'2026-11-01T08:00:00Z',parent:true,status:'awaiting',reconciliationStatus:'Usage and returns require reconciliation',sites:[good,missing]};
+ const partial={...base,id:'partial',number:'DO-PARTIAL',draftId:'draft-partial',parent:false,createdAt:'2026-11-02T08:00:00Z',sites:[{...missing,documents:[{label:'Signed DO',fileId:'b-do',source:'qc'}]}]};
+ await page.route('**/api/material-dispatches/access',r=>r.fulfill({json:{kind:'management'}}));await page.route('**/api/material-dispatches/intake',r=>r.fulfill({json:{warehouses:['Lahore warehouse'],sources:[]}}));await page.route('**/api/procurement/store',r=>r.fulfill({json:{toReceive:[]}}));await page.route('**/api/inventory-reviews',r=>r.fulfill({json:{rows:[]}}));await page.route('**/api/material-dispatches/document-status',r=>r.fulfill({json:{rows:[base,partial]}}));
+ await page.goto('/inventory');const buckets=page.locator('.inventory-dashboard-buckets');const waiting=buckets.getByRole('button').filter({hasText:'Awaiting Signed Documents'}),ready=buckets.getByRole('button').filter({hasText:'Ready for Reconciliation'});await expect(waiting.locator('strong')).toHaveText('1');await expect(ready.locator('strong')).toHaveText('1');await waiting.click();const list=page.locator('.dispatch-document-list');await expect(list.locator('tbody tr')).toHaveCount(1);await expect(list).toContainText('Second site');await expect(list).toContainText('PDO-TEST');await expect(list).toContainText('DO-PARTIAL');
+ await list.getByRole('searchbox').fill('DO-PARTIAL');await expect(list.locator('tbody tr')).toHaveCount(1);await list.getByRole('button',{name:'View documents',exact:true}).click();const dialog=page.getByRole('dialog');await expect(dialog).toContainText('PDO-TEST');await expect(dialog).toContainText('DO-PARTIAL');await expect(dialog).not.toContainText('First site');await expect(dialog.getByRole('link',{name:'Signed DO',exact:true})).toHaveAttribute('href','/api/material-dispatches/document-status/partial/evidence/b-do');await dialog.getByRole('button',{name:'Close',exact:true}).click();await ready.click();await expect(list.locator('tbody tr')).toHaveCount(1);await expect(list).toContainText('First site');await expect(list).not.toContainText('Second site');
 });

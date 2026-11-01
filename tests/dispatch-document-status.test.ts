@@ -53,3 +53,14 @@ test('owner-confirmed retrospective DOs bypass unavailable DO copies but still r
  const ready=dispatchDocumentRows([d],[b],[],older,[])[0];assert.equal(ready.status,'ready');assert.equal(ready.retrospective,true);assert.match(ready.reconciliationStatus,/gate copy waived/);
  assert.equal(dispatchDocumentRows([dispatch()],[b],[],older,[])[0].status,'awaiting','Normal DOs retain gate/delivery evidence requirements.');
 });
+
+import {groupDispatchDocumentSites} from '../shared/dispatch-document-status.js';
+test('site buckets split mixed Parent DO readiness and retain every partial dispatch without merging shared IPOs',()=>{
+ const base=dispatchDocumentRows([{...dispatch(),retrospective:true}],[board({qcJob:{...ack,variableSignoff:{id:'vso'}}})],[],[file('ack'),file('vso')],[])[0];
+ const readySite=base.sites[0];
+ const second={...readySite,siteId:'ipo-two',registeredSiteId:'board-two',name:readySite.name,ipo:readySite.ipo,documents:[{label:'Acknowledgment' as const}]};
+ const parent={...base,id:'pool',parent:true,status:'awaiting' as const,sites:[readySite,second]};
+ let sites=groupDispatchDocumentSites([parent]);assert.equal(sites.length,2);assert.equal(sites.find(s=>s.id==='board-one')?.status,'ready');assert.equal(sites.find(s=>s.id==='board-two')?.status,'awaiting');
+ const partial={...base,id:'later',createdAt:'2026-11-02T10:00:00Z',sites:[{...readySite,documents:[{label:'Signed DO' as const}]}]};
+ sites=groupDispatchDocumentSites([parent,partial,partial]);const first=sites.find(s=>s.id==='board-one')!;assert.equal(first.status,'awaiting');assert.equal(first.dispatches.length,2);assert.deepEqual(first.dispatches.map(d=>d.dispatch.id),['later','pool']);assert.equal(sites.length,2);
+});
