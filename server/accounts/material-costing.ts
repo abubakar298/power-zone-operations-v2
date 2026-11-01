@@ -26,7 +26,7 @@ export function projectMaterialCostingQueue(documents:any[],reports:any[],closur
   if(report&&entries.some(p=>p.source_id===report.id&&p.source_version===report.version))continue;
   const key=d.jobKey??d.siteId;
   if(!rows.has(key))rows.set(key,{key,jobKey:d.jobKey,siteName:d.siteName,ipo:d.ipo,customer:d.customer,receivedAt:d.receivedAt,report:null,documents:[],status:'Awaiting QC usage'});
-  const row=rows.get(key);row.siteId=d.siteId;row.documents.push(d);if(d.receivedAt>row.receivedAt)row.receivedAt=d.receivedAt;
+  const row=rows.get(key);if(!row.customer)row.customer=d.customer;row.siteId=d.siteId;row.documents.push(d);if(d.receivedAt>row.receivedAt)row.receivedAt=d.receivedAt;
  }
  return [...rows.values()].sort((a,b)=>String(b.receivedAt).localeCompare(String(a.receivedAt))||a.key.localeCompare(b.key));
 }

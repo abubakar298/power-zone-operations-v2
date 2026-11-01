@@ -6,6 +6,7 @@ test('documents and material statements form one task, completed PT and Manageme
  const report={id:'r',job_key:'ubl:68',version:2,stage:'Sent to Accounts',site_name:'Jhudo',job_id:'CHP-294',customer_code:'UBL',created_at:'2026-11-01'};
  const doc={id:'d',jobKey:'ubl:68',siteId:'registered-UBL:SOLAR:294',siteName:'Jhudo',ipo:'CHP-294',customer:'UBL',receivedAt:'2026-11-01'};
  const rows=projectMaterialCostingQueue([doc,{...doc,id:'vso'}],[report],[],[]);
+ assert.equal(projectMaterialCostingQueue([doc],[{...report,customer_code:undefined}],[],[])[0].customer,'UBL','Exact QC document customer fills a missing legacy report label');
  assert.equal(rows.length,1);assert.equal(rows[0].documents.length,2);assert.equal(rows[0].status,'Ready for PT entry');
  assert.deepEqual(projectMaterialCostingQueue([doc],[report],[],[{source_id:'r',source_version:2}]),[]);
  assert.deepEqual(projectMaterialCostingQueue([doc],[report],[{job_key:'ubl:68',stage:'Awaiting Management'}],[]),[]);
