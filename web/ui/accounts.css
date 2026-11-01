@@ -405,3 +405,7 @@
 .accounts-documents .physical-documents-table :is(th,td):last-child{width:1%;text-align:left;white-space:nowrap}
 .accounts-documents .physical-documents-table .ob-actions{display:flex;flex-wrap:nowrap;align-items:flex-start;gap:8px}
 .accounts-documents .physical-documents-table .ob-actions>.pz-button{white-space:nowrap;margin-left:0}
+
+.accounts-ui .accounts-billing-module .accounts-panel-heading{margin-bottom:20px}
+.accounts-ui .accounts-billing-buckets{grid-template-columns:repeat(2,minmax(0,1fr))}
+.accounts-ui .accounts-billing-module .stage-card{grid-template-rows:38px minmax(24px,auto) minmax(36px,auto);align-content:start;align-items:start}

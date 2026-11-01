@@ -569,17 +569,26 @@ export function AccountsWorkspace({
       {data.localSnapshot&&!['Physical Documents','Invoicing'].includes(tab)&&<details className="accounts-data-note"><summary>Local testing copy · {data.ipos.length} received IPOs</summary><p>Saved {data.localSnapshot.sourceSnapshot}. {(data.localSnapshot.limitations??[]).join(' ')} PT and review changes stay in this local copy.</p></details>}
       {tab === "My Workspace" && (
         <>
-          <div className="stage-grid workspace-buckets accounts-dashboard-buckets">
+          <div className="stage-grid workspace-buckets accounts-dashboard-buckets" role="group" aria-label="Project accounting work">
             {[
               ['IPOs Received',data.ipos.filter((i:any)=>!ptRecorded('IPO',i)).length,'IPOs Received',`${data.ipos.filter((i:any)=>ptRecorded('IPO',i)).length} recorded in PT`],
               ['Approved Documents',approvedDocumentCount??'—','Approved Documents','Sites with QC signed documents'],
               ['Inventory Reconciliations',reports.filter(r=>!ptRecorded('Inventory',r)).length,'Inventory PT Entries',`${reports.filter(r=>ptRecorded('Inventory',r)).length} recorded in PT`],
               ['Job Closure',preparationReports.length,'Job Closure','Ready, drafts and returned jobs'],
               ['Awaiting Management',data.closures.filter((c:any)=>c.stage==='Awaiting Management').length,'Awaiting Management',`${data.closures.filter((c:any)=>c.stage==='Closed').length} jobs closed`],
-              ['Invoices to Submit',invoiceQueueCount??(queueCountError?'—':'…'),'Invoices to Submit',queueCountError?'Count unavailable · open queue':'Delivery and completion invoices'],
-              ['Payments to Record',paymentQueueCount??(queueCountError?'—':'…'),'Payments to Record',queueCountError?'Count unavailable · open queue':'Awaiting payment and receipt details'],
             ].map(([label,count,destination,hint])=><Button key={String(label)} variant="neutral" className="stage-card" onClick={()=>navigate(String(destination))}><strong>{count}</strong><span>{label}</span><small>{hint}</small></Button>)}
           </div>
+
+
+          <section className="accounts-list-panel accounts-billing-module" aria-labelledby="accounts-billing-module-title">
+            <header className="accounts-panel-heading"><div><h2 id="accounts-billing-module-title">Invoicing &amp; Payments</h2><p>Invoice submissions and customer payment records.</p></div></header>
+            <div className="stage-grid workspace-buckets accounts-dashboard-buckets accounts-billing-buckets" role="group" aria-label="Invoicing and payments">
+              {[
+              ['Invoices to Submit',invoiceQueueCount??(queueCountError?'—':'…'),'Invoices to Submit',queueCountError?'Count unavailable · open queue':'Delivery and completion invoices'],
+              ['Payments to Record',paymentQueueCount??(queueCountError?'—':'…'),'Payments to Record',queueCountError?'Count unavailable · open queue':'Awaiting payment and receipt details'],
+              ].map(([label,count,destination,hint])=><Button key={String(label)} variant="neutral" className="stage-card" onClick={()=>navigate(String(destination))}><strong>{count}</strong><span>{label}</span><small>{hint}</small></Button>)}
+            </div>
+          </section>
 
           <section className="accounts-list-panel accounts-next-actions"><header className="accounts-panel-heading"><h2>Next Actions</h2></header>
 
