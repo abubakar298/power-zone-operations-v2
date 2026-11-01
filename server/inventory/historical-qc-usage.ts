@@ -87,10 +87,10 @@ export class HistoricalQcUsageRepository{
    const files=ids.length?(await c.query('SELECT id,filename,media_type,content FROM operations_board_files WHERE site_id=$1 AND id=ANY($2::uuid[])',[boardId,ids])).rows:[];
    if(input.verify&&files.length!==ids.length)throw new HttpError(422,'The referenced signed files are not available for this site.');
    if(!report)report=(await c.query('INSERT INTO inventory_reports(id,job_key,created_by) VALUES($1,$2,$3) RETURNING id',[randomUUID(),current.key,actor])).rows[0];
-   const snapshot={...job,entry:input.entry,reconciliation:reconcile(job.lines,input.entry),qcUsage:{boardId,source:'QC historical usage',reason:input.reason,input,evidenceIds:ids,usageSource:'New source entry only; old reconciliation usage not copied',stockPosting:false}};
+   const snapshot={...job,entry:input.entry,reconciliation:reconcile(job.lines,input.entry),qcUsage:{boardId,source:'QC historical usage',reason:input.reason,input,evidenceIds:ids,usageSource:'New source entry only; old reconciliation usage not copied',originalFiles:files.map(f=>({id:f.id,filename:f.filename,source:'Operations QC',reportCopy:f.content.length<=8388608})),stockPosting:false}};
    const stage=input.verify?'Sent to Accounts':'IRR Received';
    await c.query('INSERT INTO inventory_report_versions(id,report_id,version,stage,snapshot,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),report.id,input.version+1,stage,snapshot,input.requestKey,actor]);
-   for(const f of files)if(!(await c.query('SELECT 1 FROM inventory_report_files WHERE report_id=$1 AND filename=$2 AND content=$3',[report.id,f.filename,f.content])).rowCount)await c.query('INSERT INTO inventory_report_files(id,report_id,filename,media_type,content,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),report.id,f.filename,f.media_type,f.content,actor]);
+   for(const f of files.filter(f=>f.content.length<=8388608))if(!(await c.query('SELECT 1 FROM inventory_report_files WHERE report_id=$1 AND filename=$2 AND content=$3',[report.id,f.filename,f.content])).rowCount)await c.query('INSERT INTO inventory_report_files(id,report_id,filename,media_type,content,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),report.id,f.filename,f.media_type,f.content,actor]);
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'qc.historical-material-usage:'+boardId+':'+(input.version+1)]);
    return {reportId:report.id,version:input.version+1,stage,stockPosting:false};
   });
