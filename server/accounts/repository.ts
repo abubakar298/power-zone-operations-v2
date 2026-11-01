@@ -1,3 +1,4 @@
+import {agreedBoqPvWatts} from '../../shared/closure-pv-watts.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import { phaseCostComparison } from "./phase-comparison.js";
 import {recordPtEntry,ptEntrySchema} from './pt-entries.js';
@@ -321,6 +322,7 @@ export class AccountsRepository {
       );
     let lines: any[], selling: string, basis: string;
     let phaseSelling: Record<string, string> = {};
+    let agreedPv: ReturnType<typeof agreedBoqPvWatts> = null;
     if (/^ubl:\d+$/.test(key)) {
       const s = (
         await this.pool.query(
@@ -337,6 +339,7 @@ export class AccountsRepository {
         )
       ).rows[0];
       if (document) {
+        agreedPv = agreedBoqPvWatts({agreedWatts:document.snapshot.agreedWatts});
         const pt = ublIpoSample({ ...document.snapshot, status: "Active" });
         phaseSelling = Object.fromEntries(
           pt.phases.map((p) => [p.name, p.sellingExcludingGst]),
@@ -383,6 +386,7 @@ export class AccountsRepository {
         )
       ).rows[0];
       if (!b) throw new HttpError(409, "Saved BOQ budget unavailable.");
+      agreedPv = agreedBoqPvWatts({survey:b.snapshot.survey});
       selling = i.snapshot.quotationType?.saleType === "Cash Deal" ? i.snapshot.allocation.total : i.snapshot.allocation.subtotal;
       if (i.snapshot.peachtree?.taxMode !== "Tax Included" || i.snapshot.quotationType?.saleType === "Cash Deal")
         phaseSelling = Object.fromEntries(
@@ -498,6 +502,7 @@ export class AccountsRepository {
     const frozenEvidence=history[0]&&['Awaiting Management','Closed'].includes(history[0].stage)
       &&Array.isArray(history[0].snapshot.evidence)?history[0].snapshot:undefined;
     return {
+      agreedPv,
       configurationComparison,
       phaseCostComparison: phaseCostComparison(phasePeers.map(r=>r.snapshot)),
       identity,
