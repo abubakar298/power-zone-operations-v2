@@ -1,15 +1,17 @@
 import {test,expect} from '@playwright/test';
+import {jsPDF} from 'jspdf';
 import {actors,login} from './release-fixtures.js';
 for(const type of ['ups','solar-bess'])test(`QC ${type} keeps photos, completion uploads and location tracking separate`,async({page})=>{
  await actors(page.request);await login(page.request);
  const file=(id:string,name:string)=>({id,name,mediaType:'image/png'});
- const doFile=file('do','signed-do.png'),ack=file('ack','acknowledgment.png'),vso=file('vso','vso.png'),photo=file('photo','site-photo.png');
+ const doFile=file('do','signed-do.png'),ack={...file('ack','acknowledgment.pdf'),mediaType:'application/pdf'},vso=file('vso','vso.png'),photo=file('photo','site-photo.png');
  const final={date:'2026-10-30',evidence:photo,acknowledgement:ack,variableSignoff:vso,checks:{mounting:true,electrical:true,testingTraining:true,signoff:true}};
  const site={id:'qc-ui',ipo:'CHP-QC',name:'QC cleanup fixture',customer:'UBL',operationsTeam:'central',installation:true,projectType:type,stage:'delivered',completed:true,deliveryDate:'2026-10-28',version:2,accounts:[],history:[],blockers:[],deliveries:[{deliveryDate:'2026-10-28',signedDo:doFile,materialPhoto:photo,partial:false}],documents:[{id:'qc-ui:completion-documents',label:'Customer signed documents',date:'2026-10-30',location:'At site',evidence:[ack,vso],history:[]}],...(type==='ups'?{qcJob:final}:{qc:{civil:{date:'2026-10-28',evidence:photo},electrical:{date:'2026-10-29',evidence:photo},testing:{date:'2026-10-30',evidence:photo},signoff:final}})};
  await page.route('**/api/operations-board/sites',r=>r.fulfill({json:{sites:[site],access:{kind:'qc',team:'central',name:'QC'}}}));
  await page.route('**/api/operations-board/sites/qc-ui',r=>r.fulfill({json:site}));
  await page.route('**/api/operations-board/sites/qc-ui/files',r=>r.fulfill({json:{files:[doFile,ack,vso,photo].map(f=>({id:f.id,filename:f.name,media_type:f.mediaType}))}}));
  await page.route('**/api/operations-board/sites/qc-ui/files/*',r=>r.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')}));
+ const pdf=new jsPDF({compress:true});pdf.text('Fictional customer acknowledgment',20,20);await page.route('**/api/operations-board/sites/qc-ui/files/ack',r=>r.fulfill({contentType:'application/pdf',headers:{'Content-Disposition':'attachment; filename=acknowledgment.pdf'},body:Buffer.from(pdf.output('arraybuffer'))}));
  let downloads=0;page.on('download',()=>downloads++);page.on('dialog',d=>d.accept());
  await page.goto('/operations/sites/qc-ui');
  await expect(page.getByText('Material usage & sign-off',{exact:true})).toHaveCount(0);
@@ -23,6 +25,7 @@ for(const type of ['ups','solar-bess'])test(`QC ${type} keeps photos, completion
  await completion.getByRole('checkbox',{name:/No variable items used/}).check();await expect(completion.getByLabel('Variable-items sign-off',{exact:true})).toHaveCount(0);await completion.getByRole('checkbox',{name:/No variable items used/}).uncheck();
  await completion.getByRole('button',{name:'Cancel',exact:true}).click();
  const delivery=page.locator('section').filter({has:page.getByRole('heading',{name:'Delivery',exact:true})});
- await delivery.getByRole('button',{name:'signed-do.png',exact:true}).click();await expect(delivery.getByRole('img')).toBeVisible();await expect(delivery.getByRole('button',{name:/Download/})).toBeVisible();expect(downloads).toBe(0);
+ await delivery.getByRole('button',{name:'signed-do.png',exact:true}).click();const preview=page.getByRole('dialog');await expect(preview).toBeVisible();await expect(preview.getByRole('img')).toBeVisible();await expect(preview.getByRole('button',{name:/Download/})).toBeVisible();expect(downloads).toBe(0);await page.keyboard.press('Escape');await expect(preview).toHaveCount(0);await expect(delivery.getByRole('button',{name:'signed-do.png',exact:true})).toBeFocused();
+ await completion.getByRole('button',{name:'acknowledgment.pdf',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await expect(page.getByRole('dialog').getByRole('img',{name:'acknowledgment.pdf · page 1',exact:true})).toBeVisible();expect(downloads).toBe(0);await page.setViewportSize({width:390,height:844});const bounds=await page.getByRole('dialog').boundingBox();expect(bounds!.width).toBeLessThanOrEqual(390);expect(bounds!.height).toBeLessThanOrEqual(844);await page.getByRole('dialog').getByRole('button',{name:'Close preview',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
  await page.screenshot({path:`test-results/qc-${type}-cleanup.png`,fullPage:true});
 });

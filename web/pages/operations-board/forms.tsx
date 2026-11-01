@@ -1,6 +1,8 @@
 import {useEffect,useId,useRef,useState,type ReactNode} from 'react';
 import {api,type Session} from '../../api.js';
-import {EvidencePreview} from '../../components/EvidencePreview.js';
+import {createPortal} from 'react-dom';
+import {DocumentPreview} from '../../components/AccountsDocumentPreview.js';
+import '../../components/material-documents.css';
 import {Button} from '../../ui/Button.js';
 import {FileUpload} from '../../ui/FileUpload.js';
 import {useUnsavedChanges} from '../../hooks/useUnsavedChanges.js';
@@ -43,5 +45,7 @@ export function EvidencePicker({session,siteId,label,value,onChange,multiple=fal
  return <div className="pz-field ob-evidence"><label htmlFor={pickerId}>{label}</label><FileUpload ref={input} id={pickerId} aria-label={label} disabled={busy} multiple={multiple} accept="application/pdf,image/png,image/jpeg,image/webp,image/heic,image/heif" selectedFiles={selected} attachments={value.map(f=>({id:f.id,filename:f.name}))} onRemoveAttachment={file=>onChange(value.filter(f=>f.id!==file.id))} onChange={e=>{const files=Array.from(e.currentTarget.files??[]);setSelected(files);void upload(files);}}/>{existingFiles.length>0&&<label>Use an uploaded site file<select disabled={busy} value="" onChange={e=>{const file=existingFiles.find(f=>f.id===e.target.value);if(file){setError('');setSelected([]);if(input.current)input.current.value='';onChange(multiple?[...value.filter(f=>f.id!==file.id),file]:[file]);}}}><option value="">Choose existing evidence</option>{existingFiles.map(file=><option key={file.id} value={file.id}>{file.name}</option>)}</select></label>}{value.length>0&&<EvidenceLinks siteId={siteId} files={value} downloadUrl={downloadUrl}/>}{busy&&<small role="status">Uploading evidence…</small>}{error&&<><small className="form-error" role="alert">{error}</small><Button variant="neutral" onClick={()=>void upload(selected)}>Retry upload</Button></>}</div>;
 }
 export function EvidenceLinks({siteId,files,downloadUrl}:{siteId:string;files:Evidence[];downloadUrl?:(file:Evidence)=>string}){
- return <div className="ob-file-links">{[...new Map(files.filter(Boolean).map(file=>[file.id,file])).values()].map(file=><EvidencePreview key={file.id} title={file.name} filename={file.name} url={downloadUrl?.(file)??`/api/operations-board/sites/${encodeURIComponent(siteId)}/files/${encodeURIComponent(file.id)}`}/>)}</div>;
+ const [selected,setSelected]=useState<Evidence|null>(null),dialog=useRef<HTMLDialogElement>(null),heading=useId();
+ useEffect(()=>{if(selected&&!dialog.current?.open)dialog.current?.showModal();},[selected]);
+ return <div className="ob-file-links">{[...new Map(files.filter(Boolean).map(file=>[file.id,file])).values()].map(file=><Button variant="secondary" key={file.id} aria-haspopup="dialog" onClick={()=>setSelected(file)}>{file.name}</Button>)}{selected&&createPortal(<dialog ref={dialog} className="operations-theme material-document-dialog ob-evidence-dialog" aria-labelledby={heading} onClose={()=>setSelected(null)}><header><h2 id={heading}>{selected.name}</h2><Button variant="neutral" autoFocus onClick={()=>dialog.current?.close()}>Close preview</Button></header><div className="ob-evidence-dialog-body"><DocumentPreview key={selected.id} url={downloadUrl?.(selected)??`/api/operations-board/sites/${encodeURIComponent(siteId)}/files/${encodeURIComponent(selected.id)}`} title={selected.name} downloadFilename={selected.name} compactControls/></div></dialog>,document.body)}</div>;
 }

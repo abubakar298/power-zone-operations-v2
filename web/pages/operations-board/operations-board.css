@@ -24,3 +24,10 @@
 .ob-file-links{align-items:flex-start}
 .ob-file-links>.evidence-preview{flex:1 1 100%;min-width:0}
 .ob-section-title{align-items:flex-start}
+
+.ob-evidence-dialog{padding:0;overflow:hidden}
+.ob-evidence-dialog>header{padding:16px 24px;margin:0;border-bottom:1px solid var(--pz-border)}
+.ob-evidence-dialog>header h2{font-size:18px;overflow-wrap:anywhere;min-width:0}
+.ob-evidence-dialog-body{overflow:auto;max-height:calc(100dvh - 140px);padding:16px 24px}
+.ob-evidence-dialog-body .ipo-document-preview{margin:0;max-width:100%;box-sizing:border-box}
+@media(max-width:600px){.ob-evidence-dialog>header,.ob-evidence-dialog-body{padding:16px}}
