@@ -1,3 +1,4 @@
+import {completionEvidence} from '../../shared/qc-completion-evidence.js';
 import {createHash} from 'node:crypto';
 export const ipoEmailTo='recoverypzes@powerzone.com.pk';
 export const ipoEmailCc=['nazir@powerzone.com.pk','hamzabutt@powerzone.com.pk','zahid@powerzone.com.pk','abubakar@powerzone.com.pk','moaz@powerzone.com.pk','shaiggan@powerzone.com.pk'];
@@ -35,8 +36,8 @@ export function operationsStageEvidence(site:any):StageEvidence[]{
  for(const d of site.documents??[]){
   if(d.id===`${site.id}:historical-delivery-documents`&&d.evidence?.length>=2)result.push({stage:3,files:d.evidence.slice(0,2).map(ref),detail:'Uploaded signed DO and material picture for existing delivery'});
   if(site.installation===true&&d.id===`${site.id}:historical-handover-documents`){
-   if(d.evidence?.[2]?.id)result.push({stage:4,files:[ref(d.evidence[2])],detail:'Uploaded variable-items sign-off for existing installation'});
-   if(d.evidence?.[0]?.id)result.push({stage:5,files:[ref(d.evidence[0])],detail:'Uploaded acknowledgment for existing installation'});
+   if(completionEvidence(d).variableSignoff?.id)result.push({stage:4,files:[ref(completionEvidence(d).variableSignoff)],detail:'Uploaded variable-items sign-off for existing installation'});
+   if(completionEvidence(d).acknowledgement?.id)result.push({stage:5,files:[ref(completionEvidence(d).acknowledgement)],detail:'Uploaded acknowledgment for existing installation'});
   }
  }
  return result;

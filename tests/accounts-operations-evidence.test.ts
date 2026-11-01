@@ -44,12 +44,14 @@ test('Accounts reuses only exact linked completed Operations QC evidence, freeze
    [{...base,installation:false,projectType:'delivery-only'},/installation scope/],
    [{...base,projectType:null},/project type/],
    [{...base,qcJob:{...final,checks:{...final.checks,testingTraining:false}}},/checks/],
-   [{...base,qcJob:{...final,irr:undefined}},/explicitly recorded/],
+   [{...base,qcJob:{...final,variableSignoff:undefined}},/variable-items sign-off/],
    [{...base,qcJob:{...final,evidence:foreignPhoto}},/another site/],
    [{...base,qcJob:{...final,evidence:acknowledgement}},/actual QC site photograph/],
    [{...base,qcJob:{...final,evidence:irr}},/actual QC site photograph/],
    [{...base,qcJob:undefined,documents:[{id:'legacy-handover',label:'Acknowledgement IRR',location:'Submitted to Accounts',date:'2026-10-27',evidence:[acknowledgement,irr,variableSignoff]}]},/typed QC stages/],
   ] as const){await save(snapshot);const held=await projectOperationsClosureEvidence(db.pool,key);assert.deepEqual(held.evidence,[]);assert.equal(held.signature,null);assert.match(held.hold!,pattern);assert.ok(held.source);}
+  await save({...base,qcJob:{...final,irr:undefined}});assert.equal((await projectOperationsClosureEvidence(db.pool,key)).hold,undefined,'New completions do not require an IRR');
+  await save({...base,qcJob:{...final,irr:undefined,variableSignoff:undefined,noVariableItemsUsed:true}});const noUse=await projectOperationsClosureEvidence(db.pool,key);assert.equal(noUse.hold,undefined);assert.equal(noUse.evidence.some(e=>e.kind==='Variable items sign-off'),false);
   const invalidMime=await file('pretends-image.png','image/png','%PDF-actually-a-document');await save({...base,qcJob:{...final,evidence:invalidMime}});assert.match((await projectOperationsClosureEvidence(db.pool,key)).hold!,/actual QC site photograph/);
   for(const type of ['solar','solar-bess','bess']){
    const stages=type==='bess'?['cabinet','panel','bessTesting','handover']:['civil','electrical','testing','signoff'],qc=Object.fromEntries(stages.map((stage,i)=>[stage,i===3?{date:'2026-10-27',acknowledgement,irr,variableSignoff}:{date:'2026-10-26',evidence:photo}]));await save({...base,projectType:type,qcJob:undefined,qc});const result=await projectOperationsClosureEvidence(db.pool,key);assert.equal(result.hold,undefined);assert.ok(result.signature);assert.equal(result.evidence.filter(e=>e.kind==='Site photographs').length,1);

@@ -1,3 +1,4 @@
+import {completionEvidence} from '../../shared/qc-completion-evidence.js';
 import {createHash} from 'node:crypto';
 import type {Pool} from 'pg';
 import {z} from 'zod';
@@ -18,7 +19,7 @@ export function customerDocumentReferences(boards:Board[]):Ref[]{
   for(const q of [s.qcJob,s.qc?.signoff,s.qc?.handover].filter(Boolean)){add('Acknowledgment',q.acknowledgement,q.date);add('VSO',q.variableSignoff,q.date);}
   for(const d of s.documents??[]){
    if(d.id===`${b.site_id}:historical-delivery-documents`)add('Signed DO',d.evidence?.[0],d.date);
-   if(d.id===`${b.site_id}:historical-handover-documents`||d.id===`${b.site_id}:completion-documents`){add('Acknowledgment',d.evidence?.[0],d.date);add('VSO',d.evidence?.[2],d.date);}
+   if(d.id===`${b.site_id}:historical-handover-documents`||d.id===`${b.site_id}:completion-documents`){const refs=completionEvidence(d);add('Acknowledgment',refs.acknowledgement,d.date);add('VSO',refs.variableSignoff,d.date);}
   }
  }
  return refs;

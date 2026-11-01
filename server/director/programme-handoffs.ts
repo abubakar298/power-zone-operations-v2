@@ -1,3 +1,4 @@
+import {completionEvidence} from '../../shared/qc-completion-evidence.js';
 import type {Pool} from 'pg';
 import {z} from 'zod';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
@@ -26,8 +27,8 @@ export function programmeHandoffState(observation:ProgrammeHandoff){
  const entries=names.map(n=>n==='job'?s.qcJob:s.qc?.[n]),final=entries.at(-1);
  const checks=type!=='ups'||['mounting','electrical','testingTraining','signoff'].every(k=>final?.checks?.[k]===true);
  const qcDates=entries.every(e=>date(e?.date))&&entries.every((e,i)=>!i||e.date>=entries[i-1].date);
- const signed=validFile(final?.acknowledgement,files)&&(!observation.variableIssued||observation.variableSigned===true||validFile(final?.variableSignoff,files));
- const historicalHandover=(s.documents??[]).find((d:any)=>d.id===`${observation.site_id}:historical-handover-documents`&&date(d.evidenceDate??d.date)&&validFile(d.evidence?.[0],files)&&(!observation.variableIssued||validFile(d.evidence?.[2],files)));
+ const signed=validFile(final?.acknowledgement,files)&&(final?.noVariableItemsUsed===true||!observation.variableIssued||observation.variableSigned===true||validFile(final?.variableSignoff,files));
+ const historicalHandover=(s.documents??[]).find((d:any)=>d.id===`${observation.site_id}:historical-handover-documents`&&date(d.evidenceDate??d.date)&&validFile(completionEvidence(d).acknowledgement,files)&&(completionEvidence(d).noVariableItemsUsed||!observation.variableIssued||validFile(completionEvidence(d).variableSignoff,files)));
  const installed=!returned&&s.installation===true&&!s.scopePending&&s.completed===true&&!!((qcDates&&checks&&signed)||historicalHandover);
  const scheduled=!delivered&&!!(date(s.dispatchDate)||(s.planningBatches??[]).some((b:any)=>b.stops?.some((stop:any)=>stop.siteId===observation.site_id&&date(stop.plannedDate))));
  return {delivered,partialDelivery:partial,installed,scheduled,returned,rollback,deliveryDate:date(full?.deliveryDate)??date(historicalDelivery?.evidenceDate??historicalDelivery?.date),installationDate:installed?(date(final?.date)??date(historicalHandover?.evidenceDate??historicalHandover?.date)):null};

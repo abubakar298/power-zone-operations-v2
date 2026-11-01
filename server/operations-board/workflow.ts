@@ -6,7 +6,7 @@ import {sourceSiteSchema} from './schema.js';
 import {HttpError} from '../http/errors.js';
 export const fileReferenceSchema=z.object({id:z.uuid(),name:z.string(),mediaType:z.string()});
 const history=z.array(z.object({date:z.string(),description:z.string()}).passthrough());
-const entry=z.object({date:z.iso.date(),evidence:fileReferenceSchema.optional(),additionalEvidence:z.array(fileReferenceSchema).optional(),acknowledgement:fileReferenceSchema.optional(),irr:fileReferenceSchema.optional(),variableSignoff:fileReferenceSchema.optional(),recordedAt:z.string().optional()}).passthrough();
+const entry=z.object({date:z.iso.date(),evidence:fileReferenceSchema.optional(),additionalEvidence:z.array(fileReferenceSchema).optional(),acknowledgement:fileReferenceSchema.optional(),irr:fileReferenceSchema.optional(),variableSignoff:fileReferenceSchema.optional(),noVariableItemsUsed:z.boolean().optional(),stagePictures:z.record(z.string(),z.array(fileReferenceSchema)).optional(),recordedAt:z.string().optional()}).passthrough();
 const delivery=z.object({dispatchId:z.uuid().optional(),deliveryDate:z.iso.date(),signedDo:fileReferenceSchema,materialPhoto:fileReferenceSchema,partial:z.boolean(),documentId:z.string().optional()});
 const storedWorkflowSiteSchema=sourceSiteSchema.and(z.object({
  dispatchDate:z.iso.date().optional(),installationPlanDate:z.iso.date().optional(),planSavedAt:z.string().optional(),deliveryDate:z.iso.date().optional(),deliveryRecordedAt:z.string().optional(),stageStartedAt:z.string().optional(),
@@ -55,11 +55,14 @@ export function confirmDelivery(site:WorkflowSite,value:Delivery,now:string):Wor
  return {...site,...value,deliveryRecordedAt:now,stageStartedAt:partial?site.stageStartedAt:now,stage:partial?'awaiting':'delivered',completed:!partial&&site.installation===false,deliveries:[...(site.deliveries??[]),savedDelivery],documents:[...(site.documents??[]),document],accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],history:event(site,now,`${partial?'Partial delivery':'Delivery'} confirmed for ${value.deliveryDate}.`)};
 }
 function complete(site:WorkflowSite,value:Entry,now:string):WorkflowSite{
- if(!value.acknowledgement||!value.irr||!value.variableSignoff)throw new HttpError(422,'Upload the acknowledgement, IRR and variable-items sign-off.');
+ if(!value.acknowledgement)throw new HttpError(422,'Upload the customer acknowledgement.');
+ if(value.noVariableItemsUsed===true&&value.variableSignoff)throw new HttpError(422,'Choose no variable items used or upload a variable-items sign-off, not both.');
+ if(value.noVariableItemsUsed!==true&&!value.variableSignoff)throw new HttpError(422,'Upload the variable-items sign-off, or explicitly confirm that no variable items were used.');
+ if(value.variableSignoff&&site.deliveries?.some(d=>d.signedDo.id===value.variableSignoff!.id))throw new HttpError(422,'The selected file is already the signed delivery DO. Upload the actual variable-items sign-off, or confirm no variable items were used.');
  const accountsEvent={id:`${site.id}:installation-complete`,type:'Installation completed',date:now,ipo:site.ipo,site:site.name,description:'Installation completed; customer sign-offs recorded; ready for Accounts review'};
- const document={id:`${site.id}:completion-documents`,label:'Acknowledgement, IRR & variable sign-off',location:'At site' as const,date:value.date,createdDate:value.date,createdAt:now,evidence:[value.acknowledgement,value.irr,value.variableSignoff],history:[]};
+ const document={id:`${site.id}:completion-documents`,label:value.noVariableItemsUsed?'Customer acknowledgement · no variable items used':'Acknowledgement & variable sign-off',location:'At site' as const,date:value.date,createdDate:value.date,createdAt:now,completionEvidenceVersion:2,acknowledgement:value.acknowledgement,irr:value.irr,variableSignoff:value.variableSignoff,noVariableItemsUsed:value.noVariableItemsUsed===true,evidence:[value.acknowledgement,value.irr,value.variableSignoff].filter((f):f is FileReference=>!!f),history:[]};
  const old=site.documents?.find(d=>d.id===document.id);
- return {...site,completed:true,accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],documents:[...(site.documents??[]).filter(d=>d.id!==document.id),old?{...document,...old,evidence:document.evidence}:document]};
+ return {...site,completed:true,accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],documents:[...(site.documents??[]).filter(d=>d.id!==document.id),old?{...old,...document,location:old.location,date:old.date,createdDate:old.createdDate,createdAt:old.createdAt,history:old.history}:document]};
 }
 export function completeQcStage(site:WorkflowSite,stageId:string,value:Entry,now:string,editing=false):WorkflowSite{
  if(!site.installation||!(site.stage==='delivered'||site.stage==='awaiting'&&site.deliveries?.length))throw new HttpError(409,'QC updates require a recorded delivery for installation sites.');
@@ -72,7 +75,8 @@ export function completeQcStage(site:WorkflowSite,stageId:string,value:Entry,now
  if(stages.slice(0,index).some(s=>!site.qc?.[s.id]))throw new HttpError(422,'Complete the earlier QC stages first.');
  validCompletionDate(value.date,index?site.qc?.[stages[index-1].id]?.date:site.deliveryDate,now);
  if(editing&&site.qc?.[stages[index+1]?.id]?.date&&value.date>site.qc[stages[index+1].id].date)throw new HttpError(422,'The date cannot be later than the next recorded QC stage.');
- if(index!==stages.length-1&&!value.evidence)throw new HttpError(422,'Upload QC evidence before completing this stage.');
+ if(!value.evidence)throw new HttpError(422,'Upload QC evidence before completing this stage.');
+ if(![value.evidence,...value.additionalEvidence??[]].some(f=>f?.mediaType?.startsWith('image/')))throw new HttpError(422,'Upload pictures for this QC stage.');
  const updated={...site,qc:{...site.qc,[stageId]:{...value,recordedAt:editing?site.qc?.[stageId]?.recordedAt??now:now}},stageStartedAt:editing?site.stageStartedAt:now,history:event(site,now,`${stages[index].label} completed on ${value.date}.`)};
  return index===stages.length-1?complete(updated,value,now):updated;
 }
@@ -82,7 +86,9 @@ export function completeUpsJob(site:WorkflowSite,value:Entry&{checks:Record<stri
  if(site.qcJob&&!editing)throw new HttpError(409,'This UPS job is locked. Use Edit and give a reason.');
  validCompletionDate(value.date,site.deliveryDate,now);
  if(['mounting','electrical','testingTraining','signoff'].some(key=>value.checks[key]!==true))throw new HttpError(422,'Confirm system mounting, electrical work, testing/training and customer sign-off.');
+ if(['mounting','electrical','testingTraining'].some(key=>!value.stagePictures?.[key]?.some(f=>f.mediaType.startsWith('image/'))))throw new HttpError(422,'Upload pictures for system mounting, electrical work and testing & training.');
  if(!value.evidence)throw new HttpError(422,'Upload the job QC evidence.');
+ if(![value.evidence,...value.additionalEvidence??[]].some(f=>f?.mediaType?.startsWith('image/')))throw new HttpError(422,'Upload completion pictures.');
  return complete({...site,qcJob:{...value,recordedAt:editing?site.qcJob?.recordedAt??now:now},history:event(site,now,`UPS completed as one job on ${value.date}.`)},value,now);
 }
 export function currentStage(site:WorkflowSite){return siteBucket(site)==='completed'?'Completed / physical documents':siteBucket(site)==='received'?'Team assignment & dispatch planning':siteBucket(site)==='awaiting'?'Awaiting delivery':qcType(site)==='ups'?'UPS job completion':qcStagesFor(site).find(s=>!site.qc?.[s.id])?.label??'Customer sign-off';}

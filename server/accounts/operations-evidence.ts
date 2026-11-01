@@ -41,8 +41,8 @@ async function project(c:Client,jobKey:string,options:{lock?:boolean;version?:nu
  if(entries.some(e=>!e.entry))return held('The completed record lacks the applicable typed QC stages; historical document labels alone are insufficient.',source);
  const final=entries.at(-1)!.entry!;
  if(type==='ups'&&['mounting','electrical','testingTraining','signoff'].some(key=>(final.checks as Record<string,unknown>|undefined)?.[key]!==true))return held('The UPS completion checks are incomplete.',source);
- const typed=[{purpose:'acknowledgement' as const,kind:'Client acknowledgment' as const,ref:final.acknowledgement},{purpose:'irr' as const,kind:'IRR' as const,ref:final.irr},{purpose:'variable-signoff' as const,kind:'Variable items sign-off' as const,ref:final.variableSignoff}];
- if(typed.some(t=>!t.ref))return held('The final acknowledgement, IRR and variable-items sign-off must each be explicitly recorded.',source);
+ if(!final.acknowledgement||(!final.noVariableItemsUsed&&!final.variableSignoff))return held('Record the acknowledgement and variable-items sign-off, or confirm no variable items were used.',source);
+ const typed=[{purpose:'acknowledgement' as const,kind:'Client acknowledgment' as const,ref:final.acknowledgement},{purpose:'irr' as const,kind:'IRR' as const,ref:final.irr},{purpose:'variable-signoff' as const,kind:'Variable items sign-off' as const,ref:final.variableSignoff}].filter(t=>!!t.ref);
  const documentIds=new Set(typed.map(t=>t.ref!.id));
  const candidates=entries.flatMap(({stage,entry})=>[entry!.evidence,...entry!.additionalEvidence??[]].filter((r):r is NonNullable<typeof r>=>!!r).map(ref=>({stage,date:entry!.date,id:ref.id})));
  const references=[...typed.map(t=>t.ref!.id),...candidates.map(p=>p.id)];
@@ -60,7 +60,7 @@ async function project(c:Client,jobKey:string,options:{lock?:boolean;version?:nu
  };
  for(const item of typed)add(item.ref!.id,item.kind,item.purpose,final.date);
  for(const p of photos.filter((p,index,all)=>all.findIndex(other=>other.id===p.id)===index))add(p.id,'Site photographs','qc-photo',p.date);
- const signature=createHash('sha256').update(JSON.stringify({boardSiteId:source.boardSiteId,type,completed:true,installation:true,completion:entries.map(({stage,entry})=>({stage,date:entry!.date,...type==='ups'?{checks:entry!.checks}:{}})),documents:typed.map(t=>({purpose:t.purpose,id:t.ref!.id,sha256:byId.get(t.ref!.id).sha256})),photos:photos.map(p=>({...p,sha256:byId.get(p.id).sha256})).sort((a,b)=>a.stage.localeCompare(b.stage)||a.id.localeCompare(b.id))})).digest('hex');
+ const signature=createHash('sha256').update(JSON.stringify({boardSiteId:source.boardSiteId,type,completed:true,installation:true,...final.noVariableItemsUsed?{noVariableItemsUsed:true}:{},completion:entries.map(({stage,entry})=>({stage,date:entry!.date,...type==='ups'?{checks:entry!.checks}:{}})),documents:typed.map(t=>({purpose:t.purpose,id:t.ref!.id,sha256:byId.get(t.ref!.id).sha256})),photos:photos.map(p=>({...p,sha256:byId.get(p.id).sha256})).sort((a,b)=>a.stage.localeCompare(b.stage)||a.id.localeCompare(b.id))})).digest('hex');
  return {evidence,signature,source};
 }
 /** Internal read projection. Caller must authorise Accounts job access. */

@@ -28,15 +28,15 @@ export type BoardSite=z.infer<typeof sourceSiteSchema>;
 const commandBase=z.object({version:z.number().int().positive(),requestKey:z.uuid(),edit:z.boolean().default(false),reason:z.string().trim().max(2000).default('')});
 const vendorId=z.union([z.uuid(),z.literal('pz-team')]);
 export const vendorAssignmentsSchema=z.object({structure:vendorId.optional(),electrical:vendorId.optional(),earthing:vendorId.optional(),delivery:vendorId.optional()}).strict();
-const completionFields={date:z.iso.date(),evidenceIds:z.array(z.uuid()).max(30).default([]),acknowledgementId:z.uuid().optional(),irrId:z.uuid().optional(),variableSignoffId:z.uuid().optional()};
+const completionFields={date:z.iso.date(),evidenceIds:z.array(z.uuid()).max(30).default([]),acknowledgementId:z.uuid().optional(),irrId:z.uuid().optional(),variableSignoffId:z.uuid().optional(),noVariableItemsUsed:z.boolean().optional()};
 export const commandSchema=z.discriminatedUnion('action',[
  commandBase.extend({action:z.literal('assign-team'),team:teamSchema}).strict(),
  commandBase.extend({action:z.literal('plan'),dispatchDate:z.iso.date(),assignments:vendorAssignmentsSchema,teamMemberIds:z.array(z.uuid()).max(50).refine(v=>new Set(v).size===v.length,'Choose each team member once.').optional()}).strict(),
  commandBase.extend({action:z.literal('delivery'),dispatchId:z.uuid().optional(),deliveryDate:z.iso.date(),signedDoId:z.uuid(),materialPhotoId:z.uuid(),partial:z.boolean().default(false)}).strict(),
  commandBase.extend({action:z.literal('delivery-return'),scope:z.enum(['full','partial']),date:z.iso.date().optional(),dateUnknown:z.boolean(),warehouse:z.string().trim().max(200).default(''),reference:z.string().trim().max(200).default(''),reason:z.string().trim().min(3).max(2000)}).strict(),
  commandBase.extend({action:z.literal('qc'),stageId:z.enum(['civil','electrical','testing','signoff','cabinet','panel','bessTesting','handover']),...completionFields}).strict(),
- commandBase.extend({action:z.literal('ups-job'),...completionFields,checks:z.object({mounting:z.boolean(),electrical:z.boolean(),testingTraining:z.boolean(),signoff:z.boolean()}).strict()}).strict(),
- commandBase.extend({action:z.literal('historical-evidence'),category:z.enum(['delivery','handover']),date:z.iso.date(),signedDoId:z.uuid().optional(),materialPhotoId:z.uuid().optional(),acknowledgementId:z.uuid().optional(),irrId:z.uuid().optional(),variableSignoffId:z.uuid().optional()}).strict(),
+ commandBase.extend({action:z.literal('ups-job'),...completionFields,stagePictureIds:z.object({mounting:z.array(z.uuid()).min(1).max(10),electrical:z.array(z.uuid()).min(1).max(10),testingTraining:z.array(z.uuid()).min(1).max(10)}).optional(),checks:z.object({mounting:z.boolean(),electrical:z.boolean(),testingTraining:z.boolean(),signoff:z.boolean()}).strict()}).strict(),
+ commandBase.extend({action:z.literal('historical-evidence'),category:z.enum(['delivery','handover']),date:z.iso.date(),signedDoId:z.uuid().optional(),materialPhotoId:z.uuid().optional(),acknowledgementId:z.uuid().optional(),irrId:z.uuid().optional(),variableSignoffId:z.uuid().optional(),noVariableItemsUsed:z.boolean().optional()}).strict(),
  commandBase.extend({action:z.literal('blocker'),text:z.string().trim().min(1).max(2000)}).strict(),
  commandBase.extend({action:z.literal('resolve-blocker'),blockerId:z.string().min(1).max(200),resolution:z.string().trim().min(1).max(2000)}).strict(),
 ]);

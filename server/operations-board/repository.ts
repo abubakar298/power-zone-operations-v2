@@ -317,17 +317,20 @@ export class OperationsBoardRepository{
     }else snapshot=confirmDelivery(site,value,now);
     kind=v.partial?'Partial delivery update':site.invoiceOnDelivery?'Delivery invoice due':'Delivery update';audiences=['accounts'];
    }else if(v.action==='qc'||v.action==='ups-job'){
-    const ids=[...v.evidenceIds,...[v.acknowledgementId,v.irrId,v.variableSignoffId].filter((s):s is string=>!!s)],files=await this.references(c,id,ids);
-    const value:Entry={date:v.date,evidence:files.get(v.evidenceIds[0]),additionalEvidence:v.evidenceIds.slice(1).map(f=>files.get(f)!),acknowledgement:v.acknowledgementId?files.get(v.acknowledgementId):undefined,irr:v.irrId?files.get(v.irrId):undefined,variableSignoff:v.variableSignoffId?files.get(v.variableSignoffId):undefined};
-    if(v.edit){const old=v.action==='qc'?site.qc?.[v.stageId]:site.qcJob;if(old&&old.date===value.date&&isDeepStrictEqual([old.evidence?.id,...(old.additionalEvidence??[]).map(f=>f.id)].filter(Boolean),v.evidenceIds)&&old.acknowledgement?.id===value.acknowledgement?.id&&old.irr?.id===value.irr?.id&&old.variableSignoff?.id===value.variableSignoff?.id)throw new HttpError(422,'Nothing changed. Cancel editing or update the QC record.');}
+    const ids=[...v.evidenceIds,...(v.action==='ups-job'?Object.values(v.stagePictureIds??{}).flat():[]),...[v.acknowledgementId,v.irrId,v.variableSignoffId].filter((s):s is string=>!!s)],files=await this.references(c,id,ids);
+    const value:Entry={date:v.date,evidence:files.get(v.evidenceIds[0]),additionalEvidence:v.evidenceIds.slice(1).map(f=>files.get(f)!),acknowledgement:v.acknowledgementId?files.get(v.acknowledgementId):undefined,irr:v.irrId?files.get(v.irrId):undefined,variableSignoff:v.variableSignoffId?files.get(v.variableSignoffId):undefined,noVariableItemsUsed:v.noVariableItemsUsed,...v.action==='ups-job'&&v.stagePictureIds?{stagePictures:Object.fromEntries(Object.entries(v.stagePictureIds).map(([key,ids])=>[key,ids.map(file=>files.get(file)!)]))}:{}};
+    if(v.edit&&!value.irr)value.irr=(v.action==='qc'?site.qc?.[v.stageId]:site.qcJob)?.irr;
+    if(v.edit){const old=v.action==='qc'?site.qc?.[v.stageId]:site.qcJob;if(old&&old.date===value.date&&isDeepStrictEqual([old.evidence?.id,...(old.additionalEvidence??[]).map(f=>f.id)].filter(Boolean),v.evidenceIds)&&isDeepStrictEqual(old.stagePictures,value.stagePictures)&&old.acknowledgement?.id===value.acknowledgement?.id&&old.irr?.id===value.irr?.id&&old.variableSignoff?.id===value.variableSignoff?.id&&(old.noVariableItemsUsed===true)===(value.noVariableItemsUsed===true))throw new HttpError(422,'Nothing changed. Cancel editing or update the QC record.');}
     snapshot=v.action==='qc'?completeQcStage(site,v.stageId,value,now,v.edit):completeUpsJob(site,{...value,checks:v.checks},now,v.edit);
     kind=snapshot.completed?'Installation completed':'QC stage completed';audiences=snapshot.completed?['accounts']:['operations-head'];
    }else if(v.action==='historical-evidence'){
-    const ids=v.category==='delivery'?[v.signedDoId,v.materialPhotoId]:[v.acknowledgementId,v.irrId,v.variableSignoffId];
-    if(ids.some(id=>!id))throw new HttpError(422,v.category==='delivery'?'Upload the signed DO and material photo.':'Upload the acknowledgement, IRR and variable-items sign-off.');
+    if(v.category==='handover'&&(!v.acknowledgementId||!v.noVariableItemsUsed&&!v.variableSignoffId))throw new HttpError(422,'Upload the acknowledgement and variable-items sign-off, or confirm no variable items were used.');
+    if(v.category==='handover'&&v.noVariableItemsUsed&&v.variableSignoffId)throw new HttpError(422,'Choose no variable items used or a sign-off, not both.');
+    const ids=v.category==='delivery'?[v.signedDoId,v.materialPhotoId]:[v.acknowledgementId,...(v.irrId?[v.irrId]:[]),...(v.variableSignoffId?[v.variableSignoffId]:[])];
+    if(ids.some(id=>!id))throw new HttpError(422,v.category==='delivery'?'Upload the signed DO and material photo.':'Upload the acknowledgement and variable-items sign-off.');
     const files=await this.references(c,id,ids as string[]),references=(ids as string[]).map(file=>files.get(file)!);
     if(v.category==='delivery'&&!references[1].mediaType.startsWith('image/'))throw new HttpError(422,'Upload a photo of the delivered material.');
-    snapshot=attachHistoricalEvidence(site,{category:v.category,date:v.date,files:references},now,v.edit);kind='Existing site evidence recorded';audiences=['accounts'];
+    snapshot=attachHistoricalEvidence(site,{category:v.category,date:v.date,files:references,...v.category==='handover'?{completionEvidenceVersion:2,acknowledgement:files.get(v.acknowledgementId!),irr:v.irrId?files.get(v.irrId):undefined,variableSignoff:v.variableSignoffId?files.get(v.variableSignoffId):undefined,noVariableItemsUsed:v.noVariableItemsUsed}:{}},now,v.edit);kind='Existing site evidence recorded';audiences=['accounts'];
    }else if(v.action==='blocker'){
     if(v.edit)throw new HttpError(422,'Resolve the saved blocker or add a new reason.');
     const stage=currentStage(site);if(site.blockers.some(b=>b.status==='open'&&b.stage===stage&&b.reason===v.text))throw new HttpError(409,'This blocker reason is already recorded.');

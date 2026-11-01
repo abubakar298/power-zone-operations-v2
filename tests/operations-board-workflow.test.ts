@@ -33,10 +33,10 @@ test('Operations planning, UPS/Solar/BESS QC, blockers and corrections preserve 
   await assert.rejects(command('lead','ups',{action:'plan',dispatchDate:'2026-01-02',assignments,edit:true}),/reason/);
   const fixed=await command('lead','ups',{action:'plan',dispatchDate:'2026-01-02',assignments:{electrical:'pz-team',earthing:vendor.id,delivery:vendor.id},edit:true,reason:'Vehicle rescheduled'});
   assert.equal(fixed.dispatchDate,'2026-01-02');await assert.rejects(command('lead','ups',{action:'plan',dispatchDate:'2026-01-02',assignments:{electrical:'pz-team',earthing:vendor.id,delivery:vendor.id},edit:true,reason:'No actual changes'}),/Nothing changed/);
-  const files:Record<string,{pdf:string;photo:string}>={};
+  const files:Record<string,{pdf:string;photo:string;vso:string}>={};
   for(const row of rows){
    const pdf=await repo.upload(users.qc,row.id,{filename:'signed.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7\nfixture '+row.id).toString('base64')});
-   const photo=await repo.upload(users.qc,row.id,{filename:'photo.png',mediaType:'image/png',base64:Buffer.from([137,80,78,71,13,10,26,10,0]).toString('base64')});files[row.id]={pdf:pdf.id,photo:photo.id};
+   const photo=await repo.upload(users.qc,row.id,{filename:'photo.png',mediaType:'image/png',base64:Buffer.from([137,80,78,71,13,10,26,10,0]).toString('base64')});const vso=await repo.upload(users.qc,row.id,{filename:'variable-signoff.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7 variable '+row.id).toString('base64')});files[row.id]={pdf:pdf.id,photo:photo.id,vso:vso.id};
   }
   await assert.rejects(command('qc','ups',{action:'delivery',deliveryDate:'2026-01-02',signedDoId:files.bess.pdf,materialPhotoId:files.ups.photo}),/different site/);
   await assert.rejects(command('qc','ups',{action:'delivery',deliveryDate:'2026-01-02',signedDoId:files.ups.pdf,materialPhotoId:files.ups.pdf}),/photo/);
@@ -48,7 +48,7 @@ test('Operations planning, UPS/Solar/BESS QC, blockers and corrections preserve 
   for(const row of rows)await command('qc',row.id,{action:'delivery',deliveryDate:'2026-01-03',signedDoId:files[row.id].pdf,materialPhotoId:files[row.id].photo});
   assert.equal((await repo.site(users.owner,'delivery-only')).completed,true);
   const upsDeliveries=await repo.site(users.owner,'ups');assert.equal(new Set(upsDeliveries.documents?.map(d=>d.id)).size,2,'partial and final deliveries stay distinct even when a combined PDF is reused');
-  const upsEntry={action:'ups-job',date:'2026-01-04',evidenceIds:[files.ups.photo],acknowledgementId:files.ups.pdf,irrId:files.ups.pdf,variableSignoffId:files.ups.pdf,checks:{mounting:true,electrical:true,testingTraining:true,signoff:true}};
+  const upsEntry={stagePictureIds:{mounting:[files.ups.photo],electrical:[files.ups.photo],testingTraining:[files.ups.photo]},action:'ups-job',date:'2026-01-04',evidenceIds:[files.ups.photo],acknowledgementId:files.ups.pdf,irrId:files.ups.pdf,variableSignoffId:files.ups.vso,checks:{mounting:true,electrical:true,testingTraining:true,signoff:true}};
   await assert.rejects(command('lead','ups',upsEntry),/QC team/);await assert.rejects(command('south','ups',upsEntry),/not found/);
   await assert.rejects(command('qc','ups',{...upsEntry,checks:{...upsEntry.checks,mounting:false}}),/Confirm system/);
   const version=(await repo.site(users.owner,'ups')).version,requestKey=randomUUID(),body=commandSchema.parse({version,requestKey,...upsEntry});
@@ -58,7 +58,7 @@ test('Operations planning, UPS/Solar/BESS QC, blockers and corrections preserve 
   const jobs=[['solar-bess',['civil','electrical','testing','signoff']],['bess',['cabinet','panel','bessTesting','handover']]] as const;
   for(const [id,stages] of jobs){
    if(id!=='solar-bess')await assert.rejects(command('qc',id,{action:'qc',stageId:stages[1],date:'2026-01-04',evidenceIds:[files[id].photo]}),/earlier QC/);
-   for(const stageId of stages.filter(stage=>id!=='solar-bess'||stage!=='civil'))await command('qc',id,{action:'qc',stageId,date:'2026-01-04',evidenceIds:[files[id].photo],...(stageId===stages[3]?{acknowledgementId:files[id].pdf,irrId:files[id].pdf,variableSignoffId:files[id].pdf}:{})});
+   for(const stageId of stages.filter(stage=>id!=='solar-bess'||stage!=='civil'))await command('qc',id,{action:'qc',stageId,date:'2026-01-04',evidenceIds:[files[id].photo],...(stageId===stages[3]?{acknowledgementId:files[id].pdf,irrId:files[id].pdf,variableSignoffId:files[id].vso}:{})});
    assert.equal((await repo.site(users.owner,id)).completed,true);
   }
   const beforeCorrection=workflowSiteSchema.parse(await repo.site(users.owner,'bess'));
