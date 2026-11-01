@@ -47,6 +47,8 @@ test('Accounts receives and downloads committed QC signed documents without Inve
   const data=(await request(app).get('/api/accounts-workspace/customer-documents').set('Cookie',sessions.Accounts).expect(200)).body;
   assert.equal(data.rows.length,4);assert.deepEqual(new Set(data.rows.map((r:any)=>r.kind)),new Set(['Signed DO','VSO','Acknowledgment']));
   const count=(await request(app).get('/api/accounts-workspace/customer-documents?summary=1').set('Cookie',sessions.Accounts).expect(200)).body;assert.equal(count.count,1);assert.equal(count.documents,4);assert.equal(groupAccountsCustomerDocuments(data.rows)[0].documents.length,4);
+  assert.equal((await request(app).get('/api/accounts-workspace/customer-documents').query({jobKey:'ipo:'+closedIpo}).set('Cookie',sessions.Accounts).expect(200)).body.rows.length,4);
+  assert.equal((await request(app).get('/api/accounts-workspace/customer-documents').query({jobKey:'ipo:'+randomUUID()}).set('Cookie',sessions.Accounts).expect(200)).body.rows.length,0,'A different job must never receive files through matching display names or IPO text.');
   const doc=data.rows.find((r:any)=>r.kind==='VSO');const download=await request(app).get(doc.downloadUrl).set('Cookie',sessions.Accounts).expect(200);assert.equal(download.body.toString(),content.toString());assert.match(download.headers['cache-control'],/no-store/);
   await request(app).get('/api/accounts-workspace/customer-documents/'+'f'.repeat(64)+'/file').set('Cookie',sessions.Accounts).expect(404);
   await request(app).get(doc.downloadUrl).set('Cookie',sessions.Inventory).expect(403);

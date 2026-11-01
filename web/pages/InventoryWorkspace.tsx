@@ -36,10 +36,12 @@ export function InventoryWorkspace({
   session,
   accounts = false,
   receiveOnly = false,
+  initialJobKey,
 }: {
   session: Session;
   accounts?: boolean;
   receiveOnly?: boolean;
+  initialJobKey?: string;
 }) {
   const savePending=useRef(false);
   const [tab, setTab] = useState(
@@ -83,6 +85,8 @@ export function InventoryWorkspace({
   useEffect(() => {
     void load().catch((e) => setError(e.message));
   }, []);
+  const initialOpened=useRef(false);
+  useEffect(()=>{if(loaded&&initialJobKey&&!initialOpened.current){initialOpened.current=true;void openJob(initialJobKey);}},[loaded,initialJobKey]);
   function cleanNavigate(next: string) {
     if (
       dirty &&
@@ -320,6 +324,7 @@ export function InventoryWorkspace({
       <a href={"/api/inventory-reconciliation/files/" + f.id}>{f.filename}</a>
     </li>
   ));
+  if(initialJobKey&&!job)return <section><p role={error?'alert':'status'}>{error||'Opening the selected site reconciliation…'}</p></section>;
   return (
     <section className="pz-inventory">
       <div className="pz-action-row">
