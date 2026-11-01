@@ -1,0 +1,20 @@
+import {test,expect} from '@playwright/test';
+import {actors,login} from './release-fixtures.js';
+test('one material queue shows usage beside documents and opens PT entry, with ten-row pagination',async({page})=>{
+ await actors(page.request);await login(page.request,'accounts-release@example.test');
+ await page.route('**/api/accounts-workspace',r=>r.fulfill({json:{ipos:[],closures:[],ptEntries:[]}}));
+ const report={id:'report',job_key:'ubl:68',version:2,site_name:'Jhudo',job_id:'CHP-294'};
+ const rows=Array.from({length:12},(_,i)=>({key:'site'+i,jobKey:'ubl:'+i,siteId:'site'+i,siteName:i?'Site '+i:'Jhudo',ipo:'CHP-'+i,customer:'UBL',status:i?'Awaiting QC usage':'Ready for PT entry',report:i?null:report,documents:[]}));
+ await page.route('**/api/accounts-workspace/material-costing',r=>r.fulfill({json:{rows}}));
+ await page.route('**/api/inventory-reconciliation/reports/report',r=>r.fulfill({json:{versions:[{version:2,stage:'Sent to Accounts',snapshot:{reconciliation:{sections:[{rows:[{key:'fixed',description:'Fixed material with a long description on a second line',unit:'pcs',approved:'4',installed:'3'},{key:'cable',description:'Cable',unit:'m',approved:'20',installed:'15'}]}]}}}],files:[]}}));
+ await page.route('**/api/accounts-workspace/site-local-purchases?siteId=*',r=>r.fulfill({json:{items:[]}}));
+ await page.goto('/dashboard#workspace=finance&accountsTab=Material+Costing+%26+PT+Entry');
+ const table=page.locator('.accounts-material-costing .accounts-entry-table');await expect(table.locator('tbody tr')).toHaveCount(10);
+ const nav=page.getByRole('navigation',{name:'sites pages'});await nav.getByRole('button',{name:'Next',exact:true}).click();await expect(table.locator('tbody tr')).toHaveCount(2);await nav.getByRole('button',{name:'Previous',exact:true}).click();
+ await table.getByRole('button',{name:'Review material entry',exact:true}).first().click();
+ const dialog=page.getByRole('dialog');await expect(dialog.getByRole('columnheader',{name:'Actual used · VSO',exact:true})).toHaveCount(0);await expect(dialog.getByRole('columnheader',{name:'Actual used',exact:true})).toBeVisible();await expect(dialog.getByText('15',{exact:true})).toBeVisible();
+ await expect(dialog.getByRole('heading',{name:'Supporting documents',exact:true})).toBeVisible();
+ await dialog.getByRole('button',{name:'Recorded in PT — Prepare Job Closure',exact:true}).click();
+ await expect(page.getByRole('dialog').getByLabel('PT reference (required)',{exact:true})).toBeVisible();
+ await page.screenshot({path:'test-results/accounts-material-costing-pt.png',fullPage:true});
+});

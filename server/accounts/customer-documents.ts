@@ -57,7 +57,15 @@ export async function customerDocuments(pool:Pool,includeClosed=false,jobKey?:st
  if(!refs.length)return {rows:[] as AccountsCustomerDocument[],refs};
  const ids=[...new Set(refs.map(r=>r.fileId))];
  const [qc,warehouse]=await Promise.all([pool.query('SELECT id,site_id,filename,media_type,created_at FROM operations_board_files WHERE id=ANY($1::uuid[])',[ids]),pool.query('SELECT id,warehouse,original_name filename,media_type,created_at FROM inventory_material_evidence WHERE id=ANY($1::uuid[])',[ids])]);
- return {rows:projectCustomerDocuments(refs,[...qc.rows,...warehouse.rows]),refs};
+ const rows=projectCustomerDocuments(refs,[...qc.rows,...warehouse.rows]).map(row=>{
+  const b=bySite.get(row.siteId),s=b?.snapshot,origin=s?.origin?.ipoId;
+  let key=uuid.safeParse(origin).success?'ipo:'+origin:undefined;
+  if(!key&&typeof s?.jobKey==='string')key=s.jobKey;
+  if(!key){const candidates=[row.siteId,s?.sourceKey,s?.key].filter(v=>typeof v==='string').map(v=>v.replace(/^(?:registered-|received-)/,''));key=candidates.map(v=>legacySolar.get(v)).find(Boolean);}
+  if(!key){const linked=nativeLinks.get(row.siteId)??[];if(linked.length===1)key='ipo:'+linked[0];}
+  return {...row,...key?{jobKey:key}:{}};
+ });
+ return {rows,refs};
 }
 export async function customerDocumentFile(pool:Pool,id:string){
  const data=await customerDocuments(pool,true),row=data.rows.find(r=>r.id===id);if(!row)throw new HttpError(404,'This customer-signed document is not available.');

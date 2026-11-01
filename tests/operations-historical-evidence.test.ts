@@ -30,7 +30,7 @@ test('later historical evidence preserves completion, clocks and financial hando
   await assert.rejects(repo.command(users.qc,'pending',{...base,requestKey:randomUUID(),acknowledgementId:pendingPdf.id,irrId:pendingPdf.id,variableSignoffId:pendingPdf.id}),/already recorded complete/);
   await assert.rejects(repo.command(users.qc,'historical',{edit:false,reason:'',action:'historical-evidence',category:'delivery',version:3,date:'2026-01-01',requestKey:randomUUID(),signedDoId:pdf.id,materialPhotoId:pdf.id}),/photo/);
  const delivered=await repo.command(users.qc,'historical',{edit:false,reason:'Entered by Rafiq from the existing IPO thread; delivery photo unavailable.',action:'historical-evidence',category:'delivery',version:3,date:'2026-01-01',requestKey:randomUUID(),signedDoId:pdf.id});
-  assert.equal(delivered.version,4);assert.equal(delivered.documents?.find(d=>d.id==='historical:historical-delivery-documents')?.evidence.length,1);assert.deepEqual(delivered.accounts,original.accounts);assert.equal(delivered.deliveryDate,original.deliveryDate);assert.equal(delivered.completed,true);
+  assert.equal(delivered.version,4);assert.equal(delivered.documents?.find((d:any)=>d.id==='historical:historical-delivery-documents')?.evidence.length,1);assert.deepEqual(delivered.accounts,original.accounts);assert.equal(delivered.deliveryDate,original.deliveryDate);assert.equal(delivered.completed,true);
   assert.match((await db.pool.query("SELECT reason FROM operations_board_versions WHERE site_id=$1 AND version=4",['historical'])).rows[0].reason,/Entered by Rafiq/);
  }finally{await db.close();}
 });

@@ -1,3 +1,4 @@
+import {AccountsMaterialCosting} from './AccountsMaterialCosting.js';
 import {AccountsCustomerDocuments} from './AccountsCustomerDocuments.js';
 import {EvidencePreview} from '../components/EvidencePreview.js';
 import {accountsPageName} from '../../shared/accounts-navigation.js';
@@ -156,7 +157,7 @@ export function AccountsWorkspace({
     refresh();window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',visible);
     return()=>{active=false;generation++;window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',visible);};
   },[tab,actorContext]);
-  useEffect(()=>{if(tab!=='My Workspace')return;let active=true,request=0;const refresh=()=>{const current=++request;void api<{count:number}>('/accounts-workspace/customer-documents?summary=1').then(v=>{if(active&&current===request)setApprovedDocumentCount(v.count);}).catch(()=>{if(active&&current===request)setApprovedDocumentCount(null);});};setApprovedDocumentCount(null);refresh();window.addEventListener('focus',refresh);return()=>{active=false;window.removeEventListener('focus',refresh);};},[tab,actorContext]);
+  useEffect(()=>{if(tab!=='My Workspace')return;let active=true,request=0;const refresh=()=>{const current=++request;void api<{count:number}>('/accounts-workspace/material-costing?summary=1').then(v=>{if(active&&current===request)setApprovedDocumentCount(v.count);}).catch(()=>{if(active&&current===request)setApprovedDocumentCount(null);});};setApprovedDocumentCount(null);refresh();window.addEventListener('focus',refresh);return()=>{active=false;window.removeEventListener('focus',refresh);};},[tab,actorContext]);
   async function load() {
     if (!workspaceNeeded && !reportsNeeded) return;
     const generation = ++loadGeneration.current;
@@ -216,7 +217,7 @@ export function AccountsWorkspace({
     setBusy(true);
     try{
       await api('/accounts-workspace/pt-entries',{csrf:session.csrfToken,body:{sourceKind:ptDocument.kind,sourceId:ptDocument.id,sourceVersion:ptDocument.kind==='IPO'?1:ptDocument.version,ptReference:ptEntryReference,entryDate:ptEntryDate,notes:ptEntryNotes}});
-      await load();setPtDocument(undefined);setPtEntryReference('');setPtEntryNotes('');setMessage('PT entry recorded against this document version.');
+      const completed=ptDocument;await load();setPtDocument(undefined);setPtEntryReference('');setPtEntryNotes('');if(completed.kind==='Inventory'&&completed.job_key&&!isDeliveryOnlyDo(completed)){await openJob(completed.job_key);}setMessage('PT entry recorded against this document version.');
     }catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
   async function closePtEntry(){
@@ -551,11 +552,12 @@ export function AccountsWorkspace({
       </div>}
       {!["My Workspace","Physical Documents","IPOs Received","IPOs Recorded in PT","Approved Documents","Inventory PT Entries","Inventory Recorded in PT","Job Closure","Awaiting Management","Closed Jobs","Project Sites","Programme Dashboard","Project Tracking","Payments to Record","IPO Review","Invoicing","Receivables"].includes(tab)&&<h2>{tab==="My Workspace"?"Work queues":tab}</h2>}
       {doDocument&&<AccountsRecordDialog title="Site documents" reference={doDocument.record.number??jobLabel(doDocument.record)} subtitle={doDocument.record.site_name??doDocument.record.snapshot?.siteName} onClose={()=>{inventoryDocumentRequest.current++;setDoDocument(undefined);}}><section className="accounts-record-section"><h3>{doDocument.record.site_name??doDocument.record.snapshot?.siteName??jobLabel(doDocument.record)}</h3><p>Signed source documents and report attachments for this site only. Reconciliation and PT entry are separate actions.</p></section><section className="accounts-record-section"><h3>Approved documents</h3>{doDocument.loading?<p role="status">Loading site documents…</p>:doDocument.error?<p role="alert" className="form-error">{doDocument.error}</p>:(doDocument.files?.length||doDocument.signedFiles?.length)?<ul className="accounts-file-list">{(doDocument.signedFiles??[]).map((file:any)=><li key={file.id}><span>{file.kind}<small>{file.filename} · {file.source}</small></span><EvidencePreview url={file.downloadUrl} title={file.kind} filename={file.filename}/></li>)}{(doDocument.files??[]).map((file:any)=><li key={file.id}><span>{file.filename}</span><EvidencePreview url={'/api/inventory-reconciliation/files/'+file.id} title={file.filename} filename={file.filename}/></li>)}</ul>:<p>No signed source files or attachments have been uploaded for this site. Its imported reconciliation data is a separate report, not a signed document.</p>}</section></AccountsRecordDialog>}
-      {ptDocument&&<AccountsRecordDialog title="Record PT Entry" reference={ptDocument.number??jobLabel(ptDocument)} onClose={()=>void closePtEntry()}><p>Confirm the document has been entered in PT, then save its reference here.</p><div className="pz-form-grid"><Field id="pt-entry-reference" label="PT reference (required)"><input id="pt-entry-reference" value={ptEntryReference} onChange={e=>setPtEntryReference(e.target.value)}/></Field><Field id="pt-entry-date" label="Entry date (required)"><input id="pt-entry-date" type="date" value={ptEntryDate} onChange={e=>setPtEntryDate(e.target.value)}/></Field></div><Field id="pt-entry-notes" label="PT entry notes"><textarea id="pt-entry-notes" value={ptEntryNotes} onChange={e=>setPtEntryNotes(e.target.value)}/></Field><Button variant="primary" loading={busy} onClick={()=>void savePtEntry()}>Save PT entry</Button>{error&&errorAction==='pt-entry'&&<p role="alert" className="form-error">{error}</p>}</AccountsRecordDialog>}
+      {ptDocument&&<AccountsRecordDialog title="Record PT Entry" reference={ptDocument.number??jobLabel(ptDocument)} onClose={()=>void closePtEntry()}><p>Confirm the document has been entered in PT, then save its reference here.</p><div className="pz-form-grid"><Field id="pt-entry-reference" label="PT reference (required)"><input id="pt-entry-reference" value={ptEntryReference} onChange={e=>setPtEntryReference(e.target.value)}/></Field><Field id="pt-entry-date" label="Entry date (required)"><input id="pt-entry-date" type="date" value={ptEntryDate} onChange={e=>setPtEntryDate(e.target.value)}/></Field></div><Field id="pt-entry-notes" label="PT entry notes"><textarea id="pt-entry-notes" value={ptEntryNotes} onChange={e=>setPtEntryNotes(e.target.value)}/></Field><Button variant="primary" loading={busy} onClick={()=>void savePtEntry()}>{ptDocument.kind==='Inventory'?'Save PT entry & Prepare Job Closure':'Save PT entry'}</Button>{error&&errorAction==='pt-entry'&&<p role="alert" className="form-error">{error}</p>}</AccountsRecordDialog>}
       {["Programme Dashboard","Project Tracking"].includes(tab) && <ProgrammeDashboard userId={session.user.id} title="Project Tracking" endpoint="/accounts-workspace/programmes" onOpenSite={row=>{if(row.recordKey?.startsWith('ipo:'))void openIpo(row.recordKey.slice(4));else{setProgrammeSiteKey(row.sourceKey);navigate('Project Sites');}}}/>}
       {tab === "Project Sites" && <><header className="accounts-panel-heading accounts-subpage-heading"><h2>Site Details</h2><Button variant="neutral" onClick={()=>navigate("Project Tracking")}>Back to Project Tracking</Button></header><AccountsImportedSites initialSiteKey={programmeSiteKey} onOpenIpo={id=>void openIpo(id)}/></>}
       {tab === "Physical Documents" && <AccountsPhysicalDocuments/>}
       {tab === "Approved Documents" && <AccountsCustomerDocuments/>}
+      {tab === 'Material Costing & PT Entry' && <AccountsMaterialCosting onRecordPt={r=>{setPtDocument({...r,kind:'Inventory'});setPtEntryReference('');setPtEntryNotes('');setError('');}}/>}
       {tab === "Payments to Record" && <><Button variant="neutral" onClick={()=>navigate("My Workspace")}>Back to Dashboard</Button><AccountsPayments/></>}
       {tab === "Project checkpoints" && (
         <ProjectCheckpoints session={session} mode="Accounts" />
@@ -572,8 +574,7 @@ export function AccountsWorkspace({
           <div className="stage-grid workspace-buckets accounts-dashboard-buckets" role="group" aria-label="Project accounting work">
             {[
               ['IPOs Received',data.ipos.filter((i:any)=>!ptRecorded('IPO',i)).length,'IPOs Received',`${data.ipos.filter((i:any)=>ptRecorded('IPO',i)).length} recorded in PT`],
-              ['Approved Documents',approvedDocumentCount??'—','Approved Documents','Sites with QC signed documents'],
-              ['Inventory Reconciliations',reports.filter(r=>!ptRecorded('Inventory',r)).length,'Inventory PT Entries',`${reports.filter(r=>ptRecorded('Inventory',r)).length} recorded in PT`],
+              ['Material Costing & PT Entry',approvedDocumentCount??'—','Material Costing & PT Entry','QC usage, documents and material costs'],
               ['Job Closure',preparationReports.length,'Job Closure','Ready, drafts and returned jobs'],
               ['Awaiting Management',data.closures.filter((c:any)=>c.stage==='Awaiting Management').length,'Awaiting Management',`${data.closures.filter((c:any)=>c.stage==='Closed').length} jobs closed`],
             ].map(([label,count,destination,hint])=><Button key={String(label)} variant="neutral" className="stage-card" onClick={()=>navigate(String(destination))}><strong>{count}</strong><span>{label}</span><small>{hint}</small></Button>)}

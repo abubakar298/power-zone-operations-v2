@@ -1,3 +1,4 @@
+import {HistoricalQcUsage} from './HistoricalQcUsage.js';
 import {QcLocalPurchases} from './QcLocalPurchases.js';
 import {useEffect,useState} from 'react';
 import {confirmLeaveWorkspace} from '../../hooks/useUnsavedChanges.js';
@@ -20,7 +21,7 @@ export function QcMaterialUsage({boardId,session}:{boardId:string;session:Sessio
  return <Section title="Material Usage" action={!open?<Button variant="secondary" onClick={()=>setOpen(true)}>Open material usage</Button>:undefined}>
   {!open?<p>Record Operations-confirmed quantities against the signed DO and VSO. Inventory uses the saved figures for its return ledger.</p>:<>
    {notice&&<p role="status" className="ob-success">{notice}</p>}{error&&<><p role="alert" className="form-error">{error}</p><Button variant="neutral" onClick={()=>void load()}>Try again</Button></>}
-   {!data?(!error&&<p role="status">Loading issued materials…</p>):!root?<p>No issued material record is linked to this site. Issue or link its DO before recording usage.</p>:<>
+   {!data?(!error&&<p role="status">Loading issued materials…</p>):!root?<HistoricalQcUsage boardId={boardId} session={session}/>:<>
     <label>Material dispatch<select value={rootId} onChange={e=>{if(confirmLeaveWorkspace()){setNotice('');setRootId(e.target.value);}}}>{data.records.map(r=><option key={r.draftId} value={r.draftId}>{r.references.join(', ')||'Approved work'} · {r.parent?'Parent DO pool':r.kind==='fixed'?'Individual DO · fixed':'Individual DO · variable'} · {r.warehouse}</option>)}</select></label>
     <UsageForm key={boardId+':'+root.draftId+':'+(root.report?.version??0)} root={root} evidence={data.evidence} boardId={boardId} session={session} onCancel={()=>setOpen(false)} onSaved={()=>{setNotice('Material usage saved for Inventory reconciliation. Warehouse stock is unchanged.');void load();}}/>
    </>}

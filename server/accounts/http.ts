@@ -1,3 +1,4 @@
+import {materialCostingQueue} from './material-costing.js';
 import {readLocalPurchases} from '../operations-board/local-purchases.js';
 import {groupAccountsCustomerDocuments} from '../../shared/accounts-customer-documents.js';
 import {customerDocuments,customerDocumentFile} from './customer-documents.js';
@@ -51,6 +52,7 @@ export function accountsHttp(
     res.json({invoicesToSubmit:Object.values(invoices.submissionQueues).reduce((n,rows)=>n+rows.length,0),paymentsToRecord:payments.pending.length+payments.awaiting.length});
   });
   r.get('/closure-queue',async(req,res)=>res.json({closures:await repo.managementClosureQueue(req.authSession!.user.id)}));
+  r.get('/material-costing',async(req,res)=>{const data=await materialCostingQueue(repo.pool,req.authSession!.user.id);res.json(req.query.summary==='1'?{count:data.rows.length}:data);});
   r.get('/billing',async(req,res)=>res.json(await sources.billing(req.authSession!.user.id)));
   r.get('/invoice-entries',async(req,res)=>res.json(await invoiceRegister(repo.pool,req.authSession!.user.id)));
   r.post('/invoice-submissions',async(req,res)=>res.status(201).json(await recordInvoiceSubmission(repo.pool,req.authSession!.user.id,parse(invoiceSubmissionSchema,req.body))));

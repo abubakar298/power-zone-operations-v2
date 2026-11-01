@@ -1,0 +1,25 @@
+import {useEffect,useState} from 'react';
+import {api,type Session} from '../../api.js';
+import {Button} from '../../ui/Button.js';
+import {Editor,useSave} from './forms.js';
+import {decimalDisplay} from '../../numbers.js';
+import type {ReportEntry} from '../../../server/inventory/reconciliation.js';
+const blank:ReportEntry={start:'',end:'',panelCount:'',panelWattage:'',usage:{},remarks:'',expectedReturns:'',receivedReturns:'',extra:[]};
+export function HistoricalQcUsage({boardId,session}:{boardId:string;session:Session}){
+ const [data,setData]=useState<any>(),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ async function load(){setError('');try{setData(await api('/material-dispatches/qc/sites/'+encodeURIComponent(boardId)+'/historical-usage'));}catch(e){setError((e as Error).message);}}
+ useEffect(()=>{setData(undefined);void load();},[boardId]);
+ return <section className="pz-stack"><h3>Historical Site Material Usage</h3><p>The original dispatch is retained. Enter actual usage from the VSO; no warehouse OUT or return IN is created here.</p>{error&&<p role="alert" className="form-error">{error}</p>}{notice&&<p role="status" className="ob-success">{notice}</p>}{data?<HistoricalUsageForm key={boardId+':'+data.version} boardId={boardId} data={data} session={session} onSaved={()=>{setNotice('Usage saved. Verified entries are available in Accounts Material Costing & PT Entry. Warehouse stock is unchanged.');void load();}}/>:!error&&<p role="status">Loading historical issued-material references…</p>}</section>;
+}
+function HistoricalUsageForm({boardId,data,session,onSaved}:{boardId:string;data:any;session:Session;onSaved:()=>void}){
+ const [entry,setEntry]=useState<ReportEntry>(data.entry??blank),[reason,setReason]=useState(''),post=useSave(session);
+ const dirty=JSON.stringify(entry)!==JSON.stringify(data.entry??blank)||reason!=='';
+ function save(verify:boolean){if(data.locked)return;void post.save('/material-dispatches/qc/sites/'+encodeURIComponent(boardId)+'/historical-usage',{version:data.version,entry,reason,verify},onSaved);}
+ return <><details><summary>Issued materials · historical DO references ({data.issued.length})</summary>{!data.issued.length?<p>No item-level historical issue reference is linked. Review the signed DO above; approved BOQ quantities must not be treated as issued quantities.</p>:<div className="pz-table-scroll"><table className="ops-table qc-usage-table"><thead><tr><th>SR#</th><th>Item / description</th><th>UOM</th><th>Issued</th></tr></thead><tbody>{data.issued.map((l:any,i:number)=><tr key={l.key}><td>{i+1}</td><td><strong>{l.itemId}</strong><small>{l.description}</small></td><td>{l.unit}</td><td>{l.issued===null?'Not recorded':decimalDisplay(l.issued)}</td></tr>)}</tbody></table></div>}</details>
+  {data.locked?<p>This report already has a PT entry or Management submission. Accounts must review a correction before its quantities can change.</p>:<Editor dirty={dirty} busy={post.busy} error={post.error} label="Verify Usage & Send to Accounts" onCancel={()=>{setEntry(data.entry??blank);setReason('');}} onSubmit={()=>save(true)}>
+   <div className="pz-form-grid"><label>Entry reference / source<input required minLength={3} maxLength={2000} value={reason} onChange={e=>setReason(e.target.value)}/></label><label>Source notes<textarea maxLength={4000} value={entry.remarks} onChange={e=>setEntry({...entry,remarks:e.target.value})}/></label></div>
+   {data.lines.some((l:any)=>l.group==='watt')&&<div className="pz-form-grid"><label>Actual installed panel count<input inputMode="decimal" value={entry.panelCount} onChange={e=>setEntry({...entry,panelCount:e.target.value})}/></label><label>Panel wattage<input inputMode="decimal" value={entry.panelWattage} onChange={e=>setEntry({...entry,panelWattage:e.target.value})}/></label></div>}
+   <div className="pz-table-scroll"><table className="ops-table qc-usage-table"><thead><tr><th>SR#</th><th>Item / description</th><th>UOM</th><th>Approved BOQ</th><th>Actual used · VSO</th></tr></thead><tbody>{data.lines.filter((l:any)=>l.group!=='watt').map((l:any,i:number)=><tr key={l.key}><td>{i+1}</td><td><strong>{l.description}</strong></td><td>{l.unit}</td><td>{decimalDisplay(l.approved)}</td><td><input aria-label={'Actual used '+l.key} inputMode="decimal" pattern="[0-9]+([.][0-9]{1,4})?" value={entry.usage[l.key]??''} onChange={e=>setEntry({...entry,usage:{...entry.usage,[l.key]:e.target.value}})}/></td></tr>)}</tbody></table></div>
+   <p>Actual usage starts blank. Older reconciliation usage and return figures are never copied. Leave an unconfirmed quantity blank and save a draft. Local purchases and warehouse returns are recorded separately.</p><Button variant="secondary" disabled={post.busy||reason.trim().length<3} onClick={()=>save(false)}>Save usage draft</Button>
+  </Editor>}</>;
+}

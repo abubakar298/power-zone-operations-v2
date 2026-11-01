@@ -1,3 +1,4 @@
+import {HistoricalQcUsageRepository} from './historical-qc-usage.js';
 import {completionEvidence} from '../../shared/qc-completion-evidence.js';
 import {dispatchReconciliationEligibleSql} from './dispatch-reconciliation-eligibility.js';
 import {materialDispatchDraftLink} from './material-dispatch-link.js';
@@ -37,6 +38,8 @@ export function siteUsageEvidenceHolds(row:{key:string;itemId:string;description
 export class MaterialUsageRepository{
  private drafts:MaterialDraftRepository;
  constructor(private pool:Pool){this.drafts=new MaterialDraftRepository(pool);}
+ async historicalQcSite(actor:string,boardId:string){return new HistoricalQcUsageRepository(this.pool).read(actor,boardId);}
+ async saveHistoricalQcSite(actor:string,boardId:string,input:unknown){return new HistoricalQcUsageRepository(this.pool).save(actor,boardId,input);}
  private async usageDraft(actor:string,draftId:string,c:Pool|PoolClient,siteId?:string,write=false){
   const role=(await c.query('SELECT role FROM users WHERE id=$1',[actor])).rows[0]?.role;
   if(role!=='Operations')return this.drafts.detail(actor,draftId,c);

@@ -1,5 +1,5 @@
 export type CustomerDocumentKind='Signed DO'|'VSO'|'Acknowledgment';
-export type AccountsCustomerDocument={id:string;siteId:string;siteName:string;customer:string;ipo:string;kind:CustomerDocumentKind;filename:string;receivedAt:string;documentDate:string|null;source:'QC'|'Site sign-off';sourceVersion:number;downloadUrl:string};
+export type AccountsCustomerDocument={id:string;siteId:string;siteName:string;customer:string;ipo:string;jobKey?:string;kind:CustomerDocumentKind;filename:string;receivedAt:string;documentDate:string|null;source:'QC'|'Site sign-off';sourceVersion:number;downloadUrl:string};
 export type AccountsCustomerDocumentSite={siteId:string;siteName:string;customer:string;ipo:string;receivedAt:string;documents:AccountsCustomerDocument[]};
 /** Stable site identity groups partial delivery DOs without merging shared IPO numbers. */
 export function groupAccountsCustomerDocuments(rows:AccountsCustomerDocument[]):AccountsCustomerDocumentSite[]{

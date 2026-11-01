@@ -1,0 +1,9 @@
+.accounts-ui .accounts-material-costing .accounts-worklist-filters{grid-template-columns:minmax(240px,2fr) minmax(160px,1fr) minmax(180px,1fr) auto;align-items:start}
+.accounts-ui .accounts-material-costing .accounts-entry-table th:first-child{width:56px}
+.accounts-ui .accounts-material-costing .accounts-entry-table th:nth-child(2){width:40%}
+.accounts-ui .accounts-material-costing .accounts-entry-table th:last-child{width:240px}
+.accounts-ui .accounts-material-costing .accounts-entry-table td{vertical-align:top}
+.accounts-ui .accounts-material-costing .accounts-entry-table td strong{display:block;min-height:44px;line-height:24px;padding-top:10px}
+.accounts-ui .accounts-material-costing .accounts-entry-table td small{display:block;margin-top:4px}
+@media(max-width:900px){.accounts-ui .accounts-material-costing .accounts-worklist-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.accounts-ui .accounts-material-costing .accounts-worklist-filters{grid-template-columns:1fr}}
