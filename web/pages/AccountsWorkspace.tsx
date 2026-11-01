@@ -1153,9 +1153,9 @@ export function AccountsWorkspace({
             Installation: {job.entry.start} → {job.entry.end} · Net days:{" "}
             {installationDays(job.entry) ?? "Not available"} (inclusive)
           </p>
-          {manager && <ClosureComparison job={job} actual={actual} epcAggregate={epcAggregate} epc={epc}/>}
+          {(manager||readonly) && <ClosureComparison job={job} actual={actual} epcAggregate={epcAggregate} epc={epc}/>}
           {latest?.snapshot.amendment?.reason&&<p className="pz-caption">Latest correction: {latest.snapshot.amendment.reason}</p>}
-          {(!manager||!readonly)&&<details open={!readonly}><summary>Costing breakdown and EPC details</summary>
+          {!readonly&&<details open={!readonly}><summary>Costing breakdown and EPC details</summary>
           <ClosureCostTables
             job={job}
             actual={actual}
@@ -1169,7 +1169,7 @@ export function AccountsWorkspace({
             onDetails={setEpcDetails}
           />
           </details>}
-          {!manager && <>
+          {!manager&&!readonly && <>
           <h3>Closure summary · excluding GST</h3>
           <div className="table-scroll">
             <table>
