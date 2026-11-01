@@ -44,7 +44,8 @@ export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies
     const historical=b?.documents?.find((v:any)=>v.id===`${board?.site_id}:historical-handover-documents`);
     const reportCopy=report&&copies.find(c=>c.evidence_id===report.snapshot.customerEvidenceId&&c.document_id===d.id&&c.source_site_id===s.siteId);
     const received=own?{fileId:own.evidence_id,source:'warehouse' as const}:reportCopy?{fileId:reportCopy.evidence_id,source:'warehouse' as const}:report?.evidence_warehouse===d.warehouse?{fileId:report.snapshot.customerEvidenceId,source:'warehouse' as const}:qcFile(report?{id:report.snapshot.customerEvidenceId}:undefined)??qcFile(final?.variableSignoff,true)??qcFile(completionEvidence(historical).variableSignoff,true);
-    if(!(final?.noVariableItemsUsed===true||completionEvidence(historical).noVariableItemsUsed))documents.push({label:'Variable Items Sign Off',...received});
+    const noUse=(final?.noVariableItemsUsed===true&&(d.retrospective||instant(final.recordedAt??'')>=instant(d.created_at)))||(completionEvidence(historical).noVariableItemsUsed&&(d.retrospective||instant(historical?.createdAt??'')>=instant(d.created_at)));
+    if(!noUse)documents.push({label:'Variable Items Sign Off',...received});
    }
    return {siteId:s.siteId,registeredSiteId:board?.site_id??s.registeredSiteId,dispatchComplete:!d.snapshot.parent&&d.snapshot.kind==='fixed'&&d.snapshot.partialDelivery===false,name:s.siteName,customer:s.customer,ipo:[s.ipo,s.orderNumber].filter(Boolean).join(' · '),documents};
   });

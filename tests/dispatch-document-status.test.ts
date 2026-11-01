@@ -78,3 +78,13 @@ test('new owner-confirmed retrospective gate exception does not waive a customer
  const pending=dispatchDocumentRows([d],[board({qcJob:{variableSignoff:{id:'vso'}}})],[],[file('vso')],[])[0];assert.equal(pending.status,'awaiting');assert.deepEqual(pending.sites[0].documents.map(d=>d.label),['Signed DO']);
  const ready=dispatchDocumentRows([d],[board({deliveries:[delivery]})],[],[file('do')],[])[0];assert.equal(ready.status,'ready');
 });
+
+test('a no-variable declaration applies only to its existing dispatch and never credits returns',()=>{
+ const d=dispatch('d1',[cable],true);
+ const current=board({qcJob:{noVariableItemsUsed:true,recordedAt:later}});
+ assert.equal(dispatchDocumentRows([d],[current],[],[],[])[0].status,'ready');
+ const old=board({qcJob:{noVariableItemsUsed:true,recordedAt:'2026-10-30T08:00:00Z'}});
+ assert.equal(dispatchDocumentRows([d],[old],[],[],[])[0].status,'awaiting');
+ assert.equal(dispatchDocumentRows([d],[board({qcJob:{noVariableItemsUsed:true}})],[],[],[])[0].status,'awaiting');
+ assert.match(dispatchDocumentRows([d],[current],[],[],[])[0].reconciliationStatus,/returns require reconciliation/);
+});
