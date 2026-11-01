@@ -20,6 +20,7 @@ test('partial deliveries cannot reuse an ambiguous or explicitly different DO',(
  const d=[dispatch(),dispatch('d2')],legacy=board({deliveries:[{signedDo:{id:'do'}}],qcJob:ack});
  assert.deepEqual(dispatchDocumentRows(d,[legacy],[],[file('do'),file('ack')],[]).map(r=>r.status),['awaiting','awaiting']);
  const exact=dispatchDocumentRows(d,[board({deliveries:[delivery],qcJob:ack})],[],[file('do'),file('ack')],[]);
+ assert.match(exact[0].reviewNote??'',/Possible duplicate/);
  assert.deepEqual(exact.map(r=>r.status),['ready','awaiting']);
 });
 test('variable signoff is conditional on what was dispatched and old completion evidence does not clear new material',()=>{
@@ -70,4 +71,10 @@ test('Inventory readiness requires applicable DO/VSO only, while QC acknowledgme
  const pooled=dispatchDocumentRows([dispatch('pool',[cable],true)],[board({qcJob:{variableSignoff:{id:'vso'}}})],[],[file('vso')],[])[0];assert.equal(pooled.status,'ready');assert.deepEqual(pooled.sites[0].documents.map(d=>d.label),['Variable Items Sign Off']);
  const variable=dispatchDocumentRows([dispatch('d1',[fixed,cable])],[board({deliveries:[delivery],qcJob:{variableSignoff:{id:'vso'}}})],[],[file('do'),file('vso')],[])[0];assert.equal(variable.status,'ready');assert.equal(variable.sites[0].documents.length,2);
  const legacy={...variable,sites:[{...variable.sites[0],documents:[...variable.sites[0].documents,{label:'Acknowledgment' as const}]}]};const grouped=groupDispatchDocumentSites([legacy]);assert.equal(grouped[0].status,'ready');assert.equal(grouped[0].dispatches[0].site.documents.some(d=>d.label==='Acknowledgment'),false);
+});
+
+test('new owner-confirmed retrospective gate exception does not waive a customer signed DO',()=>{
+ const d={...dispatch(),retrospective:true,customer_do_waived:false};
+ const pending=dispatchDocumentRows([d],[board({qcJob:{variableSignoff:{id:'vso'}}})],[],[file('vso')],[])[0];assert.equal(pending.status,'awaiting');assert.deepEqual(pending.sites[0].documents.map(d=>d.label),['Signed DO']);
+ const ready=dispatchDocumentRows([d],[board({deliveries:[delivery]})],[],[file('do')],[])[0];assert.equal(ready.status,'ready');
 });

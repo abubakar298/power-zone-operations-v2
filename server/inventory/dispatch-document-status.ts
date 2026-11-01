@@ -4,7 +4,7 @@ import {HttpError} from '../http/errors.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import type {DispatchDocument,DispatchDocumentRow} from '../../shared/dispatch-document-status.js';
 type Db=Pool|PoolClient;
-type Dispatch={id:string;number:string;draft_id:string;warehouse:string;created_at:string;snapshot:any;retrospective?:boolean};
+type Dispatch={id:string;number:string;draft_id:string;warehouse:string;created_at:string;snapshot:any;retrospective?:boolean;customer_do_waived?:boolean};
 type Board={site_id:string;snapshot:any};
 type Copy={document_id:string;source_site_id:string|null;copy_kind:string;evidence_id:string};
 type File={id:string;site_id:string;created_at:string};
@@ -18,6 +18,8 @@ export function dispatchBoard(site:any,boards:Board[]){
 export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies:Copy[],files:File[],usage:Usage[],closed:Set<string>=new Set()):DispatchDocumentRow[]{
  const siteDispatches=new Map<string,Dispatch[]>();
  for(const d of dispatches)if(!d.snapshot.parent)for(const s of d.snapshot.sites??[]){const key=s.siteId;siteDispatches.set(key,[...(siteDispatches.get(key)??[]),d]);}
+ const signature=(d:Dispatch)=>JSON.stringify([d.warehouse,(d.snapshot.sites??[]).map((s:any)=>s.registeredSiteId??s.siteId).sort(),(d.snapshot.lines??[]).filter((l:any)=>Number(l.out??l.quantity)>0).map((l:any)=>[l.itemId,l.unit,String(l.out??l.quantity)]).sort((a:any,b:any)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))]);
+ const sameMaterials=new Map<string,Dispatch[]>();for(const d of dispatches.filter(d=>!d.snapshot.parent)){const key=signature(d);sameMaterials.set(key,[...(sameMaterials.get(key)??[]),d]);}
  return dispatches.filter(d=>!closed.has(d.draft_id)).map(d=>{
   const lines=(d.snapshot.lines??[]).filter((l:any)=>Number(l.out??l.quantity)>0);
   const sites=(d.snapshot.sites??[]).filter((s:any)=>lines.some((l:any)=>l.sites?.includes(s.siteId))).map((s:any)=>{
@@ -25,7 +27,7 @@ export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies
    const qcFile=(ref:any,fresh=false)=>ref?.id&&files.some(f=>f.id===ref.id&&f.site_id===board?.site_id&&(!fresh||d.retrospective||instant(f.created_at)>=instant(d.created_at)))?{fileId:ref.id as string,source:'qc' as const,boardId:board!.site_id}:undefined;
    const copy=(kind:string)=>copies.find(c=>c.document_id===d.id&&c.copy_kind===kind&&(kind!=='customer-signoff'||c.source_site_id===s.siteId));
    const documents:DispatchDocument[]=[];
-   if(!d.snapshot.parent&&!d.retrospective){
+   if(!d.snapshot.parent&&!(d.retrospective&&d.customer_do_waived!==false)){
     const own=copy('signed-customer');
     const deliveries=b?.deliveries??[],explicit=deliveries.filter((v:any)=>v.dispatchId===d.id),legacy=deliveries.filter((v:any)=>!v.dispatchId);
     const candidate=explicit.length===1?explicit[0]:!explicit.length&&siteDispatches.get(s.siteId)?.length===1&&legacy.length===1?legacy[0]:undefined;
@@ -34,7 +36,7 @@ export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies
     documents.push({label:'Signed DO',...received,...(!received&&deliveries.length?{note:'A signed DO must be linked to this delivery.'}:{})});
    }
    const variable=lines.filter((l:any)=>l.sites?.includes(s.siteId)&&materialDocumentPolicy(l).customerUsageSignoff);
-   if(variable.length||d.retrospective){
+   if(variable.length||(d.retrospective&&d.customer_do_waived!==false)){
     const own=copy('customer-signoff'),draftIds=[d.draft_id,d.snapshot.combinedPlan?.variableDraftId,d.snapshot.combinedPlan?.fixedDraftId].filter(Boolean);
     const report=usage.find(u=>draftIds.includes(u.draft_id)&&u.site_id===s.siteId&&u.snapshot.state==='signed'&&u.snapshot.customerEvidenceId&&(d.retrospective||instant(u.created_at)>=instant(d.created_at))&&variable.every((l:any)=>u.snapshot.lines?.some((v:any)=>v.lineKey===l.key&&v.used!==null)));
     const final=b?.qcJob??b?.qc?.signoff??b?.qc?.handover;
@@ -45,10 +47,10 @@ export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies
    }
    return {siteId:s.siteId,registeredSiteId:board?.site_id??s.registeredSiteId,dispatchComplete:!d.snapshot.parent&&d.snapshot.kind==='fixed'&&d.snapshot.partialDelivery===false,name:s.siteName,customer:s.customer,ipo:[s.ipo,s.orderNumber].filter(Boolean).join(' · '),documents};
   });
-  return {id:d.id,number:d.number,draftId:d.draft_id,warehouse:d.warehouse,createdAt:new Date(d.created_at).toISOString(),parent:!!d.snapshot.parent,retrospective:!!d.retrospective,sites,status:sites.length&&sites.every((s:any)=>s.documents.every((v:DispatchDocument)=>v.fileId))?'ready' as const:'awaiting' as const,reconciliationStatus:d.retrospective?'Retrospective DO: gate copy waived; usage and returns require reconciliation':'Usage and any returns require reconciliation'};
+  return {id:d.id,number:d.number,draftId:d.draft_id,warehouse:d.warehouse,createdAt:new Date(d.created_at).toISOString(),parent:!!d.snapshot.parent,retrospective:!!d.retrospective,...(!d.snapshot.parent&&(sameMaterials.get(signature(d))?.length??0)>1?{reviewNote:'Possible duplicate: same site, warehouse and quantities also appear on '+sameMaterials.get(signature(d))!.filter(other=>other.id!==d.id).map(other=>other.number).join(', ')+'. Verify whether these were separate deliveries.'}:{}),sites,status:sites.length&&sites.every((s:any)=>s.documents.every((v:DispatchDocument)=>v.fileId))?'ready' as const:'awaiting' as const,reconciliationStatus:d.retrospective?'Retrospective DO: gate copy waived; usage and returns require reconciliation':'Usage and any returns require reconciliation'};
  });
 }
-export const postedDispatchSql=`SELECT d.id,d.number,d.draft_id,d.warehouse,d.created_at,EXISTS(SELECT 1 FROM inventory_retrospective_dispatches retrospective WHERE retrospective.dispatch_id=d.id) retrospective,jsonb_build_object('kind',d.snapshot->'kind','partialDelivery',d.snapshot->'partialDelivery','parent',d.snapshot->'parent','sites',d.snapshot->'sites','lines',d.snapshot->'lines','combinedPlan',d.snapshot->'combinedPlan') snapshot
+export const postedDispatchSql=`SELECT d.id,d.number,d.draft_id,d.warehouse,d.created_at,EXISTS(SELECT 1 FROM inventory_retrospective_dispatches retrospective WHERE retrospective.dispatch_id=d.id) retrospective,EXISTS(SELECT 1 FROM inventory_retrospective_dispatches retrospective WHERE retrospective.dispatch_id=d.id AND retrospective.customer_do_waived) customer_do_waived,jsonb_build_object('kind',d.snapshot->'kind','partialDelivery',d.snapshot->'partialDelivery','parent',d.snapshot->'parent','sites',d.snapshot->'sites','lines',d.snapshot->'lines','combinedPlan',d.snapshot->'combinedPlan') snapshot
  FROM inventory_material_dispatches_active d WHERE ($1::text[] IS NULL OR d.warehouse=ANY($1::text[]))
  AND ${dispatchReconciliationEligibleSql} ORDER BY d.created_at DESC,d.id`;
 export async function readDispatchDocuments(db:Db,warehouses:string[]|null){

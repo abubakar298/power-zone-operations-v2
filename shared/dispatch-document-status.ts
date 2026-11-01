@@ -1,5 +1,5 @@
 export type DispatchDocument={label:'Signed DO'|'Variable Items Sign Off'|'Acknowledgment';fileId?:string;source?:'qc'|'warehouse';boardId?:string;note?:string};
-export type DispatchDocumentRow={id:string;number:string;draftId:string;warehouse:string;createdAt:string;parent:boolean;retrospective?:boolean;status:'awaiting'|'ready';reconciliationStatus:string;sites:{siteId:string;registeredSiteId?:string;dispatchComplete?:boolean;name:string;customer:string;ipo:string;documents:DispatchDocument[]}[]};
+export type DispatchDocumentRow={id:string;number:string;draftId:string;warehouse:string;createdAt:string;parent:boolean;retrospective?:boolean;reviewNote?:string;status:'awaiting'|'ready';reconciliationStatus:string;sites:{siteId:string;registeredSiteId?:string;dispatchComplete?:boolean;name:string;customer:string;ipo:string;documents:DispatchDocument[]}[]};
 
 export type DispatchDocumentSiteRow={id:string;name:string;customer:string;ipo:string;createdAt:string;status:'awaiting'|'ready';dispatches:{dispatch:DispatchDocumentRow;site:DispatchDocumentRow['sites'][number]}[]};
 /** One exact site across partial deliveries and Parent DOs; any missing required copy keeps it awaiting. */
