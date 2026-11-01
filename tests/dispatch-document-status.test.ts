@@ -58,7 +58,7 @@ test('owner-confirmed retrospective DOs bypass unavailable DO copies but still r
 import {groupDispatchDocumentSites} from '../shared/dispatch-document-status.js';
 test('site buckets split mixed Parent DO readiness and retain every partial dispatch without merging shared IPOs',()=>{
  const base=dispatchDocumentRows([{...dispatch(),retrospective:true}],[board({qcJob:{...ack,variableSignoff:{id:'vso'}}})],[],[file('ack'),file('vso')],[])[0];
- const readySite=base.sites[0];
+ const readySite={...base.sites[0],usageReady:true};
  const second={...readySite,siteId:'ipo-two',registeredSiteId:'board-two',name:readySite.name,ipo:readySite.ipo,documents:[{label:'Variable Items Sign Off' as const}]};
  const parent={...base,id:'pool',parent:true,status:'awaiting' as const,sites:[readySite,second]};
  let sites=groupDispatchDocumentSites([parent]);assert.equal(sites.length,2);assert.equal(sites.find(s=>s.id==='board-one')?.status,'ready');assert.equal(sites.find(s=>s.id==='board-two')?.status,'awaiting');
@@ -66,11 +66,11 @@ test('site buckets split mixed Parent DO readiness and retain every partial disp
  sites=groupDispatchDocumentSites([parent,partial,partial]);const first=sites.find(s=>s.id==='board-one')!;assert.equal(first.status,'awaiting');assert.equal(first.dispatches.length,2);assert.deepEqual(first.dispatches.map(d=>d.dispatch.id),['later','pool']);assert.equal(sites.length,2);
 });
 
-test('Inventory readiness requires applicable DO/VSO only, while QC acknowledgment remains separate',()=>{
+test('Inventory document requirements stay DO/VSO only while QC usage is a separate readiness gate',()=>{
  const fixedOnly=dispatchDocumentRows([dispatch()],[board({deliveries:[delivery]})],[],[file('do')],[])[0];assert.equal(fixedOnly.status,'ready');assert.deepEqual(fixedOnly.sites[0].documents.map(d=>d.label),['Signed DO']);
  const pooled=dispatchDocumentRows([dispatch('pool',[cable],true)],[board({qcJob:{variableSignoff:{id:'vso'}}})],[],[file('vso')],[])[0];assert.equal(pooled.status,'ready');assert.deepEqual(pooled.sites[0].documents.map(d=>d.label),['Variable Items Sign Off']);
  const variable=dispatchDocumentRows([dispatch('d1',[fixed,cable])],[board({deliveries:[delivery],qcJob:{variableSignoff:{id:'vso'}}})],[],[file('do'),file('vso')],[])[0];assert.equal(variable.status,'ready');assert.equal(variable.sites[0].documents.length,2);
- const legacy={...variable,sites:[{...variable.sites[0],documents:[...variable.sites[0].documents,{label:'Acknowledgment' as const}]}]};const grouped=groupDispatchDocumentSites([legacy]);assert.equal(grouped[0].status,'ready');assert.equal(grouped[0].dispatches[0].site.documents.some(d=>d.label==='Acknowledgment'),false);
+ const legacy={...variable,sites:[{...variable.sites[0],usageReady:true,documents:[...variable.sites[0].documents,{label:'Acknowledgment' as const}]}]};const grouped=groupDispatchDocumentSites([legacy]);assert.equal(grouped[0].status,'ready');assert.equal(grouped[0].dispatches[0].site.documents.some(d=>d.label==='Acknowledgment'),false);
 });
 
 test('new owner-confirmed retrospective gate exception does not waive a customer signed DO',()=>{
@@ -87,4 +87,16 @@ test('a no-variable declaration applies only to its existing dispatch and never 
  assert.equal(dispatchDocumentRows([d],[old],[],[],[])[0].status,'awaiting');
  assert.equal(dispatchDocumentRows([d],[board({qcJob:{noVariableItemsUsed:true}})],[],[],[])[0].status,'awaiting');
  assert.match(dispatchDocumentRows([d],[current],[],[],[])[0].reconciliationStatus,/returns require reconciliation/);
+});
+
+
+test('Inventory readiness requires fresh QC-saved usage, not just signed files; delivery-only receipts need no return queue',()=>{
+ const d=dispatch(),b=board({deliveries:[delivery]});
+ let rows=dispatchDocumentRows([d],[b],[],[file('do')],[]);
+ assert.equal(rows[0].sites[0].usageReady,false);assert.equal(groupDispatchDocumentSites(rows)[0].status,'awaiting');
+ const u={draft_id:'draft',site_id:'ipo-one',created_at:later,snapshot:{workflowVersion:2,state:'signed',lines:[{lineKey:'fixed',used:'1'}]}};
+ rows=dispatchDocumentRows([d],[b],[],[file('do')],[u]);assert.equal(groupDispatchDocumentSites(rows)[0].status,'ready');
+ assert.equal(dispatchDocumentRows([d],[b],[],[file('do')],[{...u,created_at:'2026-10-31T08:00:00Z'}])[0].sites[0].usageReady,false);
+ assert.equal(dispatchDocumentRows([d],[b],[],[file('do')],[{...u,snapshot:{...u.snapshot,workflowVersion:1}}])[0].sites[0].usageReady,false);
+ const delivered=dispatchDocumentRows([{...d,snapshot:{...d.snapshot,sites:[{...site,installation:false}]}}],[b],[],[file('do')],[]);assert.equal(groupDispatchDocumentSites(delivered).length,0);
 });

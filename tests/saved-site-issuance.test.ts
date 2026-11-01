@@ -68,5 +68,19 @@ test('saved site quantities create one replay-safe DO without a second quantity 
   assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'6');assert.equal((await stock.movements(f.reviewer,modules.variable!.id)).lines[0].returned,'1');
 
 
+  const usageRepo=new MaterialUsageRepository(db.pool),fixedLine=modules.fixed.snapshot.lines[0],variableLine=modules.variable!.snapshot.lines[0];
+  const useCommon={version:0,requestKey:randomUUID(),siteId:basis.siteId,date:'2026-10-29',state:'signed' as const,reason:'Isolated signed material use for combined DO closure.',customerEvidenceId:null,internalEvidenceId:null};
+  await usageRepo.save(f.reviewer,{...useCommon,draftId:modules.fixed.id,internalEvidenceId:evidence.id,lines:[{lineKey:fixedLine.key,issued:'1',used:'1',returned:null}]});
+  const fixedBeforeVariable=await drafts.returnLedger(f.reviewer,modules.fixed.id);assert.equal(fixedBeforeVariable.reconciliation?.ready,true);assert.equal(fixedBeforeVariable.linkedReconciliationReady,false);
+  await assert.rejects(drafts.changeReturnReconciliation(f.reviewer,{id:modules.fixed.id,version:0,draftVersion:modules.fixed.version,action:'close',reason:'Do not close while variable use is pending.',requestKey:randomUUID()}),/still unresolved/);
+  await usageRepo.save(f.reviewer,{...useCommon,requestKey:randomUUID(),draftId:modules.variable!.id,customerEvidenceId:evidence.id,lines:[{lineKey:variableLine.key,issued:'2',used:'1',returned:null}]});
+  assert.equal((await usageRepo.read(f.reviewer,modules.fixed.id)).dispatch.receipts.length,0,'A variable return never appears as a fixed-item receipt.');
+  assert.equal((await usageRepo.read(f.reviewer,modules.variable!.id)).reconciliation?.rows[0].verifiedWarehouseReturn,'1');
+  const combinedReady=await drafts.returnLedger(f.reviewer,modules.fixed.id);assert.equal(combinedReady.linkedReconciliationReady,true);
+  const beforeClose=(await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements')).rows[0].n;
+  assert.equal((await drafts.changeReturnReconciliation(f.reviewer,{id:modules.fixed.id,version:0,draftVersion:modules.fixed.version,action:'close',reason:'Both fixed and variable custody balance.',requestKey:randomUUID()})).status,'closed');
+  for(const linked of combinedReady.linkedPreparationIds)assert.equal((await db.pool.query('SELECT status FROM inventory_parent_reconciliation_versions WHERE draft_id=$1 ORDER BY version DESC LIMIT 1',[linked])).rows[0].status,'closed');
+  await assert.rejects(usageRepo.save(f.reviewer,{...useCommon,draftId:modules.variable!.id,version:1,requestKey:randomUUID(),lines:[]}),/closed/);
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements')).rows[0].n,beforeClose,'Closing linked ledgers does not post stock.');
  }finally{await db.close();}
 });

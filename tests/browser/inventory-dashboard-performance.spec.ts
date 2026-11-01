@@ -12,8 +12,8 @@ test('Inventory shows ordered site-flow buckets without Heads-up or redundant Pa
  await page.goto('/inventory');
  const buckets=page.locator('.inventory-dashboard-buckets');
  await expect(buckets.getByRole('button').filter({hasText:'Upcoming Projects'})).toContainText('1');
- await expect(buckets.getByRole('button').filter({hasText:'Documents Received — Ready to Reconcile'})).toContainText('1');
- await expect(buckets.getByRole('button')).toHaveCount(4);await expect(buckets.getByRole('button').locator('span')).toHaveText(['Upcoming Projects','Dispatched — Awaiting Documents','Documents Received — Ready to Reconcile','PRAs Received']);
+ await expect(buckets.getByRole('button').filter({hasText:'Material Returns & Reconciliation'})).toContainText('1');
+ await expect(buckets.getByRole('button')).toHaveCount(4);await expect(buckets.getByRole('button').locator('span')).toHaveText(['Upcoming Projects','Dispatched — Awaiting QC','Material Returns & Reconciliation','PRAs Received']);
  await expect(buckets).not.toContainText('Heads-up');await expect(buckets).not.toContainText('Parent DO');await expect(page.getByRole('complementary').getByRole('button',{name:'Parent DO reconciliation',exact:true})).toBeVisible();
  expect(access).toBe(1);expect(drafts).toBe(0);
  await buckets.getByRole('button').filter({hasText:'Upcoming Projects'}).click();await expect(page.getByRole('cell',{name:'Ready IPO UBL'})).toBeVisible();

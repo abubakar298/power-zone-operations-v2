@@ -105,6 +105,8 @@ export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:Re
  r.get('/warehouses',async(req,res)=>res.json(await repo.warehouses(req.authSession!.user.id)));
  r.get('/parent-reviewed-ledger',async(req,res)=>res.json(await repo.reviewedPools(req.authSession!.user.id)));
  r.get('/drafts/:id/reconciliation',async(req,res)=>res.json(await repo.parentReconciliation(req.authSession!.user.id,z.uuid().parse(req.params.id))));
+ r.get('/drafts/:id/return-ledger',async(req,res)=>res.json(await repo.returnLedger(req.authSession!.user.id,z.uuid().parse(req.params.id))));
+ r.post('/return-reconciliation',async(req,res)=>res.json(await repo.changeReturnReconciliation(req.authSession!.user.id,req.body)));
  r.post('/parent-reconciliation',async(req,res)=>res.json(await repo.changeParentReconciliation(req.authSession!.user.id,req.body)));
  r.get('/site-ledger-history',async(req,res)=>res.json(await repo.siteLedger(req.authSession!.user.id)));
  r.get('/transport-choices',async(req,res)=>{const warehouse=z.string().trim().min(1).max(200).parse(req.query.warehouse);res.json(await repo.transportChoices(req.authSession!.user.id,warehouse));});

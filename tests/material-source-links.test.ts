@@ -134,5 +134,19 @@ test('explicit source links retain the original approved IPO/BOQ, prevent duplic
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM operations_site_local_purchase_versions WHERE site_id=$1',[id])).rows[0].n,2,'Removing rows preserves the first saved purchase version.');
   await assert.rejects(db.pool.query('DELETE FROM operations_site_local_purchase_versions WHERE site_id=$1',[id]));
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements WHERE draft_id=$1',[saved.id])).rows[0].n,2,'Local purchase entry posts no warehouse stock.');
+  // Return reconciliation consumes QC use; partial signed receipts credit only the actual count.
+  const position=()=>stock.positions(inventory,'Lahore warehouse');
+  const signedReturn=()=>stock.uploadEvidence(inventory,{warehouse:'Lahore warehouse',filename:'isolated-signed-return.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7 isolated signed return '+randomUUID()).toString('base64')});
+  const receipt=async(quantity:string,versions=[{siteId:ipo.id,version:3}])=>{const p=await position(),e=await signedReturn();return {draftId:saved.id,sourceSha256:warehouseFixture.stockSha,authorityVersion:1,requestKey:randomUUID(),reason:'Counted and signed isolated partial warehouse return.',evidenceId:e.id,qcUsageVersions:versions,lines:[{lineKey:line,quantity,ledgerRevision:p.positions.find((r:any)=>r.itemId==='CH-CBL-AC-16MM/4C-PK')!.ledgerRevision}]};};
+  await assert.rejects(stock.receive(inventory,await receipt('1',[{siteId:ipo.id,version:2}])),/QC usage changed/);
+  const firstReturn=await receipt('1'),credited=await stock.receive(inventory,firstReturn);assert.equal(credited.stockPosted,true);assert.deepEqual(await stock.receive(inventory,firstReturn),credited);
+  await assert.rejects(usage.save(qc,{...modern,version:3,requestKey:randomUUID(),lines:[{lineKey:line,issued:null,used:'2',returned:null}]}),/exceeds the remaining issued quantity after verified returns/);
+  await assert.rejects(stock.receive(inventory,await receipt('2')),/exceeds issued material less QC use/);
+  const partialLedger=await repo.returnLedger(inventory,saved.id);assert.equal(partialLedger.reconciliation?.rows[0].remaining,'1');
+  const close={id:saved.id,version:0,draftVersion:partialLedger.draft.version,action:'close',reason:'All material accounted for.',requestKey:randomUUID()};
+  await assert.rejects(repo.changeReturnReconciliation(inventory,close),/still unresolved/);
+  await stock.receive(inventory,await receipt('1'));assert.equal((await repo.returnLedger(inventory,saved.id)).reconciliation?.ready,true);
+  assert.equal((await repo.changeReturnReconciliation(inventory,{...close,requestKey:randomUUID()})).status,'closed');
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements WHERE draft_id=$1',[saved.id])).rows[0].n,4,'Only two signed partial receipts created IN; replay and invalid returns did not.');
  }finally{await db.close();}
 });

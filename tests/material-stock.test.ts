@@ -139,6 +139,8 @@ test('physical warehouse dispatch posts once, supports partial trips, protects s
   await request(app).get(worksheet+'?version='+continuation.version).set('Cookie',sessions.keeper.cookie).expect(403);
   await request(app).get(worksheet+'?version=999').set('Cookie',sessions.dispatcher.cookie).expect(409);
   const countSheet=await request(app).get(worksheet+'?version='+continuation.version).set('Cookie',sessions.dispatcher.cookie).expect(200);assert.match(countSheet.headers['content-type'],/pdf/);
+  const individualLedger=await request(app).get('/api/material-dispatches/drafts/'+draft.id+'/return-ledger').set('Cookie',sessions.dispatcher.cookie).expect(200);assert.equal(individualLedger.body.draft.snapshot.parent,false);assert.equal(individualLedger.body.reconciliation.ready,true);
+  await request(app).get('/api/material-dispatches/drafts/'+draft.id+'/return-ledger').set('Cookie',sessions.keeper.cookie).expect(403);
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements')).rows[0].n,6,'Printing, evidence download and retry do not post stock again.');
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_source_events')).rows[0].n,2);
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM stock_on_hand_entries')).rows[0].n,0);

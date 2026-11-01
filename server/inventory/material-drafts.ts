@@ -103,6 +103,8 @@ export class MaterialDraftRepository{
  }
  async documentStatus(actor:string){const access=await this.access(actor);return readDispatchDocuments(this.pool,access.owner?null:access.warehouses);}
  async documentEvidence(actor:string,id:string,file:string){const data=await this.documentStatus(actor);return dispatchDocumentEvidence(this.pool,data.rows,id,file);}
+ returnLedger(actor:string,id:string){return new ParentReconciliationRepository(this.pool).read(actor,id,undefined,true);}
+ changeReturnReconciliation(actor:string,input:unknown){return new ParentReconciliationRepository(this.pool).change(actor,input,true);}
  parentReconciliation(actor:string,id:string){return new ParentReconciliationRepository(this.pool).read(actor,id);}
  changeParentReconciliation(actor:string,input:unknown){return new ParentReconciliationRepository(this.pool).change(actor,input);}
  async reviewedPools(actor:string){const access=await this.access(actor);return {version:approvedParentLedger.version,preparedAt:approvedParentLedger.preparedAt,groups:approvedParentLedger.groups.filter(g=>access.owner||access.warehouses.includes(g.warehouse+' warehouse'))};}

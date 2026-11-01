@@ -25,7 +25,7 @@ const quantity=z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/).refine(v=>new Decima
 export const materialIssueInputSchema=z.object({draftId:z.uuid(),version:z.number().int().positive(),requestKey:z.uuid(),sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),authorityVersion:z.number().int().positive(),reason:z.string().trim().min(3).max(2000),transport:materialDraftInputSchema.shape.transport,
  lines:z.array(z.object({lineKey:z.uuid(),quantity,ledgerRevision:z.number().int().nonnegative()}).strict()).min(1).max(2000),
 }).strict();
-export const materialReceiptInputSchema=z.object({draftId:z.uuid(),requestKey:z.uuid(),sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),authorityVersion:z.number().int().positive(),evidenceId:z.uuid(),reason:z.string().trim().min(3).max(2000),lines:z.array(z.object({lineKey:z.uuid(),quantity,ledgerRevision:z.number().int().nonnegative()}).strict()).min(1).max(2000)}).strict();
+export const materialReceiptInputSchema=z.object({draftId:z.uuid(),requestKey:z.uuid(),sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),authorityVersion:z.number().int().positive(),evidenceId:z.uuid(),reason:z.string().trim().min(3).max(2000),qcUsageVersions:z.array(z.object({siteId:z.uuid(),version:z.number().int().positive()}).strict()).max(2000).optional(),lines:z.array(z.object({lineKey:z.uuid(),quantity,ledgerRevision:z.number().int().nonnegative()}).strict()).min(1).max(2000)}).strict();
 export const materialEvidenceInputSchema=z.object({warehouse:z.string().trim().min(1).max(200),filename:z.string().trim().min(1).max(200),mediaType:z.enum(['application/pdf','image/png','image/jpeg']),base64:z.string().min(4).max(20971520)}).strict();
 type IssueInput=z.infer<typeof materialIssueInputSchema>;
 const fingerprint=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -115,7 +115,7 @@ export class MaterialStockRepository{
    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.material.receipt.request.'||$1,0))",[input.requestKey]);
    const replay=(await c.query('SELECT r.id,r.number,r.request_fingerprint,r.verified_by,d.snapshot FROM inventory_material_receipts r JOIN LATERAL(SELECT snapshot FROM inventory_material_draft_versions WHERE draft_id=r.draft_id ORDER BY version DESC LIMIT 1)d ON true WHERE r.request_key=$1',[input.requestKey])).rows[0];
    if(replay){await this.scope(actor,replay.snapshot.warehouse,c);if(replay.verified_by!==actor||replay.request_fingerprint!==fingerprint(originalInput))throw new HttpError(409,'This request belongs to a different warehouse receipt.');return {id:replay.id,number:replay.number,stockPosted:true};}
-   await c.query('SELECT id FROM inventory_material_drafts WHERE id=$1 FOR UPDATE',[input.draftId]);await requireOpenParent(c,input.draftId);
+   await c.query('SELECT id FROM inventory_material_drafts WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',[[...new Set([input.draftId,originalInput.draftId])]]);await requireOpenParent(c,input.draftId);
    const draft=await this.drafts.detail(actor,input.draftId,c),warehouse=draft.snapshot.warehouse;
    await this.scope(actor,warehouse,c);await this.authority(c,warehouse,input.sourceSha256,input.authorityVersion);
    const evidence=(await c.query('SELECT id,warehouse,sha256 FROM inventory_material_evidence WHERE id=$1',[input.evidenceId])).rows[0];
@@ -128,7 +128,15 @@ export class MaterialStockRepository{
    await c.query(`SELECT l.line_key FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) ORDER BY l.dispatch_id,l.line_key FOR UPDATE OF l`,[input.draftId,input.lines.map(r=>r.lineKey)]);
    const replacementsInstalled=(await c.query("SELECT to_regclass('public.inventory_material_replacement_returns') IS NOT NULL AS installed")).rows[0].installed;
    const faultyReturned=replacementsInstalled?"+coalesce((SELECT sum(r.quantity) FROM inventory_material_replacement_returns r JOIN inventory_material_replacement_cases c ON c.id=r.case_id WHERE c.original_dispatch_id=l.dispatch_id AND c.original_line_key=l.line_key),0)":'';
-   const sent=(await c.query(`SELECT l.*,d.created_at,d.warehouse,(coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.dispatch_id=l.dispatch_id AND r.line_key=l.line_key),0)${faultyReturned})::text returned FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) AND ${dispatchReconciliationEligibleSql} ORDER BY d.created_at,d.id,l.line_key`,[input.draftId,draft.snapshot.lines.map((r:any)=>r.key)])).rows;
+   const sent=(await c.query(`SELECT l.*,d.created_at,d.warehouse,(coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.dispatch_id=l.dispatch_id AND r.line_key=l.line_key),0)${faultyReturned})::text returned FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) AND ${dispatchReconciliationEligibleSql} ORDER BY d.created_at,d.id,l.line_key`,[input.draftId,input.lines.map(r=>r.lineKey)])).rows;
+   if(input.qcUsageVersions){
+    const reports=(await c.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM inventory_material_site_usage_versions WHERE draft_id=$1 ORDER BY site_id,version DESC',[originalInput.draftId])).rows;
+    if(!reports.some(r=>r.snapshot.workflowVersion===2&&r.snapshot.state==='signed'))throw new HttpError(409,'QC must save material usage before this return is verified.');
+    if(input.qcUsageVersions.length!==reports.length||reports.some(r=>!input.qcUsageVersions!.some(v=>v.siteId===r.site_id&&v.version===r.version)))throw new HttpError(409,'QC usage changed. Refresh the ledger before verifying this return.');
+    for(const request of input.lines){const out=sent.filter(r=>r.line_key===request.lineKey).reduce((n,r)=>n.plus(r.quantity),new Decimal(0)),returned=sent.filter(r=>r.line_key===request.lineKey).reduce((n,r)=>n.plus(r.returned),new Decimal(0)),used=reports.reduce((n,r)=>n.plus(r.snapshot.lines.find((l:any)=>l.lineKey===request.lineKey)?.used??0),new Decimal(0));
+     if(used.plus(returned).plus(request.quantity).gt(out))throw new HttpError(422,'Counted return exceeds issued material less QC use and previous returns. Correct QC usage or send the discrepancy to Management.');
+    }
+   }
    const allocations:any[]=[];
    for(const request of input.lines){
     let remaining=new Decimal(request.quantity);

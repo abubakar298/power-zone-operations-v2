@@ -51,3 +51,25 @@
 @media(max-width:600px){.dispatch-document-dialog-header,.dispatch-document-dialog-body{padding:16px}.dispatch-document-dialog-footer{padding:12px 16px}}
 /* Site-first document register: main values remain on the same top-aligned line. */
 .dispatch-document-list th:nth-child(2){width:26%}.dispatch-document-list th:nth-child(3){width:20%}.dispatch-document-list th:nth-child(4){width:22%}.dispatch-document-list th:nth-child(5){width:26%}
+
+.material-return-dialog{width:1120px}
+.material-return-table th,.material-return-table td{vertical-align:top;text-align:left}
+.material-return-table{min-width:820px;width:100%}
+.material-return-table td strong{display:block;min-height:24px}
+.material-return-table td small{display:block;margin-top:4px}
+.material-return-table input{min-height:44px;max-width:160px;text-align:right;font-variant-numeric:tabular-nums}
+
+.dispatch-document-list .material-return-table{width:100%;min-width:860px;table-layout:fixed}
+.dispatch-document-list .material-return-table th,.dispatch-document-list .material-return-table td{min-width:0;white-space:normal;overflow-wrap:anywhere}
+.dispatch-document-list .material-return-table th:nth-child(1){width:4%}
+.dispatch-document-list .material-return-table th:nth-child(2){width:23%}
+.dispatch-document-list .material-return-table th:nth-child(3){width:6%}
+.dispatch-document-list .material-return-table th:nth-child(4){width:11%}
+.dispatch-document-list .material-return-table th:nth-child(5){width:11%}
+.dispatch-document-list .material-return-table th:nth-child(6){width:14%}
+.dispatch-document-list .material-return-table th:nth-child(7){width:14%}
+.dispatch-document-list .material-return-table th:nth-child(8){width:17%}
+.dispatch-document-list .material-return-count-table th:nth-child(1){width:6%}
+.dispatch-document-list .material-return-count-table th:nth-child(2){width:50%}
+.dispatch-document-list .material-return-count-table th:nth-child(3){width:10%}
+.dispatch-document-list .material-return-count-table th:nth-child(4){width:34%}
