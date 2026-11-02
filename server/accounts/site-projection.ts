@@ -1,9 +1,10 @@
+import {partialSolarInvoiceDate} from './partial-solar-delivery.js';
 import {isArchivedLegacySolar,legacySolarArchiveReason} from '../../shared/legacy-solar-archive.js';
 import type {Pool} from 'pg';
 type Row=Record<string,any>;
 export async function latestOperationsStages(pool:Pool){
  return (await pool.query(`SELECT DISTINCT ON(site_id) site_id,version,created_at,
- jsonb_build_object('sourceKey',snapshot->'sourceKey','stage',snapshot->'stage','completed',snapshot->'completed','partial',snapshot->'partial','deliveryDate',snapshot->'deliveryDate','completionDate',COALESCE(snapshot#>'{qc,handover,date}',snapshot#>'{qc,signoff,date}',snapshot#>'{qcJob,date}',snapshot->'completionDate'),'cancelled',snapshot->'cancelled','transferred',snapshot->'transferred') AS snapshot
+ jsonb_build_object('sourceKey',snapshot->'sourceKey','stage',snapshot->'stage','completed',snapshot->'completed','partial',snapshot->'partial','customer',snapshot->'customer','projectType',snapshot->'projectType','installation',snapshot->'installation','deliveryOnly',snapshot->'deliveryOnly','signedDo',snapshot->'signedDo','deliveries',snapshot->'deliveries','deliveryRecordedAt',snapshot->'deliveryRecordedAt','deliveryReturns',snapshot->'deliveryReturns','superseded',snapshot->'superseded','scopePending',snapshot->'scopePending','deliveryDate',snapshot->'deliveryDate','completionDate',COALESCE(snapshot#>'{qc,handover,date}',snapshot#>'{qc,signoff,date}',snapshot#>'{qcJob,date}',snapshot->'completionDate'),'cancelled',snapshot->'cancelled','transferred',snapshot->'transferred') AS snapshot
  FROM operations_board_versions ORDER BY site_id,version DESC`)).rows;
 }
 /** Read projection only: never overwrite imported history or current Operations facts. */
@@ -12,7 +13,8 @@ export function applyOperationsStages(rows:Row[],operations:Row[]){
   const canonical=operations.filter(o=>o.site_id==='registered-'+row.key),matches=canonical.length?canonical:operations.filter(o=>o.snapshot.sourceKey===row.key);
   if(matches.length!==1||row.cancelled||row.transferred)return row;
   const op=matches[0],s=op.snapshot;if(!['received','awaiting','delivered','completed'].includes(s.stage))return row;const installed=s.completed===true||s.stage==='completed',delivered=installed||s.stage==='delivered',partial=s.partial===true;
-  return {...row,delivered,installed,partialDelivery:partial,deliveryDate:delivered||partial?s.deliveryDate??row.deliveryDate:null,installationDate:installed?s.completionDate??row.installationDate:null,operationsVersion:op.version,operationsUpdatedAt:op.created_at,stageBasis:'Current Operations record'};
+  const partialInvoiceDate=partialSolarInvoiceDate(s,row);
+  return {...row,delivered,installed,partialDelivery:partial,partialDeliveryInvoiceReady:!!partialInvoiceDate,deliveryDate:delivered||partial?s.deliveryDate??row.deliveryDate:null,installationDate:installed?s.completionDate??row.installationDate:null,operationsVersion:op.version,operationsUpdatedAt:op.created_at,stageBasis:'Current Operations record'};
  });
 }
 export function projectAccountsSites(snapshot:Row,operations:Row[]){

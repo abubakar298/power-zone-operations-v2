@@ -1,3 +1,4 @@
+import {partialSolarInvoiceDate} from './partial-solar-delivery.js';
 import {invoiceSubmissions,submissionMatches,submissionReferences,submissionBillingBasis} from './invoice-submission-state.js';
 import {applyOperationsStages} from './site-projection.js';
 import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
@@ -15,13 +16,15 @@ export function operationsInvoiceRows(rows:any[],registers:any[]=[]){
  const result:any[]=[];
  for(const row of rows){const s=row.snapshot;
   if(isArchivedLegacySolar({...s,id:row.site_id})||s.cancelled||s.transferred||s.scopePending)continue;
-  const approved=registers.flatMap(r=>r.rows??[]).find(r=>r.ipo===s.ipo&&r.site===s.name);
+  const sourceRows=registers.flatMap(r=>r.rows??[]),exact=sourceRows.filter(r=>row.site_id==='registered-'+r.key||!!s.sourceKey&&r.key===s.sourceKey),matches=exact.length?exact:sourceRows.filter(r=>r.ipo===s.ipo&&r.site===s.name);
+  const approved=matches.length===1?matches[0]:undefined;
   const deliveryOnly=s.installation===false||s.projectType==='delivery-only';
   const ups=approved?.kind==='UPS'||s.projectType==='ups';
   const deliveryMilestone=deliveryOnly||!ups&&(approved?.program==='Solar 70'||s.invoiceOnDelivery===true);
   const completionMilestone=!deliveryOnly&&(s.installation===true||ups||approved?.program==='Solar 70');
-  const base={deliveryOnly,key:row.site_id,sourceKind:'Operations',sourceVersion:row.version,sourceKey:s.sourceKey??(row.site_id.startsWith('registered-')?row.site_id.slice(11):undefined),customer:s.customer,site:s.name,ipo:s.ipo,po:s.customerPo??s.po??'',program:s.projectType??'',deliveryDate:s.deliveryDate,installationDate:s.qc?.handover?.date??s.qc?.signoff?.date??s.qcJob?.date,documents:s.documents??[],evidence:(s.documents??[]).flatMap((d:any)=>(d.evidence??[]).filter((f:any)=>z.uuid().safeParse(f.id).success).map((f:any)=>({id:f.id,filename:f.name??'Supporting document',url:`/api/operations-board/sites/${encodeURIComponent(row.site_id)}/files/${f.id}`})))};
-  if(deliveryMilestone&&(s.stage==='delivered'||s.stage==='completed'||s.completed===true))result.push({...base,milestone:'delivery'});
+  const partialInvoiceDate=partialSolarInvoiceDate(s,approved);
+  const base={deliveryOnly,partialDelivery:!!partialInvoiceDate,advance:approved?.advance,completion:approved?.completion,key:row.site_id,sourceKind:'Operations',sourceVersion:row.version,sourceKey:s.sourceKey??(row.site_id.startsWith('registered-')?row.site_id.slice(11):undefined),customer:s.customer,site:s.name,ipo:s.ipo,po:s.customerPo??s.po??'',program:approved?.program??s.projectType??'',deliveryDate:partialInvoiceDate??s.deliveryDate,installationDate:s.qc?.handover?.date??s.qc?.signoff?.date??s.qcJob?.date,documents:s.documents??[],evidence:(s.documents??[]).flatMap((d:any)=>(d.evidence??[]).filter((f:any)=>z.uuid().safeParse(f.id).success).map((f:any)=>({id:f.id,filename:f.name??'Supporting document',url:`/api/operations-board/sites/${encodeURIComponent(row.site_id)}/files/${f.id}`})))};
+  if(deliveryMilestone&&(s.stage==='delivered'||s.stage==='completed'||s.completed===true||!!partialInvoiceDate))result.push({...base,milestone:'delivery'});
   if(completionMilestone&&(s.completed===true||s.stage==='completed'))result.push({...base,milestone:'completion'});
  }
  return result;

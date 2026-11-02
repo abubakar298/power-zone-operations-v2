@@ -1,3 +1,4 @@
+import {isUblSolar} from './partial-solar-delivery.js';
 import {Decimal} from 'decimal.js';
 /** Frozen departmental read-model port: source rows are imported records, not journal postings. */
 type SourceRow = Record<string, any>;
@@ -77,7 +78,7 @@ export function invoicingQueues(registers:SourceRow[]){
    if(row.installed&&!row.singlePaymentReceived&&!row.singleInvoiceSubmitted&&!row.invoiceReferences.length)completion.push(row);
    else if(row.installed&&!row.singlePaymentReceived&&!row.singleInvoiceSubmitted)alreadyIssued.push({...row,milestone:'completion'});
   }else if(row.program==='Solar 70'){
-   for(const [stage,ready,list]of [['advance',row.delivered,delivery],['completion',row.installed,completion]]){
+   for(const [stage,ready,list]of [['advance',row.delivered||(row.partialDeliveryInvoiceReady===true&&isUblSolar(row)),delivery],['completion',row.installed,completion]]){
     if(!ready||row[stage]?.submitted||row[stage]?.received)continue;
     const hasInvoice=row[stage]?.invoiceAmount!=null&&row.invoiceReferences.some((ref:any)=>!/^27-50/.test(ref));
     if(hasInvoice)alreadyIssued.push({...row,milestone:stage});else list.push({...row,milestone:stage});
