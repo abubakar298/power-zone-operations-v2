@@ -1,3 +1,5 @@
+import {recentFirst} from '../../../shared/recent-records.js';
+import {PagedTableBody,PagedResults} from '../../ui/PagedTableBody.js';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
@@ -86,8 +88,8 @@ export function MiscSites({ session, mode }: { session: Session; mode: "buyer" |
           <input className="sto-filter" aria-label="Filter sites" placeholder="Filter: site, code, customer, item…" value={filter} onChange={(e) => setFilter(e.target.value)} />
         </div>
         {!data ? <p className="ops-empty">Loading…</p> : sites.length === 0 ? <p className="ops-empty">{tab === "open" ? "No misc items waiting to be sent." : "No sites here."}</p> : (
-          <div className="sto-receive">
-            {sites.map((s) => (
+          <PagedResults className="sto-receive" label="sites">
+            {recentFirst(sites).map((s) => (
               <div key={s.recordId} className="sto-order">
                 <div className="sto-order-head">
                   <div>
@@ -116,7 +118,7 @@ export function MiscSites({ session, mode }: { session: Session; mode: "buyer" |
                 )}
               </div>
             ))}
-          </div>
+          </PagedResults>
         )}
       </section>
 
@@ -127,7 +129,7 @@ export function MiscSites({ session, mode }: { session: Session; mode: "buyer" |
             <div className="pz-table-scroll">
               <table className="ops-table">
                 <thead><tr><th>Item</th><th className="num">Total</th><th className="num">Sites</th></tr></thead>
-                <tbody>{totals.map(([k, t]) => <tr key={k}><td className="site"><b>{t.name}</b><small>{k}</small></td><td className="num">{qty(t.quantity)} {t.unit}</td><td className="num">{t.sites}</td></tr>)}</tbody>
+                <PagedTableBody label="records">{totals.map(([k, t]) => <tr key={k}><td className="site"><b>{t.name}</b><small>{k}</small></td><td className="num">{qty(t.quantity)} {t.unit}</td><td className="num">{t.sites}</td></tr>)}</PagedTableBody>
               </table>
             </div>
           </details>
@@ -160,7 +162,7 @@ function MiscItemsList({ session, cat, onChanged }: { session: Session; cat: Mis
         <div className="pz-table-scroll">
           <table className="ops-table">
             <thead><tr><th>ID</th><th>Name</th><th>Unit</th><th>In use</th><th></th></tr></thead>
-            <tbody>
+            <PagedTableBody label="records">
               {cat.items.map((i) => {
                 const e = edit[i.itemKey];
                 return (
@@ -182,7 +184,7 @@ function MiscItemsList({ session, cat, onChanged }: { session: Session; cat: Mis
                   </tr>
                 );
               })}
-            </tbody>
+            </PagedTableBody>
           </table>
         </div>
         <div className="pr-additem">

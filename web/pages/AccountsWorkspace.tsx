@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {MaterialCorrectionAlerts} from '../components/MaterialCorrectionAlerts.js';
 import {AccountsMaterialCosting} from './AccountsMaterialCosting.js';
@@ -648,7 +649,7 @@ export function AccountsWorkspace({
                       </td>
                     </tr>
                   ))}
-                {received.map((r) => (
+                {recentFirst(received).map((r) => (
                   <tr key={r.id}>
                     <td>{jobLabel(r)}</td>
                     <td>Inventory approved · awaiting PT entry</td>
@@ -741,7 +742,7 @@ export function AccountsWorkspace({
                       </td>
                     </tr>
                   ))}
-                {filtered.map((i: any) => (
+                {recentFirst(filtered).map((i: any) => (
                   <tr key={i.id}>
                     <td>
                       {i.number}
@@ -1120,7 +1121,7 @@ export function AccountsWorkspace({
                 </tr>
               </thead>
               <PagedTableBody label="sites and documents">
-                {preparationReports.map((r) => (
+                {recentFirst(preparationReports).map((r) => (
                   <tr key={r.id}>
                     <td>{jobLabel(r)}</td>
                     <td>

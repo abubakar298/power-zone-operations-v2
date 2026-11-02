@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {EvidencePreview} from '../components/EvidencePreview.js';
 import { DocumentDownload } from "../components/DocumentPreview.js";
 import { displayUnit } from "../../server/boq/unit.js";
@@ -200,7 +201,7 @@ export function Departments({
               <th>Action</th>
             </tr>
           </thead>
-          <tbody>
+          <PagedTableBody label="records">
             {records
               .filter((r) => r.stage === bucket)
               .map((r) => (
@@ -228,7 +229,7 @@ export function Departments({
                   </td>
                 </tr>
               ))}
-          </tbody>
+          </PagedTableBody>
         </table>
       </div>
       {loaded && !records.some((r) => r.stage === bucket) && (

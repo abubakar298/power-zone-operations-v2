@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {CustomerSiteRegister} from '../components/CustomerSiteRegister.js';
 import './department-lists.css';
@@ -1037,7 +1038,7 @@ export function DepartmentWorkspace({
                           </td>
                         </tr>
                       ))}
-                    {department === "coordination" && visibleLegacy.map((t: any) => (
+                    {department === "coordination" && recentFirst(visibleLegacy).map((t: any) => (
                       <tr key={`commercial-${t.id}`}>
                         <td>
                           <strong>{t.customer || "Customer not recorded"} · {t.site}</strong>
@@ -1070,13 +1071,13 @@ export function DepartmentWorkspace({
               <div className="pz-table-scroll"><table className="pz-table">
                 <thead><tr><th>Customer / Site</th><th>Document</th><th>Status</th><th>Next action</th></tr></thead>
                 <PagedTableBody label="sites and documents">
-                  {readyIndividuals.map(r=><tr key={r.id}>
+                  {recentFirst(readyIndividuals).map(r=><tr key={r.id}>
                     <td><strong>{r.customerCode} · {r.site}</strong><br/>{r.siteCode}</td>
                     <td>{r.quotation?.number ?? r.references?.join(" · ") ?? r.routeLabel}<DocumentListDetails record={r}/></td>
                     <td>Approved · Awaiting dispatch</td>
                     <td><Button variant="secondary" onClick={()=>void open(r.id).catch(e=>setError(e.message))}>Review</Button></td>
                   </tr>)}
-                  {visibleLegacy.map((t:any)=><tr key={`commercial-${t.id}`}>
+                  {recentFirst(visibleLegacy).map((t:any)=><tr key={`commercial-${t.id}`}>
                     <td><strong>{t.customer} · {t.site}</strong></td>
                     <td>{t.number ?? t.reference}<DocumentListDetails record={t}/></td>
                     <td>{t.status}</td>
@@ -1545,7 +1546,7 @@ function SurveyDispatchPlan({
                 </tr>
               </thead>
               <PagedTableBody label="sites and documents">
-                {eligible.map((site: any) => (
+                {recentFirst(eligible).map((site: any) => (
                   <tr key={site.id}>
                     <td>
                       <label className="pz-review-check">
@@ -2448,7 +2449,7 @@ function SurveySubmissionGroups({ session, groups, onSent }: any) {
               </tr>
             </thead>
             <PagedTableBody label="sites and documents">
-              {groups.map((group: any) => (
+              {recentFirst(groups).map((group: any) => (
                 <tr key={group.id}>
                   <td>
                     <strong>{group.number}</strong>

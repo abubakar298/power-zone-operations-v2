@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {DocumentListDetails} from './DocumentListDetails.js';
 import {coordinationBuckets} from "../workspaces/project-routes.js";
@@ -62,7 +63,7 @@ export function PoReceiptSearch({ records, legacy = [], onConfirm, onLegacy }: a
             </tr>
           </thead>
           <PagedTableBody label="sites and documents">
-            {visible.map((r: any) => (
+            {recentFirst(visible).map((r: any) => (
               <tr key={r.id}>
                 <td>{r.customer}</td>
                 <td>{r.site}</td>

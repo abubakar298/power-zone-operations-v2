@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {useState} from 'react';
 import type {Session} from '../api.js';
 import {Button} from '../ui/Button.js';
@@ -8,7 +9,7 @@ export function CustomerSiteRegister({session,customers,sites,records,onWorkflow
  const [query,setQuery]=useState(''),[customer,setCustomer]=useState(''),[location,setLocation]=useState(''),[filtersOpen,setFiltersOpen]=useState(false),[page,setPage]=useState(0);
  const active=Boolean(query.trim()||customer||location),customerMap=new Map(customers.map(c=>[String(c.id),c]));
  const matching=active?sites.filter(site=>{const c=customerMap.get(String(site.customer_id));return c&&(!customer||String(c.id)===customer)&&(!location||site.location===location)&&[c.short_code,c.name,c.contact_person,site.name,site.code,site.location].join(' ').toLowerCase().includes(query.trim().toLowerCase())}).sort((a,b)=>String(a.name).localeCompare(String(b.name))):[];
- const pageIndex=Math.min(page,Math.max(0,Math.ceil(matching.length/10)-1)),shown=matching.slice(pageIndex*10,pageIndex*10+10);
+ const pageIndex=Math.min(page,Math.max(0,Math.ceil(matching.length/10)-1)),shown=recentFirst(matching).slice(pageIndex*10,pageIndex*10+10);
  return <div className="pz-stack customer-site-register">
   <div className="library-search-bar"><Field id="master-site-search" label="Search customers and sites"><input id="master-site-search" type="search" placeholder="Customer, site, branch code, contact or location" value={query} onChange={e=>{setQuery(e.target.value);setPage(0)}}/></Field><Button variant="neutral" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(v=>!v)}>Filters</Button><Button variant="neutral" disabled={!active} onClick={()=>{setQuery('');setCustomer('');setLocation('');setPage(0)}}>Clear filters</Button></div>
   {filtersOpen&&<div className="library-filter-panel"><Field id="master-site-customer" label="Customer"><select id="master-site-customer" value={customer} onChange={e=>{setCustomer(e.target.value);setPage(0)}}><option value="">All customers</option>{[...customers].sort((a,b)=>a.name.localeCompare(b.name)).map(c=><option key={c.id} value={c.id}>{c.short_code} · {c.name}</option>)}</select></Field><Field id="master-site-location" label="Location"><select id="master-site-location" value={location} onChange={e=>{setLocation(e.target.value);setPage(0)}}><option value="">All locations</option>{[...new Set<string>(sites.map(s=>s.location).filter(Boolean))].sort().map(v=><option key={v}>{v}</option>)}</select></Field></div>}

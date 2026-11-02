@@ -19,7 +19,7 @@ import {workflowSiteSchema,saveDispatchPlan,confirmDelivery,completeQcStage,comp
 import type {z} from 'zod';
 
 type Access={qcDelegated?:boolean;name:string;kind:'owner'|'head'|'lead'|'qc'|'accounts';team:'central'|'south'|null};
-const latest="SELECT b.* FROM (SELECT DISTINCT ON (site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC) b WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND (a.records->'portalOperationSiteIds' ? b.site_id::text))";
+const latest="SELECT b.* FROM (SELECT DISTINCT ON (site_id) site_id,version,created_at,snapshot FROM operations_board_versions ORDER BY site_id,version DESC) b WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND (a.records->'portalOperationSiteIds' ? b.site_id::text))";
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 /** Server-owned records; browser role selectors never authorise access. */
 export class OperationsBoardRepository{
@@ -48,7 +48,7 @@ export class OperationsBoardRepository{
  async sites(actor:string){
   const access=await this.access(actor);if(access.kind==='accounts')throw new HttpError(403,'Accounts can view document tracking only.');
   const rows=await withInventoryReceiving(this.pool,(await this.pool.query(latest)).rows);
-  return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>({...r.snapshot,version:r.version})),access};
+  return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>({...r.snapshot,version:r.version,updatedAt:r.created_at})),access};
  }
  async deliveryDispatches(actor:string,id:string){const site=await this.site(actor,id);return {dispatches:await siteDispatchChoices(this.pool,id,(site as {origin?:{ipoId?:string}}).origin?.ipoId)};}
  async site(actor:string,id:string){const a=await this.access(actor),r=await this.current(this.pool,id);this.scope(a,r.snapshot);return {...r.snapshot,version:r.version};}

@@ -1,3 +1,5 @@
+import {recentFirst} from '../../shared/recent-records.js';
+import {ListPagination,paginateRows,useListPage} from '../ui/ListPagination.js';
 import { useEffect, useState } from "react";
 import {Button} from "../ui/Button.js";
 import { recommendSiteCode } from "../../server/boq/schema.js";
@@ -59,6 +61,10 @@ export function CustomerSiteFields({
 
     setSite({ name: "", code: "", location: "" });
   };
+  const customerMatches=masters.customers.filter((c:any)=>c.status==='Active'&&[c.name,c.short_code,c.contact_person,c.phone].join(' ').toLowerCase().includes(customerSearch.trim().toLowerCase()));
+  const [customerPage,setCustomerPage]=useListPage(customerSearch+'|'+customer),customerPagination=paginateRows(recentFirst(customerMatches),customerPage);
+  const siteMatches=sites.filter((s:any)=>s.name.toLowerCase().includes(site.name.trim().toLowerCase()));
+  const [sitePage,setSitePage]=useListPage(customer+'|'+site.name),sitePagination=paginateRows(recentFirst(siteMatches),sitePage);
   return (
     <>
       {onAdd && !revision && <div className="customer-master-actions"><Button variant="neutral" onClick={() => {setSearchOpen(false);onAdd();}}>Add Customer</Button></div>}
@@ -78,10 +84,10 @@ export function CustomerSiteFields({
             if (e.key === "Enter") { e.preventDefault(); document.querySelector<HTMLButtonElement>("#boq-customer-options button")?.click(); }
           }} />
         <input type="hidden" name="customerId" value={customer} />
-        {!revision && searchOpen && <div className="customer-search-results" id="boq-customer-options" role="listbox" aria-label="Customer matches">
-          {masters.customers.filter((c: any) => c.status === "Active" && [c.name,c.short_code,c.contact_person,c.phone].join(" ").toLowerCase().includes(customerSearch.trim().toLowerCase())).map((c: any) =>
+        {!revision && searchOpen && <div className="customer-search-results"><div id="boq-customer-options" role="listbox" aria-label="Customer matches">
+          {customerPagination.rows.map((c: any) =>
             <button key={c.id} type="button" role="option" aria-selected={String(c.id) === customer} onKeyDown={e => { const target = e.currentTarget; if (e.key === "ArrowDown") { e.preventDefault(); (target.nextElementSibling as HTMLElement)?.focus(); } if (e.key === "ArrowUp") { e.preventDefault(); (target.previousElementSibling as HTMLElement)?.focus(); } if (e.key === "Escape") setSearchOpen(false); }} onClick={() => { changeCustomer(String(c.id)); setCustomerSearch(""); setSearchOpen(false); }}>{c.name} · {c.short_code}</button>)}
-        </div>}
+        </div><ListPagination pagination={customerPagination} onPageChange={setCustomerPage} label="customers"/></div>}
       </label>
       </div>
       <label>
@@ -105,7 +111,7 @@ export function CustomerSiteFields({
           }}
         />
       </label>
-      {!revision && <datalist id="boq-site-options">{sites.map((s: any) => <option key={s.id} value={s.name}>{s.code}</option>)}</datalist>}
+      {!revision && <><ListPagination pagination={sitePagination} onPageChange={setSitePage} label="matching sites"/><datalist id="boq-site-options">{sitePagination.rows.map((s: any) => <option key={s.id} value={s.name}>{s.code}</option>)}</datalist></>}
       <label>
         Site code
         <input

@@ -1,3 +1,4 @@
+import {PagedResults} from '../../ui/PagedTableBody.js';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
@@ -152,9 +153,9 @@ export function MiscItemsBoq({ session, recordId }: { session: Session; recordId
                 <input id={`misc-add-${recordId}`} value={search} placeholder="Type at least two letters: screw, pipe, clamp…" onChange={(e) => setSearch(e.target.value)} />
               </Field>
               {hits.length > 0 && (
-                <div className="pz-misc-hits">
+                <PagedResults className="pz-misc-hits" label="matching items">
                   {hits.map((h) => <button type="button" key={h.itemKey} onClick={() => { change([...lines, { itemKey: h.itemKey, quantity: "" }]); setSearch(""); }}>{h.name} <small>{h.unit}</small></button>)}
-                </div>
+                </PagedResults>
               )}
               {cat.can.addItem && search.trim().length >= 2 && !exactName && (
                 <div className="pz-action-row">

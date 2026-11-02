@@ -1,3 +1,5 @@
+import {recentFirst} from '../../shared/recent-records.js';
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {InventoryCatalogue} from '../components/InventoryCatalogue.js';
 import { compareRateItems } from "../ui/rateOrder.js";
 import {Button} from "../ui/Button.js";
@@ -363,8 +365,8 @@ export function Masters({
                   <th>Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {rows.map((row, i) => (
+              <PagedTableBody label="records" key={kind}>
+                {(kind==='customers'||kind==='sites'?recentFirst(rows):rows).map((row, i) => (
                   <tr key={String(row.id ?? row.key ?? i)}>
                     {columns[kind].map(([key]) => (
                       <td
@@ -420,7 +422,7 @@ export function Masters({
                     }
                   </tr>
                 ))}
-              </tbody>
+              </PagedTableBody>
             </table>
             {!rows.length && (
               <p className="empty-state">No matching records.</p>

@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../../ui/PagedTableBody.js';
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
@@ -95,7 +96,7 @@ export function StockWatch({ session }: { session: Session }) {
           <div className="pz-table-scroll">
             <table className="ops-table">
               <thead><tr><th>Item</th><th className="num">In stock</th><th className="num">Received POs</th><th className="num">Upcoming</th><th className="num">On order</th><th className="num">Keep</th><th className="num">Short</th><th>Order by</th><th>Status</th><th></th></tr></thead>
-              <tbody>
+              <PagedTableBody label="records">
                 {!data ? <tr><td colSpan={10} className="ops-empty">Loading…</td></tr> : rows.length === 0 ? <tr><td colSpan={10} className="ops-empty">No inverters, batteries or BMS are needed or in stock.</td></tr> : rows.flatMap((r) => {
                   const s = setting[r.itemKey] ?? { leadDays: String(r.leadDays), minStock: r.minStock };
                   const main = (
@@ -130,7 +131,7 @@ export function StockWatch({ session }: { session: Session }) {
                     </tr>
                   )];
                 })}
-              </tbody>
+              </PagedTableBody>
             </table>
           </div>
         </section>

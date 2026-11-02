@@ -1,3 +1,6 @@
+import {recentFirst} from '../../../shared/recent-records.js';
+import {ListPagination,paginateRows,useListPage} from '../../ui/ListPagination.js';
+import {PagedTableBody} from '../../ui/PagedTableBody.js';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
@@ -188,30 +191,31 @@ function ProcSearch({ data, onGo, onOpenRequest }: { data: Overview | null; onGo
     if (!words.length || !data) return [];
     const match = (...f: (string | null)[]) => { const h = f.join(" ").toLowerCase(); return words.every((w) => h.includes(w)); };
     return [
-      ...data.requests.filter((r) => match(r.number, r.title, r.vendors)).slice(0, 5).map((r) => ({ key: `r${r.id}`, group: "Purchase requests", title: `${r.number} · ${r.title}`, sub: `${r.statusLabel} · ${r.lines} items`, act: () => onOpenRequest(r.id) })),
-      ...data.receivedPOs.filter((p) => match(p.siteName, p.siteCode, p.customer, p.ipoNumber, p.region)).slice(0, 5).map((p) => ({ key: `p${p.issuanceId}`, group: "POs received", title: siteLabel(p.siteName, p.siteCode), sub: `${p.customer ?? ""} · IPO ${p.ipoNumber}`, act: () => onGo("received") })),
-      ...data.upcoming.filter((u) => match(u.siteName, u.siteCode, u.customer, u.reference, u.region)).slice(0, 5).map((u) => ({ key: `u${u.recordId}${u.reference}`, group: "Upcoming POs", title: siteLabel(u.siteName, u.siteCode), sub: `${u.customer ?? ""} · ${u.reference}`, act: () => onGo("upcoming") })),
-      ...data.inventory.filter((i) => match(i.name, i.itemKey)).slice(0, 5).map((i) => ({ key: `i${i.itemKey}`, group: "Inventory", title: i.name, sub: `in stock ${qty(i.inStock)} · to buy ${qty(i.toBuy)} ${i.unit}`, act: () => onGo("stock") })),
+      ...data.requests.filter((r) => match(r.number, r.title, r.vendors)).map((r) => ({ key: `r${r.id}`, updatedAt:r.updatedAt, group: "Purchase requests", title: `${r.number} · ${r.title}`, sub: `${r.statusLabel} · ${r.lines} items`, act: () => onOpenRequest(r.id) })),
+      ...data.receivedPOs.filter((p) => match(p.siteName, p.siteCode, p.customer, p.ipoNumber, p.region)).map((p) => ({ key: `p${p.issuanceId}`, date:p.poDate, group: "POs received", title: siteLabel(p.siteName, p.siteCode), sub: `${p.customer ?? ""} · IPO ${p.ipoNumber}`, act: () => onGo("received") })),
+      ...data.upcoming.filter((u) => match(u.siteName, u.siteCode, u.customer, u.reference, u.region)).map((u) => ({ key: `u${u.recordId}${u.reference}`, updatedAt:u.updatedAt, group: "Upcoming POs", title: siteLabel(u.siteName, u.siteCode), sub: `${u.customer ?? ""} · ${u.reference}`, act: () => onGo("upcoming") })),
+      ...data.inventory.filter((i) => match(i.name, i.itemKey)).map((i) => ({ key: `i${i.itemKey}`, group: "Inventory", title: i.name, sub: `in stock ${qty(i.inStock)} · to buy ${qty(i.toBuy)} ${i.unit}`, act: () => onGo("stock") })),
     ];
   }, [q, data, onGo, onOpenRequest]);
-  const groups = [...new Set(hits.map((h) => h.group))];
+  const [page,setPage]=useListPage(q),pagination=paginateRows(recentFirst(hits),page),pageHits=pagination.rows;
+  const groups = [...new Set(pageHits.map((h) => h.group))];
   return (
     <div className="gs" ref={root} role="search">
       <label className="gs-box">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         <input type="search" value={q} placeholder="Search POs, sites, items, requests…" aria-label="Search the Procurement workspace" autoComplete="off"
           onFocus={() => setOpen(true)} onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-          onKeyDown={(e) => { if (e.key === "Enter" && hits[0]) { hits[0].act(); setOpen(false); setQ(""); } if (e.key === "Escape") setOpen(false); }} />
+          onKeyDown={(e) => { if (e.key === "Enter" && pageHits[0]) { pageHits[0].act(); setOpen(false); setQ(""); } if (e.key === "Escape") setOpen(false); }} />
       </label>
       {open && q.trim() && (
-        <div className="gs-menu" role="listbox">
+        <div className="gs-menu"><div role="listbox" aria-label="Procurement search results">
           {hits.length === 0 ? <p className="gs-empty">Nothing matches.</p> : groups.map((g) => (
             <div key={g}>
               <div className="gs-group">{g}</div>
-              {hits.filter((h) => h.group === g).map((h) => <button type="button" key={h.key} className="gs-item" onClick={() => { h.act(); setOpen(false); setQ(""); }}><span><strong>{h.title}</strong><small>{h.sub}</small></span></button>)}
+              {pageHits.filter((h) => h.group === g).map((h) => <button type="button" key={h.key} className="gs-item" onClick={() => { h.act(); setOpen(false); setQ(""); }}><span><strong>{h.title}</strong><small>{h.sub}</small></span></button>)}
             </div>
           ))}
-        </div>
+        </div><ListPagination pagination={pagination} onPageChange={setPage} label="procurement search results"/></div>
       )}
     </div>
   );
@@ -377,15 +381,15 @@ function UpcomingPage({ data }: { data: Overview }) {
       <div className="pz-table-scroll">
         <table className="ops-table">
           <thead><tr><th>Site</th><th>Customer</th><th>Region</th><th>Stage</th><th>PO expected</th><th className="num">Items</th><th>Big items</th></tr></thead>
-          <tbody>
-            {rows.length === 0 ? <tr><td colSpan={7} className="ops-empty">No upcoming POs.</td></tr> : rows.map((u) => (
+          <PagedTableBody label="records">
+            {rows.length === 0 ? <tr><td colSpan={7} className="ops-empty">No upcoming POs.</td></tr> : recentFirst(rows).map((u) => (
               <tr key={`${u.recordId}${u.reference}`}>
                 <td className="site"><b>{siteLabel(u.siteName, u.siteCode)}</b><small>{u.reference}</small></td>
                 <td>{u.customer ?? "—"}</td><td>{u.region ?? "—"}</td><td>{stageText(u.workflowStage)}</td><td className="date">{fmtDay(u.expectedDate)}</td><td className="num">{u.items}</td>
                 <td className="pr-muted">{[Number(u.bigItems.panels) ? `${qty(u.bigItems.panels)} panels` : "", Number(u.bigItems.batteries) ? `${qty(u.bigItems.batteries)} batteries` : "", Number(u.bigItems.inverters) ? `${qty(u.bigItems.inverters)} inverter${Number(u.bigItems.inverters) === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ") || "—"}</td>
               </tr>
             ))}
-          </tbody>
+          </PagedTableBody>
         </table>
       </div>
     </section>
@@ -415,7 +419,7 @@ function StockPage({ data, busy, onFromToBuy }: { data: Overview; busy: boolean;
         <div className="pz-table-scroll">
           <table className="ops-table">
             <thead><tr><th>Item</th><th className="num">In stock</th><th className="num">Received POs need</th><th className="num">Upcoming POs need</th><th className="num">On order</th><th className="num">On a request</th><th className="num">To buy</th><th>Status</th></tr></thead>
-            <tbody>
+            <PagedTableBody label="records">
               {rows.length === 0 ? <tr><td colSpan={8} className="ops-empty">No items here.</td></tr> : rows.flatMap((i, n) => {
                 const st = inventoryStatus(i);
                 return [
@@ -429,7 +433,7 @@ function StockPage({ data, busy, onFromToBuy }: { data: Overview; busy: boolean;
                   </tr>,
                 ];
               })}
-            </tbody>
+            </PagedTableBody>
           </table>
         </div>
       </section>

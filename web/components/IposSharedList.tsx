@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {departmentFetch} from '../department-view.js';
 import {DocumentListDetails} from './DocumentListDetails.js';
@@ -36,7 +37,7 @@ export function IposSharedList({ records, onPreview }: { records: any[]; onPrevi
     <p className="pz-caption" role="status">{records.length} IPO{records.length === 1 ? "" : "s"}</p>
     <div className="pz-table-scroll"><table className="pz-table">
       <thead><tr><th>Customer</th><th>Site / Branch code</th><th>IPO reference</th><th>PO reference / Date</th><th className="pz-ipo-actions-heading">Next actions</th></tr></thead>
-      <PagedTableBody label="sites and documents">{records.map((record) => <tr key={record.id}>
+      <PagedTableBody label="sites and documents">{recentFirst(records).map((record) => <tr key={record.id}>
         <td>{record.customerCode || record.customer}</td>
         <td>{record.site}<br/><span className="pz-caption">{record.siteCode || "Not entered"}</span></td>
         <td>{record.data.ipoNumber || "Not available"}<DocumentListDetails record={record}/></td>

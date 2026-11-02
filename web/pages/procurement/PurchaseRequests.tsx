@@ -1,3 +1,5 @@
+import {recentFirst} from '../../../shared/recent-records.js';
+import {PagedTableBody,PagedResults} from '../../ui/PagedTableBody.js';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
@@ -80,10 +82,10 @@ export function PurchaseRequests({ session, mode, openId, onOpened, onChanged }:
         <div className="pz-table-scroll">
           <table className="ops-table">
             <thead><tr><th>Request</th><th className="num">Items</th><th className="num">Total (PKR)</th><th>Chosen vendors</th><th>Status</th><th>Raised by</th><th>Updated</th></tr></thead>
-            <tbody>
+            <PagedTableBody label="records">
               {!rows ? <tr><td colSpan={7} className="ops-empty">Loading…</td></tr>
               : visible.length === 0 ? <tr><td colSpan={7} className="ops-empty">{mode === "approver" && tab === "pending" ? "Nothing is waiting for your approval." : "No requests here."}</td></tr>
-              : visible.map((r) => (
+              : recentFirst(visible).map((r) => (
                 <tr key={r.id} data-clickable onClick={() => setSelected(r.id)}>
                   <td className="site"><b>{r.number}</b><small>{r.title}</small></td>
                   <td className="num">{r.lines}</td>
@@ -94,7 +96,7 @@ export function PurchaseRequests({ session, mode, openId, onOpened, onChanged }:
                   <td className="date">{fmtAt(r.updatedAt)}</td>
                 </tr>
               ))}
-            </tbody>
+            </PagedTableBody>
           </table>
         </div>
       </section>
@@ -269,9 +271,9 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
               <input id="pr-search" placeholder="Type at least two letters: cable, MCB, breaker…" value={search} onChange={(e) => { setSearch(e.target.value); setAdding(null); }} />
             </Field>
             {hits.length > 0 && !adding && (
-              <div className="pr-hits">
+              <PagedResults className="pr-hits" label="matching items">
                 {hits.map((h) => <button type="button" key={h.itemKey} onClick={() => setAdding({ item: h, quantity: "" })}><b>{h.name}</b><small>{h.unit}{h.rate ? ` · rate master ${pkr(h.rate)}` : " · no rate yet"}</small></button>)}
-              </div>
+              </PagedResults>
             )}
             {adding && (
               <div className="pr-addrow">

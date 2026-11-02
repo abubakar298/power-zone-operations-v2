@@ -10,8 +10,8 @@ export function PagedTableBody({children,label='records'}:{children:ReactNode;la
  return <tbody>{pagination.rows}{pagination.pages>1&&<tr className="pz-pagination-row"><td colSpan={99}><ListPagination pagination={pagination} onPageChange={setPage} label={label}/></td></tr>}</tbody>;
 }
 
-export function PagedResults({children,label='documents',className}:{children:ReactNode;label?:string;className?:string}){
+export function PagedResults({children,label='documents',className,optionList=false}:{children:ReactNode;label?:string;className?:string;optionList?:boolean}){
  const rows=Children.toArray(children),key=JSON.stringify(rows.map((row:any)=>row.key));
  const [page,setPage]=useListPage(key),pagination=paginateRows(rows,page);
- return <div className={className}>{pagination.rows}<ListPagination pagination={pagination} onPageChange={setPage} label={label}/></div>;
+ return <div className={className}>{optionList?<div role="listbox" aria-label={label}>{pagination.rows}</div>:pagination.rows}<ListPagination pagination={pagination} onPageChange={setPage} label={label}/></div>;
 }

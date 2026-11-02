@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import './accounts-material-costing.css';
 import {useEffect,useState} from 'react';
 import {api} from '../api.js';
@@ -15,7 +16,7 @@ export function AccountsMaterialCosting({onRecordPt}:{onRecordPt:(record:any)=>v
  const [page,setPage]=useListPage(JSON.stringify([search,customer,status]));
  useEffect(()=>{let active=true;void api<any>('/accounts-workspace/material-costing').then(v=>{if(active)setRows(v.rows);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[]);
  useEffect(()=>{let active=true;setDetail(undefined);if(selected?.report)void api<any>('/inventory-reconciliation/reports/'+selected.report.id).then(v=>{if(active)setDetail(v);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[selected]);
- const filtered=(rows??[]).filter(r=>(!customer||r.customer===customer)&&(!status||r.status===status)&&[r.siteName,r.ipo,r.customer].join(' ').toLowerCase().includes(search.toLowerCase())),p=paginateRows(filtered,page);
+ const filtered=(rows??[]).filter(r=>(!customer||r.customer===customer)&&(!status||r.status===status)&&[r.siteName,r.ipo,r.customer].join(' ').toLowerCase().includes(search.toLowerCase())),p=paginateRows(recentFirst(filtered),page);
  const saved=detail?.versions?.[0],current=!!saved&&saved.version===selected?.report?.version&&saved.stage==='Sent to Accounts';
  const usage=current?[...(saved.snapshot.reconciliation?.sections?.flatMap((s:any)=>s.rows)??[]),...(saved.snapshot.entry?.extra??[]).map((c:any)=>({key:c.description,description:c.description,unit:c.unit,approved:null,installed:c.used}))]:[];
  return <section className="accounts-list-panel accounts-material-costing"><header className="accounts-panel-heading"><div><h2>Material Costing &amp; PT Entry</h2><p>Review QC usage and supporting documents, enter material costs in PT, then prepare Job Closure.</p></div></header>

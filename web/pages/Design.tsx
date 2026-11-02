@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {FileUpload} from '../ui/FileUpload.js';
 import { DepartmentWorkspace } from "./DepartmentWorkspace.js";
@@ -370,7 +371,7 @@ export function LegacyDesign({ session }: { session: Session }) {
             </tr>
           </thead>
           <PagedTableBody label="sites and documents">
-            {shown.map((t) => (
+            {recentFirst(shown).map((t) => (
               <tr key={`${t.framework ? "framework" : "survey"}-${t.id}`}>
                 <td>
                   <strong>{t.customer}</strong>

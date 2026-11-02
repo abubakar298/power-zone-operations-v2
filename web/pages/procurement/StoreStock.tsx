@@ -1,3 +1,5 @@
+import {ListPagination,paginateRows,useListPage} from '../../ui/ListPagination.js';
+import {PagedResults} from '../../ui/PagedTableBody.js';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
@@ -49,6 +51,7 @@ export function StoreStock({ session }: { session: Session }) {
     return all.filter((i) => !f || i.name.toLowerCase().includes(f) || i.itemKey.toLowerCase().includes(f)).sort((a, b) => Number(isMisc(a)) - Number(isMisc(b)));
   }, [data, extra, filter]);
 
+  const [stockPage,setStockPage]=useListPage(filter+'|'+rows.map(r=>r.itemKey).join('|')),stockPagination=paginateRows(rows,stockPage);
   const saveCount = async (i: StoreItem) => {
     setBusy(true);
     try {
@@ -138,8 +141,8 @@ export function StoreStock({ session }: { session: Session }) {
             <table className="ops-table">
               <thead><tr><th>Item</th><th className="num">In stock now</th><th>Last counted</th><th className="num">New count</th></tr></thead>
               <tbody>
-                {!data ? <tr><td colSpan={4} className="ops-empty">Loading…</td></tr> : rows.length === 0 ? <tr><td colSpan={4} className="ops-empty">No items match.</td></tr> : rows.flatMap((i, n) => [
-                  ...((i.misc || /^MSC-\d+$/.test(i.itemKey)) && !(n > 0 && (rows[n - 1].misc || /^MSC-\d+$/.test(rows[n - 1].itemKey)))
+                {!data ? <tr><td colSpan={4} className="ops-empty">Loading…</td></tr> : rows.length === 0 ? <tr><td colSpan={4} className="ops-empty">No items match.</td></tr> : stockPagination.rows.flatMap((i, n) => [
+                  ...((i.misc || /^MSC-\d+$/.test(i.itemKey)) && !(n > 0 && (stockPagination.rows[n - 1].misc || /^MSC-\d+$/.test(stockPagination.rows[n - 1].itemKey)))
                     ? [<tr key="misc-divider" className="pr-divider"><td colSpan={4}>Misc items <small>small site items from Design's misc items BOQs</small></td></tr>] : []),
                   <tr key={i.itemKey}>
                     <td className="site"><b>{i.name}</b><small>{i.unit}{!i.inRateMaster ? " · not in the rate master, cannot be counted here" : ""}</small></td>
@@ -158,17 +161,18 @@ export function StoreStock({ session }: { session: Session }) {
               </tbody>
             </table>
           </div>
+          <ListPagination pagination={stockPagination} onPageChange={setStockPage} label="stock items"/>
           <div className="pr-additem">
             <label className="pr-muted" htmlFor="sto-search">Count an item that is not listed</label>
             <input id="sto-search" className="sto-filter" placeholder="Search the rate master: type at least two letters" value={search} onChange={(e) => setSearch(e.target.value)} />
             {hits.length > 0 && (
-              <div className="pr-hits">
+              <PagedResults className="pr-hits" label="matching items">
                 {hits.map((h) => (
                   <button type="button" key={h.itemKey} onClick={() => { setExtra([...extra, { itemKey: h.itemKey, name: h.name, unit: h.unit, inRateMaster: true, inStock: "0", counted: false, lastCountAt: null, stockUnit: null }]); setFilter(h.name); setSearch(""); }}>
                     <b>{h.name}</b><small>{h.unit}</small>
                   </button>
                 ))}
-              </div>
+              </PagedResults>
             )}
           </div>
         </section>

@@ -1,3 +1,5 @@
+import {PagedSelect} from '../ui/PagedSelect.js';
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {QuotationApproval} from "../components/QuotationApproval.js";
 import {Button} from "../ui/Button.js";
@@ -206,7 +208,7 @@ export function CniProposals({
                   Add customer
                 </button>
                 {!customerId && search && (
-                  <select
+                  <PagedSelect
                     aria-label="Select matching customer"
                     value=""
                     onChange={(e) => {
@@ -227,13 +229,13 @@ export function CniProposals({
                             .toLowerCase()
                             .includes(search.toLowerCase()),
                       )
-                      .slice(0, 50)
+                      
                       .map((c: any) => (
                         <option key={c.id} value={c.id}>
                           {c.name} · {c.phone}
                         </option>
                       ))}
-                  </select>
+                  </PagedSelect>
                 )}
                 {customerId && (
                   <small>
@@ -450,7 +452,7 @@ export function CniProposals({
                 </tr>
               </thead>
               <PagedTableBody label="sites and documents">
-                {rows.map((r) => (
+                {recentFirst(rows).map((r) => (
                   <tr key={r.id}>
                     <td>
                       {r.number}

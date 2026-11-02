@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedResults} from '../ui/PagedTableBody.js';
 import {ApprovedInventoryWorkspace} from '../inventory-approved/ApprovedInventoryWorkspace.js';
 import {TemporaryDocuments} from '../inventory-approved/TemporaryDocuments.js';
@@ -41,7 +42,7 @@ export function GatePasses({session,onLogout,limitedAccess=false}:{session:Sessi
  function clear(){setSelected(undefined);setFile(undefined);setNote('');setError('');setNotice('');if(upload.current)upload.current.value='';}
  function choose(next:Bucket){if(!leave())return;clear();setBucket(next);setSearch('');history.replaceState(null,'','/inventory/gate-passes?bucket='+next);}
  const records=(id:Bucket)=>data?.records.filter(r=>buckets.find(b=>b.id===id)!.kinds.includes(r.kind))??[];
- const visible=records(bucket).filter(r=>(!warehouse||r.warehouse===warehouse)&&`${r.number} ${r.siteName??''} ${r.ipo??''} ${r.warehouse}`.toLowerCase().includes(search.toLowerCase()));
+ const visible=recentFirst(records(bucket)).filter(r=>(!warehouse||r.warehouse===warehouse)&&`${r.number} ${r.siteName??''} ${r.ipo??''} ${r.warehouse}`.toLowerCase().includes(search.toLowerCase()));
  const relevant=(all:Copy[],r:Record)=>all.filter(c=>r.signoff?c.copy_kind==='customer-signoff'&&c.source_site_id===r.siteId:c.copy_kind!=='customer-signoff');
  async function open(r:Record){if(!leave())return;setBusy(true);setError('');try{const detail=await api<{copies:Copy[];parent:boolean;documentRevision:number}>('/material-dispatches/gate-passes/'+r.kind+'/'+r.id);setSelected({...r,parent:detail.parent,documentRevision:detail.documentRevision});setCopies(relevant(detail.copies,r));setFile(undefined);setNote('');setNotice('');setCopyKind(r.signoff?'customer-signoff':['return','purchase','transfer-in','replacement-in'].includes(r.kind)?'signed-store':'signed-gate');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  async function save(){if(!selected||!file||busy)return;setBusy(true);setError('');try{

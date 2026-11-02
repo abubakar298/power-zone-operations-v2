@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {FileUpload} from '../ui/FileUpload.js';
 import {CustomerSearchSelect} from "../components/CustomerSearchSelect.js";
@@ -842,7 +843,7 @@ export function Boqs({
                     </tr>
                   </thead>
                   <PagedTableBody label="sites and documents">
-                    {reviewRows.map((r) => (
+                    {recentFirst(reviewRows).map((r) => (
                       <tr key={r.id}>
                         <td>
                           {r.customer}
@@ -907,7 +908,7 @@ export function Boqs({
                     </tr>
                   </thead>
                   <PagedTableBody label="sites and documents">
-                    {records.map((r) => (
+                    {recentFirst(records).map((r) => (
                       <tr key={r.id}>
                         <td>
                           <button

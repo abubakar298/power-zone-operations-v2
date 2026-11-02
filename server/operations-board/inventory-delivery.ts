@@ -1,5 +1,5 @@
 import type {Pool,PoolClient} from 'pg';
-type Row={site_id:string;version:number;snapshot:any};
+type Row={site_id:string;version:number;snapshot:any;created_at?:string|Date};
 export type InventoryReceiving={dispatchId:string;number:string;evidenceId:string;name:string;mediaType:string;receivedAt:string;partial:boolean;sites:any[]};
 /** Customer receipt is delivery evidence. A gate signature proves warehouse OUT
  * only. Identity uses registered site/IPO IDs, never names or shared PO labels.

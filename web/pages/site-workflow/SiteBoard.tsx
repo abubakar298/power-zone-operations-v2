@@ -1,3 +1,5 @@
+import {recentFirst} from '../../../shared/recent-records.js';
+import {PagedTableBody} from '../../ui/PagedTableBody.js';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { Field } from "../../ui/Field.js";
@@ -85,10 +87,10 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialSiteNon
         <div className="pz-table-scroll">
           <table className="ops-table">
             <thead><tr><th>Site</th><th>Region</th><th>Stage</th><th>Scope</th><th>Delivery</th><th>Installation</th><th>{mode === "docs" ? "Missing documents" : "Flags"}</th></tr></thead>
-            <tbody>
+            <PagedTableBody label="records">
               {!data ? <tr><td colSpan={7} className="ops-empty">Loading…</td></tr>
               : visible.length === 0 ? <tr><td colSpan={7} className="ops-empty">{emptyText}</td></tr>
-              : visible.map((s) => (
+              : recentFirst(visible).map((s) => (
                 <tr key={s.id} data-clickable onClick={() => setSelected(s.id)}>
                   <td className="site"><b>{s.siteName ?? "Site"}{s.siteCode ? ` (${s.siteCode})` : ""}</b><small>{s.customer ?? "—"}</small></td>
                   <td>{s.region ?? "—"}</td>
@@ -99,7 +101,7 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialSiteNon
                   <td><div className="sw-chips">{flags(s)}</div></td>
                 </tr>
               ))}
-            </tbody>
+            </PagedTableBody>
           </table>
         </div>
       </section>
@@ -136,10 +138,10 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialSiteNon
             <thead>
               <tr><th>Site</th><th>Region</th><th>Stage</th><th>Scope</th><th>Delivery</th><th>Installation</th><th>{mode === "docs" ? "Missing documents" : "Flags"}</th></tr>
             </thead>
-            <tbody>
+            <PagedTableBody label="records">
               {!data ? <tr><td colSpan={7}>Loading…</td></tr>
               : visible.length === 0 ? <tr><td colSpan={7}>{emptyText}</td></tr>
-              : visible.map((s) => (
+              : recentFirst(visible).map((s) => (
                 <tr key={s.id} data-clickable onClick={() => setSelected(s.id)}>
                   <td><strong>{s.siteName ?? "Site"}</strong>{s.siteCode ? ` (${s.siteCode})` : ""}<br /><small>{s.customer ?? "—"}</small></td>
                   <td>{s.region ?? "—"}</td>
@@ -150,7 +152,7 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialSiteNon
                   <td><div className="sw-chips">{flags(s)}</div></td>
                 </tr>
               ))}
-            </tbody>
+            </PagedTableBody>
           </table>
         </div>
         <p className="sw-muted">{lateNote}</p>

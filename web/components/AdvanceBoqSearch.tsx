@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../api.js";
@@ -129,7 +130,7 @@ export function AdvanceBoqSearch({ onOpen, regionScope = "" }: { onOpen: (refere
             <PagedTableBody label="sites and documents">
               {visible.length === 0 ? (
                 <tr><td colSpan={7}>{pool.length === 0 ? "No advance BOQs received yet." : "No advance BOQs match these filters."}</td></tr>
-              ) : visible.map((r) => (
+              ) : recentFirst(visible).map((r) => (
                 <tr key={`${r.reference}-${r.recordId}`} data-clickable tabIndex={0} onClick={() => onOpen(r.reference)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(r.reference); }}>
                   <td><strong>{r.site}</strong>{r.siteCode ? ` (${r.siteCode})` : ""}<br /><small>{r.reference}</small></td>
                   <td>{r.customer}</td>

@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {departmentFetch} from '../department-view.js';
 import {FileUpload} from '../ui/FileUpload.js';
 import { displayUnit } from "../../server/boq/unit.js";
@@ -800,7 +801,7 @@ export function Orders({
                     </tr>
                   </thead>
                   <tbody>
-                    {orders.map((o) => (
+                    {recentFirst(orders).map((o) => (
                       <tr key={o.id}>
                         <td>
                           <button

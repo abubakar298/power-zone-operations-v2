@@ -1,3 +1,4 @@
+import {recentFirst} from '../../../shared/recent-records.js';
 import {ListPagination,useListPage,paginateRows} from '../../ui/ListPagination.js';
 import {OperationsPhysicalDocuments} from './PhysicalDocuments.js';
 import {operationsCompletionDate} from '../../../shared/operations-completion-date.js';
@@ -37,8 +38,8 @@ export function OperationsBoard({session,onLogout}:{session:Session;onLogout:()=
  const scoped=(data?.sites??[]).filter(s=>showOperationsSite(s)&&(!team||(team==='unassigned'?!s.operationsTeam:s.operationsTeam===team))&&(!type||(type==='solar'?['solar','solar-bess'].includes(s.projectType??''):type==='ups'?s.projectType==='ups':s.installation===false)));
  const matching=scoped.filter(s=>(!stage||bucket(s)===stage)&&`${s.name} ${s.ipo} ${s.customer??''} ${s.customerPo??''}`.toLowerCase().includes(search.toLowerCase()));
  const [page,setPage]=useListPage(JSON.stringify([stage,search,team,type]));
- const ordered=stage==='completed'?[...matching].sort((a,b)=>(operationsCompletionDate(b)??'').localeCompare(operationsCompletionDate(a)??'')||a.name.localeCompare(b.name)||a.id.localeCompare(b.id)):matching;
- const pagination=paginateRows(ordered,page,stage==='completed'),visible=pagination.rows;
+ const ordered=stage==='completed'?[...matching].sort((a,b)=>(operationsCompletionDate(b)??'').localeCompare(operationsCompletionDate(a)??'')||a.name.localeCompare(b.name)||a.id.localeCompare(b.id)):recentFirst(matching);
+ const pagination=paginateRows(ordered,page),visible=pagination.rows;
  const restricted=access?.kind==='qc'&&['vendors','members','vehicles','batches'].includes(where.page)||!supervisor&&where.page==='targets';
  const selected=where.id?data?.sites.find(s=>s.id===where.id):undefined;
  return <div className="operations-theme ob-shell">

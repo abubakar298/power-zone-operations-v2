@@ -13,6 +13,7 @@ test('BOQ entry: provisional rates, unified customer search, automatic terminati
   await page.getByRole('tab',{name:/^Rates /}).click();
   await page.getByLabel('Rate review status').selectOption('Under review');
   for (const key of ['6mm² DC Cable Red','500V 2P DC Breaker','6mm² DC Cable Black']) {
+    await page.locator('#master-search').fill(key);
     const row=page.getByRole('row').filter({has:page.getByRole('cell',{name:key,exact:true})});
     await expect(row.getByText('Under review',{exact:true})).toBeVisible();
     await expect(row.getByRole('button',{name:`History ${key}`,exact:true})).toBeVisible();

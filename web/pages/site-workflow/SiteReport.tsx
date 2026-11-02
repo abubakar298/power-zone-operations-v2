@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../../ui/PagedTableBody.js';
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
@@ -54,7 +55,7 @@ export function SiteReport({ session, regionScope = "" }: { session: Session; re
         <div className="pz-table-scroll">
           <table className="pz-table sw-table sw-table--compact">
             <thead><tr><th>Site</th><th>Customer</th><th>Region</th><th>Stage</th><th>Scope</th><th>Expected delivery</th><th>Delivered</th><th>Started</th><th>Commissioned</th><th>Handed over</th><th>Submitted</th><th>Closed</th></tr></thead>
-            <tbody>
+            <PagedTableBody label="records">
               {!report ? <tr><td colSpan={12}>Loading…</td></tr> : sites.length === 0 ? <tr><td colSpan={12}>No sites.</td></tr> : sites.map((s) => (
                 <tr key={s.id}>
                   <td><strong>{label(s)}</strong></td><td>{s.customer ?? "—"}</td><td>{s.region ?? "—"}</td>
@@ -63,7 +64,7 @@ export function SiteReport({ session, regionScope = "" }: { session: Session; re
                   <td>{fmtDay(s.expectedDelivery)}</td><td>{fmtDay(s.deliveredOn)}</td><td>{fmtDay(s.startedOn)}</td><td>{fmtDay(s.commissionedOn)}</td><td>{fmtDay(s.handedOverOn)}</td><td>{fmtDay(s.submittedToCustomerDate)}</td><td>{fmtDay(s.closedAt?.slice(0, 10))}</td>
                 </tr>
               ))}
-            </tbody>
+            </PagedTableBody>
           </table>
         </div>
       </section>

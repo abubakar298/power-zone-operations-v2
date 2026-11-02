@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {withMatchingVariableSection} from '../../shared/material-preparation.js';
 import {ListPagination,useListPage,paginateRows} from '../ui/ListPagination.js';
 import {scheduledTransport} from '../../shared/operations-transport.js';
@@ -39,7 +40,7 @@ export function ParentDos({session,onLogout}:{session:Session;onLogout:()=>void}
  async function load(){setError('');try{const [i,d,p]=await Promise.all([api<Intake>('/material-dispatches/intake'),api<{drafts:Draft[]}>('/material-dispatches/drafts'),api<{plans:{id:string;siteId:string}[]}>('/material-dispatches/site-plans')]);setPlans(p.plans);setIntake(i);setDrafts(d.drafts.filter(r=>r.snapshot.parent&&r.snapshot.kind==='variable'));}catch(e){setError((e as Error).message);}}
  useEffect(()=>{void load();const pop=()=>{if(!confirmLeaveWorkspace()){history.pushState(null,'',pathRef.current);return;}const value=location.pathname+location.search;pathRef.current=value;setPath(value);};window.addEventListener('popstate',pop);return()=>window.removeEventListener('popstate',pop);},[]);
  function go(value:string,check=true){if(check&&!confirmLeaveWorkspace())return;history.pushState(null,'',value);pathRef.current=value;setPath(value);setMobile(false);window.scrollTo(0,0);}
- const sources=(intake?.sources??[]).filter(s=>selecting||s.authorization!=='forecast-only').filter(s=>selecting||schedule==='all'||(schedule==='scheduled'?!!s.dispatchDate:!s.dispatchDate)).sort((a,b)=>(a.dispatchDate??'9999').localeCompare(b.dispatchDate??'9999')).filter(s=>`${s.ipo??''} ${s.orderNumber??''} ${s.siteName} ${s.customer}`.toLowerCase().includes(search.toLowerCase()));
+ const sources=recentFirst(intake?.sources??[]).filter(s=>selecting||s.authorization!=='forecast-only').filter(s=>selecting||schedule==='all'||(schedule==='scheduled'?!!s.dispatchDate:!s.dispatchDate)).filter(s=>`${s.ipo??''} ${s.orderNumber??''} ${s.siteName} ${s.customer}`.toLowerCase().includes(search.toLowerCase()));
  const registered=(intake?.registeredPending??[]).filter(s=>`${s.ipo} ${s.siteName} ${s.customer}`.toLowerCase().includes(search.toLowerCase()));
  const [page,setPage]=useListPage(JSON.stringify([search,schedule,selecting]));
  const pagination=paginateRows([...sources.map(source=>({source,unlinked:false as const})),...(selecting?registered.map(source=>({source,unlinked:true as const})):[])],page);

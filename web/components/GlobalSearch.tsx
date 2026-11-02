@@ -1,10 +1,12 @@
+import {recentFirst,recordedTimestamp} from '../../shared/recent-records.js';
+import {ListPagination,paginateRows,useListPage} from '../ui/ListPagination.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type Session } from "../api.js";
 import "./global-search.css";
 import { STAGE_COLOURS, STAGE_LABELS, stageInk, type StageKey } from "../pages/site-workflow/stages.js";
 
-interface SiteHit { id: string; siteName: string | null; siteCode: string | null; customer: string | null; region: string | null; stage: StageKey; stageLabel: string; ipoNumber: string; boqNumber: string }
-interface HeadsUpHit { reference: string; recordId: string; customer: string; site: string; siteCode: string; region: string; stage: string; final: boolean }
+interface SiteHit { id: string; siteName: string | null; siteCode: string | null; customer: string | null; region: string | null; stage: StageKey; stageLabel: string; updatedAt?:string; ipoNumber: string; boqNumber: string }
+interface HeadsUpHit { reference: string; recordId: string; customer: string; site: string; siteCode: string; region: string; stage: string; updatedAt?:string; final: boolean }
 type Hit = { kind: "site"; site: SiteHit } | { kind: "headsup"; headsUp: HeadsUpHit };
 
 const WORKFLOW_STAGES: Record<string, string> = {
@@ -37,7 +39,7 @@ export function GlobalSearch({ session, onOpenSite, onOpenHeadsUp }: { session: 
     ]);
     setSites(s.sites);
     setHeadsUps(a.requests.map((r: any) => ({
-      reference: r.snapshot?.headsupGroup ?? r.number, recordId: r.record_id, customer: r.customer_name ?? "—", site: r.site_name ?? r.snapshot?.site ?? "—",
+      updatedAt:r.updated_at??r.created_at, reference: r.snapshot?.headsupGroup ?? r.number, recordId: r.record_id, customer: r.customer_name ?? "—", site: r.site_name ?? r.snapshot?.site ?? "—",
       siteCode: r.site_code ?? r.snapshot?.siteCode ?? "", region: r.region || "", final: Boolean(r.confirmed_issuance_id),
       stage: r.operations_stage ? `Operations: ${STAGE_LABELS[r.operations_stage as StageKey] ?? r.operations_stage}` : WORKFLOW_STAGES[r.workflow_stage ?? ""] ?? String(r.workflow_stage ?? "").replace(/_/g, " "),
     })));
@@ -56,11 +58,12 @@ export function GlobalSearch({ session, onOpenSite, onOpenHeadsUp }: { session: 
     if (!text) return [];
     const words = text.split(/\s+/);
     const match = (fields: unknown[]) => { const hay = fields.map(norm).join(" "); return words.every((w) => hay.includes(w)); };
-    const s = sites.filter((x) => match([x.siteName, x.siteCode, x.customer, x.region, x.stageLabel, x.ipoNumber, x.boqNumber])).slice(0, 6).map((site): Hit => ({ kind: "site", site }));
-    const h = headsUps.filter((x) => match([x.reference, x.customer, x.site, x.siteCode, x.region, x.stage])).slice(0, 6).map((headsUp): Hit => ({ kind: "headsup", headsUp }));
-    return [...s, ...h];
+    const s = sites.filter((x) => match([x.siteName, x.siteCode, x.customer, x.region, x.stageLabel, x.ipoNumber, x.boqNumber])).map((site): Hit => ({ kind: "site", site }));
+    const h = headsUps.filter((x) => match([x.reference, x.customer, x.site, x.siteCode, x.region, x.stage])).map((headsUp): Hit => ({ kind: "headsup", headsUp }));
+    return recentFirst([...s, ...h],hit=>recordedTimestamp(hit.kind==='site'?hit.site:hit.headsUp));
   }, [q, sites, headsUps]);
-  useEffect(() => { setActive(0); }, [q]);
+  const [page,setPage]=useListPage(q),pagination=paginateRows(hits,page),pageHits=pagination.rows;
+  useEffect(() => { setActive(0); }, [q,pagination.page]);
 
   const choose = (hit: Hit) => {
     setOpen(false); setQ(""); input.current?.blur();
@@ -68,12 +71,12 @@ export function GlobalSearch({ session, onOpenSite, onOpenHeadsUp }: { session: 
   };
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Escape") { setOpen(false); input.current?.blur(); return; }
-    if (!hits.length) return;
-    if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => (i + 1) % hits.length); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => (i - 1 + hits.length) % hits.length); }
-    else if (e.key === "Enter") { e.preventDefault(); choose(hits[active] ?? hits[0]); }
+    if (!pageHits.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => (i + 1) % pageHits.length); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => (i - 1 + pageHits.length) % pageHits.length); }
+    else if (e.key === "Enter") { e.preventDefault(); choose(pageHits[active] ?? pageHits[0]); }
   };
-  const siteHits = hits.filter((h) => h.kind === "site"), headsUpHits = hits.filter((h) => h.kind === "headsup");
+  const siteHits = pageHits.filter((h) => h.kind === "site"), headsUpHits = pageHits.filter((h) => h.kind === "headsup");
   const showMenu = open && q.trim().length > 0;
 
   return (
@@ -86,26 +89,26 @@ export function GlobalSearch({ session, onOpenSite, onOpenHeadsUp }: { session: 
         {!q && <kbd>/</kbd>}
       </label>
       {showMenu && (
-        <div className="gs-menu" id="gs-menu" role="listbox" aria-label="Search results">
+        <div className="gs-menu"><div id="gs-menu" role="listbox" aria-label="Search results">
           {hits.length === 0 ? <p className="gs-empty">{loadedAt ? "Nothing matches." : "Loading…"}</p> : (
             <>
               {siteHits.length > 0 && <div className="gs-group">Sites</div>}
               {siteHits.map((h) => h.kind === "site" && (
-                <button type="button" key={h.site.id} role="option" className="gs-item" aria-selected={hits[active] === h} onMouseEnter={() => setActive(hits.indexOf(h))} onClick={() => choose(h)}>
+                <button type="button" key={h.site.id} role="option" className="gs-item" aria-selected={pageHits[active] === h} onMouseEnter={() => setActive(pageHits.indexOf(h))} onClick={() => choose(h)}>
                   <span><strong>{h.site.siteName ?? "Site"}{h.site.siteCode ? ` (${h.site.siteCode})` : ""}</strong><small>{h.site.customer ?? "—"}{h.site.region ? ` · ${h.site.region}` : ""} · IPO {h.site.ipoNumber}</small></span>
                   <span className="gs-tag" style={{ background: STAGE_COLOURS[h.site.stage], color: stageInk(h.site.stage) }}>{h.site.stageLabel}</span>
                 </button>
               ))}
               {headsUpHits.length > 0 && <div className="gs-group">Heads-ups (before IPO)</div>}
               {headsUpHits.map((h) => h.kind === "headsup" && (
-                <button type="button" key={`${h.headsUp.reference}-${h.headsUp.recordId}`} role="option" className="gs-item" aria-selected={hits[active] === h} onMouseEnter={() => setActive(hits.indexOf(h))} onClick={() => choose(h)}>
+                <button type="button" key={`${h.headsUp.reference}-${h.headsUp.recordId}`} role="option" className="gs-item" aria-selected={pageHits[active] === h} onMouseEnter={() => setActive(pageHits.indexOf(h))} onClick={() => choose(h)}>
                   <span><strong>{h.headsUp.site}{h.headsUp.siteCode ? ` (${h.headsUp.siteCode})` : ""}</strong><small>{h.headsUp.customer}{h.headsUp.region ? ` · ${h.headsUp.region}` : ""} · {h.headsUp.reference}</small></span>
                   <span className="gs-tag" style={{ background: "var(--pz-pending-bg)", color: "var(--pz-pending)" }}>{h.headsUp.final ? "Final received" : h.headsUp.stage}</span>
                 </button>
               ))}
             </>
           )}
-        </div>
+        </div><ListPagination pagination={pagination} onPageChange={setPage} label="search results"/></div>
       )}
     </div>
   );

@@ -1,3 +1,5 @@
+import {recentFirst} from '../../shared/recent-records.js';
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {Decimal} from 'decimal.js';
 import {DocumentListDetails} from './DocumentListDetails.js';
 import { Button } from "../ui/Button.js";
@@ -45,8 +47,8 @@ function SitesTable({
             <th>Action</th>
           </tr>
         </thead>
-        <tbody>
-          {records.map((record) => (
+        <PagedTableBody label="records">
+          {recentFirst(records).map((record) => (
             <tr key={record.id}>
               <td>
                 {record.customer}
@@ -78,7 +80,7 @@ function SitesTable({
               </td>
             </tr>
           ))}
-        </tbody>
+        </PagedTableBody>
       </table>
     </div>
   );

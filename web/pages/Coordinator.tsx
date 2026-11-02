@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {DocumentListDetails} from '../components/DocumentListDetails.js';
 import {documentListSearch} from '../../shared/document-list-search.js';
@@ -626,7 +627,7 @@ export function LegacyCoordinator({
                 </tr>
               </thead>
               <PagedTableBody label="sites and documents">
-                {visibleTasks.map((t: any) => (
+                {recentFirst(visibleTasks).map((t: any) => (
                   <tr
                     key={`${t.kind}-${t.id}`}
                     className={overdue(t) ? "task-overdue" : ""}
