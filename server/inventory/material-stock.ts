@@ -17,7 +17,7 @@ import {transaction} from '../db/transaction.js';
 import {MaterialDraftRepository,materialDraftInputSchema} from './material-drafts.js';
 import {warehouseLedgerKey} from './warehouse-source.js';
 import {warehouseNumber,requireWarehouseAccess,lockWarehouseAuthority} from './warehouse-access.js';
-import {warehousePosition,warehousePositions} from './warehouse-ledger.js';
+import {warehouseDispatchPosition,warehousePosition,warehousePositions} from './warehouse-ledger.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {approvedEarthingBasis} from '../../shared/material-preparation.js';
 
@@ -197,8 +197,8 @@ export class MaterialStockRepository{
    for(const p of prepared)if(new Decimal(p.request.quantity).plus(already.find(r=>r.line_key===p.row.key)?.issued??0).gt(p.row.out))throw new HttpError(409,'This prepared quantity has already been dispatched, including partial trips. Refresh the remaining quantity.');
    const positions=new Map<string,NonNullable<Awaited<ReturnType<typeof warehousePosition>>>>();
    for(const key of [...new Set(prepared.map(p=>p.ledgerKey))].sort()){
-    const position=await warehousePosition(c,input.sourceSha256,key,true);if(!position)throw new HttpError(409,'No reviewed opening/closing stock exists for this item, warehouse and unit. Do not assume zero or convert units.');
-    const matching=prepared.filter(p=>p.ledgerKey===key);
+    const matching=prepared.filter(p=>p.ledgerKey===key),identity=matching[0].row;
+    const position=await warehouseDispatchPosition(c,input.sourceSha256,key,{itemId:identity.itemId,unit:identity.unit,description:identity.description,warehouse:s.warehouse},actor);
     if(matching.some(p=>p.request.ledgerRevision!==position.ledgerRevision))throw new HttpError(409,'This warehouse balance changed. Refresh before issuing material.');
     const total=matching.reduce((n,p)=>n.plus(p.request.quantity),new Decimal(0));
     if(!temporaryNegativeDoBalanceAllowed()&&position.currentClosing!==null&&new Decimal(position.currentClosing).lt(total))throw new HttpError(409,'Recorded warehouse stock is insufficient for this issue quantity.');
