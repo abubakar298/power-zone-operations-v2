@@ -47,7 +47,9 @@ export function DocumentPreview({
             );
           blob = await response.blob();
         }
-        if (blob.type.startsWith("image/") || mime.startsWith("image/")) {
+        if (blob.type.includes('spreadsheetml') || /\.xlsx$/i.test(downloadFilename??title)) {
+          const {workbookPreview}=await import('./workbook-preview.js');const view=workbookPreview(new Uint8Array(await blob.arrayBuffer()));if(cancelled)return;host.current?.replaceChildren(view);
+        } else if (blob.type.startsWith("image/") || mime.startsWith("image/")) {
           const image = document.createElement("img");
           image.alt = title;
           const reader = new FileReader();
@@ -181,13 +183,13 @@ export function DocumentDownload({
       }
       if (
         !blob.type.includes("application/pdf") &&
-        !blob.type.startsWith("image/")
+        !blob.type.startsWith("image/") && !blob.type.includes("spreadsheetml")
       )
         throw new Error("Unable to download this document. Please try again.");
       const href = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = href;
-      a.download = filename??downloadName({documentType:title,identity:url.startsWith('blob:')?title:url,extension:blob.type.startsWith('image/')?blob.type.split('/')[1]:'pdf'});
+      a.download = filename??downloadName({documentType:title,identity:url.startsWith('blob:')?title:url,extension:blob.type.includes('spreadsheetml')?'xlsx':blob.type.startsWith('image/')?blob.type.split('/')[1]:'pdf'});
       a.click();
       setTimeout(() => URL.revokeObjectURL(href), 1000);
     } catch (e) {

@@ -1328,20 +1328,14 @@ export function AccountsWorkspace({
               const files =
                 job.evidence?.filter((e: any) => e.kind === kind) ?? [];
               return (
-                <p key={kind}>
+                <div key={kind}>
                   <strong>{kind}:</strong>{" "}
                   {files.length ? "Received" : "Not received"}{" "}
                   {files.map((e: any) => (
-                    <a
-                      key={e.id}
-                      href={e.downloadUrl??`/api/accounts-workspace/evidence/${e.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {e.filename}
-                    </a>
+                    <EvidencePreview key={e.id}
+                      url={e.downloadUrl??`/api/accounts-workspace/evidence/${e.id}`} title={e.filename} filename={e.filename}/>
                   ))}
-                </p>
+                </div>
               );
             })}
           </section>
@@ -1350,14 +1344,8 @@ export function AccountsWorkspace({
             {job.evidence
               ?.filter((e: any) => e.kind === "PT costing screenshot")
               .map((e: any) => (
-                <p key={e.id}>
-                  <a
-                    href={e.downloadUrl??`/api/accounts-workspace/evidence/${e.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {e.filename}
-                  </a>
+                <div key={e.id}>
+                  <EvidencePreview url={e.downloadUrl??`/api/accounts-workspace/evidence/${e.id}`} title={e.filename} filename={e.filename}/>
                   {e.id === ptAttachmentId
                     ? " · Selected for this closure"
                     : !readonly && !editingSubmitted && (
@@ -1365,7 +1353,7 @@ export function AccountsWorkspace({
                           Use this PT report
                         </Button>
                       )}
-                </p>
+                </div>
               ))}
             {!readonly && !editingSubmitted && (
               <Field

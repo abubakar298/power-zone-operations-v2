@@ -1,3 +1,4 @@
+import {InventoryItems} from './InventoryItems.js';
 import {DispatchReconciliationPage} from './DispatchReconciliationPage.js';
 import {ApprovedParentReconciliation} from '../inventory-approved/ApprovedParentReconciliation.js';
 import {SiteLedger} from '../inventory-approved/ApprovedSiteLedger.js';
@@ -30,7 +31,8 @@ export function InventoryRoleGate({session,onLogout}:{session:Session;onLogout:(
   const content=(()=>{
   const usagePath=path.split('?')[0].match(/^\/inventory\/materials\/([^/]+)\/usage\/?$/);if(usagePath)return <DispatchReconciliationPage/>;
   if(path.startsWith('/inventory/site-ledger'))return <SiteLedger/>;
-  if(path.startsWith('/inventory/temporary-documents'))return <TemporaryDocuments session={session} initialCreate/>;
+  if(path.startsWith('/inventory/items'))return <InventoryItems session={session}/>;
+  if(path.startsWith('/inventory/temporary-documents'))return <TemporaryDocuments key={path} session={session} initialCreate={new URLSearchParams(path.split('?')[1]).has('new')}/>;
   if(path.startsWith('/inventory/materials/')||path.split('?')[0]==='/inventory/materials'&&new URLSearchParams(location.search).has('site'))return <SiteMaterials key={path} {...props}/>;
   if(path.startsWith('/inventory/parent-dos/review'))return <ApprovedParentReconciliation key={path} session={session}/>;
   if(path.startsWith('/inventory/parent-dos')||path.split('?')[0]==='/inventory/materials')return <ParentDos key={path} {...props}/>;

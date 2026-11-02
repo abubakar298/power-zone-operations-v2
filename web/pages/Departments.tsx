@@ -1,3 +1,4 @@
+import {EvidencePreview} from '../components/EvidencePreview.js';
 import { DocumentDownload } from "../components/DocumentPreview.js";
 import { displayUnit } from "../../server/boq/unit.js";
 import { money as preciseMoney, wholeMoney } from "../numbers.js";
@@ -292,13 +293,7 @@ export function Departments({
                   </tbody>
                 </table>
               </div>
-              <a
-                target="_blank"
-                rel="noreferrer"
-                href={`/api/operations/store/${selected.id}/report.pdf`}
-              >
-                Download issued BOQ
-              </a>
+              <EvidencePreview url={`/api/operations/store/${selected.id}/report.pdf`} title="Issued BOQ"/>
               <p className="field-hint">
                 These are required quantities, not stock available. Recording
                 dispatch does not post inventory movements.

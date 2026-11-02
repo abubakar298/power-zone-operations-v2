@@ -1,3 +1,4 @@
+import {MastersRepository} from '../masters/repository.js';
 import {materialCorrectionAlerts} from './material-correction-alerts.js';
 import {readDispatchDocuments,dispatchDocumentEvidence} from './dispatch-document-status.js';
 import {withInventoryReceiving} from '../operations-board/inventory-delivery.js';
@@ -166,6 +167,9 @@ export class MaterialDraftRepository{
   const rows=await this.pool.query(`SELECT DISTINCT payload->>'warehouse' AS warehouse FROM inventory_warehouse_source_balances WHERE source_sha256=(SELECT source_sha256 FROM inventory_warehouse_sources ORDER BY (coalesce(metadata->>'canonicalIds','') ~ '^[1-9][0-9]*$') DESC,created_at DESC,source_sha256 LIMIT 1) ORDER BY warehouse`);
   return {warehouses:rows.rows.map(r=>r.warehouse as string).filter(w=>access.owner||access.warehouses.includes(w))};
  }
+ async itemDatabase(actor:string){await this.access(actor);return new MastersRepository(this.pool).catalogueDescriptions(actor);}
+ async addCatalogueItem(actor:string,input:unknown){await this.access(actor);return new MastersRepository(this.pool).createCatalogueItem(actor,input);}
+ async editCatalogueDescription(actor:string,input:{itemId:string;version:number;commercialDescription:string}){await this.access(actor);return new MastersRepository(this.pool).saveCommercialDescription(actor,input.itemId,input.version,input.commercialDescription);}
  async catalogue(actor:string){await this.access(actor);return this.stockCatalogue();}
  async issueSaved(actor:string,id:string,input:unknown,stock:import('./material-stock.js').MaterialStockRepository){const {issueSavedParent}=await import('./site-material-issuance.js');return issueSavedParent(this.pool,this,stock,actor,id,input);}
  async intake(actor:string){

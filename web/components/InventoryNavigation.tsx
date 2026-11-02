@@ -5,7 +5,7 @@ import {Icon} from './Icon.js';
 import {confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 import './inventory-navigation.css';
 
-export type InventorySection='dashboard'|'stock'|'minimum-stock'|'purchase-receiving'|'materials'|'site-ledger'|'parent-dos'|'reconciliations'|'gate-passes'|'transfers'|'replacements'|'all-documents'|'igps'|'ogps'|'transfer-documents'|'replacement-documents'|'copies-pending';
+export type InventorySection='items'|'temporary-documents'|'dashboard'|'stock'|'minimum-stock'|'purchase-receiving'|'materials'|'site-ledger'|'parent-dos'|'reconciliations'|'gate-passes'|'transfers'|'replacements'|'all-documents'|'igps'|'ogps'|'transfer-documents'|'replacement-documents'|'copies-pending';
 export const inventoryMenu:ReadonlyArray<{id:InventorySection;label:string;path:string;icon:string}>=[
  {id:'dashboard',label:'Dashboard',path:'/inventory',icon:'dashboard'},
  {id:'stock',label:'Stock Position',path:'/inventory/stock',icon:'site'},
@@ -17,6 +17,8 @@ export const inventoryMenu:ReadonlyArray<{id:InventorySection;label:string;path:
  {id:'gate-passes',label:'Documents Upload',path:'/inventory/gate-passes',icon:'file'},
  {id:'parent-dos',label:'Parent DO reconciliation',path:'/inventory/parent-dos/review',icon:'file'},
  {id:'reconciliations',label:'Closing reconciliations',path:'/inventory/reconciliations',icon:'shield'},
+ {id:'items',label:'Item ID Database',path:'/inventory/items',icon:'file'},
+ {id:'temporary-documents',label:'Temporary Documents',path:'/inventory/temporary-documents',icon:'file'},
  {id:'minimum-stock',label:'Minimum Closing Stock',path:'/inventory/minimum-stock',icon:'rates'},
 ];
 export const storekeeperMenu:ReadonlyArray<{id:InventorySection;label:string;icon:string}>=[

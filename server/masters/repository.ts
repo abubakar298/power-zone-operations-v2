@@ -79,14 +79,24 @@ export class MastersRepository {
       itemAliases: itemAliases.rows,
     };
   }
+  private async catalogueAccess(c:Pool|PoolClient,actor:string){
+    const user=(await c.query('SELECT active,role FROM users WHERE id=$1 FOR SHARE',[actor])).rows[0];
+    const dispatcher=user?.active&&user.role==='Inventory'&&(await c.query("SELECT 1 FROM inventory_material_access WHERE user_id=$1 AND capability='dispatcher' LIMIT 1",[actor])).rowCount;
+    if(!user?.active||!['Admin','Management','Coordinator'].includes(user.role)&&!dispatcher)throw new HttpError(403,'Item database editing access required.');
+  }
+  async catalogueDescriptions(actor:string){
+    await this.catalogueAccess(this.pool,actor);
+    const rows=(await this.pool.query('SELECT item_id,version,payload FROM inventory_catalogue_final_current ORDER BY item_id')).rows;
+    const keys=['itemId','commercialDescription','technicalDescription','itemGroup','category','unit','brandCategory','itemType','status'];
+    return {catalogue:rows.map(row=>({...row,payload:Object.fromEntries(keys.filter(k=>k in row.payload).map(k=>[k,row.payload[k]]))}))};
+  }
   async createCatalogueItem(actor:string,raw:unknown){
     const parsed=catalogueItemInput.safeParse(raw);
     if(!parsed.success)throw new HttpError(400,'Enter the item ID, description, group and unit. Pricing fields are not accepted here.');
     const input=parsed.data;
     return transaction(this.pool as Pool,async c=>{
       await c.query('SELECT pg_advisory_xact_lock(742019002)');
-      const user=(await c.query('SELECT active,role FROM users WHERE id=$1 FOR SHARE',[actor])).rows[0];
-      if(!user?.active||!['Coordinator','Management','Admin'].includes(user.role))throw new HttpError(403,'Item creation access required.');
+      await this.catalogueAccess(c,actor);
       const duplicate=(await c.query(`SELECT 1 FROM inventory_catalogue_final_current WHERE lower(btrim(item_id))=lower($1)
         UNION ALL SELECT 1 FROM inventory_catalogue_versions WHERE lower(btrim(item_id))=lower($1)
         UNION ALL SELECT 1 FROM inventory_item_aliases_current WHERE lower(btrim(alias))=lower($1)
@@ -104,9 +114,7 @@ export class MastersRepository {
       throw new HttpError(400, "Enter a commercial description of up to 1,500 characters.");
     return transaction(this.pool as Pool, async c => {
       await c.query("SELECT pg_advisory_xact_lock(742019002)");
-      const user = (await c.query("SELECT active,role FROM users WHERE id=$1 FOR SHARE", [actor])).rows[0];
-      if (!user?.active || !["Admin", "Management", "Coordinator"].includes(user.role))
-        throw new HttpError(403, "Commercial description editing access required.");
+      await this.catalogueAccess(c,actor);
       const current = (await c.query("SELECT * FROM inventory_catalogue_final_current WHERE item_id=$1", [itemId])).rows[0];
       if (!current) throw new HttpError(404, "Item ID not found.");
       if (current.version !== version) throw new HttpError(409, "This item changed. Refresh and review its latest description.");
