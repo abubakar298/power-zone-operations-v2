@@ -46,3 +46,13 @@ test('batch site picker retains checked sites from different ten-result pages wi
  await page.goto('/operations/batches');await page.getByRole('button',{name:'Plan a batch',exact:true}).click();await page.getByLabel('Operations team',{exact:true}).selectOption('central');
  const picker=page.locator('.ob-site-picker'),checks=picker.getByRole('checkbox'),pager=picker.getByRole('navigation',{name:'eligible sites pages'});await expect(checks).toHaveCount(10);await expect(picker).toContainText('Batch paging site 22');await checks.first().check();await pager.getByRole('button',{name:'Next',exact:true}).click();await checks.first().check();await expect(page.locator('.ob-stop-table tbody tr')).toHaveCount(2);await pager.getByRole('button',{name:'Previous',exact:true}).click();await expect(checks.first()).toBeChecked();expect(writes).toBe(0);
 });
+
+test('Accounts mixed next actions use one newest-first order and IPO search pages the newest records',async({page})=>{
+ await actors(page.request);await login(page.request,'accounts-release@example.test');
+ const ipos=Array.from({length:12},(_,i)=>({id:'recent-ipo-'+i,number:'IPO-'+i,created_at:`2026-10-${String(i+1).padStart(2,'0')}T10:00:00Z`,snapshot:{siteName:'Recent Accounts site '+i}}));
+ await page.route('**/api/accounts-workspace',r=>r.fulfill({json:{ipos,reviewSamples:[{id:'new-sample',site_name:'Newest approved IPO',kind:'IPO / PT',created_at:'2026-10-24T10:00:00Z',stage:'IPO ready'}],closures:[],ptEntries:[],legacy:[]}}));
+ await page.route('**/api/inventory-reconciliation/reports',r=>r.fulfill({json:{reports:[]}}));
+ await page.goto('/dashboard#workspace=finance&accountsTab=My+Workspace');
+ const list=page.locator('.accounts-next-actions table'),pager=list.getByRole('navigation');await expect(list.locator('tbody tr').first()).toContainText('Newest approved IPO');await expect(list.locator('tbody tr').nth(1)).toContainText('Recent Accounts site 11');await pager.getByRole('button',{name:'Next',exact:true}).click();await expect(list).toContainText('Recent Accounts site 0');
+ await page.getByRole('button',{name:'12 IPOs Received 0 recorded in PT',exact:true}).click();await expect(page.locator('.accounts-entry-table tbody tr').first()).toContainText('Recent Accounts site 11');
+});

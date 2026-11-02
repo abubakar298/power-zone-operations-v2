@@ -1,4 +1,4 @@
-import {recentFirst} from '../../shared/recent-records.js';
+import {recentFirst,recordedTimestamp} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {MaterialCorrectionAlerts} from '../components/MaterialCorrectionAlerts.js';
 import {AccountsMaterialCosting} from './AccountsMaterialCosting.js';
@@ -607,74 +607,16 @@ export function AccountsWorkspace({
                 </tr>
               </thead>
               <PagedTableBody label="sites and documents">
-                {data.reviewSamples?.map((r: any) => (
-                  <tr key={r.id}>
-                    <td>
-                      {r.site_name} · UBL {r.branch_code} · {r.configuration}
-                    </td>
-                    <td>
-                      {r.kind === "IPO / PT review sample"
-                        ? (r.review_decision ??
-                          "Sample—awaiting Accounts approval")
-                        : r.stage}
-                    </td>
-                    <td>
-                      <Button
-                        onClick={() => {
-                          setSamplePreview(r);
-                          setSelected(undefined);
-                          setTab("IPO Review");
-      window.scrollTo(0,0);
-                        }}
-                      >
-                        Review IPO &amp; PT
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-                {data.ipos
-                  .filter((i: any) => !ptRecorded('IPO',i))
-                  .map((i: any) => (
-                    <tr key={i.id}>
-                      <td>
-                        {i.number}
-                        <br />
-                        {i.snapshot.siteName}
-                      </td>
-                      <td>{i.accountsReview?.decision ?? "IPO received"}</td>
-                      <td>
-                        <Button onClick={() => void openIpo(i.id)}>
-                          Review IPO
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                {recentFirst(received).map((r) => (
-                  <tr key={r.id}>
-                    <td>{jobLabel(r)}</td>
-                    <td>Inventory approved · awaiting PT entry</td>
-                    <td>
-                      <Button onClick={() => navigate("Inventory PT Entries")}>
-                        Enter approved documents in PT
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-                {data.closures
-                  .filter((c: any) => c.stage !== "Closed")
-                  .map((c: any) => (
-                    <tr key={c.id}>
-                      <td>{jobLabel(c.snapshot)}</td>
-                      <td>{c.stage}</td>
-                      <td>
-                        <Button onClick={() => void openJob(c.job_key)}>
-                          {c.stage === "Awaiting Management"
-                            ? "View submitted closure"
-                            : "Continue closure"}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                {recentFirst([
+                  ...(data.reviewSamples??[]).map((r:any)=>({kind:'sample',r})),
+                  ...data.ipos.filter((r:any)=>!ptRecorded('IPO',r)).map((r:any)=>({kind:'ipo',r})),
+                  ...received.map((r:any)=>({kind:'inventory',r})),
+                  ...data.closures.filter((r:any)=>r.stage!=='Closed').map((r:any)=>({kind:'closure',r})),
+                ],({r}:any)=>recordedTimestamp(r)).map(({kind,r}:any)=><tr key={kind+':'+r.id}>
+                  <td>{kind==='sample'?`${r.site_name} · UBL ${r.branch_code} · ${r.configuration}`:kind==='ipo'?<>{r.number}<br/>{r.snapshot.siteName}</>:jobLabel(kind==='closure'?r.snapshot:r)}</td>
+                  <td>{kind==='sample'?(r.kind==='IPO / PT review sample'?(r.review_decision??'Sample—awaiting Accounts approval'):r.stage):kind==='ipo'?(r.accountsReview?.decision??'IPO received'):kind==='inventory'?'Inventory approved · awaiting PT entry':r.stage}</td>
+                  <td>{kind==='sample'?<Button onClick={()=>{setSamplePreview(r);setSelected(undefined);setTab('IPO Review');window.scrollTo(0,0);}}>Review IPO &amp; PT</Button>:kind==='ipo'?<Button onClick={()=>void openIpo(r.id)}>Review IPO</Button>:kind==='inventory'?<Button onClick={()=>navigate('Inventory PT Entries')}>Enter approved documents in PT</Button>:<Button onClick={()=>void openJob(r.job_key)}>{r.stage==='Awaiting Management'?'View submitted closure':'Continue closure'}</Button>}</td>
+                </tr>)}
               </PagedTableBody>
             </table>
           </div>
@@ -690,9 +632,9 @@ export function AccountsWorkspace({
         const queueRecords=(kind==='IPO'?data.ipos:reports).filter((r:any)=>kind==='IPO'||!inventoryType||(inventoryType==='delivery'?isDeliveryOnlyDo(r):!isDeliveryOnlyDo(r)));
         const rows=queueRecords.filter((r:any)=>!!ptRecorded(kind,r)===recorded).filter((r:any)=>`${r.number??''} ${r.snapshot?.siteName??r.site_name??''} ${r.job_key??''}`.toLowerCase().includes(search.toLowerCase()));
         return <><section className="accounts-list-panel accounts-pt-panel"><header className="accounts-panel-heading"><div><h2>{kind==='IPO'?'IPO Entries':'Inventory Reconciliations · PT Entries'}</h2>{kind==='Inventory'&&<p>Open jobs only. Closed jobs remain in Job Closure → Closed; original documents and PT records are retained.</p>}</div><div className="accounts-queue-switch"><Button variant="neutral" aria-pressed={!recorded} onClick={()=>navigate(kind==='IPO'?'IPOs Received':'Inventory PT Entries')}>Awaiting PT · {queueRecords.filter((r:any)=>!ptRecorded(kind,r)).length}</Button><Button variant="neutral" aria-pressed={recorded} onClick={()=>navigate(kind==='IPO'?'IPOs Recorded in PT':'Inventory Recorded in PT')}>Recorded · {queueRecords.filter((r:any)=>ptRecorded(kind,r)).length}</Button></div></header><div className="accounts-worklist-filters">
-<Field id="pt-document-search" label="Search document or site"><input id="pt-document-search" value={search} onChange={e=>setSearch(e.target.value)}/></Field>{kind==='Inventory'&&<Field id="inventory-document-kind" label="Document type"><select id="inventory-document-kind" value={inventoryType??'all'} onChange={e=>setInventoryType(e.target.value==='all'?null:e.target.value)}><option value="all">All documents</option><option value="installation">IRRs &amp; Variable Items</option><option value="delivery">Delivery-only DOs</option></select></Field>}</div><div className="pz-table-scroll"><table className="accounts-entry-table"><thead><tr><th>Site / IPO</th><th>{recorded?'PT Reference':'Received'}</th><th>Action</th></tr></thead><PagedTableBody label="sites and documents">{rows.map((r:any)=>{const entry=ptRecorded(kind,r);return <tr key={r.id}><td><strong>{r.snapshot?.siteName||r.site_name||jobLabel(r)}</strong><small>{r.number||r.job_id||r.job_key}{kind==='Inventory'?' · '+accountsDocumentLabel(r):''}</small></td><td>{entry?<>{entry.pt_reference}<small>{String(entry.entry_date).slice(0,10)}</small></>:r.received_at||r.created_at?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Karachi'}).format(new Date(r.received_at||r.created_at)):'Not recorded'}</td><td><Button variant="neutral" onClick={()=>kind==='IPO'?void openIpo(r.id):void openInventoryDocuments(r)}>View documents</Button>{kind==='Inventory'&&!isDeliveryOnlyDo(r)&&<Button variant="neutral" onClick={()=>{setInventoryReport(r);void navigate('Inventory Reconciliations');}}>View reconciliation</Button>}{!entry&&<Button variant="secondary" onClick={()=>{setPtDocument({...r,kind});setPtEntryReference('');setPtEntryNotes('');setError('');}}>Record PT entry</Button>}{entry&&kind==='Inventory'&&!isDeliveryOnlyDo(r)&&<Button variant="secondary" onClick={()=>void openJob(r.job_key)}>Prepare job closure</Button>}</td></tr>;})}</PagedTableBody></table>{rows.length===0&&<p>{kind==='Inventory'&&inventoryType==='delivery'?'No approved delivery-only DOs have been received yet.':'No documents in this bucket.'}</p>}</div></section></>;
+<Field id="pt-document-search" label="Search document or site"><input id="pt-document-search" value={search} onChange={e=>setSearch(e.target.value)}/></Field>{kind==='Inventory'&&<Field id="inventory-document-kind" label="Document type"><select id="inventory-document-kind" value={inventoryType??'all'} onChange={e=>setInventoryType(e.target.value==='all'?null:e.target.value)}><option value="all">All documents</option><option value="installation">IRRs &amp; Variable Items</option><option value="delivery">Delivery-only DOs</option></select></Field>}</div><div className="pz-table-scroll"><table className="accounts-entry-table"><thead><tr><th>Site / IPO</th><th>{recorded?'PT Reference':'Received'}</th><th>Action</th></tr></thead><PagedTableBody label="sites and documents">{recentFirst(rows).map((r:any)=>{const entry=ptRecorded(kind,r);return <tr key={r.id}><td><strong>{r.snapshot?.siteName||r.site_name||jobLabel(r)}</strong><small>{r.number||r.job_id||r.job_key}{kind==='Inventory'?' · '+accountsDocumentLabel(r):''}</small></td><td>{entry?<>{entry.pt_reference}<small>{String(entry.entry_date).slice(0,10)}</small></>:r.received_at||r.created_at?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Karachi'}).format(new Date(r.received_at||r.created_at)):'Not recorded'}</td><td><Button variant="neutral" onClick={()=>kind==='IPO'?void openIpo(r.id):void openInventoryDocuments(r)}>View documents</Button>{kind==='Inventory'&&!isDeliveryOnlyDo(r)&&<Button variant="neutral" onClick={()=>{setInventoryReport(r);void navigate('Inventory Reconciliations');}}>View reconciliation</Button>}{!entry&&<Button variant="secondary" onClick={()=>{setPtDocument({...r,kind});setPtEntryReference('');setPtEntryNotes('');setError('');}}>Record PT entry</Button>}{entry&&kind==='Inventory'&&!isDeliveryOnlyDo(r)&&<Button variant="secondary" onClick={()=>void openJob(r.job_key)}>Prepare job closure</Button>}</td></tr>;})}</PagedTableBody></table>{rows.length===0&&<p>{kind==='Inventory'&&inventoryType==='delivery'?'No approved delivery-only DOs have been received yet.':'No documents in this bucket.'}</p>}</div></section></>;
       })()}
-      {['Awaiting Management','Closed Jobs'].includes(tab)&&<section className="accounts-list-panel accounts-closure-list"><header className="accounts-panel-heading"><h2>{tab}</h2></header><div className="pz-table-scroll"><table><thead><tr><th>Job / site</th><th>Stage</th><th>Action</th></tr></thead><PagedTableBody label="sites and documents">{data.closures.filter((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management')).map((c:any)=><tr key={c.id}><td>{jobLabel(c.snapshot)}</td><td>{c.stage}</td><td><div className="pz-action-row"><Button variant="secondary" onClick={()=>void openJob(c.job_key)}>View closure</Button>{c.stage==="Awaiting Management"&&!managementReview&&<Button variant="neutral" onClick={()=>void openJob(c.job_key,true)}>Edit</Button>}</div></td></tr>)}</PagedTableBody></table>{!data.closures.some((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management'))&&<div className="accounts-empty"><h3>No jobs in this bucket</h3><p>Jobs appear here as they progress through Management review.</p></div>}</div></section>}
+      {['Awaiting Management','Closed Jobs'].includes(tab)&&<section className="accounts-list-panel accounts-closure-list"><header className="accounts-panel-heading"><h2>{tab}</h2></header><div className="pz-table-scroll"><table><thead><tr><th>Job / site</th><th>Stage</th><th>Action</th></tr></thead><PagedTableBody label="sites and documents">{recentFirst(data.closures.filter((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management'))).map((c:any)=><tr key={c.id}><td>{jobLabel(c.snapshot)}</td><td>{c.stage}</td><td><div className="pz-action-row"><Button variant="secondary" onClick={()=>void openJob(c.job_key)}>View closure</Button>{c.stage==="Awaiting Management"&&!managementReview&&<Button variant="neutral" onClick={()=>void openJob(c.job_key,true)}>Edit</Button>}</div></td></tr>)}</PagedTableBody></table>{!data.closures.some((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management'))&&<div className="accounts-empty"><h3>No jobs in this bucket</h3><p>Jobs appear here as they progress through Management review.</p></div>}</div></section>}
       {tab === "IPO Review" && (
         <>
           {!selected&&!samplePreview&&<>
