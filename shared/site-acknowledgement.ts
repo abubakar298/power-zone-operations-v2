@@ -22,14 +22,35 @@ function basicBatteries(lines:any[]){
  }
  return [...groups].map(([voltage,capacity])=>capacity.toString()+' kWh of '+(voltage?voltage+' ':'')+'Batteries').join('; ');
 }
-export function siteAcknowledgementModels(record:{number:string;snapshot:{sites:any[];lines:any[]}},ipos:ReadonlyMap<string,any>):SiteAcknowledgement[]{
+type AcknowledgementRecord={id?:string;number:string;snapshot:{sites:any[];lines:any[]}};
+const panelLine=(row:any)=>{const words=[row.itemId,row.key,row.description].map(text).join(' ');return !/structure|mounting|earthing|breaker|cable|box|cabinet|meter|labou?r|installation/i.test(words)&&/solar(?: pv)? (?:panels?|plates?|modules?)|\bPV\s*(?:panels?|modules?)/i.test(words);};
+/** Only saved DO quantities with an exact single-site allocation. Pooled quantities are never divided or copied. */
+export function issuedPanelLinesBySite(records:AcknowledgementRecord[]){
+ const result=new Map<string,any[]>(),seen=new Set<string>();
+ for(const record of records)for(const [index,row] of record.snapshot.lines.entries()){
+  if(!panelLine(row)||!positive(row.out??row.qty))continue;
+  const allocated=Array.isArray(row.sites)?row.sites:record.snapshot.sites.length===1?[record.snapshot.sites[0].siteId]:[];
+  if(allocated.length!==1||!record.snapshot.sites.some(site=>site.siteId===allocated[0]))continue;
+  const identity=(record.id??record.number)+'|'+(row.key??index);if(seen.has(identity))continue;seen.add(identity);
+  result.set(allocated[0],[...(result.get(allocated[0])??[]),row]);
+ }
+ return result;
+}
+function issuedPanels(rows:any[],source:any){
+ let watts=new Decimal(0),unknown=false;
+ for(const row of rows){const qty=new Decimal(row.out??row.qty),unit=text(row.unit);if(/^(?:w|wp|watts?)$/i.test(unit))watts=watts.plus(qty);else if(/^(?:kw|kwp)$/i.test(unit))watts=watts.plus(qty.mul(1000));else if(/^(?:nos?\.?|pcs?\.?|pieces?|panels?|modules?)$/i.test(unit)){
+  const rating=equipmentText(row).match(/(\d+(?:\.\d+)?)\s*W(?:p|att(?:s)?)?\b/i)?.[1]??source?.boq?.survey?.panelWattage;
+  if(rating&&positive(rating))watts=watts.plus(qty.mul(rating));else unknown=true;
+ }else unknown=true;}
+ return unknown?'Panel wattage not recorded on issued DO':watts.gt(0)?watts.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')+' W of Solar Panels':'';
+}
+export function siteAcknowledgementModels(record:AcknowledgementRecord,ipos:ReadonlyMap<string,any>,actualPanels=issuedPanelLinesBySite([record])):SiteAcknowledgement[]{
  const seen=new Set<string>();
  return record.snapshot.sites.flatMap(site=>{
   if(!site.siteId||seen.has(site.siteId))return [];seen.add(site.siteId);
   const source=ipos.get(site.siteId),s=source?.snapshot??{},input=s.input??{};
   // Every product is from this site's exact IPO/BOQ. Parent pooled material is never treated as a site's installed system.
   const lines=Array.isArray(source?.boq?.lines)?source.boq.lines:record.snapshot.sites.length===1?record.snapshot.lines:[];
-  const summary=(pattern:RegExp)=>lines.filter((r:any)=>positive(r.qty??r.out)&&r.phase!=='EPC'&&!/installation|labou?r|technical servic|commissioning/i.test(text(r.description))&&[r.key,r.itemId,r.description].some(value=>pattern.test(text(value)))).map((r:any)=>[text(r.description)||text(r.itemId)||text(r.key),text(r.specification),`${r.qty??r.out} ${text(r.unit)}`.trim()].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' - ')).join('; ');
-  return [{siteId:site.siteId,reference:record.number,customer:text(site.customer)||text(s.customer?.name),site:text(site.siteName)||text(s.siteName),ipo:text(site.ipo)||text(source?.number),customerPo:text(site.customerPo)||text(input.poNumber),orderNumber:text(site.orderNumber)||text(input.orderNumber),address:text(input.deliveryAddress),contact:text(input.siteContact)||text(input.contactPerson),phone:text(input.sitePhone)||text(input.phone),inverter:basicInverters(lines),battery:basicBatteries(lines),panels:summary(/solar(?: pv)? (?:panels?|modules?)|pv (?:panels?|modules?)/i),installation:typeof site.installation==='boolean'?site.installation:null}];
+  return [{siteId:site.siteId,reference:record.number,customer:text(site.customer)||text(s.customer?.name),site:text(site.siteName)||text(s.siteName),ipo:text(site.ipo)||text(source?.number),customerPo:text(site.customerPo)||text(input.poNumber),orderNumber:text(site.orderNumber)||text(input.orderNumber),address:text(input.deliveryAddress),contact:text(input.siteContact)||text(input.contactPerson),phone:text(input.sitePhone)||text(input.phone),inverter:basicInverters(lines),battery:basicBatteries(lines),panels:issuedPanels(actualPanels.get(site.siteId)??[],source),installation:typeof site.installation==='boolean'?site.installation:null}];
  });
 }

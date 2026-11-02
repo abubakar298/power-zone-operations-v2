@@ -1,5 +1,5 @@
 import {dispatchReconciliationEligibleSql} from './dispatch-reconciliation-eligibility.js';
-import {siteAcknowledgementModels} from '../../shared/site-acknowledgement.js';
+import {siteAcknowledgementModels,issuedPanelLinesBySite} from '../../shared/site-acknowledgement.js';
 import {temporaryNegativeDoBalanceAllowed} from './do-negative-balance.js';
 import {UnsignedDoRepository} from './unsigned-do.js';
 import {nextWarehouseClosing} from './warehouse-ledger.js';
@@ -82,7 +82,9 @@ export class MaterialStockRepository{
   const record=await this.dispatch(actor,id); // Existing signed-in user and warehouse scope first.
   const ids=[...new Set<string>(record.snapshot.sites.map((s:any)=>s.siteId))].filter(v=>/^[0-9a-f-]{36}$/i.test(v));
   const rows=ids.length?(await this.pool.query(`SELECT i.id,i.number,i.snapshot,b.snapshot AS boq FROM internal_purchase_orders i LEFT JOIN boq_revisions b ON b.id=(i.snapshot->>'boqRevisionId')::uuid WHERE i.id=ANY($1::uuid[])`,[ids])).rows:[];
-  return siteAcknowledgementModels(record,new Map(rows.map(r=>[r.id,r])));
+  const scope=await this.drafts.warehouses(actor);
+  const dispatched=ids.length?(await this.pool.query(`SELECT d.id,d.number,d.snapshot FROM inventory_material_dispatches_active d WHERE d.warehouse=ANY($2::text[]) AND EXISTS(SELECT 1 FROM jsonb_array_elements(d.snapshot->'sites') site WHERE site->>'siteId'=ANY($1::text[])) ORDER BY d.created_at,d.id`,[ids,scope.warehouses])).rows:[];
+  return siteAcknowledgementModels(record,new Map(rows.map(r=>[r.id,r])),issuedPanelLinesBySite(dispatched));
  }
  async uploadEvidence(actor:string,raw:z.infer<typeof materialEvidenceInputSchema>){
   const input=materialEvidenceInputSchema.parse(raw);await this.scope(actor,input.warehouse,this.pool,true);
