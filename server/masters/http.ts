@@ -70,6 +70,11 @@ export function mastersHttp(
   const router = Router();
   router.use(requireSession);
   router.get("/", async (_req, res) => res.json(await repo.list()));
+  router.post('/catalogue-items',async(req,res)=>{
+    const session=req.authSession!;
+    if(!equalSecrets(req.get('X-CSRF-Token')??'',session.csrfToken))throw new HttpError(403,'Refresh and try again.');
+    res.status(201).json(await repo.createCatalogueItem(session.user.id,req.body));
+  });
   router.post("/catalogue-commercial-description", async (req, res) => {
     const session = req.authSession!;
     if (!equalSecrets(req.get("X-CSRF-Token") ?? "", session.csrfToken)) throw new HttpError(403, "Refresh and try again.");

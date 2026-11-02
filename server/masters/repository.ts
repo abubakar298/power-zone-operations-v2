@@ -1,3 +1,4 @@
+import {catalogueItemInput} from './catalogue-item-input.js';
 import { importCustomers, customerImportSchema } from "./customer-import.js";
 import type { Pool, PoolClient } from "pg";
 import { transaction } from "../db/transaction.js";
@@ -77,6 +78,25 @@ export class MastersRepository {
       engineeringProfiles: engineeringProfiles.rows,
       itemAliases: itemAliases.rows,
     };
+  }
+  async createCatalogueItem(actor:string,raw:unknown){
+    const parsed=catalogueItemInput.safeParse(raw);
+    if(!parsed.success)throw new HttpError(400,'Enter the item ID, description, group and unit. Pricing fields are not accepted here.');
+    const input=parsed.data;
+    return transaction(this.pool as Pool,async c=>{
+      await c.query('SELECT pg_advisory_xact_lock(742019002)');
+      const user=(await c.query('SELECT active,role FROM users WHERE id=$1 FOR SHARE',[actor])).rows[0];
+      if(!user?.active||!['Coordinator','Management','Admin'].includes(user.role))throw new HttpError(403,'Item creation access required.');
+      const duplicate=(await c.query(`SELECT 1 FROM inventory_catalogue_final_current WHERE lower(btrim(item_id))=lower($1)
+        UNION ALL SELECT 1 FROM inventory_catalogue_versions WHERE lower(btrim(item_id))=lower($1)
+        UNION ALL SELECT 1 FROM inventory_item_aliases_current WHERE lower(btrim(alias))=lower($1)
+        UNION ALL SELECT 1 FROM inventory_final_stock_aliases WHERE lower(btrim(old_id))=lower($1) LIMIT 1`,[input.itemId])).rowCount;
+      if(duplicate)throw new HttpError(409,'This item ID or an existing alias is already recorded. Search for the existing item.');
+      const payload={itemId:input.itemId,commercialDescription:input.commercialDescription,technicalDescription:input.technicalDescription||input.commercialDescription,itemGroup:input.itemGroup,category:input.itemGroup,unit:input.unit,brandCategory:input.brandCategory||'General',itemType:input.itemType,status:'Needs review',reviewNotes:'Created in the Items database. Rate and warehouse stock links remain unrecorded.',rateLinkPending:true};
+      const saved=(await c.query('INSERT INTO inventory_catalogue_versions(item_id,version,payload,rate_key) VALUES($1,1,$2,NULL) RETURNING *',[input.itemId,payload])).rows[0];
+      await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'master.catalogue-item.created:'+JSON.stringify({itemId:input.itemId,version:1})]);
+      return saved;
+    });
   }
   /** Version only customer-facing wording; technical data and costing remain untouched. */
   async saveCommercialDescription(actor: string, itemId: string, version: number, description: string) {
