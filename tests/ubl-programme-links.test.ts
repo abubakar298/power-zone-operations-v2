@@ -4,7 +4,7 @@ import {ublProgrammeLinks,solarWorkflow,withProgrammeAccounts} from '../server/u
 import {ProjectCheckpointsRepository} from '../server/projects/repository.js';
 test('UBL Solar programme follows a real new survey request through immutable issuance, QC progress and native job closure automatically',async()=>{
  const db=await testDatabase();try{
- const actor=randomUUID(),owner=randomUUID();for(const [id,role] of [[actor,'Coordinator'],[owner,'Management']])await db.pool.query('INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$5)',[id,id+'@example.test',role,'fixture',role]);
+ const actor=randomUUID(),owner=randomUUID();for(const [id,role] of [[actor,'Coordinator'],[owner,'Admin']])await db.pool.query('INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$5)',[id,id+'@example.test',role,'fixture',role]);
  const framework=(await db.pool.query("SELECT id FROM project_framework_current WHERE customer_id=5 AND configuration_key='25-20-30:Revised'")).rows[0].id;
  const repo=new ProjectWorkflowRepository(db.pool),created=await repo.create(actor,{requestKey:randomUUID(),customerId:5,siteName:'Programme automatic linkage fixture',siteCode:'AUTO-SOLAR',route:'survey-framework',frameworkId:framework,notes:'Synthetic survey to closure test'});
  let link=(await ublProgrammeLinks(db.pool)).find(l=>l.workflowId===created.id);assert.ok(link);assert.equal(link.jobKey,'workflow:'+created.id);assert.equal(link.configuration,'25-20-30');assert.equal(link.status,'Pre-IPO');assert.equal(link.ipoId,null);
@@ -16,6 +16,10 @@ test('UBL Solar programme follows a real new survey request through immutable is
  const evidence=await repo.attach(actor,created.id,{kind:'PO / confirmation',filename:'fixture.pdf',mime:'application/pdf',base64:Buffer.from('%PDF-1.4\n% synthetic\n%%EOF').toString('base64')});
  const detail=await repo.detail(actor,created.id);await repo.action(actor,created.id,{version:detail.record.version,requestKey:randomUUID(),action:'receipt',input:{reference:'AUTO-SOLAR-PO',date:'2026-11-02',evidenceId:evidence.id,basisType:'framework',frameworkId:framework,confirmationType:'Customer PO',actual:original.comparison,reviewed:true,notes:'Synthetic approved receipt',saleDetails:{invoiceCompany:'PZES (PVT Ltd)',salesPerson:'Atif',paymentMode:'Bank transfer'}}});
  const issued=(await db.pool.query('SELECT ipo_id FROM project_workflow_issuances WHERE record_id=$1',[created.id])).rows[0];
+ const {AccountsSourceRegisters}=await import('../server/accounts/source-registers.js');const {managementProgrammes}=await import('../server/director/management-programmes.js');
+ await new AccountsSourceRegisters(db.pool).import(owner,{sourceDate:'2026-11-02',manifest:[{name:'Empty reviewed fixture',sha256:'a'.repeat(64)}],registers:[{rows:[]}],cables:{rows:[]},internet:{rows:[]},sites:{rows:[]},evidence:{rows:[],cableStageAdjustments:[]}},0);
+ const programme=(await managementProgrammes(db.pool,owner)).programmes.find(p=>p.key==='ubl-solar-70')!;assert.equal(programme.rows.filter(r=>r.ipo).length,1);assert.equal(programme.rows[0].site,'Programme automatic linkage fixture');assert.equal(programme.rows[0].grossContract,original.order.allocation.total);
+
  link=(await ublProgrammeLinks(db.pool)).find(l=>l.workflowId===created.id);assert.equal(link.jobKey,'ipo:'+issued.ipo_id);assert.equal(link.status,'Active');
  assert.equal((await ublProgrammeLinks(db.pool)).filter(l=>l.workflowId===created.id).length,1);assert.equal((await ubl.sites(owner)).filter(s=>s.workflow_record_id===created.id).length,1);
  const existing=(await db.pool.query("SELECT b.site_id,b.version FROM operations_board_versions b WHERE b.snapshot#>>'{origin,ipoId}'=$1 ORDER BY b.version DESC LIMIT 1",[issued.ipo_id])).rows[0];assert.ok(existing);

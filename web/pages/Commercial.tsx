@@ -1,3 +1,5 @@
+import {Field} from '../ui/Field.js';
+import {QuotationFallback} from '../components/QuotationFallback.js';
 import './commercial-layout.css';
 import {departmentFetch} from '../department-view.js';
 import {prepareReviewedQuotationInput,saveReviewedQuotation} from '../save-reviewed-quotation.js';
@@ -86,6 +88,7 @@ export function QuotationView({
 }) {
   const pages = useRef<HTMLDivElement>(null);
   const [pdfError, setPdfError] = useState("");
+  const [browserFallback,setBrowserFallback]=useState(false);
   const [discountAnchor, setDiscountAnchor] = useState<{
     host: HTMLDivElement;
     top: number;
@@ -98,7 +101,7 @@ export function QuotationView({
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
-    let task: any;
+    let task: any;let originalPdf:Blob|undefined;
     async function render() {
       setPdfError("");
       try {
@@ -124,7 +127,7 @@ export function QuotationView({
           throw new Error(
             (await response.json()).message ?? "Unable to load quotation PDF.",
           );
-        const data = await response.arrayBuffer();
+        const data = await response.arrayBuffer();originalPdf=new Blob([data.slice(0)],{type:"application/pdf"});
         const pdf = await import("pdfjs-dist/legacy/build/pdf.mjs");
         pdf.GlobalWorkerOptions.workerSrc = pdfWorker;
         task = pdf.getDocument({ data });
@@ -183,11 +186,11 @@ export function QuotationView({
         }
         if (!cancelled) {
           pages.current?.replaceChildren(...canvases);
-          setDiscountAnchor(anchor);
+          setDiscountAnchor(anchor);setBrowserFallback(false);
         }
       } catch (e) {
-        if (!cancelled)
-          setPdfError(e instanceof Error ? e.message : "Unable to load PDF.");
+        if(!cancelled&&originalPdf&&await originalPdf.slice(0,5).text()==='%PDF-'){if(!cancelled){pages.current?.replaceChildren();setDiscountAnchor(undefined);setBrowserFallback(true);}return;}
+        if (!cancelled)setPdfError(e instanceof Error ? e.message : "Unable to load PDF.");
       }
     }
     void render();
@@ -212,11 +215,9 @@ export function QuotationView({
       </div>
       {pdfError && <p role="alert">{pdfError}</p>}
       <div className="quote-metadata sr-only">Validity {s.input.validity}</div>
-      <div
-        className="quotation-pdf-pages"
-        ref={pages}
-        aria-label="Quotation PDF preview"
-      />
+      <div className="quotation-pdf-pages" ref={pages} aria-label="Quotation PDF preview" hidden={browserFallback}/>
+      {browserFallback&&<QuotationFallback snapshot={s} number={number}/>}
+      {browserFallback&&onDiscount&&<Field id="quotation-browser-preview-discount" label="Quotation discount (PKR)"><input id="quotation-browser-preview-discount" type="number" min="0" step="0.01" value={discount??s.input.discount} onChange={e=>onDiscount(e.target.value)}/></Field>}
       {onDiscount &&
         discountAnchor &&
         createPortal(

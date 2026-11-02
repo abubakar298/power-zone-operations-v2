@@ -39,7 +39,7 @@ export function applyProgrammeHandoffs(snapshot:Row,observations:ProgrammeHandof
  const evidence=snapshot.evidence?.rows??[];
  return {...snapshot,registers:(snapshot.registers??[]).map((register:Row)=>({...register,rows:register.rows.map((row:Row)=>{
   if(row.cancelled||row.transferred)return row;
-  const candidates=observations.filter(o=>o.site_id==='registered-'+row.key||o.snapshot.sourceKey===row.key||row.key==='issued:'+o.snapshot.origin?.ipoId);
+  const candidates=observations.filter(o=>o.site_id==='registered-'+row.key||o.snapshot.sourceKey===row.key||row.key==='issued:'+o.snapshot.origin?.ipoId||!!o.snapshot.origin?.ipoId&&row.jobKey==='ipo:'+o.snapshot.origin.ipoId);
   const flags=[...(row.flags??[])];let projected={...row};
   if(candidates.length===1){
    const observation=candidates[0],state=programmeHandoffState(observation);

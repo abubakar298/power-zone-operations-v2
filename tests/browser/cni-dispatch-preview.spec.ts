@@ -2,6 +2,10 @@ import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {actors,login,seedQuote} from './release-fixtures.js';
 
+// WebKit honours upgrade-insecure-requests on loopback; this disposable HTTP fixture has no TLS.
+// Keep production CSP unchanged and remove only that directive from fixture HTML responses.
+test.beforeEach(async({page,browserName})=>{if(browserName==='webkit')await page.route('**/dashboard*',async route=>{const response=await route.fetch();const headers={...response.headers()};if(headers['content-security-policy'])headers['content-security-policy']=headers['content-security-policy'].replace(/upgrade-insecure-requests;?\s*/g,'');await route.fulfill({response,headers});});});
+
 test('approved CNI review exposes saved-version dispatch evidence and records send separately from approval',async({page})=>{
  await actors(page.request);const coordinator=await login(page.request,'coordinator-release@example.test');
  const savedResponse=await page.request.post('/api/cni',{headers:coordinator,data:{customerId:3,siteName:'CNI dispatch regression',siteCode:'CD01',quantity:1,presentation:'Inclusive',discount:'0'}});expect(savedResponse.ok(),await savedResponse.text()).toBe(true);const saved=await savedResponse.json();
@@ -30,4 +34,14 @@ test('quotation PDF renders when newer JavaScript Promise helpers are unavailabl
  await expect(page.locator('.quotation-pdf-pages canvas').first()).toBeVisible();await expect(page.getByText(/undefined is not a function/)).toHaveCount(0);
  const before=(await(await page.request.get(`/api/commercial/quotations/${quote.id}`)).json()).snapshot;const downloaded=page.waitForEvent('download');await page.getByRole('link',{name:'Download PDF for Sharing',exact:true}).click();expect((await readFile((await(await downloaded).path())!)).subarray(0,5).toString()).toBe('%PDF-');expect((await(await page.request.get(`/api/commercial/quotations/${quote.id}`)).json()).snapshot).toEqual(before);
  expect(errors).toEqual([]);await page.screenshot({path:'test-results/quotation-pdf-compatible.png',fullPage:true});
+});
+
+test('quotation content remains readable when its PDF renderer fails, without changing approval or the quote',async({page})=>{
+ await actors(page.request);const headers=await login(page.request,'coordinator-release@example.test');const {quote}=await seedQuote(page.request,headers,'PDF-FALLBACK',true);
+ const before=(await(await page.request.get(`/api/commercial/quotations/${quote.id}`)).json()).snapshot;
+ await page.route('**/assets/pdf-*.js',route=>route.abort('failed'));
+ await page.goto('/dashboard');await page.getByRole('button',{name:/^Management Review/}).click();await page.getByRole('row').filter({hasText:quote.number}).getByRole('button',{name:'Review',exact:true}).click();
+ const fallback=page.getByRole('article',{name:'Quotation content preview'});await expect(fallback).toBeVisible();await expect(fallback).toContainText(before.siteName);await expect(fallback.getByRole('columnheader',{name:'SR#',exact:true})).toBeVisible();await expect(fallback.getByRole('row')).not.toHaveCount(1);await expect(page.getByText(/undefined is not a function/)).toHaveCount(0);expect(await fallback.innerText()).not.toMatch(/Budgeted cost|Buying rate|Internal markup/);
+ expect((await(await page.request.get(`/api/commercial/quotations/${quote.id}/quotation.pdf`)).body()).subarray(0,5).toString()).toBe('%PDF-');
+ expect((await(await page.request.get(`/api/commercial/quotations/${quote.id}`)).json()).snapshot).toEqual(before);await page.screenshot({path:'test-results/quotation-readable-fallback.png',fullPage:true});
 });

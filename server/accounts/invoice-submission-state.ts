@@ -41,7 +41,7 @@ export function applyInvoiceSubmissionBilling(rows:Row[],events:Row[]):Row[]{
  });
  for(const e of events){
   if(result.some(r=>(e.snapshot.billingIds??[]).includes(r.id)&&e.snapshot.customer===r.customer))continue;
-  result.push({id:'submission:'+e.id,sourceKey:e.source_key,billingMilestone:e.milestone,submissionId:e.id,customer:e.snapshot.customer,customerLink:e.snapshot.customerLink,category:e.milestone==='delivery'?'System · delivery':'System · completion',ipo:e.snapshot.ipo??'',po:e.snapshot.po??'',site:e.snapshot.site??'',invoice:e.invoice_reference,amount:null,pending:null,receiptConfirmed:false,date:e.submitted_on,dateBasis:'Days since verified submission',submission:'Submitted',notes:'Existing PT invoice submitted. Original invoice amount and unpaid balance are not loaded; no amounts or payments inferred.',minimum:false});
+  result.push({id:'submission:'+e.id,sourceKey:e.source_key,billingMilestone:e.milestone,submissionId:e.id,customer:e.snapshot.customer,customerLink:e.snapshot.customerLink,category:e.milestone==='delivery'?(String(e.source_key).startsWith('UBL:SOLAR:')?'System · advance':'System · delivery'):'System · completion',ipo:e.snapshot.ipo??'',po:e.snapshot.po??'',site:e.snapshot.site??'',invoice:e.invoice_reference,amount:null,pending:null,receiptConfirmed:false,date:e.submitted_on,dateBasis:'Days since verified submission',submission:'Submitted',notes:'Existing PT invoice submitted. Original invoice amount and unpaid balance are not loaded; no amounts or payments inferred.',minimum:false});
  }
  return result;
 }

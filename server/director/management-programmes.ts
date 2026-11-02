@@ -1,3 +1,4 @@
+import {ublProgrammeLinks,withProgrammeAccounts} from '../ubl/programme-links.js';
 import{invoiceReceipts,applyInvoiceReceipts,applyReceiptProgramme}from'../accounts/invoice-receipt-state.js';
 import{applyInvoiceSubmissionBilling}from'../accounts/invoice-submission-state.js';
 import{billingRows}from'../accounts/billing-model.js';
@@ -98,7 +99,7 @@ export function appendIssuedProgrammeSales(snapshot:SourceRow,issued:SourceRow[]
   }
  }
  for(const source of issued.filter(r=>r.customer==='UBL'&&r.frameworkType==='ubl-solar')){
-  if(original.some((r:SourceRow)=>r.key===source.sourceKey))continue;
+  if(original.some((r:SourceRow)=>r.key===source.sourceKey||r.ipoId===source.id))continue;
   const matches=original.filter((r:SourceRow)=>r.program==='Solar 70'&&r.siteCode&&r.siteCode===source.siteCode);
   if(matches.length===1&&matches[0].po===source.poReference)continue;
   const duplicates=issued.filter(r=>r.frameworkType==='ubl-solar'&&r.siteCode===source.siteCode&&r.poReference===source.poReference);
@@ -128,6 +129,7 @@ export async function managementProgrammes(pool:Pool,actor:string,allowAccounts=
   records.push({id:row.id,frameworkType:row.framework_type,recordId:row.record_id,customer:row.customer,sourceKey:row.source_key??null,number:row.number,issuedAt:row.issued_at,historicalImport:!!s.historicalImport,orderNumber:s.input?.orderNumber??'',site:s.siteName,siteCode:s.siteCode,poReference:s.input?.poNumber??'',configuration:row.basis.source.key.replace(row.customer+'-UPS-',''),grossContract:s.allocation?.total,delivered:['delivered','completed'].includes(op?.stage),installed:op?.completed===true||op?.stage==='completed',partialDelivery:op?.partialDelivery===true,deliveryDate:op?.deliveryDate,installationDate:op?.completionDate});
  }
  const [stages,invoiceEntries,submissions,receipts]=await Promise.all([latestProgrammeHandoffs(pool),pool.query('SELECT site_key,pt_reference,milestone FROM accounts_invoice_entries'),invoiceSubmissions(pool),invoiceReceipts(pool)]);
- const combined=appendIssuedProgrammeSales(source.snapshot,records.map(r=>({...r,delivered:false,installed:false,partialDelivery:false})),source.source_date),receiptRows=applyInvoiceReceipts(applyInvoiceSubmissionBilling(billingRows(source.snapshot.registers,source.snapshot.cables,source.snapshot.internet,source.snapshot.evidence),submissions),receipts),result=projectManagementProgrammes(applyReceiptProgramme(applyInvoiceSubmissionStages(applyProgrammeHandoffs(combined.snapshot,stages,invoiceEntries.rows),submissions),receiptRows),source.source_date,source.version);
+ const programmeSource=withProgrammeAccounts(source.snapshot,await ublProgrammeLinks(pool));
+ const combined=appendIssuedProgrammeSales(programmeSource,records.map(r=>({...r,delivered:false,installed:false,partialDelivery:false})),source.source_date),receiptRows=applyInvoiceReceipts(applyInvoiceSubmissionBilling(billingRows(programmeSource.registers,programmeSource.cables,programmeSource.internet,programmeSource.evidence),submissions),receipts),result=projectManagementProgrammes(applyReceiptProgramme(applyInvoiceSubmissionStages(applyProgrammeHandoffs(combined.snapshot,stages,invoiceEntries.rows),submissions),receiptRows),source.source_date,source.version);
  result.operationsAsOf=stages.map(s=>s.created_at instanceof Date?s.created_at.toISOString():String(s.created_at??'')).filter(Boolean).sort().at(-1);result.issues.push(...combined.issues);return result;
 }

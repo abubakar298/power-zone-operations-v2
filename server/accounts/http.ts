@@ -1,3 +1,6 @@
+import {createHash} from 'node:crypto';
+import {recoveryReport,recoveryFilteredRows} from '../../shared/recovery-report.js';
+import {recoveryPdf} from './recovery-pdf.js';
 import {consolidateCableInvoices,submitConsolidatedCable} from './cable-consolidations.js';
 import {materialCorrectionAlerts,flagMaterialCorrection} from '../inventory/material-correction-alerts.js';
 import {materialCostingQueue} from './material-costing.js';
@@ -65,6 +68,13 @@ export function accountsHttp(
   r.post('/cable-consolidations',async(req,res)=>res.status(201).json(await consolidateCableInvoices(repo.pool,req.authSession!.user.id,req.body)));
   r.post('/cable-consolidations/submit',async(req,res)=>res.status(201).json(await submitConsolidatedCable(repo.pool,req.authSession!.user.id,req.body)));
   r.get('/payment-records',async(req,res)=>res.json(await paymentRegister(repo.pool,req.authSession!.user.id)));
+  r.get('/recovery.pdf',async(req,res)=>{
+   const filters=parse(z.object({search:z.string().max(500).optional(),customer:z.string().max(250).optional(),category:z.string().max(80).optional(),stage:z.string().max(100).optional()}).strict(),req.query);
+   const data=await paymentRegister(repo.pool,req.authSession!.user.id),asOf=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+   const rows=filters.category==='internet'?data.internet:data.awaiting,report=recoveryReport(recoveryFilteredRows(rows,filters,data.sourceVersion),asOf);
+   res.locals.downloadContext={customer:filters.customer||'All customers',site:'Recovery follow-up',documentType:'Recovery report',reference:asOf,identity:'accounts-recovery:'+asOf+':'+createHash('sha256').update(JSON.stringify(filters)).digest('hex')};
+   res.set({'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="Power-Zone-Recovery-${asOf}.pdf"`,'Cache-Control':'private, no-store'}).send(Buffer.from(recoveryPdf(report).output('arraybuffer')));
+  });
   r.post('/invoice-receipts',async(req,res)=>res.status(201).json(await recordInvoiceReceipt(repo.pool,req.authSession!.user.id,parse(invoiceReceiptSchema,req.body))));
   r.post('/payment-records',async(req,res)=>res.status(201).json(await recordPayment(repo.pool,req.authSession!.user.id,parse(paymentRecordSchema,req.body))));
   r.post('/invoice-entries',async(req,res)=>res.status(201).json(await recordInvoiceEntry(repo.pool,req.authSession!.user.id,parse(invoiceEntrySchema,req.body))));
