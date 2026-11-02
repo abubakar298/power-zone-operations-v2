@@ -155,7 +155,7 @@ test("Inventory workspace: job search, draft, attachment, immutable handoff and 
     }),
   ).toBeVisible();
   await expect(page.getByLabel('Client acknowledgment reference',{exact:true})).toHaveCount(0);
-  await expect(page.locator('p').filter({hasText:'Not received'})).toHaveCount(2);
+  await expect(page.getByRole('heading',{name:'QC supporting documents',exact:true}).locator('..').locator('div').filter({hasText:'Not received'})).toHaveCount(2);
   await page.locator('#closure-pt-upload').setInputFiles({name:'pt-costing.png',mimeType:'image/png',buffer:await page.screenshot()});
   await expect(page.getByText('pt-costing.png',{exact:true}).first()).toBeVisible();
   await page.getByLabel('Accounts remarks / cost variance explanation',{exact:true}).fill('Isolated browser fixture; awaiting QC evidence.');

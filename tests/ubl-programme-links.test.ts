@@ -44,3 +44,12 @@ test('future issued programme sites join Accounts automatically without inventin
  const retained=withProgrammeAccounts(reviewed,[l]);assert.equal(retained.registers.length,1);assert.deepEqual(retained.registers[0].rows[0],original);assert.equal(retained.sites.rows.length,1);
  assert.equal(withProgrammeAccounts(source,[{...l,status:'Pre-IPO',ipoId:null}]).sites.rows.length,0);
 });
+
+test('historical Solar sites retain their own programme job identities when none has a native IPO ID',async()=>{
+ const db=await testDatabase();try{
+ const owner=randomUUID();await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,'solar-identity@example.test','Owner','fixture','Admin')",[owner]);
+ const expected=(await db.pool.query('SELECT site_id FROM ubl_effective_site_orders')).rows;
+ const sites=await new UblRepository(db.pool).sites(owner);assert.ok(expected.length>1);assert.equal(new Set(sites.map(s=>s.job_key)).size,sites.length);
+ for(const original of expected){const site=sites.find(s=>String(s.site_id)===String(original.site_id));assert.equal(site?.job_key,'ubl:'+original.site_id);}
+ }finally{await db.close();}
+});

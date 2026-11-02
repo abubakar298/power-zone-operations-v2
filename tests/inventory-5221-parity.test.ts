@@ -32,9 +32,9 @@ test('parent printable preparation excludes empty and zero quantities before sit
  assert.equal(model.stockPosting,false);
 });
 
-test('batch sign-offs keep site allocations and omit zero rows before combining the print job',()=>{
+test('batch sign-offs expose the shared Parent pool to every covered site without invented issued allocations',()=>{
  const record:any={id:'parent',number:'PDO-2',created_at:'2026-10-29',snapshot:{status:'issued',stockPosting:false,requiresSignedGate:true,kind:'variable',parent:true,warehouse:'Lahore',sites:[{siteId:'a',siteName:'Site A',ipo:'IPO-A',installation:true},{siteId:'b',siteName:'Site B',ipo:'IPO-B',installation:true}],lines:[{itemId:'CH-Flex Pipe 1',description:'Flexible pipe',unit:'m',out:'4',sites:['a']},{itemId:'CH-Duct Slot 60x60',description:'Zero duct',unit:'m',out:'0',sites:['a','b']},{itemId:'CH-Pvc Pipe 1.5 Inch',description:'PVC pipe',unit:'m',out:'6',sites:['b']}]}};
  const models=issuedCustomerSignoffModels(record);assert.equal(models.length,2);
- assert.deepEqual(models.map(m=>[m.sourceSiteId,m.sites[0].name,m.rows.map(r=>r.itemId)]),[['a','Site A',['CH-Flex Pipe 1']],['b','Site B',['CH-Pvc Pipe 1.5 Inch']]]);
+ assert.deepEqual(models.map(m=>[m.sourceSiteId,m.sites[0].name,m.rows.map(r=>r.itemId)]),[['a','Site A',['CH-Flex Pipe 1','CH-Pvc Pipe 1.5 Inch']],['b','Site B',['CH-Flex Pipe 1','CH-Pvc Pipe 1.5 Inch']]]);
  assert.ok(models.every(m=>m.omitIssued&&m.rows.every(r=>r.issued===null)));
 });

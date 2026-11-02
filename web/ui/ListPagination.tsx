@@ -1,6 +1,5 @@
 import {useEffect,useState} from 'react';
 import {Button} from './Button.js';
-import './list-pagination.css';
 export {paginateRows} from '../../shared/list-pagination.js';
 export function useListPage(key:string){
  const [state,setState]=useState({key,page:0});

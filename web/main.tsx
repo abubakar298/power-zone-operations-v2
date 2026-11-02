@@ -2,6 +2,7 @@ import {WorkflowToast} from './components/WorkflowToast.js';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
+import './ui/list-pagination.css';
 import './ui/design-tokens.css';
 import './ui/product.css';
 

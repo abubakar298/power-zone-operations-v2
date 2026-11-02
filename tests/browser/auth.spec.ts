@@ -96,12 +96,14 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("cell", { name: "MBL", exact: true }),
   ).toBeVisible();
-  await page.getByRole("tab", { name: "Sites 4" }).click();
+  await page.getByRole("tab", { name: /^Sites \d+$/ }).click();
+  await page.getByLabel("Search sites",{exact:true}).fill("0128");
   await expect(
     page.getByRole("cell", { name: "0128", exact: true }),
   ).toBeVisible();
   await page.getByRole("tab", { name: /Items & specifications \d+/ }).click();
   await page.getByLabel("Specification status").selectOption("Need to enter");
+  await page.getByLabel("Search items & specifications",{exact:true}).fill("Solar PV Modules");
   await expect(
     page.getByRole("cell", { name: "Solar PV Modules", exact: true }),
   ).toBeVisible();
