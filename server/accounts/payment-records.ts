@@ -24,7 +24,7 @@ export async function paymentRegisterData(db:Pool|PoolClient){
 }
 export async function paymentRegister(pool:Pool,actor:string){
  const role=await new AccountsRepository(pool).access(actor);
- return {...await paymentRegisterData(pool),canRecord:['Admin','Accounts'].includes(role)};
+ return {...await paymentRegisterData(pool),canConsolidate:['Admin','Management'].includes(role),canRecord:['Admin','Accounts'].includes(role)};
 }
 export async function recordPayment(pool:Pool,actor:string,input:z.infer<typeof paymentRecordSchema>){
  return transaction(pool,async db=>{

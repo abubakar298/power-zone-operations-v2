@@ -1,3 +1,4 @@
+import {consolidateCableInvoices,submitConsolidatedCable} from './cable-consolidations.js';
 import {materialCorrectionAlerts,flagMaterialCorrection} from '../inventory/material-correction-alerts.js';
 import {materialCostingQueue} from './material-costing.js';
 import {readLocalPurchases} from '../operations-board/local-purchases.js';
@@ -60,6 +61,9 @@ export function accountsHttp(
   r.get('/invoice-entries',async(req,res)=>res.json(await invoiceRegister(repo.pool,req.authSession!.user.id)));
   r.post('/invoice-submissions',async(req,res)=>res.status(201).json(await recordInvoiceSubmission(repo.pool,req.authSession!.user.id,parse(invoiceSubmissionSchema,req.body))));
   r.post('/invoice-corrections',async(req,res)=>res.status(201).json(await correctInvoice(repo.pool,req.authSession!.user.id,parse(invoiceCorrectionSchema,req.body))));
+  r.get('/cable-consolidations/:key/file',async(req,res)=>{await repo.access(req.authSession!.user.id);const key=parse(z.uuid(),req.params.key),source=(await repo.pool.query('SELECT snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0],row=source?.snapshot.cables.rows.find((r:any)=>r.key===key&&r.consolidation&&!r.supersededBy);if(!row)throw new HttpError(404,'Original consolidated invoice not found.');const file=row.consolidation.file;res.set({'Content-Type':/\.xlsx$/i.test(file.name)?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/pdf','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}).send(Buffer.from(file.base64,'base64'));});
+  r.post('/cable-consolidations',async(req,res)=>res.status(201).json(await consolidateCableInvoices(repo.pool,req.authSession!.user.id,req.body)));
+  r.post('/cable-consolidations/submit',async(req,res)=>res.status(201).json(await submitConsolidatedCable(repo.pool,req.authSession!.user.id,req.body)));
   r.get('/payment-records',async(req,res)=>res.json(await paymentRegister(repo.pool,req.authSession!.user.id)));
   r.post('/invoice-receipts',async(req,res)=>res.status(201).json(await recordInvoiceReceipt(repo.pool,req.authSession!.user.id,parse(invoiceReceiptSchema,req.body))));
   r.post('/payment-records',async(req,res)=>res.status(201).json(await recordPayment(repo.pool,req.authSession!.user.id,parse(paymentRecordSchema,req.body))));
