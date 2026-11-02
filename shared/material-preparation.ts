@@ -52,7 +52,7 @@ export function variablePreparationRows(sources:Basis[],catalogue:CatalogueItem[
    if(prior){prior.sites=[...new Set([...prior.sites,source.siteId])];delete prior.basisLine;}else grouped.set(identity,row);
   });
  }
- return [...grouped.values()];
+ return [...grouped.values()].map(row=>({...row,sites:sources.filter(source=>source.installation!==false).map(source=>source.siteId)}));
 }
 
 /** Module is derived metadata, not an operator decision. Match the same policy

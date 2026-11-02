@@ -1,3 +1,4 @@
+import {parentPoolLines} from '../../shared/parent-material-pool.js';
 import type{SiteAcknowledgement}from'../../shared/site-acknowledgement.js';
 import {Decimal} from 'decimal.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
@@ -47,7 +48,7 @@ export function parentDraftPrintModel(draft:Draft,kind:MaterialPrintKind='variab
  const selected=draft.snapshot.sites.find(s=>s.siteId===siteId);
  if(!selected)throw new HttpError(404,'This site does not belong to the Parent DO draft.');
  if(selected.installation===false)throw new HttpError(422,'Delivery-only sales do not have installation variance.');
- const eligible=draft.snapshot.lines.filter(r=>r.sites.includes(siteId)),rows=draftRows({...draft,snapshot:{...draft.snapshot,lines:eligible}},'Miscellaneous').filter(r=>kind==='customer-signoff'?materialDocumentPolicy(r).customerUsageSignoff:materialDocumentPolicy(r).installationReconciliation).map(r=>({...r,issued:null}));
+ const eligible=parentPoolLines(draft.snapshot).filter(r=>r.sites.includes(siteId!)),rows=draftRows({...draft,snapshot:{...draft.snapshot,lines:eligible}},'Miscellaneous').filter(r=>kind==='customer-signoff'?materialDocumentPolicy(r).customerUsageSignoff:materialDocumentPolicy(r).installationReconciliation).map(r=>({...r,issued:null}));
  return document(kind,reference,draft.snapshot.warehouse,[selected],rows,{omitIssued:kind==='customer-signoff',issuedLabel:'Issued at site',note:kind==='customer-signoff'?'Record the variable-material quantities used at this site. This sign-off is linked to the Parent DO; it is not another warehouse dispatch.':'Internal miscellaneous usage for this site. Parent DO unused quantities are reconciled and physically received once at warehouse level.'});
 }
 
@@ -113,7 +114,7 @@ export function returnWorksheetPrintModel(data:any):MaterialPrintModel{
 
 /** Per-site sign-offs derive only from positive rows on the immutable DO. */
 export function issuedCustomerSignoffModels(record:Parameters<typeof issuedDispatchPrintModel>[0]){
- const base=issuedDispatchPrintModel(record),snapshot=record.snapshot,printedLines=snapshot.lines.filter(row=>row.itemId&&row.out!==''&&new Decimal(row.out).gt(0));
+ const base=issuedDispatchPrintModel(record),snapshot=record.snapshot,printedLines=parentPoolLines(snapshot).filter(row=>row.itemId&&row.out!==''&&new Decimal(row.out).gt(0));
  return snapshot.sites.flatMap((source:any,index:number)=>{
   if(source.installation===false)return [];
   const rows=base.rows.filter((row,rowIndex)=>printedLines[rowIndex]?.sites.includes(source.siteId)&&materialDocumentPolicy(row).customerUsageSignoff&&row.issued!==null&&new Decimal(row.issued).gt(0));

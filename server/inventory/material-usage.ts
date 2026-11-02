@@ -1,3 +1,4 @@
+import {parentPoolLines} from '../../shared/parent-material-pool.js';
 import {HistoricalQcUsageRepository} from './historical-qc-usage.js';
 import {completionEvidence} from '../../shared/qc-completion-evidence.js';
 import {dispatchReconciliationEligibleSql} from './dispatch-reconciliation-eligibility.js';
@@ -67,7 +68,7 @@ export class MaterialUsageRepository{
   return {site:{id:boardId,name:board.name,ipo:board.ipo},records,files,evidence:{signedDos,variableSignoff:typed?.variableSignoff??null,noVariableItemsUsed:typed?.noVariableItemsUsed===true},stockPosting:false};
  }
  async read(actor:string,draftId:string,client:Pool|PoolClient=this.pool,siteId?:string){
-  const draft=await this.usageDraft(actor,draftId,client,siteId),s=draft.snapshot;
+  const original=await this.usageDraft(actor,draftId,client,siteId),draft={...original,snapshot:{...original.snapshot,lines:parentPoolLines(original.snapshot)}},s=draft.snapshot;
   const reports=(await client.query(latestUsage,[draftId])).rows;
   const issued=(await client.query(`SELECT l.line_key,sum(l.quantity)::text out FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) AND ${dispatchReconciliationEligibleSql} GROUP BY l.line_key`,[draftId,s.lines.map((r:any)=>r.key)])).rows;
   const references=(await client.query(`SELECT d.number FROM inventory_material_dispatches_active d WHERE ${materialDispatchDraftLink} ORDER BY d.created_at,d.id`,[draftId])).rows.map(r=>r.number as string);

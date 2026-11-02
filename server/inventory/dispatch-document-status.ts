@@ -1,3 +1,4 @@
+import {parentPoolLines} from '../../shared/parent-material-pool.js';
 import {completionEvidence} from '../../shared/qc-completion-evidence.js';
 import {dispatchReconciliationEligibleSql} from './dispatch-reconciliation-eligibility.js';
 import type {Pool,PoolClient} from 'pg';
@@ -22,7 +23,7 @@ export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies
  const signature=(d:Dispatch)=>JSON.stringify([d.warehouse,(d.snapshot.sites??[]).map((s:any)=>s.registeredSiteId??s.siteId).sort(),(d.snapshot.lines??[]).filter((l:any)=>Number(l.out??l.quantity)>0).map((l:any)=>[l.itemId,l.unit,String(l.out??l.quantity)]).sort((a:any,b:any)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))]);
  const sameMaterials=new Map<string,Dispatch[]>();for(const d of dispatches.filter(d=>!d.snapshot.parent)){const key=signature(d);sameMaterials.set(key,[...(sameMaterials.get(key)??[]),d]);}
  return dispatches.filter(d=>!closed.has(d.draft_id)).map(d=>{
-  const lines=(d.snapshot.lines??[]).filter((l:any)=>Number(l.out??l.quantity)>0);
+  const lines=parentPoolLines({...d.snapshot,lines:d.snapshot.lines??[]}).filter((l:any)=>Number(l.out??l.quantity)>0);
   const sites=(d.snapshot.sites??[]).filter((s:any)=>lines.some((l:any)=>l.sites?.includes(s.siteId))).map((s:any)=>{
    const board=dispatchBoard(s,boards),b=board?.snapshot;
    const qcFile=(ref:any,fresh=false)=>ref?.id&&files.some(f=>f.id===ref.id&&f.site_id===board?.site_id&&(!fresh||d.retrospective||instant(f.created_at)>=instant(d.created_at)))?{fileId:ref.id as string,source:'qc' as const,boardId:board!.site_id}:undefined;
