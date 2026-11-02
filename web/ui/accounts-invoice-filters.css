@@ -12,3 +12,5 @@
 
 .accounts-filtered-total{display:grid;grid-template-columns:auto auto;column-gap:12px;row-gap:4px;align-items:start}.accounts-filtered-total>strong{text-align:right;white-space:nowrap}.accounts-filtered-total>small{grid-column:1/-1;text-align:right}.accounts-recovery-export>.accounts-filtered-total{padding-top:11px}
 @media(max-width:700px){.accounts-filtered-total{width:100%;grid-template-columns:minmax(0,1fr) auto}.accounts-recovery-export>.accounts-filtered-total{padding-top:0}}
+
+.accounts-ui .accounts-recovery-export{align-items:flex-start}.accounts-ui .accounts-panel-heading:has(.accounts-filtered-total){align-items:flex-start}
