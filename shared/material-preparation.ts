@@ -53,3 +53,10 @@ export function variablePreparationRows(sources:Basis[],catalogue:CatalogueItem[
  }
  return [...grouped.values()];
 }
+
+/** Module is derived metadata, not an operator decision. Match the same policy
+ * used by save validation, without changing stock identity or quantities. */
+export function withMatchingVariableSection<T extends PreparationRow>(row:T):T{
+ const policy=materialDocumentPolicy(row);
+ return policy.variableDispatch?{...row,section:policy.group==='internal-variable'?'internal':'customer'}:row;
+}

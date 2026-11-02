@@ -1,3 +1,4 @@
+import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {materialIssueCategory} from '../../shared/material-issue-category.js';
 import {paginateMaterialRows} from './print-pagination.mjs';
 import React,{useEffect,useState} from 'react';
@@ -65,7 +66,7 @@ export function SiteIssueDocument({project,record,filled=false,edit,estimatedDel
  const variableCableLine=(line:IssueLine)=>variableLine(line)&&(line.entryType==='cable'||(!line.entryType&&(/^CH-CBL-|^CH-BESS-CAB-BAT-CABLE$/.test(line.id)||/\b(?:AC|DC|Earthing|Earth|Communication|Control)\s+Cable|\bCable\b/i.test(line.description))));
  const variableMixedLine=(line:IssueLine)=>variableLine(line)&&!variableCableLine(line);
  const addItem=(kind:'fixed'|'cable'|'variable')=>{const id=(kind==='fixed'?edit?.onAddFixedItem:kind==='cable'?edit?.onAddCableItem:edit?.onAddVariableItem)?.();if(id){setChangeIdFor(id);setChangeExtraIdFor(null);setIdSearch('');setIdDropdownOpen(true);}};
- const choiceFits=(line:IssueLine,item:{id:string;description:string})=>{if(!line.entryType)return true;const variable=isVariableItem(item.id,item.description),cable=/^CH-CBL-|^CH-BESS-CAB-BAT-CABLE$/.test(item.id)||/\bcables?|\bwires?\b/i.test(item.description);return line.entryType==='fixed'?(project.installation===false||!variable):line.entryType==='cable'?variable&&cable:variable&&!cable;};
+ const choiceFits=(line:IssueLine,item:{id:string;description:string})=>{if(!line.entryType)return true;const variable=materialDocumentPolicy({itemId:item.id,description:item.description}).variableDispatch,cable=/^CH-CBL-|^CH-BESS-CAB-BAT-CABLE$/.test(item.id)||/\bcables?|\bwires?\b/i.test(item.description);return line.entryType==='fixed'?(project.installation===false||!variable):line.entryType==='cable'?variable&&cable:variable&&!cable;};
  const sharedColumns=(extras=false)=>{const quantityColumns=Number(showApprovedQty)+Number(showSurveyQty)+Number(showEnteredBoqQty)+3;const qtyWidth=(100-36-(showApprovalCheck?14:0)-(masterMode||extras?8:0))/quantityColumns;return <colgroup><col className={edit||masterMode?'issue-print-only':''}/><col style={{width:'36%'}}/>{Array.from({length:quantityColumns},(_,i)=><col key={i} style={{width:`${qtyWidth}%`}}/>)}{showApprovalCheck&&<col style={{width:'14%'}}/>}{(masterMode||extras)&&<col style={{width:'8%'}}/>}{masterMode&&!extras&&<><col className={masterMode||edit?'issue-print-only':''}/><col className={masterMode||edit?'issue-print-only':''}/><col className={masterMode||edit?'issue-print-only':''}/></>}</colgroup>;};
  const fixedWorkRows=()=> displayExtras.map((row,index)=>{
   if(!['CH-Structure','CH-Earthing'].includes(row.id))return null;

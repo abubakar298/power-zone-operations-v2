@@ -1,3 +1,4 @@
+import {withMatchingVariableSection} from '../../shared/material-preparation.js';
 import {ApprovedMaterialPreview} from '../inventory-approved/ApprovedMaterialPreview.js';
 import {reviewIssueRows} from '../inventory-approved/site-issue-review.js';
 import type{MaterialPrintModel}from'../../server/inventory/material-document-model.js';
@@ -66,7 +67,7 @@ export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>v
     const d=await api<Detail>('/material-dispatches/site-plans/'+initialId);s=d.fixed.snapshot.sites[0];rows=d.fixed.snapshot.lines;v=d.variable?.snapshot.lines??[];w=d.fixed.snapshot.warehouse;t=d.fixed.snapshot.transport;route=d.variableSupply;if(active)setVersion(d.version);
    }
    if(!active)return;
-   saved.current=JSON.stringify({fixed:rows,variable:v,warehouse:w,transport:t,supply:route});setSource(s);setFixed(rows);setVariable(v);setWarehouse(w);setTransport(t);setSupply(route);setIntake(i);
+   saved.current=JSON.stringify({fixed:rows,variable:v,warehouse:w,transport:t,supply:route});setSource(s);setFixed(rows);setVariable(v.map(withMatchingVariableSection));setWarehouse(w);setTransport(t);setSupply(route);setIntake(i);
   }catch(e){if(active)setError((e as Error).message);}
  })();return()=>{active=false;};},[]);
  function back(){navigateInventory('/inventory/parent-dos');}
@@ -75,7 +76,7 @@ export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>v
   if(review?.signature!==signature+':'+partialDelivery){setReview(undefined);setError('The preparation changed. Preview this version before saving.');return;}
   setReview(undefined);
   if(!source)return;setBusy(true);setError('');setNotice('');
-  const body={...(id!=='new'?{id}:{}),version,source:{sourceKind:source.sourceKind,basisId:source.basisId,basisVersion:source.basisVersion,siteId:source.siteId},warehouse,transport,...(revisionReason.trim()?{revisionReason:revisionReason.trim()}:{}),fixedLines:fixed,variableLines:variable.map(({basisLine,...row})=>row),variableSupply:supply};
+  const body={...(id!=='new'?{id}:{}),version,source:{sourceKind:source.sourceKind,basisId:source.basisId,basisVersion:source.basisVersion,siteId:source.siteId},warehouse,transport,...(revisionReason.trim()?{revisionReason:revisionReason.trim()}:{}),fixedLines:fixed,variableLines:variable.map(({basisLine,...row})=>withMatchingVariableSection(row)),variableSupply:supply};
   const mark=JSON.stringify(body);if(request.current?.signature!==mark)request.current={signature:mark,key:crypto.randomUUID()};
   try{
    if(!dirty&&version>0&&documents.length){setPreviewRequest(v=>v+1);return;}
@@ -92,7 +93,7 @@ export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>v
    setReview({signature:signature+':'+partialDelivery,models,missing:result.missing});
   }catch(e){setError((e as Error).message);}
  }
- function update(key:string,patch:Partial<PreparationRow>,isFixed:boolean){(isFixed?setFixed:setVariable)(old=>old.map(r=>r.key===key?{...r,...patch}:r));}
+ function update(key:string,patch:Partial<PreparationRow>,isFixed:boolean){(isFixed?setFixed:setVariable)(old=>old.map(r=>r.key===key?(isFixed?{...r,...patch}:withMatchingVariableSection({...r,...patch})):r));}
  function add(group:keyof typeof labels){if(!source)return;const isFixed=['bess','panels','other'].includes(group);const row:PreparationRow={key:crypto.randomUUID(),itemId:'',description:'',unit:'',out:'',sites:[source.siteId],...(isFixed?{fixedGroup:group as 'bess'|'panels'|'other'}:{section:group as 'customer'|'internal',documentPolicyVersion:2 as const})};(isFixed?setFixed:setVariable)(old=>[...old,row]);}
  function module(group:keyof typeof labels){
   const isFixed=['bess','panels','other'].includes(group),rows=(isFixed?fixed:variable).filter(r=>(isFixed?r.fixedGroup??'other':r.section??(materialDocumentPolicy(r).group==='internal-variable'?'internal':'customer'))===group);
