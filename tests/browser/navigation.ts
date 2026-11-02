@@ -1,7 +1,7 @@
 import type {Page} from '@playwright/test';
 /** Follow the current role-specific sidebar; business assertions stay unchanged. */
 export async function openWorkspaceSection(page:Page,label:string) {
- await page.locator('.account-trigger').waitFor({state:'visible'});
+ await page.locator('.account-trigger').last().waitFor({state:'visible'});
  const direct=page.getByRole('button',{name:label,exact:true});
  if(await direct.isVisible().catch(()=>false)){await direct.click();return;}
  // Management uses a compact landing page. Existing workspaces retain stable
@@ -9,12 +9,13 @@ export async function openWorkspaceSection(page:Page,label:string) {
  const routes:Record<string,string>={'Dashboard':'dashboard','Master data':'masters','Survey & BOQ':'boqs','Commercial pricing':'pricing','Quotations':'quotes','Customer PO & IPO':'orders','BOQ to Operations':'operations','Inventory workspace':'inventory','Accounts workspace':'finance','Team access':'team','My account':'account','UBL Site Workflow':'ubl-workflow','Customer & site budgets':'reports','Approvals':'dashboard','Rate Master':'rates'};
  if(!routes[label])throw Error(`No current workspace route for ${label}`);
  await page.goto(`/dashboard#workspace=${routes[label]}`);
+ await page.reload();
  await page.locator('main').waitFor();
 }
 
 export async function signOut(page:Page) {
  const button=page.getByRole('button',{name:'Sign out',exact:true});
- if(!(await button.isVisible()))await page.locator('.account-trigger').click();
+ if(!(await button.isVisible()))await page.locator('.account-trigger').last().click();
  await button.click();
  await page.getByRole('heading',{name:'Welcome back.',exact:true}).waitFor();
 }

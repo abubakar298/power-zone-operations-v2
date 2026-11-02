@@ -81,7 +81,7 @@ test("Inventory workspace: job search, draft, attachment, immutable handoff and 
     page.getByRole("columnheader", { name: "Rate without GST" }).first(),
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: "40,785.88", exact: true }),
+    page.getByRole("row", { name: "16mm² 4C inverter cable MTRS 10.00 13.00 3.00 3,220.00 9,660.00", exact: true }),
   ).toBeVisible();
   await page.screenshot({
     path: "test-results/inventory-reconciliation-desktop.png",
@@ -115,10 +115,8 @@ test("Inventory workspace: job search, draft, attachment, immutable handoff and 
   await page.getByRole("button", { name: "Record PT entry", exact: true }).click();
   await page.getByLabel("PT reference (required)", { exact: true }).fill("PT-BROWSER-IRR-320");
   await page.getByLabel("Entry date (required)", { exact: true }).fill("2026-10-02");
-  await page.getByRole("button", { name: "Save PT entry", exact: true }).click();
+  await page.getByRole("button", { name: "Save PT entry & Prepare Job Closure", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("PT entry recorded");
-  await page.getByRole("button", { name: /^Recorded ·/ }).click();
-  await page.getByRole("button", { name: "Prepare job closure", exact: true }).click();
   await expect(page.getByRole("heading", { name: /CHP-320/ })).toBeVisible();
   // First opening also verifies that redacted budget values render safely.
   // Give only this disposable costing actor the same explicit capability as

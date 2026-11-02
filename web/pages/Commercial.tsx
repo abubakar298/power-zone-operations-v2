@@ -527,7 +527,7 @@ export function Commercial({
   }
   useEffect(() => {
     if (
-      initialQuotationId ||
+      (initialQuotationId && !revisionInfo) ||
       (section !== "pricing" && !revisionInfo) ||
       (!policy && session.user.role !== "Coordinator") ||
       revisionLoading ||
@@ -546,7 +546,7 @@ export function Commercial({
           if (active){setPreview(r);setPricingUpdating(false);setError('');if((input.discountMode==='Pre-approved'||input.roundedTotal!==undefined)&&r.snapshot.input.discountPercent!==input.discountPercent)setInput(old=>({...old,discountPercent:r.snapshot.input.discountPercent}));}
         })
         .catch((e) => {
-          if (active) fail(e);
+          if (active){setPricingUpdating(false);fail(e);}
         });
     }, 200);
     return () => {

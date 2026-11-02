@@ -14,16 +14,17 @@ test('saved site preparation has a clear DO action, auto-opens four copies and n
   if(path==='/site-plans/'+id)return route.fulfill({json:plan});
   if(path==='/stock')return route.fulfill({json:{authority:{state:'active',source_sha256:'a'.repeat(64),version:1},positions:[{itemId:line.itemId,unit:'piece',currentClosing:'10',ledgerRevision:0}]}});
   if(path==='/transport-choices')return route.fulfill({json:{choices:[]}});
+  if(path==='/site-plans/'+id+'/issued')return route.fulfill({json:{dispatches:created?[{id:dispatchId,number:'SIM-DO-1',variable:false,lines:[{key,quantity:'1'}]}]:[]}});
   if(path==='/drafts/'+draftId+'/movements')return route.fulfill({json:{dispatches:created?[{id:dispatchId,number:'SIM-DO-1',created_at:'2026-10-29',stockPosted:false}]:[],receipts:[],lines:[{line_key:key,prepared:created?'1':'0',issued:'0',returned:'0',outstanding:'0'}]}});
-  if(path==='/issues'){created++;expect(route.request().postDataJSON().lines).toEqual([{lineKey:key,quantity:'1',ledgerRevision:0}]);return route.fulfill({json:{id:dispatchId,number:'SIM-DO-1'}});}
+  if(path==='/site-plans/'+id+'/issue'){created++;expect(route.request().postDataJSON().version).toBe(1);return route.fulfill({json:{id:dispatchId,number:'SIM-DO-1'}});}
   if(path==='/issued/'+dispatchId+'/document.pdf')return route.fulfill({json:{kind:'fixed-do',status:'issued',title:'Delivery Order',reference:'SIM-DO-1',warehouse:'Lahore warehouse',sites:[{name:source.siteName,ipo:source.ipo,customer:'UBL'}],rows:[{itemId:line.itemId,description:line.description,unit:'piece',issued:'1',used:null,returned:null}],signatures:[],stockPosting:false}});
   if(route.request().method()==='POST')uploads++;
   return route.fulfill({json:{versions:[],files:[]}});
  });
  await page.goto('/inventory/materials/'+id);
- const create=page.getByRole('button',{name:'Create DO & print 4 copies',exact:true});await expect(create).toBeEnabled();
+ const create=page.getByRole('button',{name:'Preview & Save DO',exact:true});await expect(create).toBeEnabled();
  await expect(page.locator('.material-plan-actions').getByRole('button',{name:'Site use & reconciliation'})).toHaveCount(0);
- await create.click();const dialog=page.getByRole('dialog');await dialog.getByRole('textbox',{name:'Issue CH-VPD-63A/2P',exact:true}).fill('1');await dialog.getByLabel('Dispatch note').fill('Isolated dispatch for printing');await dialog.getByRole('button',{name:'Create DO',exact:true}).click();
+ await create.click();const review=page.getByRole('dialog',{name:'Review DO before saving'});await expect(review.locator('.issue-print-sheet')).toHaveCount(4);await review.getByRole('button',{name:'Save DO',exact:true}).click();const dialog=page.getByRole('dialog');
  await expect(dialog.locator('.issue-print-sheet')).toHaveCount(4);await expect(dialog.getByRole('button',{name:'Print',exact:true})).toBeEnabled();await expect(dialog.getByRole('button',{name:'Download PDF',exact:true})).toBeEnabled();
- expect(created).toBe(1);expect(uploads).toBe(0);await expect(dialog.getByText('Awaiting signed gate copy · stock unchanged',{exact:true})).toBeVisible();
+ expect(created).toBe(1);expect(uploads).toBe(0);await expect(page.getByRole('status')).toContainText('Signed gate evidence records the warehouse dispatch.');
 });

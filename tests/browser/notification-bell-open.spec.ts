@@ -1,3 +1,4 @@
+import {syncFixtureNotifications} from './release-fixtures.js';
 import { test, expect } from '@playwright/test';
 
 test('Opening either notification bell persists acknowledgment, retains history and keeps later notices unread', async ({page, browser}) => {
@@ -23,6 +24,7 @@ test('Opening either notification bell persists acknowledgment, retains history 
       const created = await coordinator.request.post('/api/cni/',{headers:coordinatorHeaders,data:{customerId:3,siteCode:`BELL-${sequence}`,siteName:`Bell notification site ${sequence}`,quantity:1,presentation:'Inclusive',discount:'0'}});
       expect(created.status(),await created.text()).toBe(201);
       const record = await created.json();
+      await syncFixtureNotifications();
       await expect.poll(async () => {
         const inbox = await (await page.request.get('/api/notifications')).json();
         return inbox.notifications.find((n:any) => n.target.id === record.id)?.id;

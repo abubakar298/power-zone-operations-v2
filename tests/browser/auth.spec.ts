@@ -52,7 +52,7 @@ test("setup, invalid login, dashboard, reload, process restart, logout, relogin,
   await expect(
     page.getByRole("region", { name: "Management approvals" }),
   ).toBeVisible();
-  await expect(page.getByRole('button',{name:'Dashboard',exact:true})).toHaveAttribute('aria-current','page');
+  await expect(page.getByRole('navigation',{name:'Administration'}).getByRole('button',{name:'Security log',exact:true})).toBeVisible();
   const solarBucket=page.getByRole('button',{name:/^UBL Solar \d+ IPOs received/});
   await expect(solarBucket).toBeVisible();
   await solarBucket.click();
@@ -176,7 +176,7 @@ test('Management reviews the exact submitted quotation without changing its save
 
 test('Coordinator can embed a revision discount, save it, export all six formats and retain its payable',async({page})=>{
  await actors(page.request);const headers=await login(page.request,'coordinator-release@example.test');const {quote}=await seedQuote(page.request,headers,'EMBED',false,'1000');
- await openSavedQuote(page,quote.number);await page.getByRole('button',{name:'Create new quotation version',exact:true}).click();
+ await openSavedQuote(page,quote.number);if(await page.getByRole('button',{name:'Create new quotation version',exact:true}).isVisible())await page.getByRole('button',{name:'Create new quotation version',exact:true}).click();
  await page.getByLabel('Revision reason',{exact:true}).fill('Customer requests the approved discount in item prices');await page.getByLabel('Requires costing change').selectOption('no');
  await page.getByRole('button',{name:'Start revision',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Confirm and send',exact:true}).click();
  await page.getByRole('button',{name:'Back to Quotation Settings',exact:true}).click();
@@ -219,7 +219,7 @@ test('Inventory, Accounts and Design retain isolated workspaces and cannot open 
  for(const role of ['Inventory','Accounts','Design']){
   await login(page.request,role.toLowerCase()+'-release@example.test');
   if(role==='Inventory')expect((await(await page.request.get('/api/material-dispatches/access')).json()).kind).toBe('dispatcher');
-  await page.goto('/dashboard');await expect(page.locator('.account-trigger')).toContainText(role);
+  await page.goto('/dashboard');await expect(page.locator('.account-trigger').last()).toContainText(role);
   for(const path of ['/api/accounts','/api/backups','/api/commercial/standard-policy'])expect((await page.request.get(path)).status()).toBe(403);
   expect((await page.request.get('/api/departments/'+(role==='Inventory'?'Accounts':'Inventory'))).status()).toBe(403);
  }

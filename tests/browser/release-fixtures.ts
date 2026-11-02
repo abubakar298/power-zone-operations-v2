@@ -45,6 +45,24 @@ export async function seedQuote(request:APIRequestContext,headers:Record<string,
 }
 export async function openSavedQuote(page:Page,number:string){
  await page.goto('/dashboard#workspace=quotes');
- await page.getByRole('button',{name:new RegExp(number.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'))}).click();
+ const session=await(await page.request.get('/api/auth/session')).json();
+ if(session.user.role==='Coordinator'){
+  await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Projects',exact:true}).click();
+  await page.getByRole('searchbox',{name:'Search projects and documents'}).fill(number);
+  await page.getByRole('button',{name:'Open project',exact:true}).click();
+  await page.getByRole('button',{name:'Documents',exact:true}).click();
+  await page.getByRole('row').filter({hasText:number}).getByRole('button',{name:'Revise Quotation',exact:true}).click();
+ }else await page.getByRole('button',{name:new RegExp(number.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'))}).click();
  await expect(page.locator('.quotation-pdf-pages canvas').first()).toBeVisible();
+}
+
+/** Run the normal notification projection against the owned disposable database.
+ * Browser checks need not wait for the production 30-second timer. No email delivery. */
+export async function syncFixtureNotifications(){
+ const {readFile}=await import('node:fs/promises');const {default:pg}=await import('pg');
+ const fixture=JSON.parse(await readFile(`.local/e2e-fixture-${process.env.PZ_E2E_PORT??'3180'}.json`,'utf8'));
+ const db=new URL(fixture.databaseUrl);
+ if(fixture.marker!=='power-zone-disposable-browser-fixture-v1'||db.hostname!=='127.0.0.1'||db.pathname!=='/power_zone_test'||db.username!=='postgres')throw Error('Owned disposable notification fixture required.');
+ const pool=new pg.Pool({connectionString:fixture.databaseUrl,max:1});
+ try{const actual=(await pool.query("SELECT current_database() AS name,current_setting('data_directory') AS directory")).rows[0];if(actual.name!=='power_zone_test'||!/[\\/]pz-v2-test-[^\\/]+[\\/]db$/.test(actual.directory))throw Error('Owned disposable database directory required.');const {NotificationsRepository}=await import('../../server/notifications/repository.js');await new NotificationsRepository(pool).sync();}finally{await pool.end();}
 }
