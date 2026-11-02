@@ -1,3 +1,4 @@
+import {materialIssueCategory} from './material-issue-category.js';
 import {materialDocumentPolicy} from './material-documents.js';
 
 type Basis={siteId:string;installation:boolean|null;items:unknown[];customer:string};
@@ -18,10 +19,10 @@ export function fixedPreparationRows(source:Basis,catalogue:CatalogueItem[],key:
   const policy=materialDocumentPolicy({itemId,description});
   const approvedFixed=approvedEarthing||/^CH-STRUCTURE\b/i.test(itemId)||/\b(?:solar|girder) structure\b/i.test(description);
   const service=!approvedFixed&&(/\b(?:installation|labou?r|project delivery|transportation|delivery[ /-]+logistics|delivery charges?|genset synch)\b/i.test(description)||/^(?:project )?delivery$/i.test(description)||/^misc\.? accessories$/i.test(String(raw.key??description))||/^(?:job|jobs|service)$/i.test(unit));
-  const bundled=/united bank|\bUBL\b/i.test(source.customer)&&itemId.toUpperCase()==='CH-SM-3P';
+  const bundled=/united bank|\bUBL\b/i.test(source.customer)&&(itemId.toUpperCase()==='CH-SM-3P'||/smart\s*meter.*included\s+(?:with|in)\s+(?:the\s+)?inverter/i.test(description));
   if(service||bundled||policy.group==='non-stock'||(source.installation!==false&&policy.variableDispatch))return [];
   const stock=catalogue.find(i=>i.itemId===itemId),locked=policy.approvedQuantityLocked;
-  const fixedGroup=/^(?:CH-)?(?:PCS|INV|HYB|BAT|BMS)[-\s]|\b(?:inverter|batter(?:y|ies)|BMS)\b/i.test(itemId+' '+description)?'bess':approvedFixed||/\b(?:solar (?:PV )?(?:panels?|plates?|modules?)|structure|earthing bore)\b/i.test(description)?'panels':'other';
+  const fixedGroup=materialIssueCategory({itemId,description})==='BESS'?'bess':approvedFixed||/\b(?:solar (?:PV )?(?:panels?|plates?|modules?)|structure|earthing bore)\b/i.test(description)?'panels':'other';
   const countUnits=stock?.units.filter(countUnit)??[];
   const recognisedUnit=stock?.units.find(u=>u.toLowerCase()===unit.toLowerCase())??(countUnit(unit)&&countUnits.length===1?countUnits[0]:undefined);
   // A power figure is not a count of inverters or batteries. Require a reviewed

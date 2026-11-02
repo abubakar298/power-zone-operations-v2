@@ -5,7 +5,7 @@ import {materialDocumentPolicy} from '../shared/material-documents.js';
 import {fixedPreparationRows,variablePreparationRows,withMatchingVariableSection} from '../shared/material-preparation.js';
 test('Al Noor BOQ cables and rooftop switchgear retain their proper categories',()=>{
  for(const description of ['2.5mm² earth panel to panel','6mm² DC earth','10mm² AC earth','16mm² 4C inverter cable','16mm² 4C load cable'])assert.equal(materialIssueCategory({itemId:'',description}),'AC & Earthing Cables',description);
- for(const description of ['Roof DC breaker','DC Circuit Breaker (Roof DB)','Inverter room DC breaker'])assert.equal(materialIssueCategory({itemId:'CH-BRK-DC-20A/4P',description}),'DC Switchgear');
+ for(const description of ['Roof DC breaker','DC Circuit Breaker (Roof DB)','Inverter room DC breaker'])assert.equal(materialIssueCategory({itemId:'CH-BRK-DC-20A/4P',description,fixedGroup:'bess'}),'DC Switchgear');
  assert.equal(materialIssueCategory({itemId:'',description:'DC Circuit Breaker (Roof DB)'}),'DC Switchgear');
  assert.equal(materialIssueCategory({itemId:'',description:'AC & DC Boxes combined'}),'All Boxes');
  assert.equal(materialIssueCategory({itemId:'',description:'DC cable red 6mm²'}),'DC Cables & Communication Cables');
@@ -23,4 +23,9 @@ test('variable module metadata follows stock policy without changing details or 
  const row={key:'key',itemId,description,unit:'m',out:'5',sites:['site'],section:'internal' as const},fixed=withMatchingVariableSection(row);
  assert.equal(fixed.section,section);assert.equal(materialDocumentPolicy(fixed).group==='internal-variable'?'internal':'customer',fixed.section);assert.equal(fixed.out,row.out);assert.equal(fixed.itemId,row.itemId);assert.equal(fixed.description,row.description);assert.equal(row.section,'internal');
  }
+});
+
+test('explicitly bundled UBL smart meter does not become another warehouse issue',()=>{
+ const source={siteId:'site',installation:true,customer:'United Bank Limited',items:[{key:'meter',description:'Smart meter included with inverter',qty:'1',unit:'No.'}]};
+ assert.deepEqual(fixedPreparationRows(source,[],()=> 'key'),[]);
 });

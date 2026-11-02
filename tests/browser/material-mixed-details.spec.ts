@@ -6,7 +6,7 @@ test('mixed issuance details remain editable for first and duplicate item rows a
  const source={sourceKind:'store-boq',basisId:draftId,basisVersion:1,siteId,siteName:'Mixed material test site',ipo:'SIM-UPS',customer:'UBL',installation:true,items:[]};
  const lines=['44444444-4444-4444-8444-444444444444','55555555-5555-4555-8555-555555555555'].map(key=>({key,itemId:'CH-Mix Items All',description:'Mixed accessories',unit:'piece',out:'1',sites:[siteId],section:'internal',documentPolicyVersion:2}));
  lines.push({...lines[0],key:'77777777-7777-4777-8777-777777777777',itemId:'CH-Pvc Pipe 1.5 Inch',description:'PVC Pipe 1.5 Inch'});
- const fixedLines=['Roof DC breaker','Inverter room DC breaker'].map((description,index)=>({key:'66666666-6666-4666-8666-66666666666'+index,itemId:'CH-BRK-DC-20A/4P',description,unit:'piece',out:'4',sites:[siteId],fixedGroup:'other'}));
+ const fixedLines=['Roof DC breaker','Inverter room DC breaker'].map((description,index)=>({key:'66666666-6666-4666-8666-66666666666'+index,itemId:'CH-BRK-DC-20A/4P',description,unit:'piece',out:'4',sites:[siteId],fixedGroup:'bess'}));
  const transport={issuedTo:'Fixture team',vehicle:'Fixture vehicle',driver:'Fixture driver',driverIdentity:''};let saved:any;
  await page.route('**/api/material-dispatches/**',async route=>{
   const path=new URL(route.request().url()).pathname.replace('/api/material-dispatches','');
