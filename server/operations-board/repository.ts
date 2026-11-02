@@ -19,7 +19,7 @@ import {workflowSiteSchema,saveDispatchPlan,confirmDelivery,completeQcStage,comp
 import type {z} from 'zod';
 
 type Access={qcDelegated?:boolean;name:string;kind:'owner'|'head'|'lead'|'qc'|'accounts';team:'central'|'south'|null};
-const latest='SELECT DISTINCT ON (site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC';
+const latest="SELECT b.* FROM (SELECT DISTINCT ON (site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC) b WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.records->'portalOperationSiteIds' ? b.site_id::text)";
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 /** Server-owned records; browser role selectors never authorise access. */
 export class OperationsBoardRepository{

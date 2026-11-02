@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {CustomerSiteRegister} from '../components/CustomerSiteRegister.js';
 import './department-lists.css';
 import {sentSurveyAwaitingDesign,surveyRequestInCoordination} from '../../shared/sent-survey-requests.js';
@@ -919,7 +920,7 @@ export function DepartmentWorkspace({
                       <th>Next action</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <PagedTableBody label="sites and documents">
                     {visible
                       .filter(
                         (r) =>
@@ -1051,7 +1052,7 @@ export function DepartmentWorkspace({
                         <td><Button variant="secondary" onClick={() => page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?onOpen?.(t):void openRevision({...t,sourceQuotationId:t.id})) : t.kind === "Sale confirmation" ? setQuotationReview({...t,sourceQuotationId:t.id}) : onOpen?.(t)}>{page === coordinationBuckets[3] ? "Create Revision" : "Review"}</Button>{page === coordinationBuckets[2] && ["Sale confirmation","C&I proposal"].includes(t.kind)&&<Button variant="success" onClick={()=>setApprovalTarget({quotationId:t.kind==="Sale confirmation"?t.id:undefined,cniId:t.kind==="C&I proposal"?t.id:undefined,number:t.number})}>Record Approval</Button>}</td>
                       </tr>
                     ))}
-                  </tbody>
+                  </PagedTableBody>
                 </table>
                 {!visible.length && !(department === "coordination" && visibleLegacy.length) && <p>No sites match these filters.</p>}
               </div>
@@ -1068,7 +1069,7 @@ export function DepartmentWorkspace({
               <h3>Approved Individual Documents</h3>
               <div className="pz-table-scroll"><table className="pz-table">
                 <thead><tr><th>Customer / Site</th><th>Document</th><th>Status</th><th>Next action</th></tr></thead>
-                <tbody>
+                <PagedTableBody label="sites and documents">
                   {readyIndividuals.map(r=><tr key={r.id}>
                     <td><strong>{r.customerCode} · {r.site}</strong><br/>{r.siteCode}</td>
                     <td>{r.quotation?.number ?? r.references?.join(" · ") ?? r.routeLabel}<DocumentListDetails record={r}/></td>
@@ -1081,7 +1082,7 @@ export function DepartmentWorkspace({
                     <td>{t.status}</td>
                     <td><Button variant="secondary" onClick={()=>onOpen?.(t)}>Review</Button></td>
                   </tr>)}
-                </tbody>
+                </PagedTableBody>
               </table></div>
               {!readyIndividuals.length&&!visibleLegacy.length&&<p>No approved individual documents match these filters.</p>}
             </section>
@@ -1132,7 +1133,7 @@ export function DepartmentWorkspace({
                           <th>Next action</th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <PagedTableBody label="sites and documents">
                         {sites.map((site) => (
                           <tr key={site.id}>
                             <td>
@@ -1158,7 +1159,7 @@ export function DepartmentWorkspace({
                             </td>
                           </tr>
                         ))}
-                      </tbody>
+                      </PagedTableBody>
                     </table>
                   </div>
                   {page !== designBuckets[1] && (
@@ -1224,7 +1225,7 @@ function DispatchPdfReview({
                 <th>Site contact</th>
               </tr>
             </thead>
-            <tbody>
+            <PagedTableBody label="sites and documents">
               {plan.sites.map((site: any) => (
                 <tr key={site.recordId}>
                   <td>
@@ -1237,7 +1238,7 @@ function DispatchPdfReview({
                   </td>
                 </tr>
               ))}
-            </tbody>
+            </PagedTableBody>
           </table>
         </div>
       </section>
@@ -1543,7 +1544,7 @@ function SurveyDispatchPlan({
                   <th>Surveyors</th>
                 </tr>
               </thead>
-              <tbody>
+              <PagedTableBody label="sites and documents">
                 {eligible.map((site: any) => (
                   <tr key={site.id}>
                     <td>
@@ -1577,7 +1578,7 @@ function SurveyDispatchPlan({
                     </td>
                   </tr>
                 ))}
-              </tbody>
+              </PagedTableBody>
             </table>
           </div>
         )}
@@ -2446,7 +2447,7 @@ function SurveySubmissionGroups({ session, groups, onSent }: any) {
                 <th>Action</th>
               </tr>
             </thead>
-            <tbody>
+            <PagedTableBody label="sites and documents">
               {groups.map((group: any) => (
                 <tr key={group.id}>
                   <td>
@@ -2483,7 +2484,7 @@ function SurveySubmissionGroups({ session, groups, onSent }: any) {
                   </td>
                 </tr>
               ))}
-            </tbody>
+            </PagedTableBody>
           </table>
         </div>
       )}

@@ -14,3 +14,17 @@ test('Projects browse ten at a time and search resets to the first page',async({
  await page.route('**/api/coordinator?scope=mine',r=>r.fulfill({json:{tasks:[]}}));await page.route('**/api/coordinator/projects',r=>r.fulfill({json:{documents}}));await page.route('**/api/boqs/drafts',r=>r.fulfill({json:{drafts:[]}}));
  await page.goto('/dashboard#workspace=projects&viewAs=Coordinator');const table=page.locator('.coordinator-library table'),pager=page.getByRole('navigation',{name:'projects pages'});await expect(table.locator('tbody tr')).toHaveCount(10);await expect(table.locator('tbody tr').first()).toContainText('Paging project 22');await pager.getByRole('button',{name:'Next'}).click();await expect(table.locator('tbody tr').first()).toContainText('Paging project 12');await expect(table.locator('tbody tr').first().locator('td').first()).toHaveText('11');await pager.getByRole('button',{name:'Next'}).click();await expect(table.locator('tbody tr')).toHaveCount(3);await page.getByRole('searchbox',{name:'Search projects and documents'}).fill('Paging project 00');await expect(table.locator('tbody tr')).toHaveCount(1);await page.getByRole('searchbox',{name:'Search projects and documents'}).fill('');await expect(pager).toContainText('Page 1 of 3');
 });
+test('Physical document search pages ten rows and resets after filters change',async({page})=>{
+ await actors(page.request);await login(page.request);
+ const sites=Array.from({length:23},(_,i)=>({id:'physical-'+i,name:'Document site '+String(i).padStart(2,'0'),ipo:'IPO-'+i,documents:[{id:'doc-'+i,label:'Delivery DO',location:'At site',date:'2026-11-'+String(i+1).padStart(2,'0'),evidence:[]}]}));
+ await page.route('**/api/accounts-workspace/physical-documents',r=>r.fulfill({json:{sites}}));
+ await page.goto('/dashboard#workspace=finance&viewAs=Accounts&accountsTab=Physical+Documents');
+ const table=page.locator('.physical-documents-table'),rows=table.locator('tbody > tr:not(.pz-pagination-row)'),pager=table.getByRole('navigation');
+ await expect(rows).toHaveCount(10);await expect(pager).toContainText('Page 1 of 3');
+ await pager.getByRole('button',{name:'Next',exact:true}).click();await expect(rows).toHaveCount(10);await expect(pager).toContainText('Page 2 of 3');
+ await pager.getByRole('button',{name:'Next',exact:true}).click();await expect(rows).toHaveCount(3);await expect(pager.getByRole('button',{name:'Next',exact:true})).toBeDisabled();
+ await pager.getByRole('button',{name:'Previous',exact:true}).click();await expect(rows).toHaveCount(10);
+ await page.getByRole('searchbox',{name:'Search IPO, site or TCS number'}).fill('Document site 00');await expect(rows).toHaveCount(1);await expect(pager).toHaveCount(0);
+ await page.getByRole('searchbox',{name:'Search IPO, site or TCS number'}).fill('');await expect(pager).toContainText('Page 1 of 3');
+ await page.screenshot({path:'test-results/physical-documents-ten-per-page.png',fullPage:true});
+});

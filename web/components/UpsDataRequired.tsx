@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {Fragment,useEffect,useState,type FormEvent} from 'react';
 import {api,type Session} from '../api.js';
 import {Button} from '../ui/Button.js';
@@ -24,7 +25,7 @@ export function UpsDataRequired({customer,onSaved}:{customer:'UBL'|'MBL',onSaved
   <label className="pz-field">Search sites<input type="search" placeholder="Site name, order number or missing detail" value={search} onChange={e=>setSearch(e.target.value)}/></label>
   {notice&&<p role="status">{notice}</p>}
   {!editing&&error&&<p className="form-error" role="alert">{error}</p>}
-  <div className="pz-table-scroll"><table className="master-table"><thead><tr><th>Sr. No.</th><th>Site name</th><th>Order number</th><th>What's missing</th><th>Status</th><th>Next action</th></tr></thead><tbody>{rows.map((row:any)=><Fragment key={row.id}>
+  <div className="pz-table-scroll"><table className="master-table"><thead><tr><th>Sr. No.</th><th>Site name</th><th>Order number</th><th>What's missing</th><th>Status</th><th>Next action</th></tr></thead><PagedTableBody label="sites and documents">{rows.map((row:any)=><Fragment key={row.id}>
    <tr><td>{row.sr}</td><td>{row.siteName||'Name required'}</td><td>{row.orderNumber}</td><td>{row.missing.length?row.missing.join('; '):'Details complete'}</td><td>{row.status}</td><td><Button variant="secondary" disabled={saving} onClick={()=>edit(row)}>{row.resolved?'Edit details':'Enter details'}</Button></td></tr>
    {editing?.id===row.id&&<tr><td colSpan={6}><form className="pz-stack" onSubmit={save} aria-label={`Edit details ${row.orderNumber}`}><h4>{row.orderNumber} · Site details</h4><div className="pz-form-grid">
     {text('siteName','Site name')}{select('delayOwner','Delay responsibility',['Unclassified',customer,'PZ'])}
@@ -37,6 +38,6 @@ export function UpsDataRequired({customer,onSaved}:{customer:'UBL'|'MBL',onSaved
    </div><label className="pz-field">Correction note<textarea required maxLength={1000} value={notes} onChange={e=>setNotes(e.target.value)}/></label><p className="pz-caption">Enter the remaining system invoice only. Advance and extra-cable payments stay separate. Blank details remain flagged.</p>
    <div className="pz-action-row"><Button type="submit" variant="primary" loading={saving} loadingLabel="Saving details…">Save</Button><Button variant="neutral" disabled={saving} onClick={()=>{setEditing(undefined);setError('');}}>Cancel</Button></div>{error&&<p className="form-error" role="alert">{error}</p>}
    </form></td></tr>}
-  </Fragment>)}{!rows.length&&<tr><td colSpan={6}>No sites match your search.</td></tr>}</tbody></table></div>
+  </Fragment>)}{!rows.length&&<tr><td colSpan={6}>No sites match your search.</td></tr>}</PagedTableBody></table></div>
  </section>;
 }

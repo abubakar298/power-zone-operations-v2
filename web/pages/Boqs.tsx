@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {FileUpload} from '../ui/FileUpload.js';
 import {CustomerSearchSelect} from "../components/CustomerSearchSelect.js";
 import {
@@ -840,7 +841,7 @@ export function Boqs({
                       <th>Review</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <PagedTableBody label="sites and documents">
                     {reviewRows.map((r) => (
                       <tr key={r.id}>
                         <td>
@@ -864,7 +865,7 @@ export function Boqs({
                         </td>
                       </tr>
                     ))}
-                  </tbody>
+                  </PagedTableBody>
                 </table>
               </div>
             )}
@@ -905,7 +906,7 @@ export function Boqs({
                       <th>Saved</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <PagedTableBody label="sites and documents">
                     {records.map((r) => (
                       <tr key={r.id}>
                         <td>
@@ -925,7 +926,7 @@ export function Boqs({
                         <td>{new Date(r.created_at).toLocaleString()}</td>
                       </tr>
                     ))}
-                  </tbody>
+                  </PagedTableBody>
                 </table>
               </div>
             )}

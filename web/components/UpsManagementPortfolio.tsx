@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {UpsActiveSites} from './UpsActiveSites.js';
 import {UpsDataRequired} from './UpsDataRequired.js';
 import {useEffect,useRef,useState} from 'react';
@@ -34,10 +35,10 @@ export function UpsManagementPortfolio({customer}:{customer:'MBL'|'UBL'}){
   <div className="pz-ups-toolbar"><label className="pz-field">Search confirmed UPS orders<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="IPO, branch, code, configuration or order number"/></label><Button variant="neutral" loading={loading} loadingLabel="Refreshing…" onClick={()=>void load()}>Refresh</Button></div>
   {error&&<p className="form-error" role="alert">{error}</p>}
   {!data&&loading&&<p role="status">Loading confirmed UPS orders…</p>}
-  {data&&<><p className="pz-caption">{rows.length} of {data.rows.length} confirmed orders</p><div className="pz-table-scroll"><table className="pz-ups-orders"><thead><tr>{['Site / branch code','IPO / order','Configuration','Approval date','Payable incl. GST','Budgeted cost excl. GST','Budgeted profit excl. GST','Markup','Next actions'].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>
+  {data&&<><p className="pz-caption">{rows.length} of {data.rows.length} confirmed orders</p><div className="pz-table-scroll"><table className="pz-ups-orders"><thead><tr>{['Site / branch code','IPO / order','Configuration','Approval date','Payable incl. GST','Budgeted cost excl. GST','Budgeted profit excl. GST','Markup','Next actions'].map(h=><th key={h}>{h}</th>)}</tr></thead><PagedTableBody label="sites and documents">
    {rows.map((r:any)=><tr key={r.id}><td><strong>{r.site}</strong><br/>{r.siteCode}</td><td><strong>{r.number}</strong>{r.orderNumber&&<><br/>Order {r.orderNumber}</>}</td><td>{r.configuration}</td><td>{r.approvalDate}</td><td className="numeric">{money(r.payable)}</td><td className="numeric">{money(r.budgetedCost)}</td><td className="numeric">{money(r.budgetedProfit)}</td><td className="numeric">{r.markupPercent===null?'Not available':`${decimalDisplay(r.markupPercent,0)}%`}</td><td><div className="pz-action-row"><Button variant="secondary" onClick={()=>setSelected(selected===r.id?undefined:r.id)}>Preview</Button><a className="pz-ups-download" href={`/api/orders/${r.id}/ipo.pdf`} download>Download</a></div></td></tr>)}
    {!rows.length&&<tr><td colSpan={9}>{search?'No confirmed UPS orders match this search.':'No confirmed UPS orders yet.'}</td></tr>}
-  </tbody></table></div></>}
+  </PagedTableBody></table></div></>}
   {current&&<section className="pz-stack" aria-label={`Review ${current.number}`}><h3>{current.number} · {current.site}</h3><details className="pz-document-review" open><summary><span>Open IPO and PT Preview</span><Icon name="chevron"/></summary><DocumentPreview url={`/api/orders/${current.id}/ipo.pdf`} title={`${current.number} · IPO and PT`}/></details></section>}
  </section>;
 }

@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {QuotationApproval} from "../components/QuotationApproval.js";
 import {Button} from "../ui/Button.js";
 import { ExternalApproval } from "../components/ExternalApproval.js";
@@ -448,7 +449,7 @@ export function CniProposals({
                   <th>Action</th>
                 </tr>
               </thead>
-              <tbody>
+              <PagedTableBody label="sites and documents">
                 {rows.map((r) => (
                   <tr key={r.id}>
                     <td>
@@ -470,7 +471,7 @@ export function CniProposals({
                     </td>
                   </tr>
                 ))}
-              </tbody>
+              </PagedTableBody>
             </table>
           </div>
         </>

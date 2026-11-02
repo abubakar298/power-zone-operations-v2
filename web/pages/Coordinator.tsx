@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {DocumentListDetails} from '../components/DocumentListDetails.js';
 import {documentListSearch} from '../../shared/document-list-search.js';
 import {bucketLabel} from '../workspaces/project-routes.js';
@@ -624,7 +625,7 @@ export function LegacyCoordinator({
                   <th>Next action</th>
                 </tr>
               </thead>
-              <tbody>
+              <PagedTableBody label="sites and documents">
                 {visibleTasks.map((t: any) => (
                   <tr
                     key={`${t.kind}-${t.id}`}
@@ -751,7 +752,7 @@ export function LegacyCoordinator({
                     </td>
                   </tr>
                 ))}
-              </tbody>
+              </PagedTableBody>
             </table>
             {visibleTasks.length === 0 && (
               <p>

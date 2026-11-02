@@ -32,8 +32,8 @@ export class MastersRepository {
   }
   async list() {
     const queries = [
-      "SELECT * FROM customers ORDER BY id",
-      "SELECT s.*,c.name AS customer_name FROM sites s JOIN customers c ON c.id=s.customer_id ORDER BY s.id",
+      "SELECT * FROM customers c WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.records->'portalCustomerIds' ? c.id::text) ORDER BY id",
+      "SELECT s.*,c.name AS customer_name FROM sites s JOIN customers c ON c.id=s.customer_id WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.records->'portalSiteIds' ? s.id::text OR a.records->'portalCustomerIds' ? c.id::text) ORDER BY s.id",
       "SELECT * FROM brands ORDER BY id",
       "SELECT DISTINCT ON(r.key) r.*,i.unit,i.item_group FROM rate_versions r JOIN item_master i ON i.key=r.key ORDER BY r.key,r.version DESC",
       "SELECT DISTINCT ON(key) * FROM rule_versions ORDER BY key,version DESC",

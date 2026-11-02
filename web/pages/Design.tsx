@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {FileUpload} from '../ui/FileUpload.js';
 import { DepartmentWorkspace } from "./DepartmentWorkspace.js";
 import { Button } from "../ui/Button.js";
@@ -368,7 +369,7 @@ export function LegacyDesign({ session }: { session: Session }) {
               <th>Documents / record</th>
             </tr>
           </thead>
-          <tbody>
+          <PagedTableBody label="sites and documents">
             {shown.map((t) => (
               <tr key={`${t.framework ? "framework" : "survey"}-${t.id}`}>
                 <td>
@@ -416,7 +417,7 @@ export function LegacyDesign({ session }: { session: Session }) {
                 </td>
               </tr>
             ))}
-          </tbody>
+          </PagedTableBody>
         </table>
       </div>
       {references && !shown.length && (

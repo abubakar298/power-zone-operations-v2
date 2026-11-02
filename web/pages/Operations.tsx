@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {AdvanceBoqInbox,AdvanceStockReview} from '../components/AdvanceBoqInbox.js';
 import {AdvanceBoqSearch} from '../components/AdvanceBoqSearch.js';
 import {ProjectCheckpoints} from './ProjectCheckpoints.js';
@@ -341,7 +342,7 @@ export function Operations({
                     <th>Document</th>
                   </tr>
                 </thead>
-                <tbody>
+                <PagedTableBody label="sites and documents">
                   {portalData?.ipos.map((i: any) => (
                     <tr key={i.id}>
                       <td>
@@ -371,7 +372,7 @@ export function Operations({
                       </td>
                     </tr>
                   ))}
-                </tbody>
+                </PagedTableBody>
               </table>
             </div>
           )}
@@ -395,7 +396,7 @@ export function Operations({
                       <th>Sites</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <PagedTableBody label="sites and documents">
                     {portalData?.demand.map((d: any, index: number) => (
                       <tr key={index}>
                         <td>
@@ -411,7 +412,7 @@ export function Operations({
                         <td>{d.sites}</td>
                       </tr>
                     ))}
-                  </tbody>
+                  </PagedTableBody>
                 </table>
               </div>
             </>
