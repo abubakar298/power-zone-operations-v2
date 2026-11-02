@@ -1,3 +1,4 @@
+import {ublProgrammeLinks,SOLAR_PROGRAMME} from './programme-links.js';
 import {issuedUblSites} from "./issued-sites.js";
 import type {Pool} from 'pg';
 import {randomUUID} from 'node:crypto';
@@ -13,13 +14,17 @@ export class UblRepository {
  constructor(private pool:Pool){}
  async closedJobs(actor:string){
   await this.role(actor);
-  const rows=(await this.pool.query(`SELECT j.id,j.snapshot,j.created_at,o.site_name,o.branch_code,o.configuration_id,o.legacy_ipo_number,to_char(j.created_at AT TIME ZONE 'Asia/Karachi','YYYY-MM-DD') AS closed_date FROM (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures ORDER BY job_key,version DESC) j JOIN ubl_effective_site_orders o ON j.job_key='ubl:'||o.site_id WHERE j.stage='Closed' ORDER BY j.created_at DESC`)).rows;
-  return {jobs:rows.map(r=>({id:r.id,siteName:r.site_name,branchCode:r.branch_code,configuration:r.configuration_id,ipoNumber:r.legacy_ipo_number,closedDate:r.closed_date,sellingValue:r.snapshot.summary.selling,actualCost:r.snapshot.summary.actual,budgetedMarkup:r.snapshot.summary.budgetedMarkup,budgetedMarkupPercent:r.snapshot.summary.budgetedMarkupPercent,actualMarkup:r.snapshot.summary.actualMarkup,actualMarkupPercent:r.snapshot.summary.actualMarkupPercent})),closureWorkflowAvailable:true};
+  const links=await ublProgrammeLinks(this.pool),byKey=new Map(links.map(l=>[l.jobKey,l]));
+  const rows=(await this.pool.query(`SELECT j.id,j.job_key,j.snapshot,to_char(j.created_at AT TIME ZONE 'Asia/Karachi','YYYY-MM-DD') closed_date FROM (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures WHERE job_key=ANY($1::text[]) ORDER BY job_key,version DESC) j WHERE j.stage='Closed' ORDER BY j.created_at DESC`,[[...byKey.keys()]])).rows;
+  return {jobs:rows.map(r=>{const l=byKey.get(r.job_key)!;return {id:r.id,jobKey:r.job_key,siteName:l.siteName,branchCode:l.siteCode,configuration:l.configuration,ipoNumber:l.ipo,closedDate:r.closed_date,sellingValue:r.snapshot.summary.selling,actualCost:r.snapshot.summary.actual,budgetedMarkup:r.snapshot.summary.budgetedMarkup,budgetedMarkupPercent:r.snapshot.summary.budgetedMarkupPercent,actualMarkup:r.snapshot.summary.actualMarkup,actualMarkupPercent:r.snapshot.summary.actualMarkupPercent};}),closureWorkflowAvailable:true};
  }
  async sites(actor:string){
   await this.role(actor);
   const historical = (await this.pool.query(`SELECT o.*,o.po_issued_date::text AS po_issued_date,(SELECT max(d.version) FROM ubl_site_document_versions d WHERE d.site_id=o.site_id) AS document_version,COALESCE(v.snapshot->'source'->'bulkIrr'->'flags','[]'::jsonb)||COALESCE((SELECT jsonb_agg(a.message ORDER BY a.created_at) FROM ubl_documentation_alerts a WHERE a.site_id=o.site_id AND a.status='Open'),'[]'::jsonb) AS irr_review_flags FROM ubl_effective_site_orders o LEFT JOIN inventory_reports r ON r.job_key='ubl:'||o.site_id LEFT JOIN LATERAL(SELECT snapshot FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true ORDER BY source_row` )).rows;
-  return [...historical,...await issuedUblSites(this.pool,historical)];
+  const links=await ublProgrammeLinks(this.pool),rows=[...historical,...await issuedUblSites(this.pool,historical)];
+  const result=rows.map(row=>{const link=links.find(l=>l.ipoId===row.new_workflow_ipo_id||!row.new_workflow_ipo_id&&l.jobKey==='ubl:'+row.site_id);return {...row,job_key:link?.jobKey??(row.new_workflow_ipo_id?'ipo:'+row.new_workflow_ipo_id:'ubl:'+row.site_id),programme:SOLAR_PROGRAMME,workflow_record_id:link?.workflowId??row.workflow_record_id,workflow_stage:link?.workflowStage,operations_ids:link?.boardIds??[],closure_stage:link?.closure?.stage??null};});
+  for(const l of links.filter(l=>!l.ipoId&&!l.jobKey.startsWith('ubl:')))result.push({site_id:l.siteId,site_name:l.siteName,branch_code:l.siteCode,region:l.region,main_city:l.region,configuration_id:l.configuration,legacy_ipo_number:null,po_number:null,po_issued_date:null,pricing_stage:null,status:l.status,baseline:null,source:null,source_row:null,document_version:null,irr_review_flags:l.flags,notes:'Linked automatically from the saved Solar survey / quotation workflow. Approved amounts remain pending until an IPO is issued.',job_key:l.jobKey,programme:SOLAR_PROGRAMME,workflow_record_id:l.workflowId,workflow_stage:l.workflowStage,operations_ids:l.boardIds,closure_stage:null});
+  return result;
  }
  async document(actor:string,siteId:number){
   await this.role(actor);

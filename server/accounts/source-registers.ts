@@ -1,3 +1,4 @@
+import {ublProgrammeLinks,withProgrammeAccounts} from '../ubl/programme-links.js';
 import {separateInvoiceRows,applySeparatedInvoiceEvents} from './invoice-components.js';
 import{invoiceCorrections,applyInvoiceCorrections}from'./invoice-correction-state.js';
 import{applyMeezanInvoiceValues}from'./meezan-invoice-values.js';
@@ -63,7 +64,7 @@ export class AccountsSourceRegisters {
   return record as {version:number;source_date:string;source_sha256:string;snapshot:AccountsSource};
  }
  async billing(actor:string,now=new Date()){
-  const record=await this.latest(actor),s=record.snapshot;
+  const record=await this.latest(actor),s=withProgrammeAccounts(record.snapshot,await ublProgrammeLinks(this.pool));
   const asOf=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
   const submissions=await invoiceSubmissions(this.pool);
   const corrections=await invoiceCorrections(this.pool),receipts=await invoiceReceipts(this.pool);
@@ -71,11 +72,11 @@ export class AccountsSourceRegisters {
   const generalReceipts=s.evidence.generalReceipts??[];
   return {unallocatedCredits:s.evidence.unallocatedCredits??[],generalReceipts,asOf,sourceAsOf:record.source_date,sourceVersion:record.version,readOnlySource:true,rows,customers:customerTotals(rows,asOf),queues:invoicingQueues(applyInvoiceSubmissionStages(s,submissions).registers),verification:{sourceModified:s.evidence.sourceModified,scope:'Reviewed source invoices; unknown original invoice amounts remain missing.'}};
  }
- async sites(actor:string){const r=await this.latest(actor);return {...projectAccountsSites(r.snapshot,await latestOperationsStages(this.pool)),sourceVersion:r.version,readOnlySource:true};}
+ async sites(actor:string){const r=await this.latest(actor);return {...projectAccountsSites(withProgrammeAccounts(r.snapshot,await ublProgrammeLinks(this.pool)),await latestOperationsStages(this.pool)),sourceVersion:r.version,readOnlySource:true};}
  async summary(actor:string){
   await this.access(actor);
   const r=(await this.pool.query('SELECT version,source_sha256,snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0];
-  return r?{asOf:r.snapshot.sites.asOf,importId:r.source_sha256,sourceVersion:r.version,counts:projectAccountsSites(r.snapshot,await latestOperationsStages(this.pool)).counts}:null;
+  return r?{asOf:r.snapshot.sites.asOf,importId:r.source_sha256,sourceVersion:r.version,counts:projectAccountsSites(withProgrammeAccounts(r.snapshot,await ublProgrammeLinks(this.pool)),await latestOperationsStages(this.pool)).counts}:null;
  }
 }
 

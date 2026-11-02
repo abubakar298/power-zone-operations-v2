@@ -1,3 +1,4 @@
+import {ublProgrammeLinks} from '../ubl/programme-links.js';
 import {historicalApprovedOrder} from '../ubl/historical-approved-order.js';
 import {agreedBoqPvWatts} from '../../shared/closure-pv-watts.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
@@ -446,45 +447,11 @@ export class AccountsRepository {
       )
     ).rows;
     let configurationComparison = null;
-    if (/^ubl:\d+$/.test(key)) {
-      const peers = (
-        await this.pool.query(
-          `
-        SELECT j.snapshot FROM
-          (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures ORDER BY job_key,version DESC) j
-        JOIN ubl_effective_site_orders o ON j.job_key='ubl:'||o.site_id
-        WHERE j.stage='Closed' AND j.job_key<>$1
-          AND NOT EXISTS(SELECT 1 FROM closure_comparison_exclusions x WHERE x.job_key=j.job_key AND x.excluded)
-          AND o.configuration_id=(SELECT configuration_id FROM ubl_effective_site_orders WHERE site_id=$2)
-      `,
-          [key, key.slice(4)],
-        )
-      ).rows;
-      const completePeers = peers.filter(
-        (r) =>
-          r.snapshot.summary.actual !== null &&
-          r.snapshot.summary.actual !== undefined &&
-          r.snapshot.summary.actualMarkup !== null &&
-          r.snapshot.summary.actualMarkup !== undefined,
-      );
-      const peerCost = completePeers.reduce(
-        (sum: Decimal, r: any) => sum.add(r.snapshot.summary.actual),
-        D("0"),
-      );
-      const peerMarkup = completePeers.reduce(
-        (sum: Decimal, r: any) => sum.add(r.snapshot.summary.actualMarkup),
-        D("0"),
-      );
-      configurationComparison = {
-        closedJobs: completePeers.length,
-        averageActualMarkupPercent: peerCost.gt(0)
-          ? m(peerMarkup.div(peerCost).mul(100))
-          : null,
-      };
-    }
     const identity = (await new InventoryRepository(this.pool).jobs(actor)).find(j => j.key === key);
     const comparisonIdentity = history[0]?.snapshot?.identity ?? identity;
-    const phasePeers = comparisonIdentity?.configuration_id && comparisonIdentity?.customer_code ? (await this.pool.query(`
+    const programme=await ublProgrammeLinks(this.pool),programmeLink=programme.find(l=>l.jobKey===key);
+    const programmePeerKeys=programmeLink?.configuration?programme.filter(l=>l.jobKey!==key&&l.configuration===programmeLink.configuration).map(l=>l.jobKey):null;
+    const phasePeers = programmePeerKeys?(await this.pool.query(`SELECT j.snapshot FROM (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures WHERE job_key=ANY($1::text[]) ORDER BY job_key,version DESC) j WHERE j.stage='Closed' AND NOT EXISTS(SELECT 1 FROM closure_comparison_exclusions x WHERE x.job_key=j.job_key AND x.excluded) AND COALESCE(substring(j.snapshot#>>'{identity,configuration_id}' from '(20-20-30|25-20-30|30-30-40|35-30-40)'),j.snapshot#>>'{identity,configuration_id}',$2)=$2`,[programmePeerKeys,programmeLink.configuration])).rows:comparisonIdentity?.configuration_id && comparisonIdentity?.customer_code ? (await this.pool.query(`
       SELECT j.snapshot FROM
         (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures ORDER BY job_key,version DESC) j
       LEFT JOIN ubl_effective_site_orders o ON j.job_key='ubl:'||o.site_id
@@ -494,6 +461,7 @@ export class AccountsRepository {
         AND COALESCE(j.snapshot->'identity'->>'configuration_id',o.configuration_id,i.snapshot->>'solutionId')=$2
         AND COALESCE(j.snapshot->'identity'->>'customer_code',CASE WHEN o.site_id IS NOT NULL THEN 'UBL' ELSE i.snapshot->'customer'->>'shortCode' END)=$3
     `,[key,comparisonIdentity.configuration_id,comparisonIdentity.customer_code])).rows : [];
+    if(programmePeerKeys){const complete=phasePeers.filter(r=>r.snapshot.summary?.actual!=null&&r.snapshot.summary?.actualMarkup!=null),cost=complete.reduce((n,r)=>n.add(r.snapshot.summary.actual),D('0')),markup=complete.reduce((n,r)=>n.add(r.snapshot.summary.actualMarkup),D('0'));configurationComparison={closedJobs:complete.length,averageActualMarkupPercent:cost.gt(0)?m(markup.div(cost).mul(100)):null};}
     const currentEvidence=await this.evidenceBundle(actor,key);
     const frozenEvidence=history[0]&&['Awaiting Management','Closed'].includes(history[0].stage)
       &&Array.isArray(history[0].snapshot.evidence)?history[0].snapshot:undefined;

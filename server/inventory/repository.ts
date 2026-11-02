@@ -41,7 +41,7 @@ export class InventoryRepository {
     ).rows;
     const regular = (
       await this.pool.query(
-        "SELECT 'ipo:'||id AS key,CASE WHEN number ~ '^CPZ-IPO-[0-9]{2}-[0-9]+' THEN 'CHP-'||split_part(number,'-',4) ELSE number END AS job_id,snapshot->'customer'->>'shortCode' AS customer_code,snapshot->>'siteName' AS site_name,snapshot->>'solutionId' AS configuration_id,snapshot->>'siteCode' AS branch_code FROM internal_purchase_orders ORDER BY created_at DESC LIMIT 500",
+        "SELECT 'ipo:'||id AS key,CASE WHEN number ~ '^CPZ-IPO-[0-9]{2}-[0-9]+' THEN 'CHP-'||split_part(number,'-',4) ELSE number END AS job_id,snapshot->'customer'->>'shortCode' AS customer_code,snapshot->>'siteName' AS site_name,CASE WHEN upper(snapshot->'customer'->>'shortCode')='UBL' THEN COALESCE(substring(snapshot->>'frameworkKey' from '(20-20-30|25-20-30|30-30-40|35-30-40)'),snapshot->>'solutionId') ELSE snapshot->>'solutionId' END AS configuration_id,snapshot->>'siteCode' AS branch_code FROM internal_purchase_orders ORDER BY created_at DESC LIMIT 500",
       )
     ).rows;
     return [...ubl, ...regular];

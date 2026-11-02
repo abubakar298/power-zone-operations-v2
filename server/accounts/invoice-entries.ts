@@ -1,3 +1,4 @@
+import {ublProgrammeLinks,withProgrammeAccounts} from '../ubl/programme-links.js';
 import {partialSolarInvoiceDate} from './partial-solar-delivery.js';
 import {invoiceSubmissions,submissionMatches,submissionReferences,submissionBillingBasis} from './invoice-submission-state.js';
 import {applyOperationsStages} from './site-projection.js';
@@ -52,6 +53,7 @@ export function importedInvoiceEntries(operations:any[],source:any){
 }
 async function candidates(c:Db){
  let source=(await c.query('SELECT version,snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0];
+ if(source)source={...source,snapshot:withProgrammeAccounts(source.snapshot,await ublProgrammeLinks(c))};
  const savedOperations=(await c.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC')).rows;
  // Use stable source identity and current Operations milestones; display IPO suffixes
  // must not recreate work for an already submitted/paid source milestone.

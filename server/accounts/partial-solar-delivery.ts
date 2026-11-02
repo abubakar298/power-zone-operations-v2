@@ -3,7 +3,7 @@
 export function isUblSolar(row:Record<string,any>){
  if(row.kind==='UPS'||row.projectType==='ups'||row.installation===false||row.deliveryOnly===true||row.projectType==='delivery-only')return false;
  const customer=String(row.customer??'').trim().toLowerCase();
- return ['ubl','united bank limited','united bank ltd','united bank'].includes(customer)&&(row.program==='Solar 70'||row.projectType==='solar');
+ return ['ubl','united bank limited','united bank ltd','united bank'].includes(customer)&&(row.program==='Solar 70'||['solar','solar-hybrid','solar-bess'].includes(row.projectType));
 }
 export function partialSolarInvoiceDate(site:Record<string,any>,approved:Record<string,any>={}){
  if(!isUblSolar({...approved,...site})||site.partial!==true||site.cancelled||site.transferred||site.superseded||site.scopePending)return null;

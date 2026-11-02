@@ -10,7 +10,7 @@ test('38 legacy UBL PO/site links preserve pricing exceptions, frozen costing an
  const db=await testDatabase();try{
   const manager=randomUUID(),coordinator=randomUUID();
   for(const [id,role] of [[manager,'Management'],[coordinator,'Coordinator']])await db.pool.query('INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$5)',[id,`${id}@example.test`,role,'fixture-only',role]);
-  const repo=new UblRepository(db.pool),rows=await repo.sites(manager);
+  const repo=new UblRepository(db.pool),rows=(await repo.sites(manager)).filter(r=>r.job_key.startsWith('ubl:'));
   assert.equal(rows.length,38);assert.equal(rows.filter(r=>r.status==='Active').length,36);assert.equal(rows.filter(r=>r.po_number).length,37);
   assert.equal(new Set(rows.map(r=>r.site_id)).size,38);
   for(const r of rows){
@@ -30,7 +30,7 @@ test('38 legacy UBL PO/site links preserve pricing exceptions, frozen costing an
   assert.equal(byCode('0152').legacy_ipo_number,'286');assert.equal(byCode('2673').po_issued_date,'2026-05-13');
   await assert.rejects(repo.sites(coordinator),/Administrator and Management/);
   await assert.rejects(db.pool.query("UPDATE ubl_site_orders SET notes='overwrite' WHERE branch_code='1072'"),/immutable/);
-  await migrate(db.pool);assert.equal((await repo.sites(manager)).length,38);
+  await migrate(db.pool);assert.equal((await repo.sites(manager)).filter(r=>r.job_key.startsWith('ubl:')).length,38);
   assert.equal((await db.pool.query('SELECT count(*) AS n FROM customer_purchase_orders')).rows[0].n,'0');
  }finally{await db.close()}
 });

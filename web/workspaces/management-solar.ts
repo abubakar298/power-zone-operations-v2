@@ -1,9 +1,9 @@
-export type SolarSite={site_id:number|string;site_name:string;branch_code?:string;configuration_id?:string;legacy_ipo_number?:string|number;po_number?:string|null;po_issued_date?:string|null;status:string;new_workflow_ipo_id?:string;irr_review_flags?:string[]};
+export type SolarSite={job_key?:string;site_id:number|string;site_name:string;branch_code?:string;configuration_id?:string;legacy_ipo_number?:string|number;po_number?:string|null;po_issued_date?:string|null;status:string;new_workflow_ipo_id?:string;irr_review_flags?:string[]};
 export type SolarCheckpoint={key:string;operation?:{installationStatus?:string;solarDelivery?:string;equipmentDelivery?:string;startDate?:string;completionDate?:string};flags?:string[]};
 export function solarDashboardRows(sites:SolarSite[],checkpoints:SolarCheckpoint[]){
  const seen=new Set<string>();
- return sites.filter(s=>{const key=String(s.site_id);if(seen.has(key))return false;seen.add(key);return true;}).map(s=>{
-  const key=s.new_workflow_ipo_id?`ipo:${s.new_workflow_ipo_id}`:`ubl:${s.site_id}`;
+ return sites.filter(s=>{const key=s.job_key??String(s.site_id);if(seen.has(key))return false;seen.add(key);return true;}).map(s=>{
+  const key=s.job_key??(s.new_workflow_ipo_id?`ipo:${s.new_workflow_ipo_id}`:`ubl:${s.site_id}`);
   const checkpoint=checkpoints.find(c=>c.key===key),op=checkpoint?.operation;
   const cancelled=s.status==='Cancelled',awaitingRevision=s.status==='Awaiting revised PO';
   const received=Boolean(s.po_number?.trim()),active=s.status==='Active'&&received;

@@ -1,3 +1,4 @@
+import {ublProgrammeLinks,programmeOperation} from '../ubl/programme-links.js';
 import type {Pool} from 'pg';
 import {randomUUID} from 'node:crypto';
 import {Decimal} from 'decimal.js';
@@ -19,14 +20,17 @@ export class ProjectCheckpointsRepository{
   const role=await this.access(actor);
   const rows=(await this.pool.query(`SELECT 'ubl:'||o.site_id AS key,'CHP-'||o.legacy_ipo_number AS job_id,o.site_name,o.configuration_id,o.status,o.baseline->>'sellingIncludingGst' AS agreed_total,l.snapshot AS imported FROM ubl_effective_site_orders o LEFT JOIN project_source_links l ON l.job_key='ubl:'||o.site_id ORDER BY o.source_row`)).rows;
   const regular=(await this.pool.query(`SELECT 'ipo:'||id AS key,CASE WHEN number ~ '^CPZ-IPO-[0-9]{2}-[0-9]+' THEN 'CHP-'||split_part(number,'-',4) ELSE number END AS job_id,snapshot->>'siteName' AS site_name,snapshot->>'solutionId' AS configuration_id,'Active' AS status FROM internal_purchase_orders ORDER BY created_at DESC LIMIT 500`)).rows;
+  const links=await ublProgrammeLinks(this.pool);
+  const present=new Set([...rows,...regular].map(r=>r.key));for(const l of links)if(!present.has(l.jobKey))regular.push({key:l.jobKey,job_id:l.ipo??'Survey request',site_name:l.siteName,configuration_id:l.configuration,status:l.status});
   const versions=(await this.pool.query('SELECT DISTINCT ON(job_key,department) job_key,department,version,snapshot,created_at FROM project_checkpoint_versions ORDER BY job_key,department,version DESC')).rows;
   return [...rows,...regular].map(r=>{
+   const link=links.find(l=>l.jobKey===r.key);if(link?.configuration)r.configuration_id=link.configuration;if(link?.agreedTotal&&!r.key.startsWith('ubl:'))r.agreed_total=link.agreedTotal;
    const imported=r.imported,source=imported?.site;
    const ops=versions.find(v=>v.job_key===r.key&&v.department==='Operations');
    const accounts=versions.find(v=>v.job_key===r.key&&v.department==='Accounts');
    const defaults={solarDelivery:source?.solar_structure_delivery_date??'',startDate:source?.project_start_date??'',equipmentDelivery:source?.other_items_delivery_date??'',completionDate:source?.completion_date??'',installationStatus:r.status==='Cancelled'?'Cancelled':source?.completion_status==='Completed'?'Installation completed':source?'Work in Progress':'Awaiting data',estimatedDate:r.status!=='Cancelled'&&source?.completion_status!=='Completed'&&source?'2026-10-14':'',remarks:r.job_id==='CHP-286'?'Malir batteries added; previous shortage resolved.':source?.operational_notes??'',evidence:''};
-   const operation={...defaults,...ops?.snapshot};
-   const flags:string[]=[];
+   const live=link?programmeOperation(link):null;const operation={...defaults,...ops?.snapshot,...live};
+   const flags:string[]=[...(link?.flags??[])];
    if(r.status==='Cancelled'){operation.installationStatus='Cancelled';operation.estimatedDate='';flags.push('PO cancelled — retained for history');}
    if(['CHP-292','CHP-316'].includes(r.job_id))flags.push('20 kW inverter installed due to stock shortage — replacement required');
    if(r.job_id==='CHP-288')flags.push('Approved 20-20-30; installed 25-20-30 — review actual variance');
@@ -37,7 +41,7 @@ export class ProjectCheckpointsRepository{
    const difference=invoiceTotal&&r.agreed_total!=null?invoiceTotal.sub(r.agreed_total).toFixed(2):null;
    if(difference&&new Decimal(difference).abs().gt('0.01'))flags.push('Invoice difference — review required; approved price unchanged');
    if(invoices.some((i:any)=>i.invoice_type==='Additional - unclassified'))flags.push('Additional invoice — reconcile against actual IRR');
-   const result:any={key:r.key,jobId:r.job_id,siteName:(r.site_name??'').replace(/^UBL\s+/i,''),configuration:r.configuration_id,status:r.status,operation,operationsVersion:ops?.version??0,remainingDays:operation.estimatedDate?remainingDays(operation.estimatedDate):null,flags,sourceAvailable:!!source};
+   const result:any={key:r.key,jobId:r.job_id,siteName:(r.site_name??'').replace(/^UBL\s+/i,''),configuration:r.configuration_id,status:r.status,operation,operationsVersion:ops?.version??0,remainingDays:operation.estimatedDate?remainingDays(operation.estimatedDate):null,flags,sourceAvailable:!!source||!!link&&!r.key.startsWith('ubl:'),programme:link?.programme,workflowId:link?.workflowId,workflowStage:link?.workflowStage,operationsIds:link?.boardIds??[],closureStage:link?.closure?.stage??null};
    if(role!=='Operations')Object.assign(result,{agreedTotal:r.agreed_total??null,invoiceTotal:invoiceTotal?.toFixed(2)??null,difference,invoices,payments,accountsVersion:accounts?.version??0,accounts:{remarks:'',evidence:'',adjustmentStatus:'Awaiting IRR review',...accounts?.snapshot},sourceSummary:source?{recordedTotal:source.recorded_total,received:source.received_amount,outstanding:source.outstanding_amount,balanceSubmission:source.balance_submission,advanceReceipt:source.advance_receipt_status}:null,sourceHistory:imported?.history??[]});
    return result;
   });
@@ -46,6 +50,7 @@ export class ProjectCheckpointsRepository{
   await this.access(actor,input.department);
   const jobs=await this.list(actor),job=jobs.find(j=>j.key===key);
   if(!job)throw new HttpError(404,'Job not found.');
+  if(key.startsWith('workflow:'))throw new HttpError(409,'Update the original survey / quotation workflow before an IPO is issued.');
   if(job.status==='Cancelled')throw new HttpError(409,'Cancelled PO checkpoints are read-only.');
   if(input.department==='Operations'){
    const s=input.snapshot;
