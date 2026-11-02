@@ -212,3 +212,5 @@
 /* Approved issuance module actions stay on their own line. */
 .approved-inventory .issue-entry-module>.issue-inline-add{display:block;border:0;background:transparent;color:var(--pz-primary);font:inherit;font-weight:600;min-height:44px;padding:8px 0;text-align:left;cursor:pointer}
 .approved-inventory .issue-entry-module>.issue-inline-add:focus-visible{outline:2px solid var(--pz-focus);outline-offset:2px}
+
+.approved-inventory textarea.issue-extra-description-edit{display:block;width:100%;box-sizing:border-box;min-height:44px;resize:vertical;font:inherit;line-height:1.4;text-align:left}.approved-inventory .issue-item-heading-row{align-items:flex-start}

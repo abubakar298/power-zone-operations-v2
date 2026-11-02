@@ -27,7 +27,7 @@ export function materialDocumentPolicy(line:MaterialDocumentLine){
  else if(internalIds.has(id))group='internal-variable';
  else if(customerIds.has(id)||/^CH-CBL-/.test(id))group='customer-variable';
  else if(internalDescription.test(description))group='internal-variable';
- else if(customerDescription.test(description))group='customer-variable';
+ else if(customerDescription.test(description)||/\bearth(?:ing)?\b/i.test(description)&&/\d\s*mm/i.test(description))group='customer-variable';
  else group=id?'fixed':'unclassified';
  return {
   group,

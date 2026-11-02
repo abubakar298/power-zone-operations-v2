@@ -17,7 +17,7 @@ export function fixedPreparationRows(source:Basis,catalogue:CatalogueItem[],key:
   const itemId=approvedEarthing?'CH-Earthing':approvedId;
   const policy=materialDocumentPolicy({itemId,description});
   const approvedFixed=approvedEarthing||/^CH-STRUCTURE\b/i.test(itemId)||/\b(?:solar|girder) structure\b/i.test(description);
-  const service=!approvedFixed&&(/\b(?:installation|labou?r|project delivery|transportation|delivery charges?|genset synch)\b/i.test(description)||/^(?:project )?delivery$/i.test(description)||/^misc\.? accessories$/i.test(String(raw.key??description))||/^(?:job|jobs|service)$/i.test(unit));
+  const service=!approvedFixed&&(/\b(?:installation|labou?r|project delivery|transportation|delivery[ /-]+logistics|delivery charges?|genset synch)\b/i.test(description)||/^(?:project )?delivery$/i.test(description)||/^misc\.? accessories$/i.test(String(raw.key??description))||/^(?:job|jobs|service)$/i.test(unit));
   const bundled=/united bank|\bUBL\b/i.test(source.customer)&&itemId.toUpperCase()==='CH-SM-3P';
   if(service||bundled||policy.group==='non-stock'||(source.installation!==false&&policy.variableDispatch))return [];
   const stock=catalogue.find(i=>i.itemId===itemId),locked=policy.approvedQuantityLocked;
