@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../api.js";
 import { StatusBadge } from "../ui/StatusBadge.js";
@@ -125,7 +126,7 @@ export function AdvanceBoqSearch({ onOpen, regionScope = "" }: { onOpen: (refere
         <div className="pz-table-scroll">
           <table className="pz-table abq-table">
             <thead><tr><th>Site</th><th>Customer</th><th>Region</th><th>Stage</th><th>Received · PO expected</th><th>Items</th><th>Status</th></tr></thead>
-            <tbody>
+            <PagedTableBody label="sites and documents">
               {visible.length === 0 ? (
                 <tr><td colSpan={7}>{pool.length === 0 ? "No advance BOQs received yet." : "No advance BOQs match these filters."}</td></tr>
               ) : visible.map((r) => (
@@ -139,7 +140,7 @@ export function AdvanceBoqSearch({ onOpen, regionScope = "" }: { onOpen: (refere
                   <td><StatusBadge tone={r.final ? "success" : "pending"}>{r.final ? "Final received" : r.status}</StatusBadge></td>
                 </tr>
               ))}
-            </tbody>
+            </PagedTableBody>
           </table>
           <p className="pz-caption">Click a row to open its heads-up.</p>
         </div>

@@ -1,3 +1,4 @@
+import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {DocumentListDetails} from './DocumentListDetails.js';
 import {coordinationBuckets} from "../workspaces/project-routes.js";
 import { useState } from "react";
@@ -60,7 +61,7 @@ export function PoReceiptSearch({ records, legacy = [], onConfirm, onLegacy }: a
               <th>Action</th>
             </tr>
           </thead>
-          <tbody>
+          <PagedTableBody label="sites and documents">
             {visible.map((r: any) => (
               <tr key={r.id}>
                 <td>{r.customer}</td>
@@ -80,7 +81,7 @@ export function PoReceiptSearch({ records, legacy = [], onConfirm, onLegacy }: a
                 </td>
               </tr>
             ))}
-          </tbody>
+          </PagedTableBody>
         </table>
       </div>
       {!visible.length && <p>No follow-up sites match these filters.</p>}
