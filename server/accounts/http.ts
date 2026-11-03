@@ -80,7 +80,7 @@ export function accountsHttp(
   r.post('/cable-consolidations/submit',async(req,res)=>res.status(201).json(await submitConsolidatedCable(repo.pool,req.authSession!.user.id,req.body)));
   r.get('/payment-records',async(req,res)=>res.json(await paymentRegister(repo.pool,req.authSession!.user.id)));
   r.get('/recovery.pdf',async(req,res)=>{
-   const filters=parse(z.object({search:z.string().max(500).optional(),customer:z.string().max(250).optional(),category:z.string().max(80).optional(),stage:z.string().max(100).optional()}).strict(),req.query);
+   const filters=parse(z.object({search:z.string().max(500).optional(),customer:z.string().max(250).optional(),category:z.string().max(80).optional(),stage:z.string().max(100).optional(),amount:z.enum(['','missing','recorded']).optional()}).strict(),req.query);
    const data=await paymentRegister(repo.pool,req.authSession!.user.id),asOf=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
    const rows=filters.category==='internet'?data.internet:data.awaiting,report=recoveryReport(recoveryFilteredRows(rows,filters,data.sourceVersion),asOf);
    res.locals.downloadContext={customer:filters.customer||'All customers',site:'Recovery follow-up',documentType:'Recovery report',reference:asOf,identity:'accounts-recovery:'+asOf+':'+createHash('sha256').update(JSON.stringify(filters)).digest('hex')};

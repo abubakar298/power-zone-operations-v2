@@ -16,7 +16,9 @@ export function recoveryReport(rows:Record<string,any>[],asOf:string){
  return {asOf,items,total:items.reduce((sum,r)=>sum.plus(r.pending??0),new Decimal(0)).toFixed(2),unknownAmounts:items.filter(r=>r.pending==null).length};
 }
 
-export function recoveryFilteredRows(rows:Record<string,any>[],filters:{search?:string;customer?:string;category?:string;stage?:string},sourceVersion:number){
+/** "Not recorded" means the outstanding amount is unknown, as counted in the filtered total. */
+export function matchesAmountFilter(row:Record<string,any>,amount?:string){return !amount||(amount==='missing'?row.pending==null:row.pending!=null);}
+export function recoveryFilteredRows(rows:Record<string,any>[],filters:{search?:string;customer?:string;category?:string;stage?:string;amount?:string},sourceVersion:number){
  const search=(filters.search??'').trim().toLowerCase();
- return rows.filter(r=>(!search||[r.site,r.ipo,r.invoice,r.customer,invoiceType(r),paymentReviewNote(r.id,sourceVersion)].join(' ').toLowerCase().includes(search))&&(!filters.customer||r.customer===filters.customer)&&(!filters.category||invoiceCategory(r)===filters.category)&&(!filters.stage||invoiceType(r)===filters.stage));
+ return rows.filter(r=>(!search||[r.site,r.ipo,r.invoice,r.customer,invoiceType(r),paymentReviewNote(r.id,sourceVersion)].join(' ').toLowerCase().includes(search))&&(!filters.customer||r.customer===filters.customer)&&(!filters.category||invoiceCategory(r)===filters.category)&&(!filters.stage||invoiceType(r)===filters.stage)&&matchesAmountFilter(r,filters.amount));
 }

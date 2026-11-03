@@ -15,7 +15,7 @@ export const displayDate=(value?:string|null)=>/^\d{4}-\d{2}-\d{2}$/.test(value?
 export function SiteDocumentsDialog({siteId,title,reference,onClose}:{siteId:string;title:string;reference?:string;onClose:()=>void}){
  const [data,setData]=useState<any>(),[error,setError]=useState('');
  useEffect(()=>{let active=true;api<any>(`/accounts-workspace/sites/${encodeURIComponent(siteId)}/evidence`).then(v=>{if(active)setData(v);}).catch(e=>{if(active)setError((e as Error).message);});return()=>{active=false;};},[siteId]);
- return <AccountsRecordDialog title={title} reference={reference} subtitle="Site documents" onClose={onClose}>
+ return <AccountsRecordDialog title={title} reference={reference} subtitle="Site documents" wide onClose={onClose}>
   {error&&<p role="alert" className="form-error">{error}</p>}
   {!data&&!error&&<p role="status">Loading site documents…</p>}
   {data&&<>

@@ -83,3 +83,12 @@ test('existing records are repaired per invoice: Gojra split, known balances kep
   assert.equal((await db.pool.query("SELECT count(*)::int n FROM audit_log WHERE action LIKE 'accounts.invoice-correction:%'")).rows[0].n,5);
  }finally{await db.close();}
 });
+
+test('the "Not recorded" filter finds invoices without an outstanding amount, on screen and in the recovery PDF',()=>{
+ const rows=[{id:'a',invoice:'27-1',site:'A',customer:'C',pending:null,submission:'Submitted',date:'2026-10-01'},{id:'b',invoice:'27-2',site:'B',customer:'C',pending:'500.00',submission:'Submitted',date:'2026-10-01'},{id:'c',invoice:'27-3',site:'C',customer:'C',pending:null,receiptHold:'x',submission:'Submitted',date:'2026-10-01'}];
+ assert.deepEqual(recoveryFilteredRows(rows,{amount:'missing'},1).map(r=>r.id),['a','c']);
+ assert.deepEqual(recoveryFilteredRows(rows,{amount:'recorded'},1).map(r=>r.id),['b']);
+ assert.deepEqual(recoveryFilteredRows(rows,{},1).map(r=>r.id),['a','b','c']);
+ const report=recoveryReport(recoveryFilteredRows(rows,{amount:'missing'},1),'2026-11-03');
+ assert.equal(report.unknownAmounts,2);assert.equal(report.total,'0.00');
+});
