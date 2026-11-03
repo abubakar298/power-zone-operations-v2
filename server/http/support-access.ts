@@ -19,6 +19,7 @@ export function supportCostView(value:any,inCostContext=false):any{
  if(Array.isArray(value))return value.map(v=>supportCostView(v,inCostContext));
  if(!value||typeof value!=='object')return value;
  const boq=!!(value.engineering&&value.survey&&Array.isArray(value.lines));
+ const pricedCost=Object.keys(value).some(k=>/^(cost|unitCost|budgetedCost|actualCost|totalCost|costBeforeTax)$/i.test(k))||('rate' in value&&!('beforeTax' in value||'selling' in value));
  const result:any={};
  for(const [key,v]of Object.entries(value)){
   if(key==='restrictedCostAccess'){result[key]=false;continue;}
@@ -26,7 +27,7 @@ export function supportCostView(value:any,inCostContext=false):any{
    // Keep redacted collection shapes safe for ordinary list rendering.
    result[key]=Array.isArray(v)?[]:v&&typeof v==='object'?{}:null;continue;
   }
-  if((boq||inCostContext)&&['rate','total','amount','perWatt','summary'].includes(key)){result[key]=Array.isArray(v)?[]:null;continue;}
+  if((boq||inCostContext||pricedCost)&&['rate','total','amount','perWatt','summary'].includes(key)){result[key]=Array.isArray(v)?[]:null;continue;}
   if(key==='rate'&&('phase' in value||'item_key' in value||'itemId' in value)){result[key]=null;continue;}
   result[key]=supportCostView(v,inCostContext||boq);
  }

@@ -2,6 +2,7 @@ import {test} from 'node:test';import assert from 'node:assert/strict';import {r
 import {testDatabase} from './database.js';import {createApp} from '../server/app.js';import {readConfig} from '../server/config.js';import {digest} from '../server/auth/crypto.js';import {supportCostView,supportRequestAllowed} from '../server/http/support-access.js';
 test('IT support projection removes nested internal costing and policy inputs while retaining workflow quantities and invoice totals',()=>{
  const input={invoice:{total:'500',number:'INV-1'},usage:{used:'4',actualUsedQty:'4'},budget:{BESS:'101'},actual:{EPC:'102'},history:[{costing:{cost:'103'},profit:'104',markup:'105',policy:{base:'106'}}],boq:{engineering:{pvWatts:'25000'},survey:{},lines:[{itemId:'panel',qty:'4',rate:'107',total:'428'}],total:'428'}};
+ assert.equal(supportCostView({lines:[{qty:'2',rate:'99',total:'198'}]}).lines[0].total,null,'ordinary priced rows do not expose cost through extended totals');
  const value=supportCostView(input);assert.equal(value.invoice.total,'500');assert.equal(value.usage.used,'4');assert.equal(value.usage.actualUsedQty,'4');assert.equal(value.boq.lines[0].rate,null);assert.equal(value.boq.total,null);
  for(const secret of ['101','102','103','104','105','106','107','428'])assert.equal(JSON.stringify(value).includes('"'+secret+'"'),false,secret);
  for(const path of ['/api/commercial/standard-policy','/api/accounts-workspace/job?key=one','/api/masters/rates','/api/accounts/users','/api/backups'])assert.equal(supportRequestAllowed(path,'GET'),false,path);
