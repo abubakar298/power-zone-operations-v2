@@ -22,14 +22,14 @@ test('BOQ customer lookup offers ten recent registrations and selecting a later 
  await page.screenshot({path:'test-results/customer-search-ten-recent.png',fullPage:true});await options.first().click();await expect(page.locator('input[name="customerId"]')).toHaveValue('1012');await expect(customer).toHaveValue('Paging customer 12');expect(await customer.evaluate((e:HTMLInputElement)=>e.checkValidity())).toBe(true);
  await customer.fill('Paging customer 00');await expect(options).toHaveCount(1);await expect(pager).toHaveCount(0);
 });
-test('native product choice paging never clears the selected product or its submitted ID',async({page})=>{
+test('Direct Product Sale shows every product choice and keeps the selected product ID',async({page})=>{
  await actors(page.request);await login(page.request);
  const items=Array.from({length:23},(_,i)=>({key:'P'+String(i).padStart(2,'0'),display_name:'Paging product '+String(i).padStart(2,'0'),status:'Active',unit:'No',approved_specification:'Test fixture'}));
  await page.route('**/api/masters',async r=>{const response=await r.fetch(),data=await response.json();return r.fulfill({json:{...data,items}});});
  await page.goto('/dashboard');await openWorkspaceSection(page,'Survey & BOQ');await page.getByRole('button',{name:'New BOQ',exact:true}).click();await page.getByLabel('BOQ type',{exact:true}).selectOption('direct-product');await openBoqSection(page,2);
- const select=page.getByLabel('Product 1',{exact:true}),pager=page.getByRole('navigation',{name:'Product 1 choices pages'});await expect(select.locator('option[value]:not([value=""]):not([hidden])')).toHaveCount(10);await select.selectOption('P00');await pager.getByRole('button',{name:'Next',exact:true}).click();await expect(select).toHaveValue('P00');expect(await select.evaluate((e:HTMLSelectElement)=>e.checkValidity())).toBe(true);
- await select.selectOption('P10');await pager.getByRole('button',{name:'Previous',exact:true}).click();await expect(select).toHaveValue('P10');await expect(page.locator('input[name="directProducts"]')).toHaveValue(/"key":"P10"/);
- await page.getByLabel('Search product 1',{exact:true}).fill('Paging product 22');await expect(pager).toHaveCount(0);await select.selectOption('P22');await expect(page.locator('input[name="directProducts"]')).toHaveValue(/"key":"P22"/);
+ const select=page.getByLabel('Product 1',{exact:true});await expect(select.locator('option[value]:not([value=""]):not([hidden])')).toHaveCount(23);await expect(page.getByRole('navigation',{name:'Product 1 choices pages'})).toHaveCount(0);
+ await select.selectOption('P22');await expect(select).toHaveValue('P22');expect(await select.evaluate((e:HTMLSelectElement)=>e.checkValidity())).toBe(true);await expect(page.locator('input[name="directProducts"]')).toHaveValue(/"key":"P22"/);
+ await page.getByLabel('Search product 1',{exact:true}).fill('Paging product 22');await expect(select.locator('option[value]:not([value=""]):not([hidden])')).toHaveCount(1);await select.selectOption('P22');await expect(page.locator('input[name="directProducts"]')).toHaveValue(/"key":"P22"/);
 });
 test('all Operations site buckets page ten and order sites by recorded activity rather than planned dates',async({page})=>{
  await actors(page.request);await login(page.request);
