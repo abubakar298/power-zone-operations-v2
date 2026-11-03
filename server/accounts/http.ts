@@ -1,3 +1,4 @@
+import {withAccountsIpo} from '../../shared/accounts-site-reference.js';
 import {createHash} from 'node:crypto';
 import {recoveryReport,recoveryFilteredRows} from '../../shared/recovery-report.js';
 import {recoveryPdf} from './recovery-pdf.js';
@@ -62,7 +63,7 @@ export function accountsHttp(
   r.get('/material-costing',async(req,res)=>{const data=await materialCostingQueue(repo.pool,req.authSession!.user.id);res.json(req.query.summary==='1'?{count:data.rows.length}:data);});
   r.get('/material-corrections',async(req,res)=>{await repo.access(req.authSession!.user.id);res.json(await materialCorrectionAlerts(repo.pool));});
   r.post('/material-corrections',async(req,res)=>res.json(await flagMaterialCorrection(repo.pool,req.authSession!.user.id,req.body)));
-  r.get('/billing',async(req,res)=>res.json(await sources.billing(req.authSession!.user.id)));
+  r.get('/billing',async(req,res)=>{const data=await sources.billing(req.authSession!.user.id);res.json({...data,rows:data.rows.map(r=>withAccountsIpo(r))});});
   r.get('/invoice-entries',async(req,res)=>res.json(await invoiceRegister(repo.pool,req.authSession!.user.id)));
   r.post('/invoice-updates',async(req,res)=>res.status(201).json(await recordInvoiceUpdate(repo.pool,req.authSession!.user.id,parse(invoiceUpdateSchema,req.body))));
   r.post('/material-costing/pt-entry',async(req,res)=>res.status(201).json(await markJobRecordedInPt(repo.pool,req.authSession!.user.id,parse(jobPtEntrySchema,req.body))));
@@ -95,7 +96,8 @@ export function accountsHttp(
   r.get('/customer-documents/:id/file',async(req,res)=>{await repo.access(req.authSession!.user.id);const id=parse(z.string().regex(/^[a-f0-9]{64}$/),req.params.id),file=await customerDocumentFile(repo.pool,id);res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);});
   r.get('/physical-documents',async(req,res)=>{
     await repo.access(req.authSession!.user.id);
-    res.json(await operationsBoard.physicalDocuments(req.authSession!.user.id));
+    const data=await operationsBoard.physicalDocuments(req.authSession!.user.id);
+    res.json({...data,sites:data.sites.map((s:any)=>withAccountsIpo(s,'ipo','name'))});
   });
   r.post('/pt-entries',async(req,res)=>res.status(201).json(await repo.recordPtEntry(req.authSession!.user.id,parse(ptEntrySchema,req.body))));
   r.post("/evidence", async (req, res) => {

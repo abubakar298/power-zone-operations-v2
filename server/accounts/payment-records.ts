@@ -1,3 +1,4 @@
+import {withAccountsIpo} from '../../shared/accounts-site-reference.js';
 import {applySeparatedInvoiceEvents} from './invoice-components.js';
 import{invoiceCorrections,applyInvoiceCorrections}from'./invoice-correction-state.js';
 import{applyMeezanInvoiceValues}from'./meezan-invoice-values.js';
@@ -24,7 +25,9 @@ export async function paymentRegisterData(db:Pool|PoolClient){
 }
 export async function paymentRegister(pool:Pool,actor:string){
  const role=await new AccountsRepository(pool).access(actor);
- return {...await paymentRegisterData(pool),canConsolidate:['Admin','Management'].includes(role),canRecord:['Admin','Accounts'].includes(role)};
+ const data=await paymentRegisterData(pool),shown=(rows:any[])=>rows.map(r=>withAccountsIpo(r));
+ // Display only; corrections and receipts read paymentRegisterData with saved labels.
+ return {...data,pending:shown(data.pending),awaiting:shown(data.awaiting),internet:shown(data.internet),invoices:shown(data.invoices),canConsolidate:['Admin','Management'].includes(role),canRecord:['Admin','Accounts'].includes(role)};
 }
 export async function recordPayment(pool:Pool,actor:string,input:z.infer<typeof paymentRecordSchema>){
  return transaction(pool,async db=>{

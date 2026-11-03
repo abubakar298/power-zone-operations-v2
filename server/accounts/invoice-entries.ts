@@ -1,3 +1,4 @@
+import {withAccountsIpo} from '../../shared/accounts-site-reference.js';
 import {ublProgrammeLinks,withProgrammeAccounts} from '../ubl/programme-links.js';
 import {partialSolarInvoiceDate} from './partial-solar-delivery.js';
 import {invoiceSubmissions,submissionMatches,submissionReferences,submissionBillingBasis} from './invoice-submission-state.js';
@@ -117,7 +118,13 @@ export async function invoiceRegister(pool:Pool,actor:string){
   entry.submissions=(own.length?own:submissions.filter(e=>!e.invoice_entry_id&&(entry.knownMilestones??[entry.milestone]).some((milestone:string)=>submissionMatches({key:entry.snapshot.sourceKey??entry.site_key,milestone},e)))).map(e=>({milestone:e.milestone,date:e.submitted_on}));
   if(!entry.imported)Object.assign(entry,invoiceState(entry,updates),{invoiceKey:entryInvoiceKey(entry.id)});
  }
- return {canRecord:['Admin','Accounts'].includes(role),submissions,submissionQueues:{...(extraCable.length?{extraCable}:{}),deliveryOnly:submissionRows.filter(r=>r.billingStage==='delivery-only'),delivery:submissionRows.filter(r=>r.billingStage==='delivery'),completion:submissionRows.filter(r=>r.billingStage==='completion')},queues:{delivery:rows.filter(r=>r.milestone==='delivery'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='delivery')),completion:rows.filter(r=>r.milestone==='completion'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='completion'))},entries:[...entries,...imported.filter(i=>!entries.some(e=>(e.site_key===i.snapshot.key||e.site_key===i.site_key)&&e.milestone===i.milestone))],importedCount:imported.length};
+ const shown=(rows:any[])=>rows.map(r=>withAccountsIpo(r));
+ const shownQueues=(queues:Record<string,any[]>)=>Object.fromEntries(Object.entries(queues).map(([k,v])=>[k,shown(v)]));
+ return relabelRegister({canRecord:['Admin','Accounts'].includes(role),submissions,submissionQueues:{...(extraCable.length?{extraCable}:{}),deliveryOnly:submissionRows.filter(r=>r.billingStage==='delivery-only'),delivery:submissionRows.filter(r=>r.billingStage==='delivery'),completion:submissionRows.filter(r=>r.billingStage==='completion')},queues:{delivery:rows.filter(r=>r.milestone==='delivery'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='delivery')),completion:rows.filter(r=>r.milestone==='completion'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='completion'))},entries:[...entries,...imported.filter(i=>!entries.some(e=>(e.site_key===i.snapshot.key||e.site_key===i.site_key)&&e.milestone===i.milestone))],importedCount:imported.length},shown,shownQueues);
+}
+/** Display-only reference corrections on the register's screen rows and saved-entry labels. */
+function relabelRegister<T extends {submissionQueues:Record<string,any[]>;queues:Record<string,any[]>;entries:any[]}>(register:T,shown:(rows:any[])=>any[],shownQueues:(q:Record<string,any[]>)=>Record<string,any[]>):T{
+ return {...register,submissionQueues:shownQueues(register.submissionQueues),queues:shownQueues(register.queues),entries:register.entries.map((e:any)=>({...e,snapshot:withAccountsIpo(e.snapshot??{})}))};
 }
 export async function recordInvoiceEntry(pool:Pool,actor:string,input:z.infer<typeof invoiceEntrySchema>){
  return transaction(pool,async c=>{

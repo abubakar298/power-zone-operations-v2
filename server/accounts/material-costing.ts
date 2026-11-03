@@ -1,3 +1,4 @@
+import {accountsIpoLabel} from '../../shared/accounts-site-reference.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {z} from 'zod';
@@ -25,7 +26,7 @@ export function projectMaterialCostingQueue(documents:any[],reports:any[],closur
  const rows=new Map<string,any>();
  for(const r of reports.filter(r=>r.stage==='Sent to Accounts')){
   if(finished.has(r.job_key)||entries.some(p=>p.source_id===r.id&&p.source_version===r.version))continue;
-  rows.set(r.job_key,{key:r.job_key,jobKey:r.job_key,siteName:r.site_name,ipo:r.job_id,customer:r.customer_code??'',receivedAt:r.created_at,report:r,documents:[],status:'Ready for PT entry'});
+  rows.set(r.job_key,{key:r.job_key,jobKey:r.job_key,siteName:r.site_name,ipo:accountsIpoLabel(r.job_id,r.site_name),customer:r.customer_code??'',receivedAt:r.created_at,report:r,documents:[],status:'Ready for PT entry'});
  }
  for(const d of documents){
   if(d.jobKey&&finished.has(d.jobKey)||finished.has('site:'+d.siteId))continue;

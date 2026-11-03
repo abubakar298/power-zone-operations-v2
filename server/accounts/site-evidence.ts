@@ -1,3 +1,4 @@
+import {accountsIpoLabel} from '../../shared/accounts-site-reference.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
@@ -102,7 +103,7 @@ export async function siteEvidence(pool:Pool,actor:string,siteId:string){
  const site=await latestSite(pool,siteId),s=site.snapshot,evidence=projectSiteEvidence(siteId,s);
  const url=(id:string)=>`/api/accounts-workspace/sites/${encodeURIComponent(siteId)}/evidence/${id}`;
  const withUrl=(f:Row)=>({...f,url:url(f.id)});
- return {site:{id:siteId,version:site.version,name:s.name,ipo:s.ipo,customer:s.customer??''},signedDos:evidence.signedDos.map(withUrl),vso:evidence.vso.map(withUrl),acknowledgments:evidence.acknowledgments.map(withUrl),pictureGroups:evidence.pictureGroups.map((g:Row)=>({...g,files:g.files.map(withUrl)})),otherDocuments:evidence.otherDocuments.map(withUrl),vsoNotRequired:evidence.vsoNotRequired,originals:projectOriginals(siteId,s,await receiptsFor(pool,[siteId]))};
+ return {site:{id:siteId,version:site.version,name:s.name,ipo:accountsIpoLabel(s.ipo,s.name),customer:s.customer??''},signedDos:evidence.signedDos.map(withUrl),vso:evidence.vso.map(withUrl),acknowledgments:evidence.acknowledgments.map(withUrl),pictureGroups:evidence.pictureGroups.map((g:Row)=>({...g,files:g.files.map(withUrl)})),otherDocuments:evidence.otherDocuments.map(withUrl),vsoNotRequired:evidence.vsoNotRequired,originals:projectOriginals(siteId,s,await receiptsFor(pool,[siteId]))};
 }
 export async function siteEvidenceFile(pool:Pool,actor:string,siteId:string,fileId:string){
  await new AccountsRepository(pool).access(actor);
@@ -118,7 +119,7 @@ export async function originalsRegister(pool:Pool,actor:string,now=new Date()){
  await new AccountsRepository(pool).access(actor);
  const rows=(await pool.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC')).rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&!r.snapshot.cancelled);
  const receipts=await receiptsFor(pool);
- return {sites:rows.map(r=>({id:r.site_id,version:r.version,name:r.snapshot.name,ipo:r.snapshot.ipo,customer:r.snapshot.customer??'',originals:projectOriginals(r.site_id,r.snapshot,receipts,now)})).filter(r=>r.originals.items.length||r.originals.missingStartDate)};
+ return {sites:rows.map(r=>({id:r.site_id,version:r.version,name:r.snapshot.name,ipo:accountsIpoLabel(r.snapshot.ipo,r.snapshot.name),customer:r.snapshot.customer??'',originals:projectOriginals(r.site_id,r.snapshot,receipts,now)})).filter(r=>r.originals.items.length||r.originals.missingStartDate)};
 }
 
 export const originalReceiptSchema=z.object({siteVersion:z.number().int().positive(),items:z.array(z.string().min(1).max(400)).min(1).max(50),receivedOn:z.iso.date(),requestKey:z.uuid()}).strict();

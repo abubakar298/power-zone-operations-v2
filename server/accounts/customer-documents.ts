@@ -1,3 +1,4 @@
+import {withAccountsIpo} from '../../shared/accounts-site-reference.js';
 import {customerDocumentNativeIpo,type DocumentIpoIdentity} from './customer-document-identity.js';
 import {completionEvidence} from '../../shared/qc-completion-evidence.js';
 import {createHash} from 'node:crypto';
@@ -70,7 +71,8 @@ export async function customerDocuments(pool:Pool,includeClosed=false,jobKey?:st
   if(!key){const linked=nativeLinks.get(row.siteId)??[];if(linked.length===1)key='ipo:'+linked[0];}
   return {...row,...key?{jobKey:key}:{}};
  });
- return {rows,refs};
+ // Display only: owner-confirmed reference corrections; refs keep saved values.
+ return {rows:rows.map(row=>withAccountsIpo(row,'ipo','siteName')),refs};
 }
 export async function customerDocumentFile(pool:Pool,id:string){
  const data=await customerDocuments(pool,true),row=data.rows.find(r=>r.id===id);if(!row)throw new HttpError(404,'This customer-signed document is not available.');

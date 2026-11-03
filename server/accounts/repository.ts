@@ -1,3 +1,4 @@
+import {withAccountsIpo} from '../../shared/accounts-site-reference.js';
 import {ublProgrammeLinks} from '../ubl/programme-links.js';
 import {historicalApprovedOrder} from '../ubl/historical-approved-order.js';
 import {agreedBoqPvWatts} from '../../shared/closure-pv-watts.js';
@@ -129,7 +130,7 @@ export class AccountsRepository {
         ...c,
         snapshot: {
           ...c.snapshot,
-          identity: identities.find((j) => j.key === c.job_key),
+          identity: (()=>{const i=identities.find((j) => j.key === c.job_key);return i?withAccountsIpo(i as any,'job_id','site_name'):i;})(),
         },
       })),
     };
