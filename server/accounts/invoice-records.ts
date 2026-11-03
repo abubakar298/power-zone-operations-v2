@@ -54,8 +54,9 @@ export async function recordInvoiceUpdate(pool:Pool,actor:string,raw:unknown){
    if(!entry)throw new HttpError(404,'Invoice record not found.');
    currentAmount=invoiceState(entry,latest?[latest]:[]).amount;
    const submission=(await c.query('SELECT id FROM accounts_invoice_submissions WHERE invoice_entry_id=$1',[entryId])).rows[0];
-   if(input.amount!==undefined&&submission&&(await c.query('SELECT 1 FROM accounts_invoice_receipts WHERE submission_id=$1 LIMIT 1',[submission.id])).rowCount)
-    throw new HttpError(409,'This invoice has recorded payments. Reconcile those payment records before changing its amount.');
+   // After submission the receivable row is the single place to confirm or correct the amount.
+   if(input.amount!==undefined&&submission)throw new HttpError(409,'This invoice is already submitted. Confirm or correct its amount in Payments to Record.');
+   if(input.amount!==undefined&&invoiceReferenceParts(entry.pt_reference).length>1)throw new HttpError(409,'This historical record combines several invoice numbers. Enter each invoice’s amount separately in Payments to Record.');
    if(input.delayReason&&submission)throw new HttpError(409,'This invoice is already submitted; no delay reason is needed.');
    snapshot={entryId,reference:entry.pt_reference,site:entry.snapshot.site,ipo:entry.snapshot.ipo,milestone:entry.milestone,submitted:!!submission};
   }else if(/^site:/.test(input.invoiceKey)){

@@ -10,6 +10,8 @@ import {paymentRegisterData} from '../server/accounts/payment-records.js';
 import {recordInvoiceReceipt} from '../server/accounts/invoice-receipts.js';
 import {applyInvoiceSubmissionBilling} from '../server/accounts/invoice-submission-state.js';
 
+// Invoices saved in the same clock tick have no fixed order; compare by number (-S first).
+const byNumber=(invoices:any[])=>[...invoices].sort((a,b)=>b.reference.localeCompare(a.reference));
 async function fixture(){
  const db=await testDatabase();
  const ids={Admin:randomUUID(),Accounts:randomUUID(),Management:randomUUID()};
@@ -31,7 +33,7 @@ test('one site milestone carries separate invoices, each with its own number, am
   assert.equal(invoiceEntrySchema.safeParse({...base,ptReference:'27-10609 / 27-10610',requestKey:randomUUID()}).success,false,'one invoice number per record');
   assert.equal(invoiceEntrySchema.safeParse({...base,ptReference:'27-10611',amount:'0',requestKey:randomUUID()}).success,false,'amount must be positive');
   let register=await invoiceRegister(db.pool,ids.Accounts),row=register.submissionQueues.delivery.find((r:any)=>r.key===site)!;
-  assert.deepEqual(row.invoices.map((i:any)=>[i.reference,i.label,i.amount,i.stage]),[['27-10609-S','Solar Panels','1250000.50','advance-delivery'],['27-10609','Remaining System',null,'advance-delivery']]);
+  assert.deepEqual(byNumber(row.invoices).map((i:any)=>[i.reference,i.label,i.amount,i.stage]),[['27-10609-S','Solar Panels','1250000.50','advance-delivery'],['27-10609','Remaining System',null,'advance-delivery']]);
   assert.equal(row.missingAmounts,1,'missing amount stays flagged, never inferred');
   assert.equal(row.unsubmittedInvoices,2);
 
@@ -47,8 +49,8 @@ test('one site milestone carries separate invoices, each with its own number, am
   for(const table of ['accounts_invoice_receipts','accounts_payment_records'])assert.equal((await db.pool.query('SELECT count(*)::int n FROM '+table)).rows[0].n,0,'amount entry records no payment');
 
   register=await invoiceRegister(db.pool,ids.Accounts);row=register.submissionQueues.delivery.find((r:any)=>r.key===site)!;
-  assert.deepEqual(row.invoices.map((i:any)=>[i.reference,i.amount,i.delay?.label??null]),[['27-10609-S','1250000.50','Awaiting physical originals'],['27-10609','850000.00',null]]);
-  assert.equal(row.invoices[0].amount,'1250000.50','delay update keeps the saved amount');
+  assert.deepEqual(byNumber(row.invoices).map((i:any)=>[i.reference,i.amount,i.delay?.label??null]),[['27-10609-S','1250000.50','Awaiting physical originals'],['27-10609','850000.00',null]]);
+  assert.equal(byNumber(row.invoices)[0].amount,'1250000.50','delay update keeps the saved amount');
 
   // Submission is per invoice; with two invoices the invoice must be named.
   const submit={sourceKind:'Operations',siteKey:site,sourceVersion:1,milestone:'delivery',submissionDate:'2026-10-22'};
@@ -58,7 +60,7 @@ test('one site milestone carries separate invoices, each with its own number, am
   await assert.rejects(recordInvoiceUpdate(db.pool,ids.Accounts,{invoiceKey:'entry:'+panels.id,version:1,delayReason:'qc-pictures',requestKey:randomUUID()}),/already submitted/);
   register=await invoiceRegister(db.pool,ids.Accounts);row=register.submissionQueues.delivery.find((r:any)=>r.key===site)!;
   assert.ok(row,'site stays in Invoices to Submit while one invoice is unsubmitted');
-  assert.deepEqual(row.invoices.map((i:any)=>[i.reference,i.submittedOn]),[['27-10609-S','2026-10-22'],['27-10609',null]]);
+  assert.deepEqual(byNumber(row.invoices).map((i:any)=>[i.reference,i.submittedOn]),[['27-10609-S','2026-10-22'],['27-10609',null]]);
   await recordInvoiceSubmission(db.pool,ids.Accounts,{...submit,submissionDate:'2026-10-25',invoiceEntryId:rest.id,requestKey:randomUUID()});
   assert.equal((await invoiceRegister(db.pool,ids.Accounts)).submissionQueues.delivery.some((r:any)=>r.key===site),false);
 
@@ -74,7 +76,7 @@ test('one site milestone carries separate invoices, each with its own number, am
   const target=payments.awaiting.find((r:any)=>r.invoice==='27-10609')!;
   await recordInvoiceReceipt(db.pool,ids.Accounts,{sourceRowId:target.id,sourceVersion:payments.sourceVersion,receiptVersion:target.receiptVersion,amount:'50000',paymentDate:'2026-10-28',transactionId:'TX-FIXTURE-1',requestKey:randomUUID()});
   assert.deepEqual(mine((await sources.billing(ids.Accounts)).rows),[['27-10609','850000.00','800000.00'],['27-10609-S','1250000.50','1250000.50']]);
-  await assert.rejects(recordInvoiceUpdate(db.pool,ids.Accounts,{invoiceKey:'entry:'+rest.id,version:2,amount:'900000',reason:'late change',requestKey:randomUUID()}),/recorded payments/);
+  await assert.rejects(recordInvoiceUpdate(db.pool,ids.Accounts,{invoiceKey:'entry:'+rest.id,version:2,amount:'900000',reason:'late change',requestKey:randomUUID()}),/already submitted/,'after submission the amount is corrected in Payments to Record');
 
   // Saved records stay immutable; audit trail kept.
   await assert.rejects(db.pool.query('UPDATE accounts_invoice_updates SET amount=1'));
