@@ -1,6 +1,7 @@
 import {isMissingInvoiceCustomer} from './invoice-customer-identity.js';
 import type {Pool,PoolClient} from 'pg';
 import {invoiceIdentity} from './billing-model.js';
+import {Decimal} from 'decimal.js';
 type Row=Record<string,any>;
 export const submissionKey=(value:unknown)=>String(value??'').replace(/^registered-/,'').replace(/^live-ipo:/,'issued:');
 export const submissionMilestone=(value:unknown)=>value==='advance'?'delivery':value;
@@ -8,8 +9,14 @@ export const submissionReferences=(values:unknown[])=>[...new Set(values.filter(
 export async function invoiceSubmissions(c:Pool|PoolClient){
  // Recover only a missing customer through BOTH exact immutable IPO keys. Shared
  // IPO numbers, invoice text and site names are never customer-link evidence.
- const rows=(await c.query(`SELECT s.*,s.submitted_on::text AS submitted_on,customer.name AS linked_customer_name,ipo.id AS linked_ipo_id
+ // A separate invoice carries its own current amount (latest Accounts update, else
+ // the amount saved with the invoice). Missing stays NULL; nothing is inferred.
+ const rows=(await c.query(`SELECT s.*,s.submitted_on::text AS submitted_on,customer.name AS linked_customer_name,ipo.id AS linked_ipo_id,
+ entry.invoice_stage AS entry_stage,entry.invoice_label AS entry_label,
+ CASE WHEN latest.version IS NOT NULL THEN latest.amount::text ELSE entry.amount::text END AS entry_amount
  FROM accounts_invoice_submissions s
+ LEFT JOIN accounts_invoice_entries entry ON entry.id=s.invoice_entry_id
+ LEFT JOIN LATERAL(SELECT u.version,u.amount FROM accounts_invoice_updates u WHERE u.invoice_key='entry:'||entry.id::text ORDER BY u.version DESC LIMIT 1) latest ON true
  LEFT JOIN internal_purchase_orders ipo ON s.source_kind='Operations' AND s.source_key='issued:'||ipo.id::text AND s.site_key='live-ipo:'||ipo.id::text
  LEFT JOIN customer_purchase_orders po ON po.id=ipo.customer_po_id
  LEFT JOIN customers customer ON customer.id=po.customer_id
@@ -34,14 +41,22 @@ export function applyInvoiceSubmissionStages(snapshot:Row,events:Row[]):Row{
 /** Preserve every existing amount/pending/receipt/reference field. An external PT
  * invoice without loaded financial values remains explicitly unknown, never zero. */
 export function applyInvoiceSubmissionBilling(rows:Row[],events:Row[]):Row[]{
+ // A separate invoice links to a reviewed register row only when that row prints
+ // the same invoice number; otherwise it is its own receivable with its own amount.
+ const separate=(e:Row)=>!!e.invoice_entry_id;
+ const sameNumber=(row:Row,e:Row)=>String(row.invoice??'').trim().toLowerCase()===String(e.invoice_reference??'').trim().toLowerCase();
+ const links=(e:Row,row:Row)=>(e.snapshot.billingIds??[]).includes(row.id)&&e.snapshot.customer===row.customer&&(!separate(e)||sameNumber(row,e));
  const result=rows.map(row=>{
-  const matches=events.filter(e=>(e.snapshot.billingIds??[]).includes(row.id)&&e.snapshot.customer===row.customer);
+  const matches=events.filter(e=>links(e,row));
   if(matches.length!==1)return row;
   return {...row,po:row.po||matches[0].snapshot.po||'',sourceKey:matches[0].source_key,billingMilestone:matches[0].milestone,submissionId:matches[0].id,submission:'Submitted',date:matches[0].submitted_on,dateBasis:'Days since verified submission'};
  });
  for(const e of events){
-  if(result.some(r=>(e.snapshot.billingIds??[]).includes(r.id)&&e.snapshot.customer===r.customer))continue;
-  result.push({id:'submission:'+e.id,sourceKey:e.source_key,billingMilestone:e.milestone,submissionId:e.id,customer:e.snapshot.customer,customerLink:e.snapshot.customerLink,category:e.milestone==='delivery'?(String(e.source_key).startsWith('UBL:SOLAR:')?'System · advance':'System · delivery'):'System · completion',ipo:e.snapshot.ipo??'',po:e.snapshot.po??'',site:e.snapshot.site??'',invoice:e.invoice_reference,amount:null,pending:null,receiptConfirmed:false,date:e.submitted_on,dateBasis:'Days since verified submission',submission:'Submitted',notes:'Existing PT invoice submitted. Original invoice amount and unpaid balance are not loaded; no amounts or payments inferred.',minimum:false});
+  if(result.some(r=>links(e,r)))continue;
+  const stage=e.entry_stage,amount=separate(e)&&e.entry_amount!=null?new Decimal(e.entry_amount).toFixed(2):null;
+  // A separate invoice keeps the stage Accounts recorded for it.
+  const category=stage==='extra-cable'?'Extra cable':stage==='internet'?'Internet':stage==='advance-delivery'?'System · advance':stage==='delivery-only'?'System · delivery':stage==='balance-completion'?'System · completion':e.milestone==='delivery'?(String(e.source_key).startsWith('UBL:SOLAR:')||(e.snapshot.billingIds??[]).some((id:string)=>id.endsWith(':advance'))?'System · advance':'System · delivery'):'System · completion';
+  result.push({id:'submission:'+e.id,sourceKey:e.source_key,billingMilestone:e.milestone,submissionId:e.id,invoiceEntryId:e.invoice_entry_id??null,invoiceLabel:e.entry_label??null,customer:e.snapshot.customer,customerLink:e.snapshot.customerLink,category,ipo:e.snapshot.ipo??'',po:e.snapshot.po??'',site:e.snapshot.site??'',invoice:e.invoice_reference,amount,pending:amount,...amount?{invoiceAmountBasis:'Accounts recorded PT invoice amount',pendingBasis:'Invoice amount; no payment recorded'}:{},receiptConfirmed:false,date:e.submitted_on,dateBasis:'Days since verified submission',submission:'Submitted',notes:amount?'Separate PT invoice submitted with its recorded amount.':separate(e)?'Separate PT invoice submitted. Invoice amount not recorded yet; Accounts must enter it. No amount or payment inferred.':'Existing PT invoice submitted. Original invoice amount and unpaid balance are not loaded; no amounts or payments inferred.',minimum:false,amountMissing:amount==null});
  }
  return result;
 }

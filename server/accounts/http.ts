@@ -3,7 +3,9 @@ import {recoveryReport,recoveryFilteredRows} from '../../shared/recovery-report.
 import {recoveryPdf} from './recovery-pdf.js';
 import {consolidateCableInvoices,submitConsolidatedCable} from './cable-consolidations.js';
 import {materialCorrectionAlerts,flagMaterialCorrection} from '../inventory/material-correction-alerts.js';
-import {materialCostingQueue} from './material-costing.js';
+import {materialCostingQueue,markJobRecordedInPt,jobPtEntrySchema} from './material-costing.js';
+import {recordInvoiceUpdate,invoiceUpdateSchema} from './invoice-records.js';
+import {siteEvidence,siteEvidenceFile,originalsRegister,confirmOriginalReceipt,originalReceiptSchema} from './site-evidence.js';
 import {readLocalPurchases} from '../operations-board/local-purchases.js';
 import {groupAccountsCustomerDocuments} from '../../shared/accounts-customer-documents.js';
 import {customerDocuments,customerDocumentFile} from './customer-documents.js';
@@ -62,6 +64,15 @@ export function accountsHttp(
   r.post('/material-corrections',async(req,res)=>res.json(await flagMaterialCorrection(repo.pool,req.authSession!.user.id,req.body)));
   r.get('/billing',async(req,res)=>res.json(await sources.billing(req.authSession!.user.id)));
   r.get('/invoice-entries',async(req,res)=>res.json(await invoiceRegister(repo.pool,req.authSession!.user.id)));
+  r.post('/invoice-updates',async(req,res)=>res.status(201).json(await recordInvoiceUpdate(repo.pool,req.authSession!.user.id,parse(invoiceUpdateSchema,req.body))));
+  r.post('/material-costing/pt-entry',async(req,res)=>res.status(201).json(await markJobRecordedInPt(repo.pool,req.authSession!.user.id,parse(jobPtEntrySchema,req.body))));
+  r.get('/originals',async(req,res)=>res.json(await originalsRegister(repo.pool,req.authSession!.user.id)));
+  r.get('/sites/:id/evidence',async(req,res)=>res.json(await siteEvidence(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id))));
+  r.get('/sites/:id/evidence/:fileId',async(req,res)=>{
+   const file=await siteEvidenceFile(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id),parse(z.uuid(),req.params.fileId));
+   res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);
+  });
+  r.post('/sites/:id/original-receipts',async(req,res)=>res.status(201).json(await confirmOriginalReceipt(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id),parse(originalReceiptSchema,req.body))));
   r.post('/invoice-submissions',async(req,res)=>res.status(201).json(await recordInvoiceSubmission(repo.pool,req.authSession!.user.id,parse(invoiceSubmissionSchema,req.body))));
   r.post('/invoice-corrections',async(req,res)=>res.status(201).json(await correctInvoice(repo.pool,req.authSession!.user.id,parse(invoiceCorrectionSchema,req.body))));
   r.get('/cable-consolidations/:key/file',async(req,res)=>{await repo.access(req.authSession!.user.id);const key=parse(z.uuid(),req.params.key),source=(await repo.pool.query('SELECT snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0],row=source?.snapshot.cables.rows.find((r:any)=>r.key===key&&r.consolidation&&!r.supersededBy);if(!row)throw new HttpError(404,'Original consolidated invoice not found.');const file=row.consolidation.file;res.set({'Content-Type':/\.xlsx$/i.test(file.name)?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/pdf','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}).send(Buffer.from(file.base64,'base64'));});

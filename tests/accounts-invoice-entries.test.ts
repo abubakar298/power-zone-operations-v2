@@ -33,7 +33,7 @@ test('PT invoice references are immutable, version checked, exactly once and lea
   const saved=await recordInvoiceEntry(db.pool,ids.Accounts,input);
   assert.equal((await recordInvoiceEntry(db.pool,ids.Accounts,input)).id,saved.id);
   await assert.rejects(recordInvoiceEntry(db.pool,ids.Accounts,{...input,notes:'Changed'}),/Request key/);
-  await assert.rejects(recordInvoiceEntry(db.pool,ids.Accounts,{...input,requestKey:randomUUID()}),/already has/);
+  await assert.rejects(recordInvoiceEntry(db.pool,ids.Accounts,{...input,requestKey:randomUUID()}),/invoice number is already recorded/,'the same invoice number cannot be recorded twice');
   const register=await invoiceRegister(db.pool,ids.Accounts);assert.equal(register.queues.delivery.length,0);assert.equal(register.submissionQueues.delivery.length,1);assert.equal(register.submissionQueues.delivery[0].invoiceCreated,true);assert.deepEqual(register.submissionQueues.delivery[0].invoiceReferences,['PT-100']);assert.equal(register.entries[0].pt_reference,'PT-100');assert.equal(register.entries[0].snapshot.ipo,'IPO-1');
   await assert.rejects(db.pool.query("UPDATE accounts_invoice_entries SET notes='changed' WHERE id=$1",[saved.id]));
   await assert.rejects(db.pool.query('DELETE FROM accounts_invoice_entries WHERE id=$1',[saved.id]));

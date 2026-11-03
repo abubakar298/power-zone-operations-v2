@@ -11,10 +11,10 @@ test('one material queue shows usage beside documents and opens PT entry, with t
  await page.goto('/dashboard#workspace=finance&accountsTab=Material+Costing+%26+PT+Entry');
  const table=page.locator('.accounts-material-costing .accounts-entry-table');await expect(table.locator('tbody tr')).toHaveCount(10);
  const nav=page.getByRole('navigation',{name:'sites pages'});await nav.getByRole('button',{name:'Next',exact:true}).click();await expect(table.locator('tbody tr')).toHaveCount(2);await nav.getByRole('button',{name:'Previous',exact:true}).click();
- await table.getByRole('button',{name:'Review material entry',exact:true}).first().click();
+ await table.getByRole('button',{name:'View Material Usage & Documents',exact:true}).first().click();
  const dialog=page.getByRole('dialog');await expect(dialog.getByRole('columnheader',{name:'Actual used · VSO',exact:true})).toHaveCount(0);await expect(dialog.getByRole('columnheader',{name:'Actual used',exact:true})).toBeVisible();await expect(dialog.getByText('15',{exact:true})).toBeVisible();
  await expect(dialog.getByText('CH-CBL-CNT-1.5MM/2C',{exact:true})).toBeVisible();await expect(dialog.getByText('Not in BOQ',{exact:true})).toBeVisible();await expect(dialog.getByRole('heading',{name:'Supporting documents',exact:true})).toBeVisible();
- await dialog.getByRole('button',{name:'Recorded in PT — Prepare Job Closure',exact:true}).click();
+ await dialog.getByRole('button',{name:'Mark as Recorded in PT',exact:true}).click();
  await expect(page.getByRole('dialog').getByLabel('PT reference (required)',{exact:true})).toBeVisible();
  await page.screenshot({path:'test-results/accounts-material-costing-pt.png',fullPage:true});
 });

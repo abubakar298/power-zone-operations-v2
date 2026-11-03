@@ -525,7 +525,10 @@ export function AccountsWorkspace({
   const received = reports.filter(
     (r) => !data.closures.some((c: any) => c.job_key === r.job_key),
   );
-  const preparationReports=reports.filter(r=>isClosurePreparationJob({latestClosure:data.closures.find((c:any)=>c.job_key===r.job_key),ptRecorded:!!ptRecorded('Inventory',r)}));
+  // A job marked recorded in PT before Inventory sent its reconciliation is also ready.
+  const jobPtRecorded=(jobKey:string)=>(data.jobPtEntries??[]).some((p:any)=>p.job_key===jobKey&&!p.report_version_id);
+  const preparationReports=reports.filter(r=>isClosurePreparationJob({latestClosure:data.closures.find((c:any)=>c.job_key===r.job_key),ptRecorded:!!ptRecorded('Inventory',r)||jobPtRecorded(r.job_key)}));
+  const awaitingReconciliation=(data.jobPtEntries??[]).filter((p:any)=>!p.report_version_id&&!reports.some(r=>r.job_key===p.job_key)&&!data.closures.some((c:any)=>c.job_key===p.job_key));
   const total = (v: Record<string, string>, keys: string[]) =>
     keys.reduce((n, k) => n.add(v[k] || "0"), new Decimal(0));
   let actualTotal: Decimal | null = null,
@@ -560,7 +563,7 @@ export function AccountsWorkspace({
       {tab === "Project Sites" && <><header className="accounts-panel-heading accounts-subpage-heading"><h2>Site Details</h2><Button variant="neutral" onClick={()=>navigate("Project Tracking")}>Back to Project Tracking</Button></header><AccountsImportedSites initialSiteKey={programmeSiteKey} onOpenIpo={id=>void openIpo(id)}/></>}
       {tab === "Physical Documents" && <AccountsPhysicalDocuments/>}
       {tab === "Approved Documents" && <AccountsCustomerDocuments/>}
-      {tab === 'Material Costing & PT Entry' && <AccountsMaterialCosting onRecordPt={r=>{setPtDocument({...r,kind:'Inventory'});setPtEntryReference('');setPtEntryNotes('');setError('');}}/>}
+      {tab === 'Material Costing & PT Entry' && <AccountsMaterialCosting onRecorded={async(row:any)=>{await load();if(row.report?.job_key&&!isDeliveryOnlyDo(row.report))await openJob(row.report.job_key);}}/>}
       {tab === "Payments to Record" && <><Button variant="neutral" onClick={()=>navigate("My Workspace")}>Back to Dashboard</Button><AccountsPayments/></>}
       {tab === "Project checkpoints" && (
         <ProjectCheckpoints session={session} mode="Accounts" />
@@ -1080,7 +1083,8 @@ export function AccountsWorkspace({
               </PagedTableBody>
             </table>
           </div>
-          {!preparationReports.length&&<div className="accounts-empty"><h3>No jobs ready for closure</h3><p>Approved Inventory documents will appear here after their PT entry is recorded.</p></div>}
+          {!preparationReports.length&&!awaitingReconciliation.length&&<div className="accounts-empty"><h3>No jobs ready for closure</h3><p>Jobs appear here after they are marked as recorded in PT.</p></div>}
+          {awaitingReconciliation.length>0&&<div className="table-scroll"><h3>Recorded in PT · awaiting Inventory reconciliation</h3><table><thead><tr><th>SR#</th><th>Job / site</th><th>PT reference</th><th>Status</th></tr></thead><tbody>{awaitingReconciliation.map((p:any,n:number)=><tr key={p.id}><td>{n+1}</td><td><strong>{p.snapshot.siteName}</strong><small>{p.snapshot.ipo}</small></td><td>{p.pt_reference}<small>{p.entry_date}</small></td><td>Closure costing opens when Inventory sends its reconciliation; it will not ask for PT entry again.</td></tr>)}</tbody></table></div>}
         </section>
       )}
       {tab === "Job Closure" && job && (

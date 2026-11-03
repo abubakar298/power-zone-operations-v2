@@ -120,6 +120,7 @@ export class AccountsRepository {
         )
       ).rows,
       ptEntries: (await this.pool.query('SELECT p.*,p.entry_date::text AS entry_date,u.display_name AS recorded_by FROM accounts_pt_entries p JOIN users u ON u.id=p.created_by ORDER BY p.created_at DESC')).rows,
+      jobPtEntries: (await this.pool.query('SELECT p.*,p.entry_date::text AS entry_date,u.display_name AS recorded_by FROM accounts_job_pt_entries p JOIN users u ON u.id=p.created_by ORDER BY p.created_at DESC')).rows,
       ipos: ipo.map((i) => ({
         ...i,
         accountsReview: reviews.find((r) => r.ipo_id === i.id),
@@ -692,7 +693,8 @@ export class AccountsRepository {
         const currentEvidence=await this.evidenceBundle(actor,input.jobKey,c,true);
         if(currentEvidence.operationsEvidenceSource&&!currentEvidence.operationsEvidenceSignature||currentEvidence.operationsEvidenceSignature!==job.operationsEvidenceSignature)
           throw new HttpError(409,'QC handover evidence changed. Reload and review it before submitting closure.');
-        const entered=(await c.query("SELECT p.id FROM accounts_pt_entries p JOIN inventory_report_versions v ON v.report_id=p.source_id AND v.version=p.source_version WHERE p.source_kind='Inventory' AND v.id=$1",[job.reportVersionId])).rows[0];
+        // A job marked recorded in PT before Inventory sent its reconciliation also counts.
+        const entered=(await c.query("SELECT p.id FROM accounts_pt_entries p JOIN inventory_report_versions v ON v.report_id=p.source_id AND v.version=p.source_version WHERE p.source_kind='Inventory' AND v.id=$1 UNION ALL SELECT id FROM accounts_job_pt_entries WHERE job_key=$2 AND report_version_id IS NULL",[job.reportVersionId,input.jobKey])).rows[0];
         if(!entered)throw new HttpError(409,'Record the current approved IRR and variable items in PT before submitting job closure.');
       }
       const latest = (

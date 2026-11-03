@@ -9,7 +9,7 @@ import {migrate} from '../server/db/migrate.js';
 test('invoice register adds migration 138 after live 139/141 while preserving existing records and notification cutoff',async()=>{
  const db=await testDatabase({skipMigrations:true}),baseline=await mkdtemp(join(tmpdir(),'pz-before-invoice-'));
  try{
- for(const f of await readdir('migrations'))if(f.endsWith('.sql')&&!f.startsWith('138_'))await copyFile(join('migrations',f),join(baseline,f));
+ for(const f of await readdir('migrations'))if(f.endsWith('.sql')&&!f.startsWith('138_')&&Number(f.slice(0,3))<166)await copyFile(join('migrations',f),join(baseline,f));
  await migrate(db.pool,baseline);
  const owner=randomUUID(),request=randomUUID();
  await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,'preserve@example.test','Preserve','Admin','isolated')",[owner]);

@@ -131,6 +131,8 @@ export class OperationsBoardRepository{
    const docs=row.snapshot.documents??[],doc=docs.find((d:any)=>d.id===v.documentId);if(!doc)throw new HttpError(404,'Document batch not found.');
    if(v.date>today()||(doc.createdDate&&v.date<doc.createdDate)||(!v.edit&&doc.date&&v.date<doc.date))throw new HttpError(422,'Enter a movement date on or after the previous movement and not in the future.');
    if(v.edit&&!v.reason.trim())throw new HttpError(422,'Give a reason for correcting the saved document movement.');
+   // QC reports arrival at Karachi; only Accounts confirms custody of the originals.
+   if(v.location==='Submitted to Accounts'&&doc.location!=='Submitted to Accounts')throw new HttpError(409,'Accounts confirms receipt of originals. Record "Received at Karachi office" instead.');
    if(v.location.startsWith('TCS')&&!v.tracking)throw new HttpError(422,'Enter the TCS consignment number.');
    if(v.location==='With delivery driver'&&!v.carrier)throw new HttpError(422,'Enter the driver’s name.');
    const movement={location:v.location,date:v.date,tracking:v.tracking,carrier:v.carrier,recordedAt:new Date().toISOString(),recordedBy:actor,...(v.edit?{correctionReason:v.reason}:{})};
