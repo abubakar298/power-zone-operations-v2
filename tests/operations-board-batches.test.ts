@@ -1,3 +1,5 @@
+import {NotificationsRepository} from '../server/notifications/repository.js';
+import {activateWorkflowHandoffs} from '../server/notifications/handoff-activation.js';
 import {readWorkflowSite} from './operations-snapshot.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -47,10 +49,17 @@ test('shared batch bookings are atomic, versioned and resource-conflict safe wit
   const extension=async(newId:string)=>batchSchema.parse({...mixed,id:savedMixed.id,version:1,requestKey:randomUUID(),edit:true,reason:'Add another IPO on the same route',stops:await Promise.all([...mixed.stops,{siteId:newId,siteVersion:1,kind:'both',order:4,plannedDate:'2026-11-02',start:'',end:''}].map(async stop=>({...stop,siteVersion:(await readWorkflowSite(repo,owner,stop.siteId)).version})))});
   await assert.rejects(repo.saveBatch(lead,await extension('add-south')),/not found/);
   await assert.rejects(repo.saveBatch(lead,await extension('add-completed')),/not eligible/);
+  const inventory=randomUUID(),accounts=randomUUID();
+  for(const [id,role] of [[inventory,'Inventory'],[accounts,'Accounts']])await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[id,id+'@example.test',role,role,'isolated']);
+  await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$2)",[inventory,owner]);
+  await activateWorkflowHandoffs(db.pool,owner,{version:0,requestKey:randomUUID(),recipients:{inventory:[inventory],accounts:[accounts],qc:[qc],leads:[lead],management:[owner]},reason:'Owner requests site-specific batch updates'});
+  await db.pool.query("UPDATE notification_settings SET email_enabled=true,activated_at=now()-interval '1 day'");
   const addition=await extension('add-central');
   await assert.rejects(repo.saveBatch(qc,addition),/Operations lead/);
   await assert.rejects(repo.saveBatch(lead,{...addition,stops:addition.stops.slice(1)}),/Explicitly cancel/);
-  const extended=await repo.saveBatch(lead,addition);assert.equal(extended.id,savedMixed.id);assert.equal(extended.number,savedMixed.number);assert.equal(extended.version,2);assert.equal(extended.stops.length,4);assert.deepEqual(extended.stops.slice(0,3).map((stop:BatchInput['stops'][number])=>stop.kind),['labour','delivery','both']);
+  const eventCount=(await db.pool.query('SELECT count(*)::int n FROM operations_board_events')).rows[0].n;
+  const extended=await repo.saveBatch(lead,addition);
+  const additionEvents=(await db.pool.query('SELECT site_id,kind FROM operations_board_events ORDER BY created_at,id')).rows;assert.equal(additionEvents.length,eventCount+1,'adding a site notifies only the added site');assert.ok(additionEvents.some(e=>e.site_id==='add-central'&&e.kind==='Batch site added'));assert.equal(extended.id,savedMixed.id);assert.equal(extended.number,savedMixed.number);assert.equal(extended.version,2);assert.equal(extended.stops.length,4);assert.deepEqual(extended.stops.slice(0,3).map((stop:BatchInput['stops'][number])=>stop.kind),['labour','delivery','both']);
   assert.equal((await repo.saveBatch(lead,addition)).version,2,'retrying an addition does not duplicate stops');
   assert.equal((await repo.batches(lead)).batches.find(batch=>batch.id===savedMixed.id)?.canEdit,true);
   const added=await readWorkflowSite(repo,owner,'add-central');assert.equal(added.planningBatches[0].id,savedMixed.id);assert.equal(added.planningBatches[0].stops.length,1);assert.equal(added.planningBatches[0].stops[0].kind,'both');assert.equal(added.accounts.find(e=>e.type==='Batch plan')?.dispatchDate,mixed.deliveryDate);
@@ -58,8 +67,36 @@ test('shared batch bookings are atomic, versioned and resource-conflict safe wit
   const cancelledSite=await readWorkflowSite(repo,owner,'mixed-deliver');
   const cancellation=batchSchema.parse({...addition,version:2,requestKey:randomUUID(),reason:'Customer postponed this site',cancelledSites:[{siteId:'mixed-deliver',siteVersion:cancelledSite.version}],stops:await Promise.all(extended.stops.filter((s:BatchInput['stops'][number])=>s.siteId!=='mixed-deliver').map(async(s:BatchInput['stops'][number],n:number)=>({...s,order:n+1,siteVersion:(await readWorkflowSite(repo,owner,s.siteId)).version})))});
   const reduced=await repo.saveBatch(lead,cancellation);assert.equal(reduced.id,savedMixed.id);assert.equal(reduced.number,savedMixed.number);assert.equal(reduced.version,3);assert.equal(reduced.stops.length,3);
-  const removed=await readWorkflowSite(repo,owner,'mixed-deliver');assert.equal(removed.planningBatches.some(b=>b.id===savedMixed.id),false);assert.equal(removed.accounts.some(e=>e.id===`${savedMixed.id}:mixed-deliver:schedule`),false);assert.equal(removed.installationPlanDate,'2026-11-02');assert.equal(removed.stage,'received');assert.ok(removed.history.some(e=>e.description.includes('site cancelled from batch')));
+  const removed=await readWorkflowSite(repo,owner,'mixed-deliver');assert.equal(removed.planningBatches.some(b=>b.id===savedMixed.id),false);assert.equal(removed.accounts.some(e=>e.id===`${savedMixed.id}:mixed-deliver:schedule`),false);assert.equal(removed.installationPlanDate,undefined);assert.equal(removed.stage,'received');assert.ok(removed.history.some(e=>e.description.includes('site cancelled from batch')));
   assert.equal((await repo.saveBatch(lead,cancellation)).version,3,'cancellation retry stays idempotent');
+  const notices=new NotificationsRepository(db.pool);await notices.sync();await notices.sync();
+  const inbox=await notices.list({id:inventory,role:'Inventory'} as any);
+  assert.equal(inbox.filter(n=>n.kind==='Site added to batch').length,1);
+  assert.equal(inbox.filter(n=>n.kind==='Site cancelled from batch').length,1);
+  assert.ok(inbox.find(n=>n.kind==='Site added to batch')?.reference.includes('Additional Central IPO'));
+  assert.ok(inbox.find(n=>n.kind==='Site cancelled from batch')?.reference.includes('mixed-deliver'));
+  assert.equal(inbox.filter(n=>n.kind==='Dispatch plan saved').length,0,'unchanged sites are not re-emailed');
+  const mails=await db.pool.query("SELECT n.kind,q.state FROM notifications n JOIN notification_email_queue q ON q.id=n.id WHERE n.user_id=$1",[inventory]);
+  assert.equal(mails.rows.length,2,'both site-specific notifications are queued for email once');
+  const sent:string[]=[];for(let n=0;n<20;n++)await notices.deliverOne({configured:true,send:async(message:any)=>{sent.push(JSON.stringify(message));return 'captured-'+sent.length;}},'http://127.0.0.1');
+  assert.equal((await db.pool.query("SELECT count(*)::int n FROM notifications n JOIN notification_email_queue q ON q.id=n.id WHERE n.user_id=$1 AND q.state='sent'",[inventory])).rows[0].n,2);
+
   for(const table of ['internal_purchase_orders','accounts_job_closures','stock_on_hand_entries'])assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM '+table)).rows[0].n,0);
+ }finally{await db.close();}
+});
+
+
+test('rollout clears only stale cancelled installation plans and preserves later active schedules',async()=>{
+ const {readFile}=await import('node:fs/promises');const db=await testDatabase();try{
+  const actor=randomUUID();await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,'batch-repair@example.test','Owner','Admin','isolated')",[actor]);
+  for(const [id,action,batches]of [['cancelled','Batch site cancelled',[]],['rescheduled','Batch plan',[{id:'new',stops:[{siteId:'rescheduled',plannedDate:'2026-11-08'}]}]]]as const){
+   await db.pool.query('INSERT INTO operations_board_sites(id,created_by) VALUES($1,$2)',[id,actor]);
+   await db.pool.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,1,$2,$3,$4,$5,$6)',[id,{id,name:id,stage:'awaiting',installation:true,installationPlanDate:'2026-11-08',planningBatches:batches,history:[]},action,'Historical cancelled batch',randomUUID(),actor]);
+  }
+  await db.pool.query(await readFile('migrations/164_batch_site_handoffs.sql','utf8'));
+  const rows=(await db.pool.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC')).rows;
+  const cancelled=rows.find(r=>r.site_id==='cancelled')!;assert.equal(cancelled.version,2);assert.equal(cancelled.snapshot.installationPlanDate,undefined);assert.equal(cancelled.snapshot.stage,'received');
+  const rescheduled=rows.find(r=>r.site_id==='rescheduled')!;assert.equal(rescheduled.version,1);assert.equal(rescheduled.snapshot.installationPlanDate,'2026-11-08');
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM operations_board_versions WHERE site_id=$1 AND version=1',['cancelled'])).rows[0].n,1,'the original cancelled snapshot remains immutable');
  }finally{await db.close();}
 });

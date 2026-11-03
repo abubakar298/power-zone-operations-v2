@@ -195,13 +195,21 @@ export class OperationsBoardRepository{
     const updated={...site,planningBatches:[...links.filter(b=>b.id!==id),link],accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],history:[...site.history,{date:now,description:`${number}: delivery ${v.deliveryDate??'not part of this batch'}; expected installation ${stop.plannedDate||'not applicable'}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}.${v.reason?' Reason: '+v.reason:''}`}]};
     const version=versions.get(site.id)!+1;
     await c.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,request_sha256,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[site.id,version,updated,'Batch plan',v.reason||'Initial shared batch plan',v.requestKey,fingerprint,actor]);
-    await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),site.id,version,previous?'Batch plan changed':'Batch plan',JSON.stringify(previous?['operations-head','management',`${v.team}-operations`,'accounts']:['accounts']),actor]);
+    const oldStop=previous?.snapshot.stops.find((saved:any)=>saved.siteId===site.id);
+    const decision=(batch:any,visit:any)=>({deliveryDate:batch.deliveryDate,vehicle:batch.vehicle,driver:batch.driver,labourTeam:batch.labourTeam,kind:visit.kind??batch.kind,plannedDate:visit.plannedDate,start:visit.start,end:visit.end,inventoryReference:batch.inventoryReference});
+    // Route reordering or adding another site must not resend every retained site's email.
+    if(!oldStop||!isDeepStrictEqual(decision(previous!.snapshot,oldStop),decision(snapshot,stop)))
+     await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),site.id,version,previous?(oldStop?'Batch plan changed':'Batch site added'):'Batch plan',JSON.stringify(previous?['operations-head','management',`${v.team}-operations`,'accounts']:['accounts']),actor]);
    }
    for(const cancelled of v.cancelledSites){
     const original=selected.find(site=>site.id===cancelled.siteId)!;
     const links=original.planningBatches.filter(batch=>batch.id!==id);
     const updated={...original,planningBatches:links,accounts:original.accounts.filter(event=>event.id!==`${id}:${original.id}:schedule`),history:[...original.history,{date:now,description:`${number}: site cancelled from batch. Reason: ${v.reason}`}]};
     if(original.stage!=='delivered'&&previous?.snapshot.deliveryDate===original.dispatchDate&&!links.some(batch=>batch.deliveryDate&&batch.stops.some((stop:any)=>stop.siteId===original.id&&(stop.kind??batch.kind)!=='labour')))delete updated.dispatchDate;
+    const otherInstallation=links.flatMap(batch=>batch.stops.filter(stop=>stop.siteId===original.id&&stop.plannedDate)).at(-1);
+    if(otherInstallation)updated.installationPlanDate=otherInstallation.plannedDate;
+    else delete updated.installationPlanDate;
+    if(updated.stage==='awaiting'&&!updated.dispatchDate&&!updated.deliveries?.length)updated.stage='received';
     const version=versions.get(original.id)!+1;
     await c.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,request_sha256,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[original.id,version,updated,'Batch site cancelled',v.reason,v.requestKey,fingerprint,actor]);
     await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),original.id,version,'Batch site cancelled',JSON.stringify(['operations-head','management',`${v.team}-operations`,'accounts']),actor]);
