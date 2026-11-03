@@ -320,7 +320,7 @@ export function Departments({
                     {selected.division.basis} · Discount allocated from the
                     accepted quotation.
                   </p>
-                  <table>
+                  <div className="pz-scroll-x"><table>
                     <thead>
                       <tr>
                         <th>Phase</th>
@@ -335,7 +335,7 @@ export function Departments({
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </table></div>
                   <p>
                     <strong>Phase total:</strong> {selected.division.phaseTotal}{" "}
                     · <strong>IPO tax:</strong>{" "}

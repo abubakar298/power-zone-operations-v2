@@ -1,0 +1,23 @@
+/* Responsive safety net for every department. Loaded last so content adapts to the
+   screen instead of widening the page: wide data tables scroll inside their own box,
+   media and form controls never exceed their column, and popups fit small screens.
+   Printed documents keep their own fixed A4 layouts. */
+.pz-scroll-x{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.pz-table-scroll,.table-scroll{max-width:100%;-webkit-overflow-scrolling:touch}
+img,video{max-width:100%;height:auto}
+input,select,textarea{max-width:100%;box-sizing:border-box}
+dialog{max-width:calc(100vw - 16px);box-sizing:border-box}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}
+/* Single-column page sections: the column may shrink to the screen, so a wide table
+   scrolls inside its box instead of stretching the whole page. */
+.pz-stack,.ac-panel-fields,.accounts-closure-form,.accounts-invoicing,.accounts-ipo-record,.accounts-site-signed-files,.inventory-document-upload,.inventory-upload-list,.ob-batch,.pc-bars,.pr-form,.pr,.purchase-card,.pz-accounts-billing,.pz-compact-filters,.reconciled-stock,.revision-request-form,.sw-list,.sw-rows,.sw{grid-template-columns:minmax(0,1fr)}
+@media (max-width:700px){
+ main{min-width:0}
+ main h1,main h2,main h3,main h4{overflow-wrap:anywhere}
+ dialog{max-height:calc(100dvh - 16px)}
+}
+/* Touch screens: comfortable tap targets for buttons and form fields. */
+@media (pointer:coarse){
+ .pz-button,select,input[type=text],input[type=search],input[type=date],input[type=number],input[type=email],input[type=password],input:not([type]){min-height:44px}
+}
+@media print{.pz-scroll-x{overflow:visible}}

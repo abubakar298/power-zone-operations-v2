@@ -2606,7 +2606,7 @@ function CoordinationCommercialSummary({ session, detail }: any) {
     perWatt: any,
     totalLabel: string,
   ) => (
-    <table className="pz-table">
+    <div className="pz-scroll-x"><table className="pz-table">
       <thead>
         <tr>
           <th>Costing Phase</th>
@@ -2642,7 +2642,7 @@ function CoordinationCommercialSummary({ session, detail }: any) {
           </th>
         </tr>
       </tbody>
-    </table>
+    </table></div>
   );
   return (
     <section className="pz-panel">

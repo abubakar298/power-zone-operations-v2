@@ -610,7 +610,7 @@ export function Masters({
           >
             <h2 id="master-history-title">Version history</h2>
             <p>{history[0]?.key}</p>
-            <table className="master-table">
+            <div className="pz-scroll-x"><table className="master-table">
               <thead>
                 <tr>
                   <th>Version</th>
@@ -637,7 +637,7 @@ export function Masters({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
             <button
               className="dark-button"
               autoFocus

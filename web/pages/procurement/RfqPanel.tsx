@@ -103,7 +103,7 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
               <b>{f.number} · due {fmtDay(f.dueOn)}</b>
               <small>{f.items.length} item{f.items.length === 1 ? "" : "s"} · made by {f.createdBy} {fmtAt(f.createdAt)} · <a href={`/api/procurement/rfqs/${f.id}/all.zip`} download>Download all vendors (zip)</a></small>
             </div></div>
-            <table className="ops-table">
+            <div className="pz-scroll-x"><table className="ops-table">
               <tbody>{f.vendors.map((v) => (
                 <tr key={v.id}>
                   <td className="site"><b>{v.vendor}</b>{v.contact && <small>{v.contact}</small>}</td>
@@ -112,7 +112,7 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
                   <td>{edit && <button type="button" className="sw-link" onClick={() => pickVendor(v.vendor)}>Enter quotation</button>}</td>
                 </tr>
               ))}</tbody>
-            </table>
+            </table></div>
           </div>
         ))}
 

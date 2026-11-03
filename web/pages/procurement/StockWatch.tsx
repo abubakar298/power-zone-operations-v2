@@ -146,7 +146,7 @@ export function StockWatch({ session }: { session: Session }) {
                 <label className="pr-muted">Expected <input type="date" aria-label="Expected arrival" value={form.expectedOn} onChange={(e) => setForm({ ...form, expectedOn: e.target.value })} /></label>
               </div>
               {lines.length === 0 ? <p className="pr-muted">Press “Order” on an item above to add it.</p> : (
-                <table className="ops-table">
+                <div className="pz-scroll-x"><table className="ops-table">
                   <thead><tr><th>Item</th><th className="num">Quantity</th><th className="num">Rate (optional)</th><th></th></tr></thead>
                   <tbody>{lines.map((l, i) => (
                     <tr key={l.itemKey}>
@@ -156,7 +156,7 @@ export function StockWatch({ session }: { session: Session }) {
                       <td><button type="button" className="sw-link" onClick={() => setLines(lines.filter((_, n) => n !== i))}>Remove</button></td>
                     </tr>
                   ))}</tbody>
-                </table>
+                </table></div>
               )}
               <input aria-label="Note" placeholder="Note (optional)" value={form.note} maxLength={2000} onChange={(e) => setForm({ ...form, note: e.target.value })} />
               <label className="pr-muted pr-password">Your password, to record the order (asked again after 5 minutes)
@@ -179,9 +179,9 @@ export function StockWatch({ session }: { session: Session }) {
                     <b>{o.number} · {o.vendor || "—"} {o.status === "received" ? <span className="sw-chip sw-chip--ok">Received</span> : o.overdue ? <span className="sw-chip sw-chip--danger">Overdue</span> : <span className="sw-chip">On the way</span>}</b>
                     <small>{o.orderReference} · ordered {fmtAt(o.orderedAt)}{o.expectedOn ? ` · expected ${fmtDay(o.expectedOn)}` : ""}{o.receivedAt ? ` · received ${fmtAt(o.receivedAt)}` : ""}</small>
                   </div></div>
-                  <table className="ops-table">
+                  <div className="pz-scroll-x"><table className="ops-table">
                     <tbody>{o.lines.map((l) => <tr key={l.itemKey}><td className="site"><b>{l.name}</b></td><td className="num">{qty(l.received)} of {qty(l.quantity)} {l.unit} received</td></tr>)}</tbody>
-                  </table>
+                  </table></div>
                 </div>
               ))}
             </div>

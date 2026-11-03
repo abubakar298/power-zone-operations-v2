@@ -1195,7 +1195,7 @@ export function AccountsWorkspace({
                 Scenario only, pending authorized invoice adjustment. This does
                 not post an invoice or change the approved selling price.
               </p>
-              <table>
+              <div className="pz-scroll-x"><table>
                 <tbody>
                   <tr>
                     <th>Cable adjustment only</th>
@@ -1249,7 +1249,7 @@ export function AccountsWorkspace({
                     </td>
                   </tr>
                 </tbody>
-              </table>
+              </table></div>
             </section>
           )}
           <p>

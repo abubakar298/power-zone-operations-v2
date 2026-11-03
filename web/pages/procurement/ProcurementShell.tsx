@@ -330,7 +330,7 @@ function ReceivedTable({ rows }: { rows: Overview["receivedPOs"] }) {
                       <div><span>Delivery wanted</span><b>{p.poDeliveryDate ? fmtDay(p.poDeliveryDate) : "not given"}</b></div>
                       <div><span>Deliver to</span><b>{p.deliveryAddress ?? "not given"}</b></div>
                     </div>
-                    <table className="ops-table">
+                    <div className="pz-scroll-x"><table className="ops-table">
                       <thead><tr><th>Item</th><th className="num">Quantity</th><th>Material</th></tr></thead>
                       <tbody>{p.lines.length === 0 ? <tr><td colSpan={3} className="ops-empty">No material lines on this PO.</td></tr> : p.lines.map((l) => (
                         <tr key={l.itemKey}>
@@ -339,7 +339,7 @@ function ReceivedTable({ rows }: { rows: Overview["receivedPOs"] }) {
                           <td>{!p.pending ? <span className="sw-chip sw-chip--ok">Delivered</span> : l.short ? <span className="sw-chip sw-chip--warning">Short</span> : <span className="sw-chip">In stock</span>}</td>
                         </tr>
                       ))}</tbody>
-                    </table>
+                    </table></div>
                   </div>
                 </td>
               </tr>,

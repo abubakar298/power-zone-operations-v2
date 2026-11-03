@@ -18,3 +18,6 @@ void import('./App.js').then(({ App }) => {
 import './ui/accounts.css';
 
 import './components/staff-sidebar.css';
+
+// Loaded last: responsive safety net for every screen.
+import './ui/responsive.css';
