@@ -7,7 +7,7 @@ import {materialSiteDocuments,reconcileMaterialDispatch} from './material-dispat
 
 export type MaterialPrintKind='fixed-do'|'variable-do'|'customer-signoff'|'irr';
 export type MaterialPrintRow={documentPolicyVersion?:2;itemId:string;description:string;unit:string;issued:string|null;used:string|null;returned:string|null;group?:string;remark?:string;expectedReturn?:string|null;verifiedReturn?:string|null;remainingReturn?:string|null};
-export type MaterialPrintModel={acknowledgements?:SiteAcknowledgement[];kind:MaterialPrintKind;status:'draft'|'prepared'|'simulation'|'issued'|'site-record'|'received';context?:{columns:[string,string,string];rows:[string,string,string][]};title:string;reference:string;warehouse:string;sites:{name:string;ipo:string;orderNumber?:string;customer?:string;customerPo?:string}[];rows:MaterialPrintRow[];note:string;issuedLabel:string;omitIssued?:boolean;customerReturnColumn?:boolean;returnWorksheet?:boolean;signatures:string[];stockPosting:boolean;parentDispatch?:boolean;date?:string;transport?:{issuedTo:string;vehicle:string;driver:string;driverIdentity?:string}};
+export type MaterialPrintModel={blankRows?:number;acknowledgements?:SiteAcknowledgement[];kind:MaterialPrintKind;status:'draft'|'prepared'|'simulation'|'issued'|'site-record'|'received';context?:{columns:[string,string,string];rows:[string,string,string][]};title:string;reference:string;warehouse:string;sites:{name:string;ipo:string;orderNumber?:string;customer?:string;customerPo?:string}[];rows:MaterialPrintRow[];note:string;issuedLabel:string;omitIssued?:boolean;customerReturnColumn?:boolean;returnWorksheet?:boolean;signatures:string[];stockPosting:boolean;parentDispatch?:boolean;date?:string;transport?:{issuedTo:string;vehicle:string;driver:string;driverIdentity?:string}};
 type Draft={number?:string;id:string;version:number;snapshot:{warehouse:string;parent:boolean;kind:'fixed'|'variable';sites:any[];lines:any[];transport?:{issuedTo:string;vehicle:string;driver:string;driverIdentity?:string}}};
 const titles={ 'fixed-do':'Fixed Material Delivery Order','variable-do':'Variable Material Dispatch Order','customer-signoff':'Cable, Pipe and Duct Sign-off',irr:'Installation Reconciliation Report'};
 const signatures={ 'fixed-do':['Warehouse issued by','Customer received by'],'variable-do':['Warehouse issued by','Site team received by'],'customer-signoff':['Site engineer','Customer representative'],irr:['Site engineer','Warehouse return verified by']};
@@ -112,13 +112,11 @@ export function returnWorksheetPrintModel(data:any):MaterialPrintModel{
  return {kind:'variable-do',status:'draft',title:'Return IGP · Warehouse Count Sheet',reference:`Return worksheet / ${data.references?.join(' / ')||data.draft.id} / v${data.draft.version}`,warehouse:source.warehouse,sites:sites(source.sites),rows,returnWorksheet:true,stockPosting:false,issuedLabel:source.parent?'Parent DO OUT':'DO OUT',signatures:['Returned by / site custodian','Warehouse counted, signed and stamped by'],note:'Fill Actual return with quantities physically counted on this trip. Previously verified warehouse IN is shown separately. Partial returns are allowed. Upload the signed and stamped sheet for verification; printing this sheet does not credit stock. Blank use or expected figures remain pending, not zero.'};
 }
 
-/** Per-site sign-offs derive only from positive rows on the immutable DO. */
+/** Every dispatched site can take a VSO. Listed quantities come only from the immutable DO; blank rows allow later local/site entries. */
 export function issuedCustomerSignoffModels(record:Parameters<typeof issuedDispatchPrintModel>[0]){
  const base=issuedDispatchPrintModel(record),snapshot=record.snapshot,printedLines=parentPoolLines(snapshot).filter(row=>row.itemId&&row.out!==''&&new Decimal(row.out).gt(0));
  return snapshot.sites.flatMap((source:any,index:number)=>{
-  if(source.installation===false)return [];
   const rows=base.rows.filter((row,rowIndex)=>printedLines[rowIndex]?.sites.includes(source.siteId)&&materialDocumentPolicy(row).customerUsageSignoff&&row.issued!==null&&new Decimal(row.issued).gt(0));
-  if(!rows.length)return [];
-  return [{...base,sourceSiteId:source.siteId,sites:[base.sites[index]],kind:'customer-signoff' as const,title:'Variable-Material Usage Sign-off',rows:snapshot.parent?rows.map(row=>({...row,issued:null})):rows,omitIssued:!!snapshot.parent,customerReturnColumn:!snapshot.parent,signatures:['Site engineer','Customer representative']}];
+  return [{...base,sourceSiteId:source.siteId,sites:[base.sites[index]],kind:'customer-signoff' as const,title:'Variable-Material Usage Sign-off',blankRows:snapshot.parent&&rows.length?3:5,rows:snapshot.parent?rows.map(row=>({...row,issued:null})):rows,omitIssued:!!snapshot.parent,customerReturnColumn:!snapshot.parent,signatures:['Site engineer','Customer representative']}];
  });
 }

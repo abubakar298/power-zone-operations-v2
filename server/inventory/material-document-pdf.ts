@@ -35,9 +35,11 @@ export function materialDocumentPdf(model:MaterialPrintModel,copies:string[]=[''
   const id=printable(r.itemId||'ID pending'),description=printable((r.description||'Description pending')+(r.remark?'\n'+r.remark:'')),unit=printable(r.unit||'Unit pending'),issued=quantity(r.issued),used=quantity(r.used),returned=quantity(r.returned);
   return worksheet?[id+'\n'+description,unit,issued,used,quantity(r.expectedReturn??null),quantity(r.verifiedReturn??null),quantity(r.remainingReturn??null),'']:internal?[printable(r.group||'Miscellaneous'),id,description,unit,issued,used,returned]:usage?[id,description,unit,...(!model.omitIssued?[issued]:[]),used,...(model.customerReturnColumn?[returned]:[])]:[id,description,unit,issued];
  });
+ if(usage&&model.blankRows)body.push(...Array.from({length:model.blankRows},()=>columns.map(()=>'')));
  const widths=worksheet?[57,13,18,18,20,18,18,20]:internal?[20,40,50,15,19,18,20]:usage?(model.omitIssued?[47,95,18,22]:model.customerReturnColumn?[40,66,16,20,20,20]:[47,75,18,22,20]):[50,85,20,27];
  if(y>225){pdf.addPage();y=top;}
- table({startY:y,head:[columns],body:body.length?body:[[...columns.map((_,i)=>i===0?'No materials recorded':'')]],columnStyles:Object.fromEntries(widths.map((cellWidth,i)=>[i,{cellWidth}]))});
+ const serialWidths=[10,...widths.map(width=>width*172/widths.reduce((sum,width)=>sum+width,0))];
+ table({startY:y,head:[['SR#',...columns]],body:(body.length?body:[columns.map((_,i)=>i===0?'No materials recorded':'')]).map((row,index)=>[String(index+1),...row]),columnStyles:Object.fromEntries(serialWidths.map((cellWidth,i)=>[i,{cellWidth}]))});
  y=(pdf as any).lastAutoTable.finalY+6;
  const note=pdf.splitTextToSize(printable(model.note),182);
  if(y+note.length*4>237){pdf.addPage();header();y=top;}
