@@ -10,6 +10,7 @@ import { HttpError } from "../http/errors.js";
 import { digest, equalSecrets } from "./crypto.js";
 import { AuthService, publicUser } from "./service.js";
 import type { Session } from "./repository.js";
+import {supportRequestAllowed} from '../http/support-access.js';
 import { isBackground } from "../security/events.js";
 
 declare global {
@@ -79,6 +80,9 @@ export function authHttp(service: AuthService, config: Config) {
       }
       req.authSession={...req.authSession,user:target};
       req.departmentViewApplied=true;
+    }
+    if(req.authSession.user.role==='IT Support'||req.authSession.user.supportAccess){
+      if(!supportRequestAllowed(req.originalUrl,req.method))throw new HttpError(403,'Internal costing, pricing standards and account administration are restricted for IT Support.');
     }
     next();
   }

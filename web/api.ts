@@ -5,6 +5,7 @@ export interface User {
   email: string;
   displayName: string;
   restrictedCostAccess?: boolean;
+  supportAccess?: boolean;
   role:
     | "Admin"
     | "Management"
@@ -13,7 +14,8 @@ export interface User {
     | "Operations"
     | "Inventory"
     | "Accounts"
-    | "Design";
+    | "Design"
+    | "IT Support";
 }
 export interface Session {
   user: User;

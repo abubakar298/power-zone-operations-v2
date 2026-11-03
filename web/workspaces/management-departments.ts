@@ -6,5 +6,5 @@ export const managementDepartments = [
   {view:'inventory',label:'Inventory / Store',role:'Inventory'},
 ] as const;
 export type ManagementDepartment = typeof managementDepartments[number]['view'];
-export const canViewDepartments=(role:string)=>role==='Admin'||role==='Management';
+export const canViewDepartments=(role:string)=>role==='Admin'||role==='Management'||role==='IT Support';
 export const managementDepartment=(view:string|null)=>managementDepartments.find(d=>d.view===view);

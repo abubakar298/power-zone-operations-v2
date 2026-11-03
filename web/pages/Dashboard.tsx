@@ -340,26 +340,27 @@ export function Dashboard({
     if(switchingDepartment||!confirmLeaveWorkspace())return false;
     setSwitchingDepartment(true);setDepartmentError('');
     try{
-      if(destination==='operations'&&area==='procurement'){
+      if(destination==='operations'&&area==='procurement'&&principalSession.user.role!=='IT Support'){
         await api('/auth/department-view',{csrf:principalSession.csrfToken,body:{userId:null}});
         clearDepartmentUser();setDepartmentUser(undefined);
         sessionStorage.setItem('pz:management-procurement',principalSession.user.id);setManagementProcurement(true);
         history.replaceState(null,'','/dashboard#workspace=dashboard');return true;
       }
       sessionStorage.removeItem('pz:management-procurement');setManagementProcurement(false);
-      if(destination==='inventory'){clearDepartmentUser();window.location.assign('/inventory');return true;}
+      if(destination==='inventory'&&principalSession.user.role!=='IT Support'){clearDepartmentUser();window.location.assign('/inventory');return true;}
       let selected:User|undefined;
       if(destination!=='dashboard'){
         const role=managementDepartment(destination)!.role;
         const {users}=await api<{users:User[]}>('/auth/department-views');
         const candidates=users.filter(u=>u.role===role);
-        const preferred=role==='Coordinator'?'Atif Hameed':role==='Design'?'Sajid Kasrana':role==='Operations'?(area==='procurement'?'Hamza Mir':'Moaz Ahsan'):'';
+        const preferred=role==='Coordinator'?'Atif Hameed':role==='Design'?'Sajid Kasrana':role==='Inventory'?'Shaiggan Cheema':role==='Accounts'?'Salaas':role==='Operations'?(area==='procurement'?'Hamza Mir':'Moaz Ahsan'):'';
         const preferredTarget=candidates.find(u=>u.displayName.toLowerCase()===preferred.toLowerCase());
         const target=preferredTarget??(role==='Operations'?undefined:candidates[0]);
         if(role==='Operations'&&!target)throw Error(`The ${area==='procurement'?'Procurement':'Operations'} workspace needs the active ${preferred} account.`);
         if(!target)throw Error(`No active ${managementDepartment(destination)!.label} account is available.`);
         selected=(await api<{user:User}>('/auth/department-view',{csrf:principalSession.csrfToken,body:{userId:target.id}})).user;
         saveDepartmentUser(principalSession.user,selected);
+        if(destination==='inventory'){window.location.assign('/inventory');return true;}
       }else{await api('/auth/department-view',{csrf:principalSession.csrfToken,body:{userId:null}});clearDepartmentUser();}
       setDepartmentUser(selected);setDepartmentView(destination==='dashboard'?undefined:destination);
       setOperationsArea(destination==='operations'?area:'operations');
@@ -1253,6 +1254,7 @@ export function Dashboard({
                   onContextChange={setAccountsContext}
                 />
               )}
+              {view === "dashboard" && session.user.role === "IT Support" && <section className="card"><h2>IT Support</h2><p>Use View as to open a team workspace and troubleshoot its workflows. Actions are audited to your account. Internal costing, profit margins and pricing standards are restricted.</p></section>}
               {view === "dashboard" && session.user.role === "Employee" && (
                 <section className="card">
                   <h2>Department access required</h2>

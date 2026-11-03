@@ -5,7 +5,7 @@ import { AccountLink } from "./pages/AccountLink.js";
 import { Login } from "./pages/Login.js";
 import { Setup } from "./pages/Setup.js";
 import { Dashboard } from "./pages/Dashboard.js";
-import {clearDepartmentUser} from './department-view.js';
+import {savedDepartmentUser,clearDepartmentUser} from './department-view.js';
 
 const OperationsBoard=lazy(()=>import('./pages/operations-board/OperationsBoard.js').then(m=>({default:m.OperationsBoard})));
 const InventoryRoleGate=lazy(()=>import('./pages/InventoryRoleGate.js').then(m=>({default:m.InventoryRoleGate})));
@@ -117,6 +117,8 @@ export function App() {
     );
   if (state.kind === "authenticated") {
     const props={session:state.session,onLogout:signedOut};
+    const supportTarget=state.session.user.role==='IT Support'?savedDepartmentUser(state.session.user):undefined;
+    if(oiaEntry.startsWith('/inventory')&&supportTarget?.role==='Inventory')return <Suspense fallback={<p role="status">Opening Inventory…</p>}><InventoryRoleGate session={{...state.session,user:supportTarget}} onLogout={signedOut}/></Suspense>;
     if(["Coordinator","Design","Employee"].includes(state.session.user.role))return <Dashboard {...props}/>;
     if(oiaEntry.startsWith('/operations')&&['Admin','Management','Operations'].includes(state.session.user.role))return <Suspense fallback={<p role="status">Opening Operations…</p>}><OperationsBoard {...props}/></Suspense>;
     if((oiaEntry==='/inventory'||oiaEntry.startsWith('/inventory/'))&&['Admin','Management','Inventory'].includes(state.session.user.role))return <Suspense fallback={<p role="status">Opening Inventory…</p>}><InventoryRoleGate {...props}/></Suspense>;

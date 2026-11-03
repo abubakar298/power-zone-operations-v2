@@ -49,6 +49,7 @@ export class AccountsService {
           "Inventory",
           "Accounts",
           "Design",
+          "IT Support",
         ]),
         password: z.string().max(128),
         newPassword: z.string().min(12).max(128),
@@ -99,6 +100,7 @@ export class AccountsService {
           "Inventory",
           "Accounts",
           "Design",
+          "IT Support",
         ]),
         password: z.string().max(128),
       })
@@ -201,6 +203,7 @@ export class AccountsService {
             "Inventory",
             "Accounts",
             "Design",
+          "IT Support",
           ])
           .optional(),
         active: z.boolean().optional(),

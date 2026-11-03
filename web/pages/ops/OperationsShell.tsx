@@ -131,7 +131,7 @@ export function OperationsShell({ session, onLogout, viewingAs, onReturn }: {
             {menuOpen && (
               <div className="ops-menu" role="menu">
                 <div className="who"><strong>{session.user.displayName}</strong><small>{session.user.email} · {session.user.role}{viewingAs ? ` · viewed by ${viewingAs}` : ""}</small></div>
-                {onReturn && <button type="button" role="menuitem" onClick={onReturn}>{ICON.logout}Return to Management</button>}
+                {onReturn && <button type="button" role="menuitem" onClick={onReturn}>{ICON.logout}Return to {session.user.supportAccess?'IT Support':'Management'}</button>}
                 <button type="button" role="menuitem" onClick={() => go("account")}>{ICON.account}My account</button>
                 <button type="button" role="menuitem" onClick={() => { go("account"); window.dispatchEvent(new Event("pz:change-password")); }}>{ICON.key}Change password</button>
                 {!onReturn && <button type="button" role="menuitem" onClick={() => void logout()} disabled={busy}>{ICON.logout}{busy ? "Signing out…" : "Sign out"}</button>}

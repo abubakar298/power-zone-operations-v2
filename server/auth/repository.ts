@@ -8,6 +8,7 @@ export interface User {
   email: string;
   display_name: string;
   restrictedCostAccess?: boolean;
+  supportAccess?: boolean;
   role:
     | "Admin"
     | "Management"
@@ -16,7 +17,8 @@ export interface User {
     | "Operations"
     | "Inventory"
     | "Accounts"
-    | "Design";
+    | "Design"
+    | "IT Support";
 }
 export interface StoredUser extends User {
   password_hash: string;
@@ -36,7 +38,7 @@ export class AuthRepository {
   constructor(private pool: Pool) {}
 
   private requireManagement(user: User) {
-    if (!['Admin','Management'].includes(user.role)) throw new HttpError(403,'Only Management can open another department account.');
+    if (!['Admin','Management','IT Support'].includes(user.role)) throw new HttpError(403,'Management or IT Support access is required to open a department account.');
   }
   async departmentUsers(principal: User) {
     this.requireManagement(principal);
@@ -47,7 +49,7 @@ export class AuthRepository {
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new HttpError(400,'Select an active department user.');
     const user=(await this.departmentUsers(principal)).find(u=>u.id===id);
     if(!user)throw new HttpError(403,'This department user is inactive or unavailable.');
-    return user;
+    return principal.role==='IT Support'?{...user,supportAccess:true,restrictedCostAccess:false}:user;
   }
   async departmentAudit(principal: User, target: User|null, details: Record<string,unknown>) {
     this.requireManagement(principal);

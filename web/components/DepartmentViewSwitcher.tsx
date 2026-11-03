@@ -13,7 +13,7 @@ export function DepartmentViewSwitcher({role,value,onSelect,operationsArea='oper
  return <div ref={root} className="pz-department-switcher" onKeyDown={e=>{if(e.key==='Escape'){setOpen(false);root.current?.querySelector<HTMLButtonElement>('button')?.focus();}}}>
   <Button variant="neutral" loading={busy} loadingLabel="Opening…" title={procurementSelected?'Current view: Procurement':value?`Current view: ${managementDepartment(value)?.label}`:'Open a department workspace'} aria-expanded={open} aria-controls={id} onClick={()=>setOpen(!open)}>View as<Icon name="chevron"/></Button>
   {open&&<nav id={id} className="pz-department-switcher-menu" aria-label="View department workspace">
-   <Button disabled={busy} variant={value?'neutral':'secondary'} onClick={()=>void choose('dashboard')}>Management</Button>
+   <Button disabled={busy} variant={value?'neutral':'secondary'} onClick={()=>void choose('dashboard')}>{role==='IT Support'?'IT Support':'Management'}</Button>
    {managementDepartments.map(d=><Fragment key={d.view}>
     {d.view==='operations'&&onProcurement&&<Button disabled={busy} variant={procurementSelected?'secondary':'neutral'} aria-current={procurementSelected?'page':undefined} onClick={()=>void chooseProcurement()}>Procurement</Button>}
     <Button disabled={busy} variant={value===d.view&&!procurementSelected?'secondary':'neutral'} aria-current={value===d.view&&!procurementSelected?'page':undefined} onClick={()=>void choose(d.view)}>{d.label}</Button>

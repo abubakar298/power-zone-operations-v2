@@ -1,3 +1,4 @@
+import {supportCostView} from './support-access.js';
 import { Decimal } from "decimal.js";
 import type { RequestHandler } from "express";
 
@@ -206,8 +207,20 @@ export function coordinationPricingView(value: any): any {
 
 /** Central outbound boundary; evaluated at send time, after route authentication. */
 export const financialVisibility: RequestHandler = (req, res, next) => {
+  const send=res.send.bind(res),sendFile=res.sendFile.bind(res);
+  const support=()=>req.authSession?.user.supportAccess===true||req.authSession?.user.role==='IT Support';
+  // Opaque originals can contain PT costs and cannot be safely redacted as JSON.
+  res.send=((body:any)=>{
+    if(support()&&!String(res.getHeader('content-type')??'').includes('application/json'))return res.status(403).type('application/json').json({message:'Document contents are restricted for IT Support. Record metadata remains available.'});
+    return send(body);
+  }) as typeof res.send;
+  res.sendFile=((...args:any[])=>{
+    if(support()){res.status(403).type('application/json').json({message:'Original document contents are restricted for IT Support.'});return;}
+    return (sendFile as any)(...args);
+  }) as typeof res.sendFile;
   const json = res.json.bind(res);
   res.json = ((body: any) => {
+    if(req.authSession?.user.supportAccess||req.authSession?.user.role==='IT Support')return json(supportCostView(body));
     if (req.authSession?.user.role === "Coordinator" && req.originalUrl.startsWith("/api/commercial")) body = coordinationPricingView(body);
     if (canSeeBessCost(req.authSession?.user)) return json(body);
     const path = req.originalUrl;

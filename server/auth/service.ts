@@ -31,6 +31,7 @@ export const publicUser = (u: User) => ({
   email: u.email,
   displayName: u.display_name,
   role: u.role,
+  supportAccess: u.role === "IT Support" || u.supportAccess === true,
   restrictedCostAccess: u.restrictedCostAccess === true,
 });
 
