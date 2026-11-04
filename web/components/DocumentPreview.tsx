@@ -142,12 +142,14 @@ export function DocumentDownload({
   data,
   label = "Download",
   downloadFilename,
+  disabled = false,
 }: {
   url: string;
   title: string;
   data?: Blob;
   label?: string;
   downloadFilename?:string;
+  disabled?: boolean;
 }) {
   const [downloadError, setDownloadError] = useState("");
   const [downloading, setDownloading] = useState(false);
@@ -162,9 +164,11 @@ export function DocumentDownload({
           credentials: "same-origin",
           cache: "no-store",
         });
+        // Show the server's reason (for example a restricted document) rather than saving it as a file.
         if (!response.ok)
           throw new Error(
-            "Unable to download this document. Please try again.",
+            (await response.json().catch(() => null))?.message ??
+              "Unable to download this document. Please try again.",
           );
         blob = await response.blob();
         filename=filenameFromDisposition(response.headers.get('Content-Disposition'))??filename;
@@ -191,6 +195,7 @@ export function DocumentDownload({
       <Button
         variant="secondary"
         loading={downloading}
+        disabled={disabled}
         onClick={() => void download()}
       >
         {label}
