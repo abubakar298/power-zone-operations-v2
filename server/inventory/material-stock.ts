@@ -21,7 +21,7 @@ import {warehouseDispatchPosition,warehousePosition,warehousePositions} from './
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {approvedEarthingBasis} from '../../shared/material-preparation.js';
 
-const quantity=z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/).refine(v=>new Decimal(v).gt(0),'Enter a positive quantity.').transform(v=>new Decimal(v).toString());
+const quantity=z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/,{abort:true}).refine(v=>new Decimal(v).gt(0),'Enter a positive quantity.').transform(v=>new Decimal(v).toString());
 export const materialIssueInputSchema=z.object({draftId:z.uuid(),version:z.number().int().positive(),requestKey:z.uuid(),sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),authorityVersion:z.number().int().positive(),reason:z.string().trim().min(3).max(2000),transport:materialDraftInputSchema.shape.transport,
  lines:z.array(z.object({lineKey:z.uuid(),quantity,ledgerRevision:z.number().int().nonnegative()}).strict()).min(1).max(2000),
 }).strict();

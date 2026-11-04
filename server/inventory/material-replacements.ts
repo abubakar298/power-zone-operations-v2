@@ -14,7 +14,7 @@ import {warehousePosition} from './warehouse-ledger.js';
 import {MaterialDraftRepository,materialDraftInputSchema} from './material-drafts.js';
 import {sameUnit} from '../../shared/stock-units.js';
 
-const positive=z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/).refine(v=>new Decimal(v).gt(0),'Enter a positive counted quantity.').transform(v=>new Decimal(v).toString());
+const positive=z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/,{abort:true}).refine(v=>new Decimal(v).gt(0),'Enter a positive counted quantity.').transform(v=>new Decimal(v).toString());
 const optionalQuantity=positive.nullable();
 const serial=z.string().trim().max(200).nullable();
 const reason=z.string().trim().min(3).max(2000);

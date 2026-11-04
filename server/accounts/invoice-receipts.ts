@@ -9,7 +9,8 @@ import{HttpError}from'../http/errors.js';
 import{paymentRegisterData}from'./payment-records.js';
 import{receiptLedgerKey}from'./invoice-receipt-state.js';
 import{invoiceIdentity}from'./billing-model.js';
-const money=z.string().regex(/^\d{1,14}(?:\.\d{1,2})?$/).refine(v=>new Decimal(v).gt(0),'Enter a positive PKR amount.');
+import{invoiceMoney}from'./invoice-records.js';
+const money=invoiceMoney;
 export const invoiceReceiptSchema=z.object({sourceRowId:z.string().min(1).max(500),sourceVersion:z.number().int().nonnegative(),receiptVersion:z.number().int().nonnegative(),amount:money,outstandingBefore:money.optional(),paymentDate:z.iso.date(),transactionId:z.string().trim().min(1).max(200),requestKey:z.uuid()}).strict();
 export async function recordInvoiceReceipt(pool:Pool,actor:string,raw:unknown,now=new Date()){
  const input=invoiceReceiptSchema.parse(raw),today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);

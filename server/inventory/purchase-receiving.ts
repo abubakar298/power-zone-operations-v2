@@ -9,7 +9,7 @@ import {transaction} from '../db/transaction.js';
 import {sameUnit} from '../../shared/stock-units.js';
 import {warehousePosition} from './warehouse-ledger.js';
 import {requireWarehouseAccess,lockWarehouseAuthority,warehouseNumber} from './warehouse-access.js';
-const quantity=z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/).refine(v=>new Decimal(v).gt(0),'Enter a positive received quantity.').transform(v=>new Decimal(v).toString());
+const quantity=z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/,{abort:true}).refine(v=>new Decimal(v).gt(0),'Enter a positive received quantity.').transform(v=>new Decimal(v).toString());
 export const purchaseReceiptInputSchema=z.object({requestId:z.uuid(),requestKey:z.uuid(),warehouse:z.string().trim().min(1).max(200),sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),authorityVersion:z.number().int().positive(),evidenceId:z.uuid(),reason:z.string().trim().min(3).max(2000),lines:z.array(z.object({itemKey:z.string().trim().min(1).max(200),itemId:z.string().trim().min(1).max(200),unit:z.string().trim().min(1).max(40),quantity,ledgerRevision:z.number().int().nonnegative()}).strict()).min(1).max(200)}).strict();
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 type Db=Pool|PoolClient;

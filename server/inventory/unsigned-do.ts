@@ -13,7 +13,7 @@ import {fixedPreparationRows} from '../../shared/material-preparation.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {issuedDispatchPrintModel} from './material-document-model.js';
 import {MaterialDraftRepository} from './material-drafts.js';
-const line=z.object({key:z.uuid(),itemId:z.string().min(1).max(300),unit:z.string().min(1).max(100),out:z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/).refine(v=>new Decimal(v).gt(0))}).strict();
+const line=z.object({key:z.uuid(),itemId:z.string().min(1).max(300),unit:z.string().min(1).max(100),out:z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/,{abort:true}).refine(v=>new Decimal(v).gt(0))}).strict();
 export const unsignedDoInput=z.object({revision:z.number().int().positive(),requestKey:z.uuid(),action:z.enum(['edit','delete']),partialDelivery:z.boolean().optional(),reason:z.string().trim().min(3).max(2000),transport:z.object({issuedTo:z.string().trim().min(1).max(200),vehicle:z.string().max(200),driver:z.string().max(200),driverIdentity:z.string().max(200)}).strict().optional(),lines:z.array(line).min(1).max(2000).optional()}).strict();
 export class UnsignedDoRepository{
  constructor(private pool:Pool){}

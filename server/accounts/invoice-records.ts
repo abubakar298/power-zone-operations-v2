@@ -12,7 +12,11 @@ export const invoiceStages=['advance-delivery','balance-completion','delivery-on
 export const invoiceStageLabels:Record<(typeof invoiceStages)[number],string>={'advance-delivery':'Advance / delivery','balance-completion':'Balance / completion','delivery-only':'Delivery only','extra-cable':'Extra cable','internet':'Internet'};
 export const delayReasons=['qc-pictures','physical-originals','customer-clarification','other'] as const;
 export const delayReasonLabels:Record<(typeof delayReasons)[number],string>={'qc-pictures':'Awaiting QC pictures','physical-originals':'Awaiting physical originals','customer-clarification':'Customer clarification','other':'Other'};
-export const invoiceMoney=z.string().regex(/^\d{1,14}(?:\.\d{1,2})?$/).refine(v=>new Decimal(v).gt(0),'Enter a positive PKR amount.');
+/** PKR as written in PT: thousands commas are accepted (450,000); any other malformed
+ * value is refused with a field message rather than failing the request. */
+const withoutCommas=(v:unknown)=>typeof v==='string'&&/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(v.trim())?v.trim().replace(/,/g,''):v;
+export const pkrDigits=z.preprocess(withoutCommas,z.string().regex(/^\d{1,14}(?:\.\d{1,2})?$/,{abort:true}));
+export const invoiceMoney=z.preprocess(withoutCommas,z.string().regex(/^\d{1,14}(?:\.\d{1,2})?$/,{abort:true}).refine(v=>new Decimal(v).gt(0),'Enter a positive PKR amount.'));
 /** Exact printed number: 27-10609 and 27-10609-S are different invoices. */
 export const normalizedInvoiceReference=(value:unknown)=>String(value??'').trim().replace(/\s+/g,' ').toLowerCase();
 /** Historical rows may hold several numbers in one field; compare each one. */

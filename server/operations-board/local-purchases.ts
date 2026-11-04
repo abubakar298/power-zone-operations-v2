@@ -6,7 +6,7 @@ import {transaction} from '../db/transaction.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {requireQcMaterialSite} from '../inventory/qc-material-access.js';
 import {HttpError} from '../http/errors.js';
-export const localPurchasesSchema=z.object({version:z.number().int().nonnegative(),requestKey:z.uuid(),items:z.array(z.object({key:z.uuid(),itemId:z.string().trim().min(1).max(160),description:z.string().trim().min(1).max(1000),quantity:z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/).refine(v=>new Decimal(v).gt(0)).transform(v=>new Decimal(v).toString())}).strict()).max(200)}).strict();
+export const localPurchasesSchema=z.object({version:z.number().int().nonnegative(),requestKey:z.uuid(),items:z.array(z.object({key:z.uuid(),itemId:z.string().trim().min(1).max(160),description:z.string().trim().min(1).max(1000),quantity:z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/,{abort:true}).refine(v=>new Decimal(v).gt(0)).transform(v=>new Decimal(v).toString())}).strict()).max(200)}).strict();
 /** Caller authorizes QC for site read, or Accounts for the separate cost-entry projection. */
 export async function readLocalPurchases(pool:Pool,siteId:string){
  const saved=(await pool.query('SELECT version,snapshot,created_at FROM operations_site_local_purchase_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1',[siteId])).rows[0];
