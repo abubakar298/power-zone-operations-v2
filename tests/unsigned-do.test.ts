@@ -16,6 +16,7 @@ import {SiteMaterialPlanRepository} from '../server/inventory/site-material-plan
 import {MaterialStockRepository} from '../server/inventory/material-stock.js';
 import {WarehouseAuthorityRepository,warehousePosition} from '../server/inventory/warehouse-ledger.js';
 import {signDispatch} from './signed-dispatch-fixture.js';
+import {Decimal} from 'decimal.js';
 
 test('unsigned DO edits retain number and audit, deletion releases prepared quantities, signed gate locks edits atomically',async()=>{
  const db=await (process.env.TEST_DIRECT_PGLITE==='true'?directMaterialDatabase():testDatabase());try{
@@ -39,9 +40,17 @@ test('unsigned DO edits retain number and audit, deletion releases prepared quan
   assert.equal(original.editable,true);
   const originalSnapshot=(await db.pool.query('SELECT snapshot FROM inventory_material_dispatches WHERE id=$1',[result.id])).rows[0].snapshot,newKey=randomUUID();
   const changedRows=record.snapshot.lines.map((r:any)=>({key:r.key,itemId:r.itemId,unit:r.unit,out:r.out}));changedRows[1].out='3';
-  const edit={revision:1,requestKey:randomUUID(),action:'edit' as const,reason:'Correct reviewed cable quantity before dispatch',transport:record.snapshot.transport,lines:changedRows};
+  const planBefore=await plans.detail(f.reviewer,saved.id),planLine=(p:any,key:string)=>[...p.fixed.snapshot.lines,...(p.variable?.snapshot.lines??[])].find((r:any)=>r.key===key);
+  const edit={revision:1,requestKey:randomUUID(),action:'edit' as const,reason:'Correct reviewed cable quantity before dispatch',transport:{...record.snapshot.transport,vehicle:'TEST-EDITED'},lines:changedRows};
   await assert.rejects(repo.change(keeper,result.id,edit),/assigned Inventory dispatcher/);
   const edited=await repo.change(f.reviewer,result.id,edit);assert.equal(edited.number,result.number);assert.equal(edited.revision,2);assert.equal((await stock.dispatch(f.reviewer,result.id)).snapshot.lines[1].out,'3');
+  // The site preparation follows the edited DO: the row moves by exactly the DO change and transport follows.
+  const planAfter=await plans.detail(f.reviewer,saved.id),cableKey=changedRows[1].key;
+  assert.equal(planAfter.version,planBefore.version+1,'The preparation gets a new version; the earlier one is retained.');
+  assert.equal(planLine(planAfter,cableKey).out,new Decimal(planLine(planBefore,cableKey).out).minus(record.snapshot.lines[1].out).plus('3').toString());
+  assert.equal(planAfter.fixed.snapshot.transport.vehicle,'TEST-EDITED');
+  assert.match(planAfter.fixed.snapshot.revisionReason,/revision 2: Correct reviewed cable quantity/);
+  for(const r of changedRows.filter((_:any,i:number)=>i!==1))assert.equal(planLine(planAfter,r.key).out,planLine(planBefore,r.key).out,'Unchanged DO rows keep their prepared quantity.');
   assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,before);
   assert.equal((await repo.change(f.reviewer,result.id,edit)).revision,2,'Retries do not create revisions or another DO.');
   const history=(await db.pool.query('SELECT * FROM inventory_material_dispatch_revisions WHERE dispatch_id=$1',[result.id])).rows;assert.deepEqual(history[0].before_record.snapshot,originalSnapshot);
@@ -54,7 +63,7 @@ test('unsigned DO edits retain number and audit, deletion releases prepared quan
   const evidence=await stock.uploadEvidence(keeper,{warehouse:'Lahore warehouse',filename:'gate.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7 FICTIONAL GATE').toString('base64')});
   await assert.rejects(new GatePassRepository(db.pool).attach(keeper,{kind:'dispatch',documentId:result.id,copyKind:'signed-gate',evidenceId:evidence.id,note:'Do not post cancelled DO',requestKey:randomUUID()}),/not found/);
   assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,before);
-  const replacement=await plans.issueSaved(f.reviewer,saved.id,{...command,requestKey:randomUUID()},stock);
+  const replacement=await plans.issueSaved(f.reviewer,saved.id,{...command,version:(await plans.detail(f.reviewer,saved.id)).version,requestKey:randomUUID()},stock);
   assert.notEqual(replacement.id,result.id);assert.equal((await plans.issued(f.reviewer,saved.id)).dispatches.length,1);
   const replacementRecord=await stock.dispatch(f.reviewer,replacement.id);
   const revise={...edit,revision:1,requestKey:randomUUID(),lines:replacementRecord.snapshot.lines.map((r:any)=>({key:r.key,itemId:r.itemId,unit:r.unit,out:r.out}))};
@@ -65,7 +74,8 @@ test('unsigned DO edits retain number and audit, deletion releases prepared quan
   const gates=new GatePassRepository(db.pool),gate={kind:'dispatch' as const,documentId:replacement.id,copyKind:'signed-gate' as const,evidenceId:evidence.id,note:'Current revised DO gate copy',requestKey:randomUUID()};
   await assert.rejects(gates.attach(keeper,gate),/changed/);
   await gates.attach(keeper,{...gate,documentRevision:2});
-  assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'5','Only latest revised cable quantity posts once.');
+  const reissuedCable=replacementRecord.snapshot.lines.find((r:any)=>r.key===cableKey).out;assert.equal(reissuedCable,planLine(planAfter,cableKey).out,'A DO issued after deleting the edited one uses the corrected preparation.');
+  assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,new Decimal(before!).minus(reissuedCable).toString(),'Only latest revised cable quantity posts once.');
   assert.equal((await repo.detail(f.reviewer,replacement.id)).editable,false);
   await assert.rejects(repo.change(f.reviewer,replacement.id,{...remove,revision:2,requestKey:randomUUID()}),/locked/);
   await assert.rejects(repo.change(f.reviewer,replacement.id,{...revise,revision:2,requestKey:randomUUID()}),/locked/);

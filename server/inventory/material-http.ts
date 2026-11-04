@@ -12,6 +12,7 @@ import {MaterialDraftRepository,materialDraftInputSchema} from './material-draft
 import {SiteMaterialPlanRepository,siteMaterialPlanInputSchema} from './site-material-plans.js';
 import {issuedCustomerSignoffModels,returnWorksheetPrintModel,returnReceiptPrintModel,purchaseReceiptPrintModel,siteUsagePrintModel,issuedDispatchPrintModel,parentDraftPrintModel,sitePlanPrintModel} from './material-document-model.js';
 import {materialDocumentPdf,parentDoCopies,warehouseDoCopies} from './material-document-pdf.js';
+import {temporaryDocumentPdf} from './temporary-document-pdf.js';
 
 import {MaterialStockRepository,materialIssueInputSchema,materialReceiptInputSchema,materialEvidenceInputSchema} from './material-stock.js';
 
@@ -120,6 +121,7 @@ export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:Re
  r.get('/drafts/:id/history',async(req,res)=>{const id=z.uuid().parse(req.params.id);res.json(await repo.history(req.authSession!.user.id,id));});
  r.get('/site-plans/:id/history',async(req,res)=>{if(!sitePlans)throw new HttpError(404,'Site preparation unavailable.');const id=z.uuid().parse(req.params.id),plan=await sitePlans.detail(req.authSession!.user.id,id),fixed=await repo.history(req.authSession!.user.id,plan.fixed.id);res.json(fixed);});
  r.get('/temporary-documents',async(req,res)=>res.json(await repo.temporaryDocuments(req.authSession!.user.id)));
+ r.get('/temporary-documents/:id/document.pdf',async(req,res)=>{const id=z.uuid().safeParse(req.params.id);if(!id.success)throw new HttpError(400,'Invalid temporary document.');const doc=await repo.temporaryDocument(req.authSession!.user.id,id.data);res.locals.downloadContext={documentType:'Temporary document',identity:`temporary-document:${doc.id}`,revision:doc.version??1};res.type('pdf').set('Content-Disposition',`inline; filename="${doc.number}.pdf"`).send(temporaryDocumentPdf(doc));});
  r.post('/temporary-documents',async(req,res)=>res.json(await repo.saveTemporaryDocument(req.authSession!.user.id,req.body)));
  r.get('/intake',async(req,res)=>res.json(await repo.intake(req.authSession!.user.id)));
  r.get('/drafts',async(req,res)=>res.json(await repo.list(req.authSession!.user.id)));

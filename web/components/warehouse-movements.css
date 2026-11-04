@@ -2,3 +2,14 @@
 
 .warehouse-movement-table .warehouse-primary,.warehouse-movement-table td strong{box-sizing:border-box;display:block;min-height:40px;padding-top:8px;line-height:24px}
 .warehouse-movement-dialog .pz-button:disabled{background:var(--pz-disabled-bg);color:var(--pz-disabled-text);box-shadow:none;border-color:var(--pz-border)}
+
+/* Original DO: saved DOs listed readably inside the panel; a typed reference may be used as external. */
+.original-do-field{position:relative;min-width:0}.original-do-field>input{width:100%;box-sizing:border-box}
+.original-do-results{position:absolute;z-index:30;top:calc(100% + 4px);left:0;right:0;background:var(--pz-surface,#fff);border:1px solid var(--pz-border);border-radius:var(--pz-radius-control,8px);box-shadow:0 10px 30px rgb(0 0 0 / 10%);padding:4px}
+.original-do-results>[role=listbox]{max-height:18rem;overflow-y:auto}
+.original-do-results button{display:grid;gap:2px;width:100%;min-width:0;text-align:left;padding:8px 12px;border:0;border-radius:6px;background:transparent;color:var(--pz-text);font:inherit;cursor:pointer}
+.original-do-results button:hover,.original-do-results button:focus-visible,.original-do-results button[aria-selected=true]{background:var(--pz-selected-bg,#f0ecf8)}
+.original-do-results button strong{font-weight:600;overflow-wrap:anywhere}.original-do-results button strong>span{font-weight:400;color:var(--pz-muted)}
+.original-do-results button small{color:var(--pz-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.original-do-results .original-do-external{margin-top:4px;border-top:1px solid var(--pz-border);border-radius:0 0 6px 6px;color:var(--pz-primary,#514394);font-weight:600}
+.original-do-empty{margin:0;padding:8px 12px;font-size:12px;color:var(--pz-muted)}

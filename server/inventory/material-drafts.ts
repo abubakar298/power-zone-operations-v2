@@ -141,6 +141,12 @@ export class MaterialDraftRepository{
   const rows=await this.pool.query('SELECT snapshot FROM inventory_temporary_documents WHERE ($1 OR warehouse=ANY($2::text[])) ORDER BY created_at DESC',[access.owner,access.warehouses]);
   return {documents:rows.rows.map(r=>r.snapshot),warehouses:access.owner?catalogue.warehouses:access.warehouses,items:catalogue.catalogue.map(r=>({id:r.itemId,description:r.description,unit:r.units[0]??''}))};
  }
+ /** One temporary document for printing, within the same warehouse scope as the list. */
+ async temporaryDocument(actor:string,id:string){
+  const access=await this.access(actor,this.pool,true);
+  const row=(await this.pool.query('SELECT snapshot FROM inventory_temporary_documents WHERE id=$1 AND ($2 OR warehouse=ANY($3::text[]))',[id,access.owner,access.warehouses])).rows[0];
+  if(!row)throw new HttpError(404,'Temporary document not found.');return row.snapshot;
+ }
  async saveTemporaryDocument(actor:string,value:unknown){
   const input=z.object({requestKey:z.uuid(),id:z.union([z.uuid(),z.literal('')]),version:z.number().int().nonnegative(),type:z.enum(['IGP','OGP','TRF','IRR','OTHER']),date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),warehouse:z.string().trim().min(1).max(200),party:z.string().max(500),sourceReference:z.string().max(500),actualReference:z.string().max(500),notes:z.string().max(5000),detailsConfirmed:z.boolean(),lines:z.array(z.object({itemId:z.string().max(200),description:z.string().max(1000),quantity:z.union([z.literal(''),z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/)]),unit:z.string().max(40),remarks:z.string().max(2000)}).strict()).min(1).max(500)}).strict().safeParse(value);
   if(!input.success)throw new HttpError(422,'Check the temporary document, quantities and warehouse.');

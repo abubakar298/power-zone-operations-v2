@@ -13,6 +13,7 @@ import {fixedPreparationRows} from '../../shared/material-preparation.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {issuedDispatchPrintModel} from './material-document-model.js';
 import {MaterialDraftRepository} from './material-drafts.js';
+import {SiteMaterialPlanRepository} from './site-material-plans.js';
 const line=z.object({key:z.uuid(),itemId:z.string().min(1).max(300),unit:z.string().min(1).max(100),out:z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/,{abort:true}).refine(v=>new Decimal(v).gt(0))}).strict();
 export const unsignedDoInput=z.object({revision:z.number().int().positive(),requestKey:z.uuid(),action:z.enum(['edit','delete']),partialDelivery:z.boolean().optional(),reason:z.string().trim().min(3).max(2000),transport:z.object({issuedTo:z.string().trim().min(1).max(200),vehicle:z.string().max(200),driver:z.string().max(200),driverIdentity:z.string().max(200)}).strict().optional(),lines:z.array(line).min(1).max(2000).optional()}).strict();
 export class UnsignedDoRepository{
@@ -63,6 +64,8 @@ export class UnsignedDoRepository{
     const movements=[];
     for(const l of snapshot.lines){const ledgerKey=warehouseLedgerKey(l.itemId,record.warehouse,l.unit);await c.query('INSERT INTO inventory_material_dispatch_lines(dispatch_id,line_key,source_sha256,ledger_key,item_id,unit,description,quantity) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,l.key,record.source_sha256,ledgerKey,l.itemId,l.unit,l.description,l.out]);movements.push({ledgerKey,quantity:l.out,kind:'dispatch-out',draftId:record.draft_id,dispatchId:id,lineKey:l.key});}
     await c.query("UPDATE inventory_signed_dispatch_pending SET movements=$2 WHERE document_kind='dispatch' AND document_id=$1",[id,JSON.stringify(movements)]);
+    // The site preparation (Materials page) follows the edited DO, so the two never disagree.
+    if(!snapshot.parent)await new SiteMaterialPlanRepository(this.pool).followDoEdit(actor,c,{number:record.number,draftId:record.draft_id??null,combinedPlanId:record.snapshot.combinedPlan?.id,revision:snapshot.doRevision,reason:input.reason,requestKey:input.requestKey},beforeLines.map((l:any)=>({key:l.line_key,quantity:String(l.quantity)})),snapshot.lines.map((l:any)=>({key:l.key,out:l.out,description:l.description})),input.transport!);
    }
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'inventory.unsigned_do.'+input.action+':'+id+':revision:'+snapshot.doRevision]);
    return {id,number:record.number,revision:snapshot.doRevision,cancelled:input.action==='delete',stockPosted:false};
