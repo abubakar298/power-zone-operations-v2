@@ -5,7 +5,7 @@ import {equalSecrets} from '../auth/crypto.js';
 import {HttpError} from '../http/errors.js';
 import {requireWarehouseAccess} from './warehouse-access.js';
 import {MaterialStockRepository,materialEvidenceInputSchema} from './material-stock.js';
-import {MaterialReplacementsRepository,replacementCaseInputSchema,replacementIssueInputSchema,replacementReturnInputSchema,replacementUsableInputSchema} from './material-replacements.js';
+import {MaterialReplacementsRepository,replacementCaseInputSchema,replacementCaseBatchInputSchema,replacementIssueInputSchema,replacementReturnInputSchema,replacementUsableInputSchema} from './material-replacements.js';
 import {replacementDocumentPdf,replacementPrintRecord,type ReplacementDocumentKind} from './material-replacement-documents.js';
 const uuid=(v:unknown)=>{const p=z.uuid().safeParse(v);if(!p.success)throw new HttpError(400,'Invalid replacement record.');return p.data;};
 const warehouse=(v:unknown)=>{const p=z.string().trim().min(1).max(200).safeParse(v);if(!p.success)throw new HttpError(422,'Select a warehouse.');return p.data;};
@@ -35,6 +35,7 @@ export function materialReplacementHttp(pool:Pool,requireSession:RequestHandler)
  r.get('/cases',async(req,res)=>res.json(await repo.list(actor(req),warehouse(req.query.warehouse))));
  r.get('/cases/:id',async(req,res)=>res.json(await repo.detail(actor(req),uuid(req.params.id))));
  r.post('/cases',async(req,res)=>res.json(await repo.open(actor(req),parse(replacementCaseInputSchema,req.body))));
+ r.post('/cases/batch',async(req,res)=>res.json(await repo.openBatch(actor(req),parse(replacementCaseBatchInputSchema,req.body))));
  r.post('/cases/:id/issue',async(req,res)=>{const input=parse(replacementIssueInputSchema,req.body);if(input.caseId!==uuid(req.params.id))throw new HttpError(422,'The selected replacement case changed.');res.json(await repo.issue(actor(req),input));});
  r.post('/cases/:id/faulty-return',async(req,res)=>{const input=parse(replacementReturnInputSchema,req.body);if(input.caseId!==uuid(req.params.id))throw new HttpError(422,'The selected replacement case changed.');res.json(await repo.receiveFaulty(actor(req),input));});
  r.post('/returns/:id/usable-release',async(req,res)=>{const input=parse(replacementUsableInputSchema,req.body);if(input.returnId!==uuid(req.params.id))throw new HttpError(422,'The selected counted return changed.');res.json(await repo.releaseUsable(actor(req),input));});

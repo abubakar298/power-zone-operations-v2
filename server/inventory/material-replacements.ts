@@ -20,6 +20,8 @@ const serial=z.string().trim().max(200).nullable();
 const reason=z.string().trim().min(3).max(2000);
 const version=z.number().int().positive();
 export const replacementCaseInputSchema=z.object({originalDispatchId:z.uuid().optional(),originalLineKey:z.uuid().optional(),externalOriginal:z.object({reference:z.string().trim().min(1).max(200),itemId:z.string().trim().min(1).max(200),unit:z.string().trim().min(1).max(40),quantity:positive,siteName:z.string().trim().min(1).max(200),customer:z.string().trim().min(1).max(200),ipo:z.string().trim().max(200).default('')}).strict().optional(),siteId:z.uuid().optional(),warehouse:z.string().trim().min(1).max(200),quantity:positive,expectedOriginalReturnQuantity:optionalQuantity,originalSerial:serial,reason,requestKey:z.uuid()}).strict().superRefine((v,ctx)=>{if(v.externalOriginal?(!!v.originalDispatchId||!!v.originalLineKey||!!v.siteId):(!v.originalDispatchId||!v.originalLineKey))ctx.addIssue({code:'custom',message:'Select a saved original DO or enter its external reference.'});});
+/** Several items of one original DO opened together: one case per item, all or none. */
+export const replacementCaseBatchInputSchema=z.object({requestKey:z.uuid(),cases:z.array(replacementCaseInputSchema).min(1).max(50)}).strict().superRefine((v,ctx)=>{const first=v.cases[0];if(v.cases.some(c=>c.warehouse!==first.warehouse||c.originalDispatchId!==first.originalDispatchId||!!c.externalOriginal))ctx.addIssue({code:'custom',message:'Open a batch for items of one saved original DO and one warehouse.'});if(new Set(v.cases.map(c=>c.originalLineKey)).size!==v.cases.length||new Set(v.cases.map(c=>c.requestKey)).size!==v.cases.length)ctx.addIssue({code:'custom',message:'Each original DO item can be listed once.'});});
 export const replacementIssueInputSchema=z.object({caseId:z.uuid(),caseVersion:version,requestKey:z.uuid(),sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),authorityVersion:version,ledgerRevision:z.number().int().nonnegative(),quantity:positive,replacementSerial:serial,reason,transport:materialDraftInputSchema.shape.transport}).strict();
 export const replacementReturnInputSchema=z.object({caseId:z.uuid(),caseVersion:version,requestKey:z.uuid(),warehouse:z.string().trim().min(1).max(200),evidenceId:z.uuid(),quantity:positive,receivedItemId:z.string().trim().min(1).max(200).nullable().optional(),receivedUnit:z.string().trim().min(1).max(40).nullable().optional(),receivedSerial:serial,date:z.iso.date(),reason}).strict();
 export const replacementUsableInputSchema=z.object({returnId:z.uuid(),caseVersion:version,requestKey:z.uuid(),sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),authorityVersion:version,ledgerRevision:z.number().int().nonnegative(),evidenceId:z.uuid(),quantity:positive,usableConfirmed:z.literal(true),itemIdentityConfirmed:z.literal(true),reason}).strict();
@@ -60,8 +62,18 @@ export class MaterialReplacementsRepository{
  }
  async open(actor:string,raw:z.infer<typeof replacementCaseInputSchema>){
   const input=replacementCaseInputSchema.parse(raw);
+  return transaction(this.pool,async c=>{await lockActiveActor(c,actor);return this.openWithin(c,actor,input);});
+ }
+ async openBatch(actor:string,raw:z.infer<typeof replacementCaseBatchInputSchema>){
+  const input=replacementCaseBatchInputSchema.parse(raw),reference='RPL-'+createHash('sha256').update(input.requestKey).digest('hex').slice(0,8).toUpperCase();
   return transaction(this.pool,async c=>{
-   await lockActiveActor(c,actor);
+   await lockActiveActor(c,actor);const ids=[];
+   for(const [index,item]of input.cases.entries())ids.push((await this.openWithin(c,actor,item,{reference,index:index+1,count:input.cases.length})).id);
+   return{ids,reference,stockPosted:false};
+  });
+ }
+ private async openWithin(c:PoolClient,actor:string,input:z.infer<typeof replacementCaseInputSchema>,batch?:{reference:string;index:number;count:number}){
+  {
    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.replacement.case.request.'||$1,0))",[input.requestKey]);
    const replay=(await c.query('SELECT id,warehouse,created_by,request_fingerprint FROM inventory_material_replacement_cases WHERE request_key=$1',[input.requestKey])).rows[0];
    if(replay){await requireWarehouseAccess(actor,replay.warehouse,c);if(replay.created_by!==actor||replay.request_fingerprint!==fingerprint(input))throw new HttpError(409,'This request belongs to a different replacement case.');return{id:replay.id,version:1,stockPosted:false};}
@@ -90,11 +102,11 @@ export class MaterialReplacementsRepository{
    const sites=input.siteId?eligible.filter((site:any)=>site.siteId===input.siteId):eligible;
    const other=(await c.query('SELECT count(*)::int AS n FROM inventory_material_replacement_cases WHERE original_dispatch_id=$1 AND original_line_key=$2',[original.id,original.line_key])).rows[0].n;
    const flags=[...(ext?['External original DO reference; original delivery is not a software stock posting.']:[]),...(sites.length!==1?['Original site destination is unverified; a physical replacement cannot be dispatched yet.']:[]),...(!input.originalSerial?['Original item serial is unverified; no serial was inferred.']:[]),...(input.expectedOriginalReturnQuantity===null?['Expected original return quantity is unverified.']:[]),...(other?['Other replacement cases exist for this original DO line; verify this is a separate incident.']:[])];
-   const id=randomUUID(),snapshot={warehouse:input.warehouse,original:{externalReference:ext?.reference??null,externalIdentity:original.externalIdentity??null,dispatchId:original.id,number:original.number,draftId:original.draft_id,warehouse:original.warehouse,lineKey:original.line_key,itemId:original.item_id,unit:original.unit,description:original.description,quantity:original.quantity,sourceSha256:original.source_sha256,serial:input.originalSerial},sites,replacementQuantity:input.quantity,expectedOriginalReturnQuantity:input.expectedOriginalReturnQuantity,issuedQuantity:'0',physicalReturnedQuantity:'0',usableReleasedQuantity:'0',originalReturnIdentity:'Not confirmed from warehouse inspection',flags,reason:input.reason};
+   const id=randomUUID(),snapshot={...batch?{batch}:{},warehouse:input.warehouse,original:{externalReference:ext?.reference??null,externalIdentity:original.externalIdentity??null,dispatchId:original.id,number:original.number,draftId:original.draft_id,warehouse:original.warehouse,lineKey:original.line_key,itemId:original.item_id,unit:original.unit,description:original.description,quantity:original.quantity,sourceSha256:original.source_sha256,serial:input.originalSerial},sites,replacementQuantity:input.quantity,expectedOriginalReturnQuantity:input.expectedOriginalReturnQuantity,issuedQuantity:'0',physicalReturnedQuantity:'0',usableReleasedQuantity:'0',originalReturnIdentity:'Not confirmed from warehouse inspection',flags,reason:input.reason};
    await c.query('INSERT INTO inventory_material_replacement_cases(id,original_dispatch_id,original_line_key,original_warehouse,warehouse,item_id,unit,original_quantity,replacement_quantity,expected_return_quantity,snapshot,request_key,request_fingerprint,created_by,external_do_reference) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)',[id,original.id,original.line_key,original.warehouse,input.warehouse,original.item_id,original.unit,original.quantity,input.quantity,input.expectedOriginalReturnQuantity,snapshot,input.requestKey,fingerprint(input),actor,ext?.reference??null]);
    await c.query("INSERT INTO inventory_material_replacement_case_versions(case_id,version,action,snapshot,reason,created_by) VALUES($1,1,'opened',$2,$3,$4)",[id,snapshot,input.reason,actor]);
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'inventory.replacement.opened:'+id]);return{id,version:1,stockPosted:false};
-  });
+  }
  }
  async issue(actor:string,raw:z.infer<typeof replacementIssueInputSchema>){
   const input=replacementIssueInputSchema.parse(raw);

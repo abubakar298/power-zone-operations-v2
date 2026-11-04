@@ -13,3 +13,14 @@
 .original-do-results button small{color:var(--pz-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .original-do-results .original-do-external{margin-top:4px;border-top:1px solid var(--pz-border);border-radius:0 0 6px 6px;color:var(--pz-primary,#514394);font-weight:600}
 .original-do-empty{margin:0;padding:8px 12px;font-size:12px;color:var(--pz-muted)}
+
+/* Replacement items: one row per original DO item — item, quantity, unit, expected return, serial. */
+.replacement-items{display:grid;gap:12px;min-width:0}.replacement-items>h3{margin:0;font-size:15px}
+.replacement-item-row{display:grid;grid-template-columns:28px minmax(220px,2.2fr) minmax(90px,.8fr) minmax(90px,.7fr) minmax(110px,.9fr) minmax(120px,1fr) auto;gap:12px;align-items:start;padding:12px;border:1px solid var(--pz-border);border-radius:var(--pz-radius-control,8px);min-width:0}
+.replacement-item-row>.pz-field{margin:0;min-width:0}.replacement-item-row input,.replacement-item-row select{width:100%;box-sizing:border-box}
+.replacement-item-sr{padding-top:34px;font-weight:600;color:var(--pz-muted);text-align:center}
+.replacement-item-remove{padding-top:26px}
+.replacement-item-problem{grid-column:2/-1;margin:0;color:var(--pz-danger,#a33f30)}
+.replacement-items>.pz-button{justify-self:start}
+@media(max-width:1100px){.replacement-item-row{grid-template-columns:28px minmax(0,1fr) minmax(0,1fr)}.replacement-item-sr{grid-column:1;grid-row:1/span 6;padding-top:30px}.replacement-item-row>.pz-field{grid-column:span 1}.replacement-item-row>.pz-field:first-of-type,.replacement-item-remove,.replacement-item-problem{grid-column:2/-1}.replacement-item-remove{padding-top:0}}
+@media(max-width:600px){.replacement-item-row{grid-template-columns:minmax(0,1fr)}.replacement-item-row>.pz-field,.replacement-item-row>.pz-field:first-of-type,.replacement-item-remove,.replacement-item-problem{grid-column:1}.replacement-item-sr{grid-row:auto;grid-column:1;padding-top:0;text-align:left}}

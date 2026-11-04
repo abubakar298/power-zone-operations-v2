@@ -192,3 +192,20 @@ test('a returned later replacement serial cannot settle the original item or rec
   assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))!.currentClosing,'4');
  }finally{await db.close();}
 });
+
+test('several items of one original DO open together as one batch, all or none, and a retry returns the same cases',async()=>{
+ const db=await testDatabase();try{
+  const f=await materialStockFixture(db.pool);await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$2)",[f.reviewer,f.owner]);
+  await new WarehouseAuthorityRepository(db.pool).command(f.owner,{warehouse:'Lahore warehouse',version:0,sourceSha256:f.stockSha,state:'active',reason:'Verified fictional baseline',requestKey:randomUUID()});
+  const original=await originalDispatch(db.pool,f);await staged(db.pool);const repo=new MaterialReplacementsRepository(db.pool);
+  const item=(extra:any={})=>({originalDispatchId:original.id,originalLineKey:original.lineKey,warehouse:'Lahore warehouse',quantity:'1',expectedOriginalReturnQuantity:'1',originalSerial:null,reason:'Fictional faulty items on one DO',requestKey:randomUUID(),...extra});
+  const count=async()=>(await db.pool.query('SELECT count(*)::int n FROM inventory_material_replacement_cases')).rows[0].n;
+  await assert.rejects(repo.openBatch(f.reviewer,{requestKey:randomUUID(),cases:[item(),item()]}),/listed once/);
+  await assert.rejects(repo.openBatch(f.reviewer,{requestKey:randomUUID(),cases:[item(),item({originalLineKey:randomUUID()})]}),/original committed material DO/);
+  assert.equal(await count(),0,'a failing item saves nothing');
+  const command={requestKey:randomUUID(),cases:[item()]},opened=await repo.openBatch(f.reviewer,command);
+  assert.match(opened.reference,/^RPL-[0-9A-F]{8}$/);assert.equal(opened.ids.length,1);
+  const detail=await repo.detail(f.reviewer,opened.ids[0]);assert.deepEqual(detail.snapshot.batch,{reference:opened.reference,index:1,count:1});assert.equal(detail.snapshot.replacementQuantity,'1');
+  assert.deepEqual((await repo.openBatch(f.reviewer,command)).ids,opened.ids,'retry returns the same case');assert.equal(await count(),1);
+ }finally{await db.close();}
+});
