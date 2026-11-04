@@ -31,3 +31,6 @@
 .ob-evidence-dialog-body{overflow:auto;max-height:calc(100dvh - 140px);padding:16px 24px}
 .ob-evidence-dialog-body .ipo-document-preview{margin:0;max-width:100%;box-sizing:border-box}
 @media(max-width:600px){.ob-evidence-dialog>header,.ob-evidence-dialog-body{padding:16px}}
+
+/* POC name / number per site in the batch summary, in route order. */
+.ob-facts .ob-fact-lines{display:grid;gap:4px;font-size:13px;color:inherit}.ob-facts .ob-fact-lines>b{font-weight:600}

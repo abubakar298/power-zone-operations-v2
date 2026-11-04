@@ -49,6 +49,8 @@ export const batchSchema=z.object({
  id:z.uuid().optional(),version:z.number().int().nonnegative(),requestKey:z.uuid(),edit:z.boolean().default(false),team:teamSchema,kind:z.enum(['delivery','labour','both']),
  deliveryDate:z.iso.date().optional(),cancelledSites:z.array(z.object({siteId:z.string().min(1).max(160),siteVersion:z.number().int().positive()}).strict()).max(1000).default([]),
  vehicle:z.string().trim().max(100).default(''),driver:z.string().trim().max(200).default(''),labourTeam:vendorId.optional(),inventoryReference:z.string().trim().max(200).default(''),reason:z.string().trim().max(2000).default(''),
- stops:z.array(z.object({siteId:z.string().min(1).max(160),siteVersion:z.number().int().positive(),kind:z.enum(['delivery','labour','both']).optional(),order:z.number().int().positive(),plannedDate:z.union([z.iso.date(),z.literal('')]),start:z.union([time,z.literal('')]).default(''),end:z.union([time,z.literal('')]).default('')}).strict()).min(1).max(1000),
+ stops:z.array(z.object({siteId:z.string().min(1).max(160),siteVersion:z.number().int().positive(),kind:z.enum(['delivery','labour','both']).optional(),order:z.number().int().positive(),plannedDate:z.union([z.iso.date(),z.literal('')]),start:z.union([time,z.literal('')]).default(''),end:z.union([time,z.literal('')]).default(''),
+  // Site point of contact for this visit (optional), shown on the batch plan.
+  pocName:z.string().trim().max(200).default(''),pocPhone:z.string().trim().max(40).regex(/^[0-9+()\-\s]*$/,'Enter the POC number using digits, spaces, +, - or brackets.').default('')}).strict()).min(1).max(1000),
 }).strict();
 export type BatchInput=z.infer<typeof batchSchema>;
