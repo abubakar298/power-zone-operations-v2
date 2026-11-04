@@ -35,3 +35,6 @@
 /* Saved batch: one row per site, POC name and number on the same row as the site. */
 .ob-batch-sites{min-width:720px;margin-top:4px}.ob-batch-sites th:first-child,.ob-batch-sites td:first-child{width:48px;text-align:center}.ob-batch-sites td>small{display:block;color:var(--pz-muted);font-size:12px;line-height:18px}.ob-batch-sites td:last-child{white-space:normal}.ob-batch-sites .ob-muted{color:var(--pz-muted)}
 .ob-batch-sites td:nth-child(n+4),.ob-batch-sites th{white-space:nowrap}
+
+/* Delete batch confirmation, shown in place under the batch heading. */
+.ob-batch-delete{padding:16px;border:1px solid var(--pz-danger-border,#e7b7b0);border-radius:var(--pz-radius-control,8px);background:var(--pz-danger-bg,#fdf4f3)}.ob-batch-delete p{margin:0}.ob-batch-delete textarea{width:100%;min-height:72px;box-sizing:border-box}

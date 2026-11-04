@@ -14,7 +14,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {HttpError} from '../http/errors.js';
 import {transaction} from '../db/transaction.js';
-import {fileSchema,importSchema,movementSchema,commandSchema,vendorSchema,targetsSchema,batchSchema,type BatchInput,type BoardCommand,type BoardSite} from './schema.js';
+import {fileSchema,importSchema,movementSchema,commandSchema,vendorSchema,targetsSchema,batchSchema,batchDeleteSchema,type BatchInput,type BoardCommand,type BoardSite} from './schema.js';
 import {workflowSiteSchema,saveDispatchPlan,confirmDelivery,completeQcStage,completeUpsJob,currentStage,siteBucket as siteBucketForBatch,qcType as qcTypeForBatch,type WorkflowSite,type FileReference,type Entry} from './workflow.js';
 import type {z} from 'zod';
 
@@ -147,7 +147,7 @@ export class OperationsBoardRepository{
   const a=await this.access(actor);if(!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Batch planning belongs to the Operations lead.');
   const rows=(await this.pool.query('SELECT DISTINCT ON (batch_id) batch_id,version,snapshot FROM operations_board_batch_versions ORDER BY batch_id,version DESC')).rows;
   const current=(await this.pool.query(latest)).rows,sites=new Map(current.map(r=>[r.site_id,r]));
-  return {batches:rows.filter(r=>['owner','head'].includes(a.kind)||r.snapshot.team===a.team).map(r=>{
+  return {batches:rows.filter(r=>!r.snapshot.deleted&&(['owner','head'].includes(a.kind)||r.snapshot.team===a.team)).map(r=>{
    const snapshot=r.snapshot as BatchSnapshot,stops=snapshot.stops.filter(s=>['owner','head'].includes(a.kind)||sites.get(s.siteId)?.snapshot.operationsTeam===a.team).map(s=>({...s,siteVersion:sites.get(s.siteId)?.version}));
    return {...snapshot,version:r.version,stops,canEdit:stops.length===snapshot.stops.length};
   })};
@@ -203,20 +203,47 @@ export class OperationsBoardRepository{
     if(!oldStop||!isDeepStrictEqual(decision(previous!.snapshot,oldStop),decision(snapshot,stop)))
      await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),site.id,version,previous?(oldStop?'Batch plan changed':'Batch site added'):'Batch plan',JSON.stringify(previous?['operations-head','management',`${v.team}-operations`,'accounts']:['accounts']),actor]);
    }
-   for(const cancelled of v.cancelledSites){
-    const original=selected.find(site=>site.id===cancelled.siteId)!;
-    const links=original.planningBatches.filter(batch=>batch.id!==id);
-    const updated={...original,planningBatches:links,accounts:original.accounts.filter(event=>event.id!==`${id}:${original.id}:schedule`),history:[...original.history,{date:now,description:`${number}: site cancelled from batch. Reason: ${v.reason}`}]};
-    if(original.stage!=='delivered'&&previous?.snapshot.deliveryDate===original.dispatchDate&&!links.some(batch=>batch.deliveryDate&&batch.stops.some((stop:any)=>stop.siteId===original.id&&(stop.kind??batch.kind)!=='labour')))delete updated.dispatchDate;
-    const otherInstallation=links.flatMap(batch=>batch.stops.filter(stop=>stop.siteId===original.id&&stop.plannedDate)).at(-1);
-    if(otherInstallation)updated.installationPlanDate=otherInstallation.plannedDate;
-    else delete updated.installationPlanDate;
-    if(updated.stage==='awaiting'&&!updated.dispatchDate&&!updated.deliveries?.length)updated.stage='received';
-    const version=versions.get(original.id)!+1;
-    await c.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,request_sha256,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[original.id,version,updated,'Batch site cancelled',v.reason,v.requestKey,fingerprint,actor]);
-    await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),original.id,version,'Batch site cancelled',JSON.stringify(['operations-head','management',`${v.team}-operations`,'accounts']),actor]);
-   }
+   for(const cancelled of v.cancelledSites)await this.cancelSiteFromBatch(c,selected.find(site=>site.id===cancelled.siteId)!,versions.get(cancelled.siteId)!+1,{id,number,team:v.team,deliveryDate:previous?.snapshot.deliveryDate,reason:v.reason,requestKey:v.requestKey,fingerprint,actor},`${number}: site cancelled from batch. Reason: ${v.reason}`,'Batch site cancelled');
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`operations.board.batch:${id}:${v.version+1}`]);return {...snapshot,version:v.version+1};
+  });
+ }
+ /** Remove one site from a batch: its schedule entry, dispatch date and planned installation follow the remaining batches. */
+ private async cancelSiteFromBatch(c:PoolClient,original:WorkflowSite,version:number,batch:{id:string;number:string;team:string;deliveryDate?:string;reason:string;requestKey:string;fingerprint:string;actor:string},history:string,action:string){
+  const {id}=batch,links=original.planningBatches.filter(b=>b.id!==id);
+  const updated={...original,planningBatches:links,accounts:original.accounts.filter(event=>event.id!==`${id}:${original.id}:schedule`),history:[...original.history,{date:new Date().toISOString(),description:history}]};
+  if(original.stage!=='delivered'&&batch.deliveryDate===original.dispatchDate&&!links.some(b=>b.deliveryDate&&b.stops.some((stop:any)=>stop.siteId===original.id&&(stop.kind??b.kind)!=='labour')))delete updated.dispatchDate;
+  const otherInstallation=links.flatMap(b=>b.stops.filter(stop=>stop.siteId===original.id&&stop.plannedDate)).at(-1);
+  if(otherInstallation)updated.installationPlanDate=otherInstallation.plannedDate;
+  else delete updated.installationPlanDate;
+  if(updated.stage==='awaiting'&&!updated.dispatchDate&&!updated.deliveries?.length)updated.stage='received';
+  await c.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,request_sha256,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[original.id,version,updated,action,batch.reason,batch.requestKey,batch.fingerprint,batch.actor]);
+  await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),original.id,version,action,JSON.stringify(['operations-head','management',`${batch.team}-operations`,'accounts']),batch.actor]);
+ }
+ /** Delete a batch made by mistake. Each site is cancelled from it as in Edit batch; delivered or
+  * completed work cannot be cancelled here. A final 'deleted' version keeps the batch history. */
+ async deleteBatch(actor:string,input:z.infer<typeof batchDeleteSchema>){
+  const v=batchDeleteSchema.parse(input),fingerprint=createHash('sha256').update(JSON.stringify({delete:v})).digest('hex');
+  return transaction(this.pool,async c=>{
+   await lockActiveActor(c,actor);
+   const a=await this.access(actor,c);if(!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Batch planning belongs to the Operations lead.');
+   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('operations.board.batches',0))");
+   const replay=(await c.query('SELECT version,snapshot,request_sha256 FROM operations_board_batch_versions WHERE request_key=$1',[v.requestKey])).rows[0];
+   if(replay){if(replay.request_sha256!==fingerprint)throw new HttpError(409,'This request key was used for another batch decision.');return {id:v.id,number:replay.snapshot.number,version:replay.version,deleted:true};}
+   const previous=(await c.query('SELECT version,snapshot FROM operations_board_batch_versions WHERE batch_id=$1 ORDER BY version DESC LIMIT 1',[v.id])).rows[0];
+   if(!previous||a.kind==='lead'&&previous.snapshot.team!==a.team)throw new HttpError(404,'Batch not found.');
+   if(previous.snapshot.deleted)throw new HttpError(409,'This batch is already deleted.');
+   if(previous.version!==v.version)throw new HttpError(409,'The batch was updated. Reload before deleting.');
+   const snapshot=previous.snapshot as BatchSnapshot,sites:{site:WorkflowSite;version:number}[]=[];
+   for(const stop of [...snapshot.stops].sort((x,y)=>x.siteId.localeCompare(y.siteId))){
+    const row=await this.current(c,stop.siteId,true);this.scope(a,row.snapshot);const site=workflowSiteSchema.parse(row.snapshot);
+    if(siteBucketForBatch(site)==='completed'||(stop.kind??snapshot.kind)!=='labour'&&site.stage==='delivered')throw new HttpError(409,`${site.name} already has delivered or completed work in this batch. Cancel the other sites with Edit batch, or ask Management to review.`);
+    sites.push({site,version:row.version});
+   }
+   for(const {site,version} of sites)await this.cancelSiteFromBatch(c,site,version+1,{id:v.id,number:snapshot.number,team:snapshot.team,deliveryDate:snapshot.deliveryDate,reason:v.reason,requestKey:v.requestKey,fingerprint,actor},`${snapshot.number}: batch deleted. Reason: ${v.reason}`,'Batch deleted');
+   const now=new Date().toISOString();
+   await c.query('INSERT INTO operations_board_batch_versions(batch_id,version,number,snapshot,request_key,request_sha256,reason,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[v.id,v.version+1,snapshot.number,{...snapshot,stops:[],deleted:true,deletedStops:snapshot.stops,updatedAt:now,deletedAt:now,deletedBy:a.name},v.requestKey,fingerprint,v.reason,actor]);
+   await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`operations.board.batch-deleted:${v.id}:${v.version+1}`]);
+   return {id:v.id,number:snapshot.number,version:v.version+1,deleted:true};
   });
  }
  private async vendorList(c:Pool|PoolClient){

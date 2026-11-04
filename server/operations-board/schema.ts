@@ -54,3 +54,5 @@ export const batchSchema=z.object({
   pocName:z.string().trim().max(200).default(''),pocPhone:z.string().trim().max(40).regex(/^[0-9+()\-\s]*$/,'Enter the POC number using digits, spaces, +, - or brackets.').default('')}).strict()).min(1).max(1000),
 }).strict();
 export type BatchInput=z.infer<typeof batchSchema>;
+/** Delete a batch planned by mistake: every site is cancelled from it; its history is kept. */
+export const batchDeleteSchema=z.object({id:z.uuid(),version:z.number().int().positive(),requestKey:z.uuid(),reason:z.string().trim().min(3).max(2000)}).strict();

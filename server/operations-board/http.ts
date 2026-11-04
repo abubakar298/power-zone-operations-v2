@@ -2,7 +2,7 @@ import {Router,json,type RequestHandler} from 'express';
 import {z} from 'zod';
 import {equalSecrets} from '../auth/crypto.js';
 import {HttpError} from '../http/errors.js';
-import {fileSchema,movementSchema,commandSchema,vendorSchema,targetsSchema,batchSchema} from './schema.js';
+import {fileSchema,movementSchema,commandSchema,vendorSchema,targetsSchema,batchSchema,batchDeleteSchema} from './schema.js';
 import {OperationsBoardRepository} from './repository.js';
 export function operationsBoardHttp(repo:OperationsBoardRepository,requireSession:RequestHandler){
  const r=Router();r.use(requireSession);
@@ -11,6 +11,7 @@ export function operationsBoardHttp(repo:OperationsBoardRepository,requireSessio
  const siteId=(value:unknown)=>parse(z.string().min(1).max(160),value);
  r.get('/batches',async(req,res)=>res.json(await repo.batches(req.authSession!.user.id)));
  r.post('/batches',json({limit:'512kb'}),async(req,res)=>res.status(201).json(await repo.saveBatch(req.authSession!.user.id,parse(batchSchema,req.body))));
+ r.post('/batches/delete',json({limit:'16kb'}),async(req,res)=>res.json(await repo.deleteBatch(req.authSession!.user.id,parse(batchDeleteSchema,req.body))));
  r.get('/alerts',async(req,res)=>res.json(await repo.alerts(req.authSession!.user.id)));
  r.get('/resources',async(req,res)=>res.json(await repo.resources(req.authSession!.user.id,parse(z.enum(['member','vehicle']),req.query.kind))));
  r.post('/resources',json({limit:'128kb'}),async(req,res)=>res.status(201).json(await repo.saveVendor(req.authSession!.user.id,parse(vendorSchema,req.body))));
