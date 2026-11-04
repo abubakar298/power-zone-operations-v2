@@ -16,6 +16,25 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere}
  main h1,main h2,main h3,main h4{overflow-wrap:anywhere}
  dialog{max-height:calc(100dvh - 16px)}
 }
+/* Shared department top bar (IT Support, Coordination, Design, Accounts) on phones:
+   one row like the Operations and Procurement header — logo icon, menu, notifications,
+   View as and the account initials; name and role stay in the account menu's label. */
+@media (max-width:700px){
+ .fixed-header-layout .topbar{flex-wrap:nowrap;gap:8px;padding:0 12px}
+ .coordinator-layout .topbar,.operations-layout .topbar{flex-wrap:wrap;align-content:center}
+ .fixed-header-layout .topbar{justify-content:flex-start}
+ .fixed-header-layout .pz-header-brand{margin-right:0;min-width:0}
+ .fixed-header-layout .topbar .notification-anchor{margin-left:auto}
+ .fixed-header-layout .pz-header-brand .brand-compact>div{display:none}
+ .fixed-header-layout .topbar .account-trigger{padding:5px;gap:0}
+ .fixed-header-layout .topbar .account-trigger>span:not(.avatar),.fixed-header-layout .topbar .account-trigger>svg{display:none}
+ .fixed-header-layout .topbar .pz-department-switcher>.pz-button{padding:8px 10px}
+ .fixed-header-layout .topbar .account-menu{right:0;max-width:calc(100vw - 24px)}
+ /* Management and IT Support also have site search: it takes its own full-width second row. */
+ .fixed-header-layout .topbar:has(.gs){flex-wrap:wrap;align-content:center;row-gap:10px}
+ .workspace.fixed-header-layout:not(.operations-layout):has(.topbar .gs){--coordination-header-height:128px}
+ .workspace.fixed-header-layout.accounts-ui:has(.topbar .gs){margin-top:128px}
+}
 /* Touch screens: comfortable tap targets for buttons and form fields. */
 @media (pointer:coarse){
  .pz-button,select,input[type=text],input[type=search],input[type=date],input[type=number],input[type=email],input[type=password],input:not([type]){min-height:44px}
