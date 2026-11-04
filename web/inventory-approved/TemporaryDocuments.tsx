@@ -6,7 +6,7 @@ import './temporary.css';
 import {Button} from '../ui/Button.js';
 import {Field} from '../ui/Field.js';
 import {StatusBadge} from '../ui/StatusBadge.js';
-import {DocumentPreview} from '../components/DocumentPreview.js';
+import {TemporaryDocumentSheet} from './TemporaryDocumentSheet.js';
 
 type TemporaryType='IGP'|'OGP'|'TRF'|'IRR'|'OTHER';
 type TemporaryLine={itemId:string;description:string;quantity:string;unit:string;remarks:string};
@@ -45,8 +45,8 @@ export function TemporaryDocuments({initialCreate=false,session}:{initialCreate?
  useUnsavedChanges(changed||busy);
  const save=async()=>{if(!draft||busy)return;if(!draft.date||!draft.warehouse){setNotice('Choose a document date and warehouse before saving.');return;}setBusy(true);setNotice('');try{const body={id:draft.id,version:draft.version??0,type:draft.type,date:draft.date,warehouse:draft.warehouse,party:draft.party,sourceReference:draft.sourceReference,actualReference:draft.actualReference,notes:draft.notes,detailsConfirmed:draft.detailsConfirmed,lines:draft.lines.filter(line=>line.itemId||line.description||line.quantity||line.remarks)};if(!body.lines.length)body.lines=[blankLine()];const signature=JSON.stringify(body);if(request.current?.signature!==signature)request.current={signature,key:crypto.randomUUID()};const saved=await api<TemporaryDocument>('/material-dispatches/temporary-documents',{csrf:session.csrfToken,body:{...body,requestKey:request.current.key}});setDocuments(old=>[saved,...old.filter(d=>d.id!==saved.id)]);request.current=null;setDraft(null);setNotice(`${saved.number} saved. No stock movement was posted.`);}catch(e){setNotice((e as Error).message);}finally{setBusy(false);}};
  const confirmActual=(checked:boolean)=>{if(!draft)return;if(checked&&!draft.actualReference.trim()){setNotice('Enter the actual document reference before clearing the reminder.');return;}change('detailsConfirmed',checked);};
- // Printed as the same A4 PDF layout as other inventory documents (logo, header, SR#, signatures, footer).
- if(printing){const url='/api/material-dispatches/temporary-documents/'+encodeURIComponent(printing.id)+'/document.pdf';return <section className="temporary-document-view"><div className="temporary-document-actions"><Button variant="neutral" onClick={()=>setPrinting(null)}>← Back to temporary documents</Button><StatusBadge tone="warning">Temporary copy · Replace details with actuals</StatusBadge><Button variant="primary" onClick={()=>window.open(url,'_blank','noopener')}>Open A4 PDF to print</Button></div><DocumentPreview url={url} title={printing.number}/></section>;}
+ // Printed in the same approved sheet layout as the material DO (logo header, SR#, sign-off boxes, footer).
+ if(printing)return <section className="temporary-document-view"><div className="temporary-document-actions"><Button variant="neutral" onClick={()=>setPrinting(null)}>← Back to temporary documents</Button><StatusBadge tone="warning">Temporary copy · Replace details with actuals</StatusBadge></div><TemporaryDocumentSheet doc={printing}/></section>;
  return <section className="temporary-documents purchase-card" aria-labelledby="temporary-documents-title">
   <div className="temporary-documents-heading"><div><h2 id="temporary-documents-title">Temporary documents</h2><p>Create and print a document when the final transaction details are not available yet.</p></div>{!draft&&<Button variant="primary" onClick={startNew}>Create temporary document</Button>}</div>
   {notice&&<p className="temporary-documents-notice" role="status">{notice}</p>}
