@@ -13,7 +13,7 @@ export function Login({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  // Why the last session ended, e.g. after 30 minutes without activity (set by App on a 401).
+  // Why the last session ended, e.g. its 12-hour limit (set by App on a 401).
   const [notice] = useState(() => {
     try { const m = sessionStorage.getItem("pz:signed-out") ?? ""; sessionStorage.removeItem("pz:signed-out"); return m; } catch { return ""; }
   });

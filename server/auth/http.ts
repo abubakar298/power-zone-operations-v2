@@ -55,17 +55,7 @@ export function authHttp(service: AuthService, config: Config) {
     if(expectedPrincipal&&expectedPrincipal!==req.authSession.user.id){
       res.status(409).json({code:'SESSION_CHANGED',message:'The signed-in account changed. Reload its workspace before continuing.'});return;
     }
-    // Signed out after a stretch without real activity; background refreshes do not count (Moaz, 24 Oct 2026).
-    const idleMinutes = config.idleMinutes ?? 30;
-    const last = req.authSession.lastActivityAt ? new Date(req.authSession.lastActivityAt).getTime() : Date.now();
-    if (Date.now() - last > idleMinutes * 60_000) {
-      const ended = req.authSession;
-      req.authSession = undefined;
-      await service.repository.deleteSession(ended);
-      await service.repository.logSecurity("sign-out.idle", { id: ended.user.id, email: ended.user.email }, `${idleMinutes} minutes without activity`, req, 401);
-      res.clearCookie(cookieName, options);
-      throw new HttpError(401, `You were signed out after ${idleMinutes} minutes without activity. Please sign in again.`);
-    }
+    // No sign-out for inactivity (owner, 5 Nov 2026); a session ends at sign-out or its 12-hour limit.
     if (!isBackground(req)) await service.repository.touchSession(req.authSession.tokenHash);
     const actingUserId=req.get('X-PZ-Department-User');
     // The real cookie/session remains Management. Department scope is per request,

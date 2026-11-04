@@ -74,7 +74,7 @@ export function App() {
   useEffect(() => {
     if (!linkPage) void load();
   }, []);
-  // Idle sign-out (Moaz, 24 Oct 2026): the server ends a session after PZ_IDLE_MINUTES without real activity.
+  // A session that has ended (12-hour limit, or signed out elsewhere) returns to the sign-in page with the reason.
   useEffect(() => {
     const ended = (e: Event) => {
       const message = (e as CustomEvent<string>).detail ?? "";
@@ -87,14 +87,9 @@ export function App() {
   }, [signedOut, state.kind]);
   useEffect(() => {
     if (state.kind !== "authenticated") return;
-    let lastPing = Date.now();
-    // A click, key press or scroll counts as activity even when it loads nothing (reading a long page).
-    const active = () => { if (Date.now() - lastPing > 120_000) { lastPing = Date.now(); void api("/auth/session").catch(() => undefined); } };
-    const names = ["pointerdown", "keydown", "wheel", "touchstart"];
-    for (const name of names) window.addEventListener(name, active, { passive: true });
     // A quiet check every minute notices an ended session even when nothing is clicked.
     const timer = setInterval(() => void api("/auth/session").catch(() => undefined), 60_000);
-    return () => { for (const name of names) window.removeEventListener(name, active); clearInterval(timer); };
+    return () => clearInterval(timer);
   }, [state.kind]);
   useEffect(()=>{
     const changed=()=>{clearDepartmentUser();resetApiPrincipal();window.history.replaceState(null,'','/dashboard');window.location.reload();};

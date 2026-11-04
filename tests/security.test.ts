@@ -81,7 +81,7 @@ test("Security: price access, no self-approval, Admin-managed access, idle sign-
     assert.deepEqual(list.events.slice(0, 2).map((e) => [e.action, e.reason, e.actor]), [["remove", "Left the company", "Admin"], ["grant", "New buyer", "Admin"]]);
     await assert.rejects(db.pool.query("UPDATE procurement_access_events SET reason='x'"), /immutable/);
 
-    // HTTP from here: idle sign-out, password before approving, the security log.
+    // HTTP from here: no inactivity sign-out, password before approving, the security log.
     const app = createApp(db.pool, readConfig({ NODE_ENV: "test", APP_ORIGIN: ORIGIN, DATABASE_URL: db.url, ADMIN_SETUP_TOKEN: "security-test-setup-token-12345678901" }));
     const login = async (id: string, pw = password) => {
       const res = await request(app).post("/api/auth/login").set("Origin", ORIGIN).set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15").send({ email: `${id}@example.test`, password: pw });
@@ -92,24 +92,14 @@ test("Security: price access, no self-approval, Admin-managed access, idle sign-
     const post = (s: { cookie: string[]; csrf: string }, path: string, body: object) =>
       request(app).post(path).set("Cookie", s.cookie).set("Origin", ORIGIN).set("X-CSRF-Token", s.csrf).send(body);
 
-    // 4. Idle sign-out: 30 minutes without real activity; background refreshes do not count; the 12-hour limit stays.
-    assert.equal(readConfig({ NODE_ENV: "test", APP_ORIGIN: ORIGIN, DATABASE_URL: db.url, ADMIN_SETUP_TOKEN: "x".repeat(32), PZ_IDLE_MINUTES: "45" }).idleMinutes, 45);
-    assert.throws(() => readConfig({ NODE_ENV: "test", APP_ORIGIN: ORIGIN, DATABASE_URL: db.url, ADMIN_SETUP_TOKEN: "x".repeat(32), PZ_IDLE_MINUTES: "1" }));
-    const accounts = await login(u.accounts);
-    const accountsToken = await tokenOf(u.accounts);
-    await idleFor(accountsToken, 29);
-    assert.equal((await request(app).get("/api/auth/session").set("Cookie", accounts.cookie).set("X-PZ-Background", "1")).status, 200);
-    const still = (await db.pool.query("SELECT now() - last_activity_at > interval '28 minutes' AS idle FROM auth_sessions WHERE token_hash=$1", [accountsToken])).rows[0].idle;
-    assert.equal(still, true, "a background refresh does not count as activity");
-    await idleFor(accountsToken, 31);
-    const ended = await request(app).get("/api/procurement/requests").set("Cookie", accounts.cookie);
-    assert.equal(ended.status, 401);
-    assert.match(ended.body.message, /signed out after 30 minutes without activity/);
-    assert.equal((await db.pool.query("SELECT 1 FROM auth_sessions WHERE token_hash=$1", [accountsToken])).rowCount, 0);
+    // 4. No inactivity sign-out (owner, 5 Nov 2026): a session stays valid however long it is idle; the 12-hour limit stays.
+    assert.equal("idleMinutes" in readConfig({ NODE_ENV: "test", APP_ORIGIN: ORIGIN, DATABASE_URL: db.url, ADMIN_SETUP_TOKEN: "x".repeat(32), PZ_IDLE_MINUTES: "30" }), false, "an old PZ_IDLE_MINUTES setting is ignored");
     const active = await login(u.accounts);
-    await idleFor(await tokenOf(u.accounts), 29);
-    assert.equal((await request(app).get("/api/procurement/requests").set("Cookie", active.cookie)).status, 200, "real activity");
-    await idleFor(await tokenOf(u.accounts), 0);
+    await idleFor(await tokenOf(u.accounts), 31);
+    assert.equal((await request(app).get("/api/procurement/requests").set("Cookie", active.cookie)).status, 200, "31 minutes idle: still signed in");
+    await idleFor(await tokenOf(u.accounts), 11 * 60);
+    assert.equal((await request(app).get("/api/auth/session").set("Cookie", active.cookie)).status, 200, "11 hours idle: still signed in");
+    assert.equal((await db.pool.query("SELECT count(*)::int AS n FROM security_events WHERE kind='sign-out.idle'")).rows[0].n, 0, "nobody is signed out for inactivity");
     await db.pool.query("UPDATE auth_sessions SET expires_at=now() - interval '1 second' WHERE user_id=$1", [u.accounts]);
     assert.equal((await request(app).get("/api/auth/session").set("Cookie", active.cookie)).status, 401, "the 12-hour limit still applies");
 
@@ -146,7 +136,7 @@ test("Security: price access, no self-approval, Admin-managed access, idle sign-
     assert.equal((await request(app).get(`/api/procurement/requests/${pr.id}/comparison.pdf`).set("Cookie", buyer.cookie)).status, 200);
     await new Promise((r) => setTimeout(r, 200));
     const kinds = (await db.pool.query("SELECT kind, count(*)::int AS n FROM security_events GROUP BY 1")).rows.reduce<Record<string, number>>((m, r) => ({ ...m, [r.kind]: r.n }), {});
-    for (const k of ["sign-in", "sign-in.failed", "sign-in.locked", "sign-out.idle", "password-check", "password-check.failed", "view", "export", "approval", "procurement-access.grant", "procurement-access.remove"])
+    for (const k of ["sign-in", "sign-in.failed", "sign-in.locked", "password-check", "password-check.failed", "view", "export", "approval", "procurement-access.grant", "procurement-access.remove"])
       assert.ok(kinds[k] > 0, `security log has ${k}: ${JSON.stringify(kinds)}`);
     assert.equal((await db.pool.query("SELECT count(*)::int AS n FROM security_events WHERE kind='view'")).rows[0].n, before, "background refreshes are not logged as views");
     const signIn = (await db.pool.query("SELECT ip, device, user_id FROM security_events WHERE kind='sign-in' ORDER BY created_at DESC LIMIT 1")).rows[0];

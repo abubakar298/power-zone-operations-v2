@@ -31,7 +31,7 @@ export class ApiError extends Error {
   }
 }
 // Real activity: a click, key press, scroll or touch in the last 10 seconds (Moaz, 24 Oct 2026). Requests made
-// without one (timers, background refreshes) are marked, so they do not keep an idle session alive on the server.
+// without one (timers, background refreshes) are marked, so the server does not log them as user views.
 let lastInput = Date.now();
 if (typeof window !== "undefined")
   for (const name of ["pointerdown", "keydown", "wheel", "touchstart"])
@@ -87,7 +87,7 @@ export async function api<T>(
         "The server returned an unexpected response. Please refresh and try again.",
       );
     }
-    // An ended session (idle or expired) takes the app back to the sign-in page, which says why.
+    // An ended session (signed out or past its 12-hour limit) takes the app back to the sign-in page, which says why.
     if (response.status === 401 && path !== "/auth/login" && typeof window !== "undefined")
       window.dispatchEvent(new CustomEvent("pz:session-ended", { detail: body.message ?? "" }));
     if(response.status===409&&body.code==='SESSION_CHANGED')accountChanged();
