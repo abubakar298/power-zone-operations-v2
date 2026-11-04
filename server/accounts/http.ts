@@ -23,6 +23,7 @@ import { z } from "zod";
 import { equalSecrets } from "../auth/crypto.js";
 import { HttpError } from "../http/errors.js";
 import { AccountsRepository, closureSchema } from "./repository.js";
+import { previewInvoiceAmountBatch, applyInvoiceAmountBatch, invoiceAmountBatchSchema } from "./invoice-amount-batch.js";
 export function accountsHttp(
   repo: AccountsRepository,
   requireSession: RequestHandler,
@@ -75,6 +76,8 @@ export function accountsHttp(
   });
   r.post('/sites/:id/original-receipts',async(req,res)=>res.status(201).json(await confirmOriginalReceipt(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id),parse(originalReceiptSchema,req.body))));
   r.post('/invoice-submissions',async(req,res)=>res.status(201).json(await recordInvoiceSubmission(repo.pool,req.authSession!.user.id,parse(invoiceSubmissionSchema,req.body))));
+  r.get('/invoice-amount-batch',async(req,res)=>res.json(await previewInvoiceAmountBatch(repo.pool,req.authSession!.user.id)));
+  r.post('/invoice-amount-batch',async(req,res)=>res.status(201).json(await applyInvoiceAmountBatch(repo.pool,req.authSession!.user.id,parse(invoiceAmountBatchSchema,req.body))));
   r.post('/invoice-corrections',async(req,res)=>res.status(201).json(await correctInvoice(repo.pool,req.authSession!.user.id,parse(invoiceCorrectionSchema,req.body))));
   r.get('/cable-consolidations/:key/file',async(req,res)=>{await repo.access(req.authSession!.user.id);const key=parse(z.uuid(),req.params.key),source=(await repo.pool.query('SELECT snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0],row=source?.snapshot.cables.rows.find((r:any)=>r.key===key&&r.consolidation&&!r.supersededBy);if(!row)throw new HttpError(404,'Original consolidated invoice not found.');const file=row.consolidation.file;res.set({'Content-Type':/\.xlsx$/i.test(file.name)?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/pdf','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}).send(Buffer.from(file.base64,'base64'));});
   r.post('/cable-consolidations',async(req,res)=>res.status(201).json(await consolidateCableInvoices(repo.pool,req.authSession!.user.id,req.body)));
