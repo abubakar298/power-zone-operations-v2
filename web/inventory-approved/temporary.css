@@ -102,3 +102,5 @@
 .approved-inventory .temporary-sheet-strip{color:#8a5a12;font-weight:600}
 .approved-inventory .temporary-sheet-notes{margin:0;padding:1mm 0 2mm;border-bottom:1px solid #888;white-space:pre-wrap;overflow-wrap:anywhere}
 .approved-inventory .temporary-sheet-table thead th:nth-child(4){text-align:center}
+
+.inventory-sheet-copies{display:flex;align-items:center;gap:8px;font-size:13px}.inventory-sheet-copies select{min-height:40px}
