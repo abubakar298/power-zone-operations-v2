@@ -1,5 +1,6 @@
 import {closureEmailIdentity} from './closure-identity.js';
 import {OperationsIncidentProjector} from './operations-incidents.js';
+import {PlanningReminderProjector} from '../operations-board/planning-reminders.js';
 import {OperationsNotificationProjector,operationsNotificationRecipientAllowed} from './operations-projector.js';
 import {notificationRecipientAllowed} from './recipient.js';
 import {quotationApprovalAttachments} from './quotation-attachment.js';
@@ -30,6 +31,7 @@ export class NotificationsRepository {
       const operationsClock=new Date().toISOString();
       await new OperationsNotificationProjector().sync(c,operationsClock);
       await new OperationsIncidentProjector().sync(c,operationsClock);
+      await new PlanningReminderProjector().sync(c,operationsClock);
       // Evaluate current authorization once, retaining only reference metadata.
       await c.query(`CREATE TEMP TABLE notification_sync_events ON COMMIT DROP AS
        SELECT source_key,entity_key,kind,reference,actor_id,created_at,owner_id,audience,target,actionable
