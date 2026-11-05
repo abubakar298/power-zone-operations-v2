@@ -79,13 +79,13 @@ export function projectOriginals(siteId:string,s:Row,receipts:Row[],now=new Date
  const day=today(now);
  const projected:Row[]=items.map((item):Row=>{
   const receipt=receipts.find(r=>r.site_id===siteId&&r.item_key===item.key);
-  const status=receipt?'confirmed':item.location==='Submitted to Accounts'?'legacy-handover':item.location==='Received at Karachi office'?'karachi-pending':'pending';
-  const statusLabel={confirmed:'Handed over to Accounts','legacy-handover':'Handed over to Accounts (recorded by Operations before Accounts confirmation)','karachi-pending':'Karachi arrival reported — Accounts confirmation pending',pending:'Not yet at Karachi office'}[status];
-  const outstanding=status==='pending'||status==='karachi-pending';
+  const status=receipt?'confirmed':item.location==='Submitted to Accounts'?'legacy-handover':item.location==='Received at Karachi office'?'karachi-pending':item.location==='Received at Lahore head office'?'lahore-pending':'pending';
+  const statusLabel={confirmed:'Handed over to Accounts','legacy-handover':'Handed over to Accounts (recorded by Operations before Accounts confirmation)','karachi-pending':'Karachi arrival reported — Accounts confirmation pending','lahore-pending':'At Lahore head office — Accounts confirmation pending',pending:'Not yet at Karachi office'}[status];
+  const outstanding=status==='pending'||status==='karachi-pending'||status==='lahore-pending';
   const daysOverdue=outstanding&&due&&day>due?daysBetween(due,day):0;
   return {...item,status,statusLabel,receivedOn:receipt?.received_on??null,receivedLate:!!receipt&&!!due&&receipt.received_on>due,daysLate:receipt&&due&&receipt.received_on>due?daysBetween(due,receipt.received_on):0,overdue:daysOverdue>0,daysOverdue};
  });
- return {startDate:start,startBasis:only?'Final delivery date':'Job Completion Date (QC)',dueDate:due,missingStartDate,items:projected,missing:projected.filter(i=>i.status==='pending'||i.status==='karachi-pending'),overdue:projected.filter(i=>i.overdue)};
+ return {startDate:start,startBasis:only?'Final delivery date':'Job Completion Date (QC)',dueDate:due,missingStartDate,items:projected,missing:projected.filter(i=>i.status==='pending'||i.status==='karachi-pending'||i.status==='lahore-pending'),overdue:projected.filter(i=>i.overdue)};
 }
 
 async function latestSite(c:Db,siteId:string,lock=false){
@@ -141,8 +141,9 @@ export async function confirmOriginalReceipt(pool:Pool,actor:string,siteId:strin
    const item=originals.items.find(i=>i.key===key);
    if(!item||item.unconfirmable)throw new HttpError(404,'This original is not a required document for the site.');
    if(item.status==='confirmed')throw new HttpError(409,`${item.type} (${item.batchLabel}) is already confirmed received.`);
-   if(item.status!=='karachi-pending')throw new HttpError(409,`${item.type} (${item.batchLabel}) has not been reported at the Karachi office by QC.`);
-   if(item.locationDate&&input.receivedOn<item.locationDate)throw new HttpError(422,'Receipt date cannot be before QC reported Karachi arrival.');
+   // Accounts confirms originals reported at the Karachi office or at the Lahore head office.
+   if(item.status!=='karachi-pending'&&item.status!=='lahore-pending')throw new HttpError(409,`${item.type} (${item.batchLabel}) has not been reported at the Karachi office or the Lahore head office.`);
+   if(item.locationDate&&input.receivedOn<item.locationDate)throw new HttpError(422,item.status==='lahore-pending'?'Receipt date cannot be before the Lahore head office arrival.':'Receipt date cannot be before QC reported Karachi arrival.');
    const row=(await c.query('INSERT INTO accounts_original_receipts(id,site_id,item_key,document_id,document_type,received_on,site_version,snapshot,request,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *,received_on::text AS received_on',[randomUUID(),siteId,key,item.documentId,item.type,input.receivedOn,site.version,{site:site.snapshot.name,ipo:site.snapshot.ipo,batchLabel:item.batchLabel,dueDate:originals.dueDate,reportedAt:item.locationDate,tracking:item.tracking},input,input.requestKey,actor])).rows[0];
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'accounts.original-receipt:'+row.id]);
    saved.push(row);
