@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {testDatabase} from './database.js';
 import {OperationsBoardRepository} from '../server/operations-board/repository.js';
+import type {BoardSite} from '../server/operations-board/schema.js';
 import {confirmOriginalReceipt,originalsRegister} from '../server/accounts/site-evidence.js';
 
 test('originals confirmed by Accounts show for Operations as handed over to Accounts, one document batch at a time',async()=>{
  const db=await testDatabase();try{
   const users:Record<string,string>={};
   for(const [name,role] of [['owner','Admin'],['accounts','Accounts'],['head','Operations'],['lead','Operations'],['southlead','Operations']]){users[name]=randomUUID();await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[users[name],name+'@example.test',name,role,'isolated']);}
-  for(const [name,kind,team] of [['head','head',null],['lead','lead','central'],['southlead','lead','south']])await db.pool.query('INSERT INTO operations_board_access(user_id,kind,team,granted_by) VALUES($1,$2,$3,$4)',[users[name],kind,team,users.owner]);
+  for(const [name,kind,team] of [['head','head',null],['lead','lead','central'],['southlead','lead','south']] as const)await db.pool.query('INSERT INTO operations_board_access(user_id,kind,team,granted_by) VALUES($1,$2,$3,$4)',[users[name],kind,team,users.owner]);
   const repo=new OperationsBoardRepository(db.pool);
-  const doc=(id:string,label:string)=>({id,label,location:'Received at Karachi office',date:'2026-11-01',createdDate:'2026-10-30',evidence:[],history:[]});
+  const doc=(id:string,label:string):NonNullable<BoardSite['documents']>[number]=>({id,label,location:'Received at Karachi office',date:'2026-11-01',createdDate:'2026-10-30',evidence:[],history:[]});
   await repo.importSource(users.owner,{sourceSha256:'a'.repeat(64),rows:[
    {id:'s1',ipo:'IPO-1',name:'Site one',stage:'completed',completed:true,installation:true,projectType:'solar',operationsTeam:'central',documents:[doc('s1:delivery','Delivery DO'),doc('s1:completion-documents','Acknowledgement & variable sign-off')]},
   ]});

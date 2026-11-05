@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {testDatabase} from './database.js';
 import {OperationsBoardRepository} from '../server/operations-board/repository.js';
+import type {BoardSite} from '../server/operations-board/schema.js';
 import {confirmOriginalReceipt,originalsRegister} from '../server/accounts/site-evidence.js';
 
 test('Accounts can confirm originals at the Lahore head office as well as Karachi; other locations stay unconfirmable',async()=>{
@@ -10,7 +11,7 @@ test('Accounts can confirm originals at the Lahore head office as well as Karach
   const owner=randomUUID(),accounts=randomUUID(),head=randomUUID();
   for(const [id,role] of [[owner,'Admin'],[accounts,'Accounts'],[head,'Operations']])await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[id,id+'@example.test',role,role,'isolated']);
   await db.pool.query("INSERT INTO operations_board_access(user_id,kind,team,granted_by) VALUES($1,'head',NULL,$2)",[head,owner]);
-  const doc=(id:string,label:string,location:string)=>({id,label,location,date:'2026-11-01',createdDate:'2026-10-30',evidence:[],history:[]});
+  const doc=(id:string,label:string,location:NonNullable<BoardSite['documents']>[number]['location']):NonNullable<BoardSite['documents']>[number]=>({id,label,location,date:'2026-11-01',createdDate:'2026-10-30',evidence:[],history:[]});
   await new OperationsBoardRepository(db.pool).importSource(owner,{sourceSha256:'b'.repeat(64),rows:[
    {id:'lhr',ipo:'IPO-L',name:'Lahore site',stage:'completed',completed:true,installation:true,projectType:'solar',operationsTeam:'central',documents:[doc('lhr:delivery','Delivery DO','Received at Lahore head office'),doc('lhr:completion-documents','Acknowledgement & variable sign-off','At site')]},
   ]});

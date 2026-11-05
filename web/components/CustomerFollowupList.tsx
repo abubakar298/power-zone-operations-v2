@@ -31,9 +31,11 @@ function HeadsupStatus({ record }: { record: any }) {
 function SitesTable({
   records,
   onOpen,
+  onRevise,
 }: {
   records: any[];
   onOpen: (id: string) => void;
+  onRevise?: (record: any) => void;
 }) {
   return (
     <div className="pz-table-scroll">
@@ -73,10 +75,11 @@ function SitesTable({
               <td>
                 <HeadsupStatus record={record} />
               </td>
-              <td>
-                <Button variant="secondary" onClick={() => onOpen(record.id)}>
+              <td style={{verticalAlign:"top"}}>
+                <div className="pz-action-row pz-quotation-revision-actions"><Button variant="secondary" onClick={() => onOpen(record.id)}>
                   Review
                 </Button>
+                {onRevise&&(record.quotation?.id||record.sourceQuotationId||record.route==="survey-framework")&&<Button variant="secondary" onClick={()=>onRevise(record)}>Create Revision</Button>}</div>
               </td>
             </tr>
           ))}
@@ -90,10 +93,12 @@ export function CustomerFollowupList({
   records,
   groups,
   onOpen,
+  onRevise,
 }: {
   records: any[];
   groups: any[];
   onOpen: (id: string) => void;
+  onRevise?: (record: any) => void;
 }) {
   const count =
     records.length +
@@ -111,7 +116,7 @@ export function CustomerFollowupList({
           </span>
         </div>
         {records.length ? (
-          <SitesTable records={records} onOpen={onOpen} />
+          <SitesTable records={records} onOpen={onOpen} onRevise={onRevise} />
         ) : (
           <p className="pz-caption">No individual sites match these filters.</p>
         )}
@@ -137,7 +142,7 @@ export function CustomerFollowupList({
                 {group.sites.length} site{group.sites.length === 1 ? "" : "s"}
               </span>
             </summary>
-            <SitesTable records={group.sites} onOpen={onOpen} />
+            <SitesTable records={group.sites} onOpen={onOpen} onRevise={onRevise} />
           </details>
         ))}
         {!groups.length && (
@@ -147,3 +152,4 @@ export function CustomerFollowupList({
     </div>
   );
 }
+
