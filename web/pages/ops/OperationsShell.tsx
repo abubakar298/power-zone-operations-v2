@@ -1,3 +1,4 @@
+import {BackButton} from '../../components/BackButton.js';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { GlobalSearch } from "../../components/GlobalSearch.js";
@@ -123,6 +124,7 @@ export function OperationsShell({ session, onLogout, viewingAs, onReturn }: {
           <span className="mark"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg></span>
           <span>Power Zone<small>Operations</small></span>
         </button>
+        <BackButton />
         <GlobalSearch session={session} onOpenSite={openSite} onOpenHeadsUp={openHeadsUp} />
         <div className="ops-hdr-r">
           <NotificationCenter session={session} onOpen={(target) => { if (typeof target === "string" && (VIEWS as string[]).includes(target)) go(target as View); }} />

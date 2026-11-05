@@ -1,3 +1,4 @@
+import {BackButton} from '../../components/BackButton.js';
 import {recentFirst} from '../../../shared/recent-records.js';
 import {ListPagination,paginateRows,useListPage} from '../../ui/ListPagination.js';
 import {PagedTableBody} from '../../ui/PagedTableBody.js';
@@ -116,6 +117,7 @@ export function ProcurementShell({ session, onLogout, viewingAs, onReturn }: { s
           <span className="mark"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg></span>
           <span>Power Zone<small>Procurement</small></span>
         </button>
+        <BackButton />
         <ProcSearch data={data} onGo={(v) => go(v)} onOpenRequest={openReq} />
         <div className="ops-hdr-r">
           <NotificationCenter session={session} onOpen={() => undefined} />

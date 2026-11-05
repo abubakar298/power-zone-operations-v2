@@ -1,3 +1,4 @@
+import {BackButton} from '../components/BackButton.js';
 import {recentFirst} from '../../shared/recent-records.js';
 import {withMatchingVariableSection} from '../../shared/material-preparation.js';
 import {ListPagination,useListPage,paginateRows} from '../ui/ListPagination.js';
@@ -48,7 +49,7 @@ export function ParentDos({session,onLogout}:{session:Session;onLogout:()=>void}
  const batchId=new URLSearchParams(path.split('?')[1]??'').get('operations-batch');
  const activeBatch=intake?.operationsBatches?.find(batch=>batch.id===batchId);
  async function logout(){if(!confirmLeaveWorkspace())return;try{await api('/auth/logout',{csrf:session.csrfToken,body:{}});onLogout();}catch(e){setError((e as Error).message);}}
- return <div className="ob-shell"><header className="ob-header"><Button className="ob-mobile-toggle" aria-label="Open navigation" onClick={()=>setMobile(!mobile)}><Icon name="menu"/></Button><Brand compact/><div className="ob-header-actions"><ManagementHeaderSwitcher session={session} value="inventory"/><WorkspaceAccountMenu name={session.user.displayName} label={'Inventory'} onSignOut={()=>void logout()}/></div></header>
+ return <div className="ob-shell"><header className="ob-header"><Button className="ob-mobile-toggle" aria-label="Open navigation" onClick={()=>setMobile(!mobile)}><Icon name="menu"/></Button><Brand compact/><BackButton/><div className="ob-header-actions"><ManagementHeaderSwitcher session={session} value="inventory"/><WorkspaceAccountMenu name={session.user.displayName} label={'Inventory'} onSignOut={()=>void logout()}/></div></header>
   <InventoryNavigation mode="dispatcher" mobile={mobile}/>
   <main className="ob-main">{error&&<section className="pz-panel pz-stack"><p role="alert" className="form-error">{error}</p><Button onClick={()=>void load()}>Try again</Button></section>}
    {!intake&&!error&&<p role="status">Loading material requests…</p>}
