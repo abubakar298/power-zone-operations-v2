@@ -409,3 +409,8 @@
 .accounts-ui .accounts-billing-module .accounts-panel-heading{margin-bottom:20px}
 .accounts-ui .accounts-billing-buckets{grid-template-columns:repeat(2,minmax(0,1fr))}
 .accounts-ui .accounts-billing-module .stage-card{grid-template-rows:38px minmax(24px,auto) minmax(36px,auto);align-content:start;align-items:start}
+/* Operations · Handed over to Accounts: one row per site with its documents stacked. */
+.accounts-documents .physical-documents-site-list{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.accounts-documents .physical-documents-site-list li{display:grid;gap:2px}
+.accounts-documents .physical-documents-site-actions{display:grid;gap:8px}
+.accounts-documents .physical-documents-site-actions .ob-actions{flex-wrap:wrap}
