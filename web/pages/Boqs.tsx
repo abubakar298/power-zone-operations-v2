@@ -62,7 +62,7 @@ export function Boqs({
 }: {
   session: Session;
   onLogout: () => void;
-  onPricing?: (id: string) => void;
+  onPricing?: (id: string, preparationDraftId?:string) => void;
   initialDraftId?: string;
   initialCniId?: string;
   startNew?: boolean;
@@ -449,8 +449,9 @@ export function Boqs({
       );
       const savedDraft=await persist(inputs);if(!savedDraft)return;
       if(!reviewOnly&&onPricing&&["Admin","Management","Coordinator"].includes(session.user.role)){
-        const revision=await api<{id:string}>("/boqs/save",{body:{draftId:savedDraft.id,version:savedDraft.version,fingerprint:p.fingerprint},csrf:session.csrfToken});
-        onPricing(revision.id);
+        const revision=await api<{id:string}>("/boqs/prepare",{body:{draftId:savedDraft.id,version:savedDraft.version,fingerprint:p.fingerprint},csrf:session.csrfToken});
+        try{const key=`pz-quotation-preparation-draft:${session.user.id}:${savedDraft.id}`,carry=JSON.parse(sessionStorage.getItem(key)??'null');if(carry)sessionStorage.setItem(key,JSON.stringify({...carry,boqRevisionId:revision.id}));}catch{}
+        onPricing(revision.id,savedDraft.id);
         return;
       }
       setPreview(p);
@@ -515,7 +516,7 @@ export function Boqs({
     setBusy(true);
     setError("");
     try {
-      const r = await api<{ id: string }>("/boqs/save", {
+      const r = await api<{ id: string }>("/boqs/prepare", {
         body: {
           draftId: draft.id,
           version: draft.version,
@@ -524,7 +525,7 @@ export function Boqs({
         csrf: session.csrfToken,
       });
       await load();
-      if (onPricing) onPricing(r.id);
+      if (onPricing) onPricing(r.id,draft.id);
       else
         setNotice(
           "BOQ saved. Open Commercial pricing to prepare the quotation.",
@@ -1729,7 +1730,7 @@ export function Boqs({
                 </button>}
                 {onPricing&&["Admin","Management"].includes(session.user.role)&&<button type="button" disabled={busy||revisionMode} onClick={event=>{const formElement=event.currentTarget.form;if(formElement?.reportValidity())void calculate(event,true);}}>Calculate &amp; review BOQ</button>}
                 <button className="primary" disabled={busy || revisionMode} type="submit">
-                  {busy ? "Processing…" : onPricing&&["Admin","Management","Coordinator"].includes(session.user.role)?"Enter Pricing":"Calculate & review BOQ"}
+                  {busy ? "Processing…" : onPricing&&["Admin","Management","Coordinator"].includes(session.user.role)?"Save & Continue to Quotation Settings":"Calculate & review BOQ"}
                 </button>
               </div>
             </form>

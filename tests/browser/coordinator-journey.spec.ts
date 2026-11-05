@@ -12,7 +12,7 @@ for(const quick of [false,true])test(`Coordinator ${quick?'Quick BOQ':'measured 
  if(!quick)for(const [field,value]of [['6mm² DC cable total (m)','360'],['2.5mm² earth cable (m)','20'],['6mm² earth cable (m)','90'],['10mm² earth cable (m)','90']])await page.getByLabel(field,{exact:true}).fill(value);
  for(const [field,label]of [['Solar Panel brand','Any of the Above'],['Inverter brand','Chint Power'],['Battery & BMS brand','Chint Power'],['Cable brand','Newage Cables'],['Switchgear brand','CHINT']])await chooseBrand(page,field,label);
  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.setViewportSize({width:1280,height:900});
- const savedBoq=page.waitForResponse(r=>r.url().endsWith('/api/boqs/save')&&r.request().method()==='POST');await page.getByRole('button',{name:'Enter Pricing',exact:true}).click();const boqResponse=await savedBoq;expect(boqResponse.ok(),await boqResponse.text()).toBe(true);const boq=await boqResponse.json();
+ const savedBoq=page.waitForResponse(r=>r.url().endsWith('/api/boqs/prepare')&&r.request().method()==='POST');await page.getByRole('button',{name:'Save & Continue to Quotation Settings',exact:true}).click();const boqResponse=await savedBoq;expect(boqResponse.ok(),await boqResponse.text()).toBe(true);const boq=await boqResponse.json();
  const discountControl=page.getByRole('checkbox',{name:'Add discount to selling price',exact:true});
  await expect(discountControl).toBeVisible();await expect(discountControl).not.toBeChecked();
  await expect(page.getByLabel('Discount (%)',{exact:true})).toBeVisible();

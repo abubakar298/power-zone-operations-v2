@@ -34,7 +34,7 @@ export async function workflowHistory(pool: Pool, revisionId: string) {
             COALESCE((SELECT jsonb_agg(jsonb_build_object(
               'id',q.id,'number',q.number,'quoted_at',q.created_at,
               'private_quote',q.snapshot || jsonb_build_object('additionalItem',(SELECT a.input FROM quotation_additional_inputs a WHERE a.quotation_id=q.id)),'private_pricing',(SELECT p.snapshot FROM commercial_pricing_versions p WHERE p.id=q.pricing_id),
-              'revision',(SELECT jsonb_build_object('origin',r.origin,'reason',r.reason) FROM quotation_revision_links k JOIN quotation_revision_requests r ON r.id=k.request_id WHERE k.quotation_id=q.id),
+              'revision',(SELECT jsonb_build_object('origin',r.origin,'reason',r.reason) FROM quotation_revision_links k JOIN quotation_revision_requests_current r ON r.id=k.request_id WHERE k.quotation_id=q.id),
               'net_total',(SELECT entry->>'amount' FROM jsonb_array_elements(q.snapshot->'footer') entry WHERE entry->>'label'='Net Total' LIMIT 1),
               'status',COALESCE((SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1),'Not submitted')
             ) ORDER BY q.version) FROM quotation_versions q WHERE q.boq_revision_id=l.id),'[]'::jsonb) AS quotations

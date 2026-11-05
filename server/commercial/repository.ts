@@ -26,7 +26,7 @@ export class CommercialRepository {
   async revisionRequests(actor: string) {
     return (
       await this.pool.query(
-        `SELECT q.*,v.number AS source_number,v.pricing_id AS source_pricing_id,v.boq_revision_id AS source_boq_id,f.revision_id AS approved_revision_id,l.quotation_id AS completed_quotation_id FROM quotation_revision_requests q JOIN quotation_versions v ON v.id=q.source_quotation_id LEFT JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id LEFT JOIN quotation_revision_links l ON l.request_id=q.id WHERE q.created_by=$1 OR ${ownedCondition('quotation','v.id','$1')} ORDER BY q.created_at DESC LIMIT 200`,
+        `SELECT q.*,v.number AS source_number,v.pricing_id AS source_pricing_id,v.boq_revision_id AS source_boq_id,f.revision_id AS approved_revision_id,l.quotation_id AS completed_quotation_id FROM quotation_revision_requests_current q JOIN quotation_versions v ON v.id=q.source_quotation_id LEFT JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id LEFT JOIN quotation_revision_links l ON l.request_id=q.id WHERE q.created_by=$1 OR ${ownedCondition('quotation','v.id','$1')} ORDER BY q.created_at DESC LIMIT 200`,
         [actor],
       )
     ).rows;
@@ -72,7 +72,7 @@ export class CommercialRepository {
             409,
             "This request key was already used for another revision.",
           );
-        return previous;
+        return (await c.query('SELECT * FROM quotation_revision_requests_current WHERE id=$1',[previous.id])).rows[0];
       }
       const source = (
         await c.query("SELECT * FROM quotation_versions WHERE id=$1", [
@@ -83,7 +83,7 @@ export class CommercialRepository {
       const status=(await c.query('SELECT kind FROM coordination_events WHERE quotation_id=$1 ORDER BY created_at DESC LIMIT 1',[sourceId])).rows[0]?.kind;
       // A self revision forks the saved document; it cannot approve or alter its source.
       if(intent==='return'&&status!=='Submitted')throw new HttpError(409,'Only a submitted quotation can be returned to Coordination.');
-      const open=(await c.query(`SELECT r.* FROM quotation_revision_requests r WHERE source_quotation_id=$1 AND NOT EXISTS(SELECT 1 FROM quotation_revision_links l WHERE l.request_id=r.id) ORDER BY r.created_at DESC LIMIT 1`,[sourceId])).rows[0];
+      const open=(await c.query(`SELECT r.* FROM quotation_revision_requests_current r WHERE source_quotation_id=$1 AND NOT EXISTS(SELECT 1 FROM quotation_revision_links l WHERE l.request_id=r.id) ORDER BY r.created_at DESC LIMIT 1`,[sourceId])).rows[0];
       const recordReturn=async()=>{
         if(intent!=='return')return;
         await c.query("INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by,created_at) VALUES($1,$2,'Changes requested',$3,$4,clock_timestamp())",[randomUUID(),sourceId,reason,actor]);
@@ -159,11 +159,27 @@ export class CommercialRepository {
       return request;
     });
   }
+  async technicalRevision(actor:string,requestId:string){
+    return transaction(this.pool,async c=>{
+      await c.query('SELECT pg_advisory_xact_lock(742019003)');await this.manager(c,actor);
+      const request=(await c.query(`SELECT r.*,v.snapshot,v.boq_revision_id FROM quotation_revision_requests_current r JOIN quotation_versions v ON v.id=r.source_quotation_id WHERE r.id=$1 AND ${ownedCondition('quotation','v.id','$2')}`,[requestId,actor])).rows[0];
+      if(!request)throw new HttpError(404,'Revision not found.');
+      if((await c.query('SELECT 1 FROM quotation_revision_links WHERE request_id=$1',[requestId])).rowCount)throw new HttpError(409,'This revision is already saved. Start a new revision.');
+      if(request.draft_id)return request;
+      const source=(await c.query('SELECT snapshot FROM boq_revisions WHERE id=$1',[request.boq_revision_id])).rows[0],draftId=randomUUID();
+      const survey={...source.snapshot.survey},extra=(await c.query('SELECT input FROM quotation_additional_inputs WHERE quotation_id=$1',[request.source_quotation_id])).rows[0]?.input;
+      if(extra&&!survey.additionalItem)survey.additionalItem={description:extra.description,specification:'',qty:'1',unit:'LS',unitCost:extra.cost,taxRate:extra.taxRate};
+      await c.query('INSERT INTO survey_drafts(id,owner_id,inputs,base_revision_id,revision_reason,revision_origin) VALUES($1,$2,$3,$4,$5,$6)',[draftId,actor,survey,request.boq_revision_id,request.reason,request.origin]);
+      await c.query('INSERT INTO quotation_revision_scope_changes(request_id,draft_id,changed_by) VALUES($1,$2,$3)',[requestId,draftId,actor]);
+      await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'quotation.revision.technical-route:'+requestId]);
+      return {...request,costing_change:true,draft_id:draftId};
+    });
+  }
   async revisionContext(actor: string, boqId: string) {
     await this.manager(this.pool, actor);
     const row = (
       await this.pool.query(
-        "SELECT q.*,p.snapshot->'input' AS pricing_input,p.snapshot->'rows' AS pricing_rows,p.snapshot->'policy' AS pricing_policy FROM quotation_revision_requests q JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id JOIN quotation_versions v ON v.id=q.source_quotation_id JOIN commercial_pricing_versions p ON p.id=v.pricing_id WHERE f.revision_id=$1",
+        "SELECT q.*,p.snapshot->'input' AS pricing_input,p.snapshot->'rows' AS pricing_rows,p.snapshot->'policy' AS pricing_policy FROM quotation_revision_requests_current q JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id JOIN quotation_versions v ON v.id=q.source_quotation_id JOIN commercial_pricing_versions p ON p.id=v.pricing_id WHERE f.revision_id=$1",
         [boqId],
       )
     ).rows[0];
@@ -189,7 +205,7 @@ export class CommercialRepository {
   ) {
     const request = (
       await c.query(
-        "SELECT q.*,v.snapshot AS source_snapshot,v.number AS source_number,v.boq_revision_id AS source_boq_id FROM quotation_revision_requests q JOIN quotation_versions v ON v.id=q.source_quotation_id WHERE q.id=$1",
+        "SELECT q.*,v.snapshot AS source_snapshot,v.number AS source_number,v.boq_revision_id AS source_boq_id FROM quotation_revision_requests_current q JOIN quotation_versions v ON v.id=q.source_quotation_id WHERE q.id=$1",
         [requestId],
       )
     ).rows[0];
@@ -220,7 +236,7 @@ export class CommercialRepository {
   ) {
     const row = (
       await c.query(
-        "SELECT q.id FROM quotation_revision_requests q JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id WHERE f.revision_id=$1",
+        "SELECT q.id FROM quotation_revision_requests_current q JOIN boq_draft_finalizations f ON f.draft_id=q.draft_id WHERE f.revision_id=$1",
         [boqId],
       )
     ).rows[0];
@@ -343,7 +359,7 @@ export class CommercialRepository {
     await this.manager(this.pool, actor);
     return (
       await this.pool.query(
-        `SELECT p.id,p.number,p.version,p.boq_revision_id,p.created_at,p.snapshot->>'boqNumber' AS boq_number,p.snapshot->>'netTotal' AS total FROM commercial_pricing_versions p WHERE ${ownedCondition("pricing", "p.id", "$1")} AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? p.id::text) ORDER BY p.created_at DESC LIMIT 200`,
+        `SELECT p.id,p.number,p.version,p.boq_revision_id,p.created_at,p.snapshot->>'boqNumber' AS boq_number,p.snapshot->>'netTotal' AS total FROM commercial_pricing_versions p WHERE ${ownedCondition("pricing", "p.id", "$1")} AND NOT EXISTS(SELECT 1 FROM boq_stale_pricing stale WHERE stale.pricing_id=p.id) AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? p.id::text) ORDER BY p.created_at DESC LIMIT 200`,
         [actor],
       )
     ).rows;
@@ -371,6 +387,7 @@ export class CommercialRepository {
     return transaction(this.pool, async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(742019003)");
       await this.manager(c, actor);
+      await lockBoqPreparation(c,input.boqRevisionId);
       input=await this.pricingAttribution(c,actor,input);
       await this.requireCostingContext(
         c,
@@ -445,7 +462,7 @@ export class CommercialRepository {
     allowExisting = false,
   ) {
     if(input.revisionRequestId && input.discount===undefined){
-      const prior=(await c.query("SELECT v.snapshot FROM quotation_revision_requests r JOIN quotation_versions v ON v.id=r.source_quotation_id WHERE r.id=$1",[input.revisionRequestId])).rows[0];
+      const prior=(await c.query("SELECT v.snapshot FROM quotation_revision_requests_current r JOIN quotation_versions v ON v.id=r.source_quotation_id WHERE r.id=$1",[input.revisionRequestId])).rows[0];
       if(prior) input={...input,discount:prior.snapshot.input.discount??prior.snapshot.footer.find((r:any)=>r.label==="Special Discount")?.amount??"0"};
     }
     const p = input.previewPricing?{boq_revision_id:input.previewPricing.boqRevisionId,snapshot:(await this.pricingPreview(actor,input.previewPricing)).snapshot}:await this.pricingGet(actor, input.pricingId, c),
@@ -616,6 +633,7 @@ export class CommercialRepository {
       const preparation=await lockBoqPreparation(c,preview.boqRevisionId);
       const newerPreparation=(await c.query(`SELECT 1 FROM boq_preparation_edits e JOIN boq_draft_finalizations f ON f.draft_id=e.draft_id JOIN boq_revisions newer ON newer.id=f.revision_id JOIN boq_revisions current ON current.id=$1 WHERE newer.boq_id=$2 AND newer.revision>current.revision`,[preview.boqRevisionId,preparation.boq_id])).rowCount;
       if(newerPreparation)throw new HttpError(409,'The BOQ preparation was updated. Reopen pricing for the latest BOQ before creating its quotation.');
+      if((await c.query('SELECT 1 FROM boq_stale_pricing WHERE pricing_id=$1',[input.pricingId])).rowCount)throw new HttpError(409,'The BOQ changed. Reopen Quotation Settings and review the current prices.');
       const comparison=(preview.snapshot as any).revision?.comparison;
       if(comparison?.previousPayable && !new Decimal(comparison.previousPayable).eq(comparison.proposedPayable) && !input.acknowledgePriceChange)
         throw new HttpError(409,"Acknowledge the previous and proposed payable change before saving this revision.");
@@ -726,7 +744,7 @@ export class CommercialRepository {
   async quotationList(actor?: string) {
     return (
       await this.pool.query(
-        `SELECT q.id,q.number,q.version,q.pricing_id,q.boq_revision_id,q.created_at,(SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS workflow_status,NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS workflow_latest,EXISTS(SELECT 1 FROM quotation_revision_requests r WHERE r.source_quotation_id=q.id) AS revision_requested,q.snapshot->>'boqNumber' AS boq_number,q.snapshot->'customer'->>'name' AS customer,q.snapshot->>'siteName' AS site FROM quotation_versions q ${actor ? `WHERE ${ownedCondition("quotation", "q.id", "$1")}` : "WHERE true"} AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? q.id::text) ORDER BY q.created_at DESC LIMIT 200`,
+        `SELECT q.id,q.number,q.version,q.pricing_id,q.boq_revision_id,q.created_at,(SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS workflow_status,NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS workflow_latest,EXISTS(SELECT 1 FROM quotation_revision_requests_current r WHERE r.source_quotation_id=q.id) AS revision_requested,q.snapshot->>'boqNumber' AS boq_number,q.snapshot->'customer'->>'name' AS customer,q.snapshot->>'siteName' AS site FROM quotation_versions q ${actor ? `WHERE ${ownedCondition("quotation", "q.id", "$1")}` : "WHERE true"} AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? q.id::text) ORDER BY q.created_at DESC LIMIT 200`,
         actor ? [actor] : [],
       )
     ).rows;

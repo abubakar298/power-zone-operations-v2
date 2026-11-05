@@ -261,6 +261,7 @@ export function QuotationView({
 export function Commercial({
   session,
   initialRevisionId,
+  initialPreparationDraftId,
   initialFrameworkInput,
   section = "pricing",
   onRevisionDraft,
@@ -273,6 +274,7 @@ export function Commercial({
 }: {
   session: Session;
   initialRevisionId?: string;
+  initialPreparationDraftId?:string;
   initialFrameworkInput?: Partial<PricingInput>;
   section?: "pricing" | "quotes";
   onRevisionDraft?: (id: string,preparationEdit?:boolean) => void;
@@ -340,8 +342,30 @@ export function Commercial({
   const [revisionRequests, setRevisionRequests] = useState<any[]>([]);
   const [openedProjectRevision,setOpenedProjectRevision]=useState(false);
   useEffect(()=>{if(startQuotationRevision&&savedQuote&&!openedProjectRevision){setOpenedProjectRevision(true);setRevisionDialog(true);setRevisionReason(savedQuote.workflow_notes??'');setCostingChoice('');}},[startQuotationRevision,savedQuote,openedProjectRevision]);
-  const [preparationEdit,setPreparationEdit]=useState<{canEdit:boolean;quoted:boolean}>();
-  useEffect(()=>{let active=true;setPreparationEdit(undefined);if(input.boqRevisionId&&!savedQuote)void api<{canEdit:boolean;quoted:boolean}>(`/boqs/${input.boqRevisionId}/preparation`).then(value=>{if(active)setPreparationEdit(value);}).catch(()=>{});return()=>{active=false;};},[input.boqRevisionId,savedQuote]);
+  const preparationCarryKey=(id:string)=>`pz-quotation-preparation:${session.user.id}:${id}`;
+  const draftCarryKey=(id:string)=>`pz-quotation-preparation-draft:${session.user.id}:${id}`;
+  function restoredPreparation(value:PricingInput):PricingInput{
+    try{const carry=JSON.parse((initialPreparationDraftId?sessionStorage.getItem(draftCarryKey(initialPreparationDraftId)):null)??sessionStorage.getItem(preparationCarryKey(value.boqRevisionId))??'null');if(carry?.boqRevisionId===value.boqRevisionId)return {...value,...carry,boqRevisionId:value.boqRevisionId,revisionRequestId:value.revisionRequestId??carry.revisionRequestId};}catch{}
+    return value;
+  }
+  async function backToBoq(){
+    if(savedQuote){setRevisionDialog(true);setRevisionReason(savedQuote.workflow_notes??'');setCostingChoice('yes');setNotice('This quotation is already saved. Record a reason to start its technical revision.');return;}
+    if(!onRevisionDraft)return;
+    if(!input.revisionRequestId&&preparationEdit?.quotationId){setSavedQuote(await api(`/commercial/quotations/${preparationEdit.quotationId}`));setRevisionDialog(true);setRevisionReason('');setCostingChoice('yes');setNotice('This BOQ is already quoted. Record a reason to start its technical revision.');return;}
+    let id=input.boqRevisionId;
+    if(input.revisionRequestId){
+      const request=revisionInfo??(await api<{requests:any[]}>('/commercial/revision-requests')).requests.find(r=>r.id===input.revisionRequestId);
+      if(request&&!request.costing_change){
+        if(!(await confirmRevision('Switch to technical revision','Changing BOQ quantities or equipment requires a technical revision. The same revision request and its reason are retained; the original quotation remains unchanged.','Switch to technical revision')))return;
+        const next=await api<any>(`/commercial/revision-requests/${request.id}/technical-route`,{csrf:session.csrfToken,body:{}});
+        sessionStorage.setItem(draftCarryKey(next.draft_id),JSON.stringify(input));onRevisionDraft(next.draft_id,true);return;
+      }
+    }
+    const result=await api<{draftId:string}>(`/boqs/${id}/working-preparation`,{csrf:session.csrfToken,body:{}});
+    sessionStorage.setItem(draftCarryKey(result.draftId),JSON.stringify(input));sessionStorage.setItem(preparationCarryKey(id),JSON.stringify(input));onRevisionDraft(result.draftId,true);
+  }
+  const [preparationEdit,setPreparationEdit]=useState<{canEdit:boolean;quoted:boolean;quotationId?:string}>();
+  useEffect(()=>{let active=true;setPreparationEdit(undefined);if(input.boqRevisionId&&!savedQuote)void api<{canEdit:boolean;quoted:boolean;quotationId?:string}>(`/boqs/${input.boqRevisionId}/working-preparation`).then(value=>{if(active)setPreparationEdit(value);}).catch(()=>{});return()=>{active=false;};},[input.boqRevisionId,savedQuote]);
   const boqRevisionLocked = Boolean(initialRevisionId) || Boolean(new URLSearchParams(window.location.search).get("pricingPreviewToken")) || boqs.some(b => b.id === input.boqRevisionId && b.from_technical_report === true);
   const directSale =
     (boqs.find((b) => b.id === input.boqRevisionId)?.family ??
@@ -384,11 +408,11 @@ export function Commercial({
             `/commercial/pricing/${r.source_pricing_id}`,
           );
           setRevisionInfo(r);
-          setInput({
+          setInput(restoredPreparation({
             ...editablePricing(source.snapshot),
             boqRevisionId: initialRevisionId,
             revisionRequestId: r.id,
-          });
+          }));
           setNotice(
             `${r.origin}: ${r.reason}. Review commercial pricing for this revision.`,
           );
@@ -398,7 +422,7 @@ export function Commercial({
           );
           if (r) {
             setRevisionInfo(r);
-            setInput({
+            setInput(restoredPreparation({
               ...r.pricing_input,
               markups: {
                 ...defaults(session.user.displayName).markups,
@@ -406,8 +430,8 @@ export function Commercial({
               },
               boqRevisionId: initialRevisionId,
               revisionRequestId: r.id,
-            });
-          }
+            }));
+          } else setInput(old=>restoredPreparation({...old,boqRevisionId:initialRevisionId}));
         }
       })()
         .catch(fail)
@@ -689,7 +713,7 @@ export function Commercial({
     if (
       !(await confirmRevision(
         submit
-          ? quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput.additionalItem ? "Approve quotation within pre-approved allowance" : "Save and send quotation for approval"
+          ? !quoteInput?.revisionRequestId && quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput.additionalItem ? "Approve quotation within pre-approved allowance" : "Save and send quotation for approval"
           : quoteInput.revisionRequestId ? "Save revision" : "Save quotation version",
         "This preserves the quotation prices, discount and terms as an immutable version.",
         submit ? "Save and send" : quoteInput.revisionRequestId ? "Save Revision" : "Save quotation",
@@ -702,10 +726,10 @@ export function Commercial({
       setDirty(false);setSavedQuote(q);setQuoteInput(undefined);
       if (submit) {
         try{await api("/coordinator/events", {
-          body: { quotationId: q.id, kind: quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput.additionalItem ? "Approved" : "Submitted", notes: "" },
+          body: { quotationId: q.id, kind: !quoteInput?.revisionRequestId && quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput.additionalItem ? "Approved" : "Submitted", notes: "" },
           csrf: session.csrfToken,
         });}catch(e){throw new Error(`Quotation saved, but it was not sent. ${e instanceof Error?e.message:"Please retry the send action."}`);}
-        setDirty(false);setSavedQuote(q);setQuoteInput(undefined);
+        setDirty(false);setSavedQuote(await api(`/commercial/quotations/${q.id}`));setQuoteInput(undefined);
         if(onQuotationSent){onQuotationSent();return;}
       }
       setDirty(false);setSavedQuote(q);setQuoteInput(undefined);
@@ -796,7 +820,7 @@ export function Commercial({
         Commercial pricing uses the selected saved BOQ revision. Atif may approve quotations within the standard discount allowance; Management approves further discounts. Saved versions retain their original
         inputs and amounts.
       </p>
-      {!savedQuote&&!input.revisionRequestId&&onRevisionDraft&&preparationEdit?.canEdit&&<div className="pz-actions"><Button variant="neutral" disabled={busy} onClick={()=>void action(async()=>{const result=await api<{draftId:string}>(`/boqs/${input.boqRevisionId}/edit-preparation`,{csrf:session.csrfToken,body:{}});onRevisionDraft(result.draftId,true);})}>Edit BOQ</Button></div>}
+      {onRevisionDraft&&(savedQuote||input.revisionRequestId||preparationEdit?.canEdit||preparationEdit?.quotationId)&&<div className="pz-actions"><Button variant="neutral" disabled={busy} onClick={()=>void action(backToBoq)}>Back to BOQ Settings</Button></div>}
       {dirty && <p role="status">Unsaved quotation preparation changes</p>}
       {revisionInfo && (
         <aside className="detail-panel" aria-label="Requested revision">
@@ -841,8 +865,11 @@ export function Commercial({
                     value={input.boqRevisionId}
                     onChange={(e) => {
                       const id = e.target.value;
-                      update({ boqRevisionId: id });
-                      if (id) void applyApprovalInstructions(id).catch(fail);
+                      setRevisionInfo(undefined);update({boqRevisionId:id,revisionRequestId:undefined});
+                      if(id)void api<any>(`/commercial/revision-context/${id}`).then(context=>{
+                        if(context){setRevisionInfo(context);setInput(old=>old.boqRevisionId===id?restoredPreparation({...old,revisionRequestId:context.id}):old);}
+                        else return applyApprovalInstructions(id);
+                      }).catch(fail);
                     }}
                     required
                   >
@@ -1427,7 +1454,7 @@ export function Commercial({
             >
               Preview quotation
             </Button>
-            {quoteInput.revisionRequestId&&<div className="pz-send-action"><Button variant="primary" loading={busy} loadingLabel="Saving revision…" onClick={()=>void saveQuote(false)}>Save Revision</Button>{error&&<p className="form-error" role="alert">{error}</p>}</div>}
+            <div className="pz-send-action"><Button variant="secondary" loading={busy} loadingLabel="Saving quotation…" disabled={!quotePreview?.fingerprint||(!!quotePreview&&hasRevisionPriceChange(quotePreview.snapshot)&&!priceChangeAcknowledged)} onClick={()=>void saveQuote(false)}>{quoteInput.revisionRequestId?'Save Revision':'Create Quotation'}</Button>{error&&<p className="form-error" role="alert">{error}</p>}</div>
           </form>
         </>
       )}
@@ -1461,7 +1488,7 @@ export function Commercial({
             acknowledged={priceChangeAcknowledged}
             onAcknowledge={setPriceChangeAcknowledged}
           />
-          {quoteInput?.revisionRequestId?<p>Save Revision to review the saved quotation, then send that saved version to Management.</p>:<p>{quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput?.additionalItem ? 'Download the preview or approve it within the pre-approved discount allowance.' : 'Download the preview or send the reviewed quotation to Management for approval.'}</p>}
+          {quoteInput?.revisionRequestId?<p>Save Revision to finish later, or send the reviewed revision directly to Management. Both actions save the exact version shown.</p>:<p>{!quoteInput?.revisionRequestId && quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput?.additionalItem ? 'Download the preview or approve it within the pre-approved discount allowance.' : 'Download the preview or send the reviewed quotation to Management for approval.'}</p>}
           <div className="pz-action-row">
             <Button
               variant="secondary"
@@ -1475,7 +1502,7 @@ export function Commercial({
             >
               Download Preview
             </Button>
-            {!quoteInput?.revisionRequestId&&<div className="pz-send-action">
+            <div className="pz-send-action">
             <Button
               variant="primary"
               loading={busy}
@@ -1486,10 +1513,10 @@ export function Commercial({
               }
               onClick={() => void saveQuote(true)}
             >
-              {quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput?.additionalItem ? 'Approve Quotation' : 'Send to Management'}
+              {!quoteInput?.revisionRequestId && quotePreview.snapshot.discountAuthorization && !quotePreview.snapshot.discountAuthorization.requiresManagementApproval && !(quotePreview.snapshot as QuotationSnapshot & {revision?:unknown}).revision && !quoteInput?.additionalItem ? 'Approve Quotation' : 'Send to Management'}
             </Button>
               {sendError&&<p className="form-error" role="alert">{sendError}</p>}
-            </div>}
+            </div>
           </div>
         </>
       )}

@@ -151,9 +151,12 @@ export function Dashboard({
   const [advanceToOpen, setAdvanceToOpen] = useState<string>();
   const [advanceOpenNonce, setAdvanceOpenNonce] = useState(0);
   const openSiteFromAnywhere = (id: string) => { setSiteToOpen(id); setSiteOpenNonce((n) => n + 1); setStageToOpen(undefined); navigate("sites"); };
-  const [pricingRevisionId, setPricingRevisionId] = useState<string>();
-  const [revisionDraftId, setRevisionDraftId] = useState<string>();
-  const [pricingRequestId, setPricingRequestId] = useState<string>();
+  const quotationLink=(key:string)=>{const value=new URLSearchParams(window.location.hash.slice(1)).get(key);return value&&/^[0-9a-f-]{36}$/i.test(value)?value:undefined;};
+  function rememberQuotationLink(values:Record<string,string|undefined>){const url=new URL(window.location.href),hash=new URLSearchParams(url.hash.slice(1));url.searchParams.delete('pricingPreviewToken');for(const key of ['boq','boqDraft','preparationDraft','revisionRequest'])hash.delete(key);for(const [key,value]of Object.entries(values))if(value)hash.set(key,value);url.hash=hash.toString();history.replaceState(null,'',url);}
+  const [pricingRevisionId, setPricingRevisionId] = useState<string|undefined>(()=>quotationLink('boq'));
+  const [revisionDraftId, setRevisionDraftId] = useState<string|undefined>(()=>quotationLink('boqDraft'));
+  const [pricingPreparationDraftId,setPricingPreparationDraftId]=useState<string|undefined>(()=>quotationLink('preparationDraft'));
+  const [pricingRequestId, setPricingRequestId] = useState<string|undefined>(()=>quotationLink('revisionRequest'));
   const [verified, setVerified] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false),
     [mobileOpen, setMobileOpen] = useState(false);
@@ -393,7 +396,7 @@ export function Dashboard({
       }
       if(!departmentUser)setDepartmentView(undefined);
       // Restore authorized workspace links after a reload as well as sidebar navigation.
-      const linkedRoles:Record<string,string[]>={'project-tracking':['Management'],'receivables':['Management'],finance:['Admin','Management','Accounts'],account:['Admin','Management','Coordinator','Design','Operations','Inventory','Accounts'],team:['Admin'],boqs:['Admin','Management','Coordinator','Design'],pricing:['Admin','Management','Coordinator'],quotes:['Admin','Management','Coordinator'],orders:['Admin','Management','Coordinator','Accounts'],reports:['Admin','Management','Accounts','Inventory'],rates:['Admin','Management']};
+      const linkedRoles:Record<string,string[]>={'project-tracking':['Management'],'receivables':['Management'],finance:['Admin','Management','Accounts'],account:['Admin','Management','Coordinator','Design','Operations','Inventory','Accounts'],team:['Admin'],newboq:['Admin','Management','Coordinator'],boqs:['Admin','Management','Coordinator','Design'],pricing:['Admin','Management','Coordinator'],quotes:['Admin','Management','Coordinator'],orders:['Admin','Management','Coordinator','Accounts'],reports:['Admin','Management','Accounts','Inventory'],rates:['Admin','Management']};
       if(destination&&linkedRoles[destination]?.includes(session.user.role)){
         setView(destination as typeof view);return;
       }
@@ -1315,6 +1318,7 @@ export function Dashboard({
                     session={session}
                     onQuotationSent={session.user.role==='Coordinator'?()=>{setBucketTask(undefined);setRevisionDraftId(undefined);setPricingRevisionId(undefined);setPricingRequestId(undefined);const url=new URL(window.location.href);url.searchParams.delete('pricingPreviewToken');url.hash='workspace=newboq';window.history.replaceState(null,'',url);setView('newboq');}:undefined}
                     initialRevisionId={pricingRevisionId}
+                    initialPreparationDraftId={pricingPreparationDraftId}
                     initialFrameworkInput={bucketTask?.context?.frameworkPricingInput}
                     initialRequestId={pricingRequestId}
                     initialQuotationId={
@@ -1331,12 +1335,12 @@ export function Dashboard({
                     onRevisionPricing={(id, requestId) => {
                       setPricingRevisionId(id);
                       setPricingRequestId(requestId);
-                      navigate("pricing");
+                      if(navigate("pricing"))rememberQuotationLink({boq:id,revisionRequest:requestId});
                     }}
                     section={view === "pricing" ? "pricing" : "quotes"}
                     onRevisionDraft={(id,preparationEdit) => {
                       setRevisionDraftId(id);
-                      navigate(preparationEdit?"newboq":"boqs");
+                      if(navigate(preparationEdit?"newboq":"boqs"))rememberQuotationLink({boqDraft:id});
                     }}
                   />
                 ))}
@@ -1355,10 +1359,11 @@ export function Dashboard({
                       ? bucketTask.id
                       : undefined
                   }
-                  onPricing={(id) => {
+                  onPricing={(id,preparationDraftId) => {
+                    setPricingPreparationDraftId(preparationDraftId);
                     setPricingRequestId(undefined);
                     setPricingRevisionId(id);
-                    navigate("pricing");
+                    if(navigate("pricing"))rememberQuotationLink({boq:id,preparationDraft:preparationDraftId});
                   }}
                   session={session}
                   onLogout={onLogout}

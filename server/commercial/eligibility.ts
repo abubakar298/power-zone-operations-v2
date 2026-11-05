@@ -5,7 +5,7 @@ export async function quotationEligibility(c: Pool | PoolClient, id: string) {
   const row=(await c.query(`SELECT q.id,
     (SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS status,
     NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS current,
-    EXISTS(SELECT 1 FROM quotation_revision_requests r WHERE r.source_quotation_id=q.id) AS revision_requested
+    EXISTS(SELECT 1 FROM quotation_revision_requests_current r WHERE r.source_quotation_id=q.id) AS revision_requested
     FROM quotation_versions q WHERE q.id=$1`,[id])).rows[0];
   if(!row) throw new HttpError(404,"Saved quotation not found.");
   const approved=["Approved","PO received"].includes(row.status);

@@ -34,6 +34,8 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
       throw new HttpError(403, "Refresh and try again.");
     next();
   });
+  r.get('/:id/working-preparation',async(req,res)=>res.json(await repo.preparation(req.authSession!.user.id,z.uuid().parse(req.params.id),false,true)));
+  r.post('/:id/working-preparation',async(req,res)=>{z.object({}).strict().parse(req.body);res.json(await repo.preparation(req.authSession!.user.id,z.uuid().parse(req.params.id),true,true));});
   r.get('/:id/preparation',async(req,res)=>{const id=z.uuid().parse(req.params.id);res.json(await repo.preparation(req.authSession!.user.id,id));});
   r.post('/:id/edit-preparation',async(req,res)=>{const id=z.uuid().parse(req.params.id);z.object({}).strict().parse(req.body);res.json(await repo.preparation(req.authSession!.user.id,id,true));});
   r.get("/drafts", async (req, res) =>
@@ -84,7 +86,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
       );
     const {baseRevisionId,...survey}=v.data;res.json(await repo.preview(survey,baseRevisionId));
   });
-  r.post("/save", async (req, res) => {
+  r.post(["/save","/prepare"], async (req, res) => {
     const v = z
       .object({
         draftId: z.uuid(),
@@ -103,6 +105,7 @@ export function boqHttp(repo: BoqRepository, requireSession: RequestHandler) {
           v.data.draftId,
           v.data.version,
           v.data.fingerprint,
+          req.path==='/prepare',
         ),
       );
   });

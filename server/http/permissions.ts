@@ -1,3 +1,4 @@
+import {editableDraftCondition} from '../boq/draft-access.js';
 import type { RequestHandler } from "express";
 import type { Pool } from "pg";
 import { HttpError } from "./errors.js";
@@ -74,7 +75,7 @@ export const resourceOwnership = {
   ipo: "SELECT 1 FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE i.id=$1 AND (i.created_by=$2 OR s.created_by=$2)",
   revisionRequest:
     "SELECT 1 FROM quotation_revision_requests req JOIN quotation_versions quote ON quote.id=req.source_quotation_id JOIN boq_revisions rev ON rev.id=quote.boq_revision_id JOIN boqs boq ON boq.id=rev.boq_id JOIN survey_drafts draft ON draft.id=boq.draft_id WHERE req.id=$1 AND (req.created_by=$2 OR quote.created_by=$2 OR boq.created_by=$2 OR draft.owner_id=$2)",
-  draft: "SELECT 1 FROM survey_drafts WHERE id=$1 AND owner_id=$2",
+  draft: `SELECT 1 FROM survey_drafts d WHERE id=$1 AND ${editableDraftCondition('d','$2')}`,
   submission: "SELECT 1 FROM ipo_submissions WHERE id=$1 AND created_by=$2",
   review:
     "SELECT 1 FROM boq_review_submissions s JOIN survey_drafts d ON d.id=s.draft_id WHERE s.id=$1 AND d.owner_id=$2",

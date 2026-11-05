@@ -49,7 +49,7 @@ export class ReviewRepository {
         await this.pool.query(
           `SELECT r.origin,r.reason,r.requested_by,q.number AS source_quotation,
         (SELECT e.notes FROM coordination_events e WHERE e.quotation_id=q.id AND e.kind='Changes requested' ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS management_feedback
-       FROM quotation_revision_requests r JOIN quotation_versions q ON q.id=r.source_quotation_id WHERE r.draft_id=$1`,
+       FROM quotation_revision_requests_current r JOIN quotation_versions q ON q.id=r.source_quotation_id WHERE r.draft_id=$1`,
           [row.draft_id],
         )
       ).rows[0] ?? null;

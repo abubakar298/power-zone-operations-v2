@@ -91,6 +91,7 @@ export function commercialHttp(
         ),
       );
   });
+  r.post('/revision-requests/:id/technical-route',async(req,res)=>{parse(z.object({}).strict(),req.body);res.json(await repo.technicalRevision(req.authSession!.user.id,id(req.params.id)));});
   r.get("/revision-context/:id", async (req, res) =>
     res.json(
       await repo.revisionContext(req.authSession!.user.id, id(req.params.id)),

@@ -1,4 +1,5 @@
-import {assertPreparationEditable,lockBoqPreparation,preparationState} from './preparation.js';
+import {editableDraftCondition} from './draft-access.js';
+import {assertPreparationEditable,lockBoqPreparation,preparationState,workingPreparationState} from './preparation.js';
 import {sentSurveyAwaitingDesign} from '../../shared/sent-survey-requests.js';
 import {frameworkCosting} from './framework-costing.js';
 import { allocateReference } from "../documents/references.js";
@@ -42,7 +43,7 @@ export class BoqRepository {
     ).rows;
   }
   async itemsForActor(actor:string,id:string){const row=(await this.pool.query(`SELECT r.id FROM boq_revisions r WHERE r.id=$1 AND ${ownedCondition('boq','r.id','$2')}`,[id,actor])).rows[0];if(!row)throw new HttpError(404,'BOQ not found.');return this.get(id);}
-  async preparation(actor:string,revisionId:string,open=false){
+  async preparation(actor:string,revisionId:string,open=false,working=false){
     return transaction(this.pool,async c=>{
       const user=(await c.query('SELECT role,active FROM users WHERE id=$1 FOR SHARE',[actor])).rows[0];
       if(!user?.active)throw new HttpError(401,'Your access has ended.');
@@ -50,22 +51,34 @@ export class BoqRepository {
       const source=(await c.query(`SELECT r.* FROM boq_revisions r WHERE r.id=$1 AND ${ownedCondition('boq','r.id','$2')}`,[revisionId,actor])).rows[0];
       if(!source)throw new HttpError(404,'BOQ preparation not found.');
       if(open)await lockBoqPreparation(c,revisionId);
-      const state=await preparationState(c,revisionId);
-      if(!open)return {canEdit:state.canEdit,quoted:state.quoted};
+      const state=await (working?workingPreparationState:preparationState)(c,revisionId);
+      if(!open)return {canEdit:state.canEdit,quoted:state.quoted,...(working?{quotationId:(state as any).quotation_id}: {})};
       if(!state.canEdit)throw new HttpError(409,state.quoted?'A quotation has been created. Use the quotation revision flow to change this BOQ.':'Open the latest preliminary BOQ before editing.');
+      if(working){
+        const approved=(await c.query("SELECT 1 FROM boq_draft_finalizations f JOIN boq_review_submissions s ON s.draft_id=f.draft_id JOIN boq_review_decisions decision ON decision.submission_id=s.id WHERE f.revision_id=$1 AND decision.outcome='Approved'",[revisionId])).rowCount;
+        if(approved){
+          const existing=(await c.query('SELECT d.id FROM boq_preparation_edits e JOIN survey_drafts d ON d.id=e.draft_id WHERE e.source_revision_id=$1',[revisionId])).rows[0];if(existing)return {canEdit:true,quoted:false,draftId:existing.id};
+          const draftId=randomUUID();await c.query("INSERT INTO survey_drafts(id,owner_id,inputs,base_revision_id,revision_reason,revision_origin) VALUES($1,$2,$3,$4,'Update approved BOQ preparation','Internal management')",[draftId,actor,source.snapshot.survey,revisionId]);
+          await c.query('INSERT INTO boq_preparation_edits(draft_id,source_revision_id,created_by) VALUES($1,$2,$3)',[draftId,revisionId,actor]);return {canEdit:true,quoted:false,draftId};
+        }
+        const draft=(await c.query('SELECT d.id FROM boq_draft_finalizations f JOIN survey_drafts d ON d.id=f.draft_id WHERE f.revision_id=$1',[revisionId])).rows[0];
+        if(!draft)throw new HttpError(409,'This document has no editable preparation. Use its quotation revision flow.');
+        await c.query('INSERT INTO boq_working_preparations(revision_id,draft_id,updated_by) VALUES($1,$2,$3) ON CONFLICT(revision_id) DO NOTHING',[revisionId,draft.id,actor]);
+        return {canEdit:true,quoted:false,draftId:draft.id};
+      }
       const existing=(await c.query('SELECT d.id FROM boq_preparation_edits e JOIN survey_drafts d ON d.id=e.draft_id WHERE e.source_revision_id=$1 AND e.created_by=$2',[revisionId,actor])).rows[0];
-      if(existing)return {draftId:existing.id};
+      if(existing)return {canEdit:true,quoted:false,draftId:existing.id};
       const draftId=randomUUID();
       await c.query("INSERT INTO survey_drafts(id,owner_id,inputs,base_revision_id,revision_reason,revision_origin) VALUES($1,$2,$3,$4,'Preparation edited before quotation creation','Internal management')",[draftId,actor,source.snapshot.survey,revisionId]);
       await c.query('INSERT INTO boq_preparation_edits(draft_id,source_revision_id,created_by) VALUES($1,$2,$3)',[draftId,revisionId,actor]);
       await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'boq.preparation.edit-opened:'+revisionId+':'+draftId]);
-      return {draftId};
+      return {canEdit:true,quoted:false,draftId};
     });
   }
   async drafts(owner: string) {
     return (
       await this.pool.query(
-        `SELECT d.*,EXISTS(SELECT 1 FROM boq_preparation_edits pe WHERE pe.draft_id=d.id) AS preparation_edit,(SELECT jsonb_build_object('designer',u.display_name,'sent_at',h.created_at,'notes',h.inputs->>'notes','attachments',(SELECT jsonb_agg(jsonb_build_object('id',a.id,'filename',a.filename)) FROM survey_uploads a WHERE h.inputs->'uploadIds' ? a.id::text)) FROM design_survey_handoffs h JOIN users u ON u.id=h.created_by WHERE h.draft_id=d.id) AS design_source,s.id AS review_id,s.draft_version AS submitted_version,CASE WHEN s.id IS NULL THEN NULL ELSE COALESCE(v.outcome,'Awaiting review') END AS review_status,v.comments FROM survey_drafts d LEFT JOIN LATERAL(SELECT * FROM boq_review_submissions WHERE draft_id=d.id ORDER BY draft_version DESC LIMIT 1) s ON true LEFT JOIN boq_review_decisions v ON v.submission_id=s.id WHERE d.owner_id=$1 AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? d.id::text) AND d.id NOT IN(SELECT draft_id FROM boq_draft_finalizations) ORDER BY d.updated_at DESC LIMIT 100`,
+        `SELECT d.*,(EXISTS(SELECT 1 FROM boq_preparation_edits pe WHERE pe.draft_id=d.id) OR EXISTS(SELECT 1 FROM boq_working_preparations wp WHERE wp.draft_id=d.id)) AS preparation_edit,(SELECT jsonb_build_object('designer',u.display_name,'sent_at',h.created_at,'notes',h.inputs->>'notes','attachments',(SELECT jsonb_agg(jsonb_build_object('id',a.id,'filename',a.filename)) FROM survey_uploads a WHERE h.inputs->'uploadIds' ? a.id::text)) FROM design_survey_handoffs h JOIN users u ON u.id=h.created_by WHERE h.draft_id=d.id) AS design_source,s.id AS review_id,s.draft_version AS submitted_version,CASE WHEN s.id IS NULL THEN NULL ELSE COALESCE(v.outcome,'Awaiting review') END AS review_status,v.comments FROM survey_drafts d LEFT JOIN LATERAL(SELECT * FROM boq_review_submissions WHERE draft_id=d.id ORDER BY draft_version DESC LIMIT 1) s ON true LEFT JOIN boq_review_decisions v ON v.submission_id=s.id WHERE ${editableDraftCondition('d','$1')} AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? d.id::text) AND (d.id NOT IN(SELECT draft_id FROM boq_draft_finalizations) OR EXISTS(SELECT 1 FROM boq_working_preparations wp WHERE wp.draft_id=d.id AND NOT EXISTS(SELECT 1 FROM quotation_versions q WHERE q.boq_revision_id=wp.revision_id))) ORDER BY d.updated_at DESC LIMIT 100`,
         [owner],
       )
     ).rows;
@@ -73,7 +86,7 @@ export class BoqRepository {
   async draftForReport(owner: string, id: string) {
     const row = (
       await this.pool.query(
-        "SELECT inputs FROM survey_drafts WHERE id=$1 AND owner_id=$2 AND id NOT IN (SELECT draft_id FROM boq_draft_finalizations)",
+        "SELECT inputs FROM survey_drafts d WHERE id=$1 AND (owner_id=$2 OR (EXISTS(SELECT 1 FROM users WHERE id=$2 AND role IN('Admin','Management')) AND EXISTS(SELECT 1 FROM boq_working_preparations wp WHERE wp.draft_id=d.id))) AND (id NOT IN (SELECT draft_id FROM boq_draft_finalizations) OR EXISTS(SELECT 1 FROM boq_working_preparations wp WHERE wp.draft_id=d.id AND NOT EXISTS(SELECT 1 FROM quotation_versions q WHERE q.boq_revision_id=wp.revision_id)))",
         [id, owner],
       )
     ).rows[0];
@@ -96,7 +109,7 @@ export class BoqRepository {
       const existingDraft = id
         ? (
             await c.query(
-              "SELECT d.*,EXISTS(SELECT 1 FROM boq_preparation_edits e WHERE e.draft_id=d.id) AS preparation_edit FROM survey_drafts d WHERE id=$1 AND owner_id=$2 FOR UPDATE",
+              `SELECT d.*,EXISTS(SELECT 1 FROM boq_preparation_edits e WHERE e.draft_id=d.id) AS preparation_edit FROM survey_drafts d WHERE id=$1 AND ${editableDraftCondition('d','$2')} FOR UPDATE`,
               [id, owner],
             )
           ).rows[0]
@@ -104,6 +117,7 @@ export class BoqRepository {
       if (id && !existingDraft) throw new HttpError(404, "Draft not found.");
       if(id)await assertPreparationEditable(c,id);
       if(existingDraft?.preparation_edit)reason="Preparation edited before quotation creation";
+      if(id){const basis=(await c.query('SELECT r.snapshot FROM boq_working_preparations wp JOIN boq_revisions r ON r.id=wp.revision_id WHERE wp.draft_id=$1',[id])).rows[0];if(basis&&(inputs.customerId!==basis.snapshot.survey.customerId||inputs.siteCode!==basis.snapshot.survey.siteCode))throw new HttpError(422,'The working BOQ must retain its customer and site.');}
       const inferredWorkflow=id?(await c.query("SELECT id FROM project_workflow_records WHERE data->>'coordinationQuotationDraftId'=$1",[id])).rows[0]?.id:null;
       if(workflowId&&inferredWorkflow&&workflowId!==inferredWorkflow)throw new HttpError(409,'This draft is linked to a different reviewed survey.');
       const reviewWorkflow=workflowId??inferredWorkflow;
@@ -165,11 +179,11 @@ export class BoqRepository {
             "A revision must retain the original customer and site code.",
           );
       }
-      await this.uploads(c, owner, inputs.uploadIds, base);
+      await this.uploads(c, owner, inputs.uploadIds, base??(id?(await c.query('SELECT revision_id FROM boq_working_preparations WHERE draft_id=$1',[id])).rows[0]?.revision_id:undefined));
       if (id) {
         const row = (
           await c.query(
-            "UPDATE survey_drafts SET inputs=$1,version=version+1,updated_at=now(),revision_reason=$5,revision_origin=COALESCE(revision_origin,$6) WHERE id=$2 AND owner_id=$3 AND version=$4 AND id NOT IN (SELECT draft_id FROM boq_draft_finalizations) RETURNING id,version",
+            `UPDATE survey_drafts d SET inputs=$1,version=version+1,updated_at=now(),revision_reason=$5,revision_origin=COALESCE(revision_origin,$6) WHERE d.id=$2 AND ${editableDraftCondition('d','$3')} AND d.version=$4 AND (d.id NOT IN (SELECT draft_id FROM boq_draft_finalizations) OR EXISTS(SELECT 1 FROM boq_working_preparations wp WHERE wp.draft_id=d.id)) RETURNING d.id,d.version`,
             [
               inputs,
               id,
@@ -226,27 +240,35 @@ export class BoqRepository {
     if (Number(n) !== ids.length)
       throw new HttpError(403, "One or more attachments are unavailable.");
   }
-  async save(owner: string, id: string, version: number, expected: string) {
+  async save(owner: string, id: string, version: number, expected: string, working=false) {
     return transaction(this.pool, async c => {
       await c.query("SELECT pg_advisory_xact_lock(742019002)");
       const user=(await c.query("SELECT active,role FROM users WHERE id=$1 FOR SHARE",[owner])).rows[0];
       if(!user?.active)throw new HttpError(401,"Your access has ended.");
       if(!["Coordinator","Admin","Management"].includes(user.role))throw new HttpError(403,"Commercial preparation access required.");
-      const d=(await c.query("SELECT * FROM survey_drafts WHERE id=$1 AND owner_id=$2 FOR UPDATE",[id,owner])).rows[0];
+      const d=(await c.query(`SELECT * FROM survey_drafts d WHERE id=$1 AND ${editableDraftCondition('d','$2')} AND ($3 OR d.owner_id=$2) FOR UPDATE`,[id,owner,working])).rows[0];
       if(!d)throw new HttpError(404,"Draft not found.");
       const existing=(await c.query("SELECT r.* FROM boq_draft_finalizations f JOIN boq_revisions r ON r.id=f.revision_id WHERE f.draft_id=$1",[id])).rows[0];
-      if(existing)return existing;
+      if(existing&&!working)return existing;
       await assertPreparationEditable(c,id);
       if(d.version!==version)throw new HttpError(409,"Draft changed. Save and recalculate before creating a quotation.");
       const survey=surveySchema.parse(d.inputs);
       if(survey.uploadIds.length&&!survey.ocrReviewed)throw new HttpError(400,"Review source documents first.");
-      await this.uploads(c,owner,survey.uploadIds,d.base_revision_id);
+      await this.uploads(c,owner,survey.uploadIds,d.base_revision_id??existing?.id);
       const source=d.base_revision_id?(await c.query("SELECT snapshot FROM boq_revisions WHERE id=$1",[d.base_revision_id])).rows[0]?.snapshot:null;
       const snapshot=source?.frameworkRevisionBasis?frameworkCosting(source,survey):calculate(survey,await new MastersRepository(c,true).list());
       // Owner deferred electrical certification on 9 October 2026; retain pending
       // snapshot status and calculation checks without blocking commercial preparation.
       if(fingerprint(snapshot)!==expected)throw new HttpError(409,"Reference data changed. Recalculate the costing.");
-      return this.finalize(c,owner,d,snapshot,false);
+      if(existing&&working){
+        await lockBoqPreparation(c,existing.id);const state=await workingPreparationState(c,existing.id);
+        if(!state.canEdit)throw new HttpError(409,'The quotation is already created. Start a new revision.');
+        await c.query('INSERT INTO boq_working_preparations(revision_id,draft_id,updated_by) VALUES($1,$2,$3) ON CONFLICT(revision_id) DO UPDATE SET updated_by=$3,updated_at=now()',[existing.id,d.id,owner]);
+        return (await c.query('UPDATE boq_revisions SET snapshot=$2 WHERE id=$1 RETURNING *',[existing.id,snapshot])).rows[0];
+      }
+      const result=await this.finalize(c,owner,d,snapshot,false);
+      if(working)await c.query('INSERT INTO boq_working_preparations(revision_id,draft_id,updated_by) VALUES($1,$2,$3)',[result.id,d.id,owner]);
+      return result;
     });
   }
   async finalize(c: PoolClient, actor: string, d: any, snapshot: BoqSnapshot, managementApproved = true) {
