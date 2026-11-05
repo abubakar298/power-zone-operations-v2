@@ -14,6 +14,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {HttpError} from '../http/errors.js';
 import {transaction} from '../db/transaction.js';
+import {installationDocumentsAtKarachi} from './batch-documents.js';
 import {fileSchema,importSchema,movementSchema,commandSchema,vendorSchema,targetsSchema,batchSchema,batchDeleteSchema,type BatchInput,type BoardCommand,type BoardSite} from './schema.js';
 import {workflowSiteSchema,saveDispatchPlan,confirmDelivery,completeQcStage,completeUpsJob,currentStage,siteBucket as siteBucketForBatch,qcType as qcTypeForBatch,type WorkflowSite,type FileReference,type Entry} from './workflow.js';
 import type {z} from 'zod';
@@ -148,7 +149,7 @@ export class OperationsBoardRepository{
   const rows=(await this.pool.query('SELECT DISTINCT ON (batch_id) batch_id,version,snapshot FROM operations_board_batch_versions ORDER BY batch_id,version DESC')).rows;
   const current=(await this.pool.query(latest)).rows,sites=new Map(current.map(r=>[r.site_id,r]));
   return {batches:rows.filter(r=>!r.snapshot.deleted&&(['owner','head'].includes(a.kind)||r.snapshot.team===a.team)).map(r=>{
-   const snapshot=r.snapshot as BatchSnapshot,stops=snapshot.stops.filter(s=>['owner','head'].includes(a.kind)||sites.get(s.siteId)?.snapshot.operationsTeam===a.team).map(s=>({...s,siteVersion:sites.get(s.siteId)?.version}));
+   const snapshot=r.snapshot as BatchSnapshot,stops=snapshot.stops.filter(s=>['owner','head'].includes(a.kind)||sites.get(s.siteId)?.snapshot.operationsTeam===a.team).map(s=>({...s,siteVersion:sites.get(s.siteId)?.version,installationDocumentsAtKarachi:installationDocumentsAtKarachi(s.siteId,sites.get(s.siteId)?.snapshot)}));
    return {...snapshot,version:r.version,stops,canEdit:stops.length===snapshot.stops.length};
   })};
  }
