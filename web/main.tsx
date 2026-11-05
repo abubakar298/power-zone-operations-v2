@@ -1,8 +1,8 @@
 import {WorkflowToast} from './components/WorkflowToast.js';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import {installBackTrail} from './navigation/back-trail.js';
-installBackTrail();
+import {installBackSteps} from './navigation/back-steps.js';
+installBackSteps();
 import './styles.css';
 import './ui/list-pagination.css';
 import './ui/design-tokens.css';

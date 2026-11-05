@@ -3,3 +3,5 @@
 .pz-back-button:focus-visible{outline:3px solid #cfc8fb;outline-offset:2px}
 .pz-back-button svg{flex-shrink:0}
 @media(max-width:700px){.pz-back-button{min-height:36px;padding:0 9px}.pz-back-button span{display:none}}
+/* Inside an opened window: the arrow sits above the window heading. */
+.pz-dialog-back{display:flex;width:max-content;margin:14px 0 6px 18px}

@@ -1,3 +1,5 @@
+import {useBackStep} from '../navigation/useBackStep.js';
+import {confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 import {recentFirst,recordedTimestamp} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {MaterialCorrectionAlerts} from '../components/MaterialCorrectionAlerts.js';
@@ -121,6 +123,8 @@ export function AccountsWorkspace({
     [message, setMessage] = useState(""),
     [saved, setSaved] = useState(""),
     [legacy, setLegacy] = useState(false);
+  // An opened IPO record is a Back step: Back returns to the list.
+  useBackStep(!!selected,()=>{if(confirmLeaveWorkspace())setSelected(undefined);});
   useEffect(()=>{onContextChange?.(job?'Job Closure':tab==='IPO Review'&&selected?'IPO Review':null);return()=>onContextChange?.(null);},[job,tab,selected,onContextChange]);
   const selectedIpoSource=selected?data.ipos?.find((r:any)=>r.id===selected.ipo.id):null;
   const ipoReceivedDate=selectedIpoSource?.received_at??selectedIpoSource?.created_at??selected?.ipo?.created_at;

@@ -1,3 +1,4 @@
+import {useBackStep} from '../navigation/useBackStep.js';
 import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {CustomerSiteRegister} from '../components/CustomerSiteRegister.js';
@@ -255,6 +256,8 @@ export function DepartmentWorkspace({
   const [removingGroupSite, setRemovingGroupSite] = useState<string | null>(
     null,
   );
+  // An opened record is a Back step: Back returns to the list.
+  useBackStep(!!detail,()=>{if(!confirmLeaveWorkspace())return;setDetail(undefined);setNotice("");});
   useEffect(() => {
     window.dispatchEvent(
       new CustomEvent("pz:department-active", { detail: page }),
