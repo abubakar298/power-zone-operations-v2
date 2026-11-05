@@ -26,7 +26,8 @@ import { CoordinatorLibrary } from "./CoordinatorLibrary.js";
 import { NotificationAdmin } from "../components/NotificationAdmin.js";
 import { NotificationCenter } from "../components/NotificationCenter.js";
 import { GlobalSearch } from "../components/GlobalSearch.js";
-import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { recentPush } from "../navigation/back-steps.js";
 import { WorkspaceBoundary } from "../components/WorkspaceBoundary.js";
 import { api, ApiError, type Session, type User } from "../api.js";
 import { Brand } from "../components/Brand.js";
@@ -121,6 +122,7 @@ export function Dashboard({
   const session=departmentUser?{...principalSession,user:departmentUser}:principalSession;
   const [operationsArea,setOperationsArea]=useState<OperationsArea>(()=>currentOperationsArea(session.user));
   const [accountsPage,setAccountsPage]=useState(()=>accountsPageName(new URLSearchParams(location.hash.slice(1)).get('accountsTab')||({'/accounts/programmes':'Programme Dashboard','/accounts/sites':'Project Sites','/accounts/ipos':'IPOs Received','/accounts/inventory':'Inventory PT Entries','/accounts/closures':'Job Closure','/accounts/closure-review':'Awaiting Management','/accounts/documents':'Physical Documents','/accounts/invoicing':'Invoicing','/accounts/receivables':'Receivables','/accounts/checkpoints':'Project checkpoints'} as Record<string,string>)[location.pathname]||'My Workspace'));
+  const accountsPageRef=useRef(accountsPage);accountsPageRef.current=accountsPage;
   const [accountsContext,setAccountsContext]=useState<string|null>(null);
   const [inventoryDispatcher,setInventoryDispatcher]=useState(false);
   useEffect(()=>{let live=true;if(session.user.role==='Inventory')void api<{kind:string}>('/material-dispatches/access').then(a=>{if(live)setInventoryDispatcher(a.kind==='dispatcher');}).catch(()=>{if(live)setInventoryDispatcher(false);});else setInventoryDispatcher(false);return()=>{live=false;};},[session.user.id,session.user.role]);
@@ -129,7 +131,10 @@ export function Dashboard({
   useEffect(()=>{
     const sync=()=>setOperationsArea(currentOperationsArea(session.user));
     sync();window.addEventListener('hashchange',sync);
-    return()=>window.removeEventListener('hashchange',sync);
+    // Back to an earlier Accounts tab reopens that tab.
+    const accountsTab=()=>{const params=new URLSearchParams(location.hash.slice(1));if(params.get('workspace')!=='finance')return;const page=accountsPageName(params.get('accountsTab')||'My Workspace');if(page!==accountsPageRef.current){setAccountsPage(page);setWorkspaceVisit(n=>n+1);}};
+    window.addEventListener('popstate',accountsTab);
+    return()=>{window.removeEventListener('hashchange',sync);window.removeEventListener('popstate',accountsTab);};
   },[session.user.id]);
   const [switchingDepartment,setSwitchingDepartment]=useState(false),[departmentError,setDepartmentError]=useState('');
   const [busy, setBusy] = useState(false),
@@ -139,6 +144,12 @@ export function Dashboard({
   const [workspaceVisit, setWorkspaceVisit] = useState(0);
   const [departmentView,setDepartmentView]=useState<ManagementDepartment|undefined>(()=>managementDepartments.find(d=>d.role===departmentUser?.role)?.view);
   const [departmentPage, setDepartmentPage] = useState("Workspace");
+  const departmentPageRef=useRef(departmentPage);departmentPageRef.current=departmentPage;
+  // Back to an earlier department page (Coordinator, Design and other department workspaces) reopens it.
+  useEffect(()=>{
+    const follow=()=>{const params=new URLSearchParams(location.hash.slice(1));if((params.get("workspace")??"dashboard")!=="dashboard")return;const page=params.get("page")||"Workspace";if(page!==departmentPageRef.current)window.dispatchEvent(new CustomEvent("pz:department-page",{detail:page}));};
+    window.addEventListener("popstate",follow);return()=>window.removeEventListener("popstate",follow);
+  },[]);
   useLayoutEffect(() => {
     const active = (event: Event) => setDepartmentPage((event as CustomEvent<string>).detail);
     window.addEventListener("pz:department-active", active);
@@ -321,7 +332,8 @@ export function Dashboard({
       sessionStorage.setItem("pz:workflow-open", task.workflow_id);
     setView(next);
     if(session.user.role==='Coordinator'&&(next==='boqs'||next==='newboq'))setDepartmentPage('Create Quotation');
-    window.history.replaceState(null, "", `/dashboard#workspace=${next}${departmentUser?'&viewAs='+departmentUser.role:department?'&viewAs=department':''}`);
+    // A new Back step for each workspace opened.
+    window.history.pushState(null, "", `/dashboard#workspace=${next}${departmentUser?'&viewAs='+departmentUser.role:department?'&viewAs=department':''}`);
     setMobileOpen(false);
     setMenuOpen(false);
     return true;
@@ -378,6 +390,15 @@ export function Dashboard({
     sessionStorage.removeItem('pz:management-switch-intent');
     try{const intent=JSON.parse(raw);if(canViewDepartments(principalSession.user.role)&&intent.principalId===principalSession.user.id&&(intent.destination==='dashboard'||managementDepartment(intent.destination)))void selectDepartment(intent.destination,intent.area==='procurement'?'procurement':'operations');}catch{/* Ignore stale or invalid local navigation intent. */}
   },[principalSession.user.id]);
+  useEffect(()=>{
+    if(view!=="dashboard")return;
+    const params=new URLSearchParams(location.hash.slice(1));
+    if((params.get("workspace")??"dashboard")!=="dashboard"||(params.get("page")||"Workspace")===departmentPage)return;
+    if(departmentPage==="Workspace")params.delete("page");else params.set("page",departmentPage);
+    const next=location.pathname+location.search+"#"+params.toString();
+    // A page chosen from the sidebar already made its step; a page opened inside the workspace makes one.
+    if(recentPush())history.replaceState(null,"",next);else history.pushState(null,"",next);
+  },[departmentPage,view]);
   const isCoordinator = session.user.role === "Coordinator";
   const canUseLibrary = ["Coordinator", "Admin", "Management"].includes(
     session.user.role,

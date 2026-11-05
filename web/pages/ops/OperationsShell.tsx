@@ -67,7 +67,13 @@ export function OperationsShell({ session, onLogout, viewingAs, onReturn }: {
   const [advanceCount, setAdvanceCount] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const go = useCallback((next: View) => { setView(next); setMenuOpen(false); window.scrollTo(0, 0); window.history.replaceState(null, "", `/dashboard#workspace=${next}`); }, []);
+  const go = useCallback((next: View) => { setView(next); setMenuOpen(false); window.scrollTo(0, 0); window.history.pushState(null, "", `/dashboard#workspace=${next}`); }, []);
+  // Back (arrow or browser key) reopens the earlier page.
+  useEffect(() => {
+    const follow = () => { const wanted = new URLSearchParams(window.location.hash.slice(1)).get("workspace"); setView(wanted && (VIEWS as string[]).includes(wanted) ? (wanted as View) : "dashboard"); };
+    window.addEventListener("popstate", follow);
+    return () => window.removeEventListener("popstate", follow);
+  }, []);
   const openSite = useCallback((id: string) => { setSiteToOpen(id); setSiteNonce((n) => n + 1); setStageToOpen(undefined); go("sites"); }, [go]);
   const openStage = useCallback((stage: string) => { setStageToOpen(stage); setSiteToOpen(undefined); go("sites"); }, [go]);
   const openHeadsUp = useCallback((reference: string) => { setAdvanceToOpen(reference); setAdvanceNonce((n) => n + 1); go("operations"); }, [go]);
