@@ -22,7 +22,7 @@ CREATE TRIGGER immutable_stale_boq_pricing BEFORE UPDATE OR DELETE ON boq_stale_
 CREATE FUNCTION protect_boq_preparation() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE working boq_working_preparations; draft_version integer;
 BEGIN
- IF TG_OP <> 'UPDATE' THEN RAISE EXCEPTION 'Saved BOQ records cannot be deleted'; END IF;
+ IF TG_OP <> 'UPDATE' THEN RAISE EXCEPTION 'Saved BOQ records are immutable and cannot be deleted'; END IF;
  SELECT * INTO working FROM boq_working_preparations WHERE revision_id=OLD.id;
  IF working.revision_id IS NULL OR (to_jsonb(NEW)-'snapshot') IS DISTINCT FROM (to_jsonb(OLD)-'snapshot')
  OR NOT EXISTS(SELECT 1 FROM boq_preliminary_references WHERE revision_id=OLD.id)
@@ -31,7 +31,7 @@ BEGIN
  OR EXISTS(SELECT 1 FROM customer_purchase_orders WHERE boq_revision_id=OLD.id)
  OR EXISTS(SELECT 1 FROM boq_draft_finalizations f JOIN boq_review_submissions s ON s.draft_id=f.draft_id JOIN boq_review_decisions d ON d.submission_id=s.id WHERE f.revision_id=OLD.id AND d.outcome='Approved')
  OR OLD.id <> (SELECT id FROM boq_revisions WHERE boq_id=OLD.boq_id ORDER BY revision DESC LIMIT 1)
- THEN RAISE EXCEPTION 'Saved BOQ is locked; create a revision'; END IF;
+ THEN RAISE EXCEPTION 'Saved BOQ is immutable and locked; create a revision'; END IF;
  IF NEW.snapshot IS DISTINCT FROM OLD.snapshot THEN
   SELECT version INTO draft_version FROM survey_drafts WHERE id=working.draft_id;
   INSERT INTO boq_working_changes(revision_id,draft_version,before_snapshot,after_snapshot,changed_by)
