@@ -14,11 +14,6 @@ export function amountRule(row:Row,outstandingGiven:boolean):{rule:'confirmed'|'
  if(row.receiptConfirmed===true)return {rule:'kept',hold:'The reviewed register shows a receipt for this invoice. Enter its current outstanding balance from PT together with the amount.'};
  return {rule:'no-payments'};
 }
-/** Imported values an amount confirmation was made against, so a later source change is detected. */
-export function confirmationSource(row:Row,register:{receipts:any[]}){
- const paid=(row.receiptVersion??0)>0,firstReceipt=paid?register.receipts.find((e:any)=>e.ledger_key===receiptLedgerKey(row)):undefined;
- return {sourceAmount:Object.hasOwn(row,'originalAmount')?row.originalAmount:row.amount,sourcePending:firstReceipt?firstReceipt.snapshot.originalPending??null:Object.hasOwn(row,'originalPending')?row.originalPending:row.pending,...paid?{receivedBefore:row.operationalReceived??null}:{}};
-}
 export const invoiceCorrectionSchema=z.object({sourceRowId:z.string().min(1).max(500),sourceVersion:z.number().int().positive(),version:z.number().int().nonnegative(),invoiceReference:z.string().trim().min(1).max(200).refine(v=>!(/\s+\/\s+|,|\s*&\s*/.test(v)),'Enter one invoice number per record.'),submissionDate:z.iso.date().nullable(),reason:z.string().trim().min(1).max(2000),confirmedAmount:pkrDigits.optional(),confirmedOutstanding:pkrDigits.optional(),requestKey:z.uuid()}).strict();
 export async function correctInvoice(pool:Pool,actor:string,raw:unknown,now=new Date()){
  const input=invoiceCorrectionSchema.parse(raw),today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
@@ -45,8 +40,10 @@ export async function correctInvoice(pool:Pool,actor:string,raw:unknown,now=new 
   if(confirmingAmount&&rule.hold)throw new HttpError(409,rule.hold);
   if(outstandingOnly&&row.amount!=null&&new Decimal(input.confirmedOutstanding!).gt(row.amount))throw new HttpError(422,`The outstanding balance cannot exceed the invoice amount of ${new Decimal(row.amount).toFixed(2)}. Check the balance in PT.`);
   if(confirmingAmount&&!outstandingOnly&&rule.minimum&&new Decimal(input.confirmedAmount!).lt(rule.minimum))throw new HttpError(422,`The invoice amount cannot be less than ${rule.minimum} (payments recorded plus the outstanding balance). Check the amount in PT.`);
+  // Before receipts the invoice's own pending value is the first receipt's frozen opening balance.
+  const firstReceipt=paid?register.receipts.find((e:any)=>e.ledger_key===receiptLedgerKey(row)):undefined;
   if(!confirmingAmount&&input.invoiceReference===row.invoice&&input.submissionDate===(row.date??null))throw new HttpError(422,'Change the invoice number or submission date before saving.');
-  const snapshot={originalInvoice:row.originalInvoice??row.invoice,customer:row.customer,site:row.site,invoiceType:invoiceType(row),previousInvoice:row.invoice,previousDate:row.date??null,...(confirmingAmount?{...input.confirmedAmount!==undefined?{confirmedAmount:new Decimal(input.confirmedAmount).toFixed(2)}:{},...input.confirmedOutstanding!==undefined?{confirmedOutstanding:new Decimal(input.confirmedOutstanding).toFixed(2)}:{},outstandingRule:rule.rule,...confirmationSource(row,register)}:{})};
+  const snapshot={originalInvoice:row.originalInvoice??row.invoice,customer:row.customer,site:row.site,invoiceType:invoiceType(row),previousInvoice:row.invoice,previousDate:row.date??null,...(confirmingAmount?{...input.confirmedAmount!==undefined?{confirmedAmount:new Decimal(input.confirmedAmount).toFixed(2)}:{},...input.confirmedOutstanding!==undefined?{confirmedOutstanding:new Decimal(input.confirmedOutstanding).toFixed(2)}:{},outstandingRule:rule.rule,sourceAmount:Object.hasOwn(row,'originalAmount')?row.originalAmount:row.amount,sourcePending:firstReceipt?firstReceipt.snapshot.originalPending??null:Object.hasOwn(row,'originalPending')?row.originalPending:row.pending,...paid?{receivedBefore:row.operationalReceived??null}:{}}:{})};
   const saved=(await c.query('INSERT INTO accounts_invoice_corrections(id,source_row_id,source_version,version,invoice_reference,submitted_on,reason,snapshot,request,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',[randomUUID(),row.id,input.sourceVersion,input.version+1,input.invoiceReference,input.submissionDate,input.reason,snapshot,input,input.requestKey,actor])).rows[0];
   await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'accounts.invoice-correction:'+saved.id]);return saved;
  });

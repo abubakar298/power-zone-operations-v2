@@ -2,7 +2,6 @@ import {matchesAmountFilter} from '../../shared/recovery-report.js';
 import {InvoiceDataReview,amountOutstandingLabel,outstandingRequired,amountBalanceNote} from '../components/InvoiceDataReview.js';
 import {FilteredInvoiceTotal} from '../components/FilteredInvoiceTotal.js';
 import {ConsolidateCableInvoices} from '../components/ConsolidateCableInvoices.js';
-import {InvoiceAmountBatch} from '../components/InvoiceAmountBatch.js';
 import {ListPagination,useListPage,paginateRows} from '../ui/ListPagination.js';
 import'../ui/accounts-invoice-filters.css';
 import{invoiceCategories,invoiceCategory,invoiceType,isSubmittedInvoicePending}from'../../shared/accounts-invoice-display.js';
@@ -48,7 +47,7 @@ export function AccountsPayments(){
  const pagination=paginateRows(sortedRows,page),recentRows=pagination.rows;
  const exportable=rows.filter(isSubmittedInvoicePending);
  const recoveryUrl='/api/accounts-workspace/recovery.pdf?'+new URLSearchParams({search,customer,category,stage:invoiceStage,...amountFilter?{amount:amountFilter}:{}}).toString();
- return <section className="pz-stack"><InvoiceDataReview rows={data.invoices??[]} canRecord={!!data.canRecord} onConfirm={r=>open(r,'amount')}/>{data.canRecord&&<InvoiceAmountBatch onApplied={()=>void api('/accounts-workspace/payment-records').then(setData).catch(e=>setError(e.message))}/>}<ConsolidateCableInvoices data={data} onSaved={async()=>setData(await api('/accounts-workspace/payment-records'))}/>
+ return <section className="pz-stack"><InvoiceDataReview rows={data.invoices??[]} canRecord={!!data.canRecord} onConfirm={r=>open(r,'amount')}/><ConsolidateCableInvoices data={data} onSaved={async()=>setData(await api('/accounts-workspace/payment-records'))}/>
   {success&&<p role="status">{success}</p>}
   <div className="stage-grid workspace-buckets">
    <Button variant="neutral" className={`stage-card ${queue==='awaiting'?'selected':''}`} aria-pressed={queue==='awaiting'} onClick={()=>setQueue('awaiting')}><span>Awaiting payment</span><strong>{data.awaiting?.length??0}</strong><small>Submitted invoices with outstanding balances</small></Button>
