@@ -1,4 +1,5 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
+import {api} from '../../api.js';
 import {AccountsPhysicalDocuments} from '../AccountsPhysicalDocuments.js';
 import type {Session} from '../../api.js';
 import {Button} from '../../ui/Button.js';
@@ -11,7 +12,10 @@ import '../../components/material-documents.css';
 /** Reuse the same physical-original register as Accounts, from the scoped Operations source. */
 export function OperationsPhysicalDocuments({sites,session,loading,onRefresh,onSaved}:{sites:Site[];session:Session;loading:boolean;onRefresh:()=>void;onSaved:(site:Site)=>void}){
  const [selected,setSelected]=useState<{siteId:string;documentId:string}|null>(null),[busy,setBusy]=useState(false),dialog=useRef<HTMLDialogElement>(null);
- const records=useMemo(()=>sites.map(s=>({id:s.id,name:s.name,ipo:s.ipo,completed:s.completed===true,version:s.version,documents:(s.documents??[]).map(d=>({...d,label:d.id===`${s.id}:completion-documents`||d.id===`${s.id}:historical-handover-documents`?'VSO & acknowledgment':d.label}))})),[sites]);
+ // Originals Salaas has confirmed receiving count as handed over to Accounts here too.
+ const [received,setReceived]=useState<{siteId:string;documentId:string;receivedOn:string}[]>([]);
+ useEffect(()=>{let live=true;api<{documents:typeof received}>('/operations-board/accounts-receipts').then(r=>{if(live)setReceived(r.documents);}).catch(()=>{});return()=>{live=false;};},[sites]);
+ const records=useMemo(()=>sites.map(s=>({id:s.id,name:s.name,ipo:s.ipo,completed:s.completed===true,version:s.version,documents:(s.documents??[]).map(d=>({...d,accountsReceivedOn:received.find(r=>r.siteId===s.id&&r.documentId===d.id)?.receivedOn,label:d.id===`${s.id}:completion-documents`||d.id===`${s.id}:historical-handover-documents`?'VSO & acknowledgment':d.label}))})),[sites,received]);
  const site=sites.find(s=>s.id===selected?.siteId),doc=site?.documents?.find(d=>d.id===selected?.documentId);
  useEffect(()=>{if(selected&&!dialog.current?.open)dialog.current?.showModal();},[selected]);
  function close(){if(!busy&&confirmLeaveWorkspace())dialog.current?.close();}

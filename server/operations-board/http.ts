@@ -10,6 +10,7 @@ export function operationsBoardHttp(repo:OperationsBoardRepository,requireSessio
  const parse=<T>(schema:z.ZodType<T>,input:unknown)=>{const r=schema.safeParse(input);if(!r.success)throw new HttpError(400,'Check the Operations fields and references.');return r.data;};
  const siteId=(value:unknown)=>parse(z.string().min(1).max(160),value);
  r.get('/batches',async(req,res)=>res.json(await repo.batches(req.authSession!.user.id)));
+ r.get('/accounts-receipts',async(req,res)=>res.json(await repo.accountsReceipts(req.authSession!.user.id)));
  r.post('/batches',json({limit:'512kb'}),async(req,res)=>res.status(201).json(await repo.saveBatch(req.authSession!.user.id,parse(batchSchema,req.body))));
  r.post('/batches/delete',json({limit:'16kb'}),async(req,res)=>res.json(await repo.deleteBatch(req.authSession!.user.id,parse(batchDeleteSchema,req.body))));
  r.get('/alerts',async(req,res)=>res.json(await repo.alerts(req.authSession!.user.id)));

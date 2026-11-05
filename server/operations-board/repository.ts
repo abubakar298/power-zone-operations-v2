@@ -15,6 +15,7 @@ import type {Pool,PoolClient} from 'pg';
 import {HttpError} from '../http/errors.js';
 import {transaction} from '../db/transaction.js';
 import {installationDocumentsAtKarachi} from './batch-documents.js';
+import {projectOriginals} from '../accounts/site-evidence.js';
 import {fileSchema,importSchema,movementSchema,commandSchema,vendorSchema,targetsSchema,batchSchema,batchDeleteSchema,type BatchInput,type BoardCommand,type BoardSite} from './schema.js';
 import {workflowSiteSchema,saveDispatchPlan,confirmDelivery,completeQcStage,completeUpsJob,currentStage,siteBucket as siteBucketForBatch,qcType as qcTypeForBatch,type WorkflowSite,type FileReference,type Entry} from './workflow.js';
 import type {z} from 'zod';
@@ -50,6 +51,22 @@ export class OperationsBoardRepository{
   const access=await this.access(actor);if(access.kind==='accounts')throw new HttpError(403,'Accounts can view document tracking only.');
   const rows=await withInventoryReceiving(this.pool,(await this.pool.query(latest)).rows);
   return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>({...r.snapshot,version:r.version,updatedAt:r.created_at})),access};
+ }
+ /** Physical Documents: originals Accounts has confirmed receiving (every original in the document batch). Read only. */
+ async accountsReceipts(actor:string){
+  const access=await this.access(actor);if(access.kind==='accounts')throw new HttpError(403,'Accounts can view document tracking only.');
+  const rows=(await this.pool.query(latest)).rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team));
+  const receipts=(await this.pool.query('SELECT site_id,item_key,received_on::text AS received_on FROM accounts_original_receipts WHERE site_id=ANY($1::text[])',[rows.map(r=>r.site_id)])).rows;
+  const documents:{siteId:string;documentId:string;receivedOn:string}[]=[];
+  for(const r of rows){
+   if(!receipts.some(x=>x.site_id===r.site_id))continue;
+   const items=projectOriginals(r.site_id,r.snapshot,receipts).items.filter((i:any)=>i.documentId);
+   for(const documentId of new Set(items.map((i:any)=>i.documentId as string))){
+    const own=items.filter((i:any)=>i.documentId===documentId);
+    if(own.every((i:any)=>i.status==='confirmed'))documents.push({siteId:r.site_id,documentId,receivedOn:own.map((i:any)=>i.receivedOn).sort().at(-1)});
+   }
+  }
+  return {documents};
  }
  async deliveryDispatches(actor:string,id:string){const site=await this.site(actor,id);return {dispatches:await siteDispatchChoices(this.pool,id,(site as {origin?:{ipoId?:string}}).origin?.ipoId)};}
  async site(actor:string,id:string){const a=await this.access(actor),r=await this.current(this.pool,id);this.scope(a,r.snapshot);return {...r.snapshot,version:r.version};}
