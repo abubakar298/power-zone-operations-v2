@@ -5,3 +5,5 @@
 .customer-site-register .site-row-actions{display:flex;flex-wrap:nowrap;align-items:flex-start;gap:8px}
 .customer-site-register .site-row-actions .pz-button{width:auto;flex:0 0 auto;white-space:nowrap;margin:0;min-height:38px;padding:8px 10px}
 .customer-site-register td:last-child{width:1%}
+.pz-quotation-revision-actions{display:flex;flex-wrap:nowrap;align-items:flex-start;justify-content:flex-start;gap:var(--pz-space-3);min-width:max-content}
+.pz-quotation-revision-actions .pz-button{flex:0 0 auto;width:auto;white-space:nowrap;margin:0}
