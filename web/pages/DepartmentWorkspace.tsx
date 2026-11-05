@@ -296,7 +296,7 @@ export function DepartmentWorkspace({
       const revisionDetail = record.sourceQuotationId
         ? undefined
         : await api<any>(`/project-workflow/${record.id}`);
-      setRevisionRecord({ ...record, revisionDetail });
+      setRevisionRecord({ ...record, ...revisionDetail?.record, revisionDetail });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -896,8 +896,9 @@ export function DepartmentWorkspace({
 
           {department === "coordination" && page === coordinationBuckets[5] && (
             <CustomerFollowupList
-              records={[...visible,...visibleLegacy.map(t=>({...t,id:`legacy:${t.id}`,data:{},siteCode:t.site_code??"",route:"quotation",routeLabel:t.number??t.reference??""}))]}
+              records={[...visible,...visibleLegacy.map(t=>({...t,id:`legacy:${t.id}`,data:{},siteCode:t.site_code??"",sourceQuotationId:t.kind==="Sale confirmation"?t.id:undefined,route:"quotation",routeLabel:t.number??t.reference??""}))]}
               groups={combinedFollowups}
+              onRevise={(record:any)=>void openRevision(record)}
               onOpen={(id: string) => {
                 if(id.startsWith("legacy:")){const task=visibleLegacy.find(t=>t.id===id.slice(7));if(task){if(task.kind==="Sale confirmation")setQuotationReview({...task,sourceQuotationId:task.id,followupPreview:true});else onOpen?.({...task,followupPreview:true});}}
                 else void open(id).catch((e) => setError(e.message));
@@ -1065,6 +1066,7 @@ export function DepartmentWorkspace({
               session={session}
               visibleRecordIds={visible.map(r => r.id)}
               onUnbind={(id:string)=>{const record=rows.find(r=>r.id===id);if(record)void unbindApproved(record);}}
+              onRevise={(id:string)=>{const record=rows.find(r=>r.id===id);if(record)void openRevision(record);}}
             />
             <section className="pz-panel pz-stack">
               <h3>Approved Individual Documents</h3>
@@ -1075,13 +1077,13 @@ export function DepartmentWorkspace({
                     <td><strong>{r.customerCode} · {r.site}</strong><br/>{r.siteCode}</td>
                     <td>{r.quotation?.number ?? r.references?.join(" · ") ?? r.routeLabel}<DocumentListDetails record={r}/></td>
                     <td>Approved · Awaiting dispatch</td>
-                    <td><Button variant="secondary" onClick={()=>void open(r.id).catch(e=>setError(e.message))}>Review</Button></td>
+                    <td style={{verticalAlign:"top"}}><div className="pz-action-row pz-quotation-revision-actions"><Button variant="secondary" onClick={()=>void open(r.id).catch(e=>setError(e.message))}>Review</Button><Button variant="secondary" onClick={()=>void openRevision(r)}>Create Revision</Button></div></td>
                   </tr>)}
                   {recentFirst(visibleLegacy).map((t:any)=><tr key={`commercial-${t.id}`}>
                     <td><strong>{t.customer} · {t.site}</strong></td>
                     <td>{t.number ?? t.reference}<DocumentListDetails record={t}/></td>
                     <td>{t.status}</td>
-                    <td><Button variant="secondary" onClick={()=>onOpen?.(t)}>Review</Button></td>
+                    <td style={{verticalAlign:"top"}}><div className="pz-action-row pz-quotation-revision-actions"><Button variant="secondary" onClick={()=>onOpen?.(t)}>Review</Button>{t.kind==="Sale confirmation"&&<Button variant="secondary" onClick={()=>void openRevision({...t,sourceQuotationId:t.id})}>Create Revision</Button>}</div></td>
                   </tr>)}
                 </PagedTableBody>
               </table></div>
@@ -5868,3 +5870,4 @@ function SentSurveyQuotation({session,record,onOpen}:{session:Session;record:any
  async function prepare(){if(busy)return;setBusy(true);setError('');try{const result=await api<any>(`/project-workflow/${record.id}/prepare-sent-quotation`,{csrf:session.csrfToken,body:{version:record.version}});onOpen?.({...result.task,...(!result.task?{draft_id:result.draftId,kind:'Survey / BOQ'}:{}),target:!result.task||result.task.target==='boqs'?'newboq':result.task.target,workflow_id:result.recordId});}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  return <section className="pz-panel"><h3>Sent survey request</h3><p>Awaiting Design. Prepare your own BOQ and quotation for this site while the survey remains pending.</p><Button variant="primary" loading={busy} onClick={()=>void prepare()}>{record.data.sentQuotationDraftId?'Open BOQ / Quotation':'Create BOQ / Quotation'}</Button>{error&&<p className="form-error" role="alert">{error}</p>}</section>;
 }
+
