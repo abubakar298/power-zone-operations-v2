@@ -385,7 +385,7 @@ export class AccountsRepository {
         )
       ).rows[0];
       if (!b) throw new HttpError(409, "Saved BOQ budget unavailable.");
-      agreedPv = agreedBoqPvWatts({survey:b.snapshot.survey});
+      agreedPv = agreedBoqPvWatts({agreedWatts:b.snapshot.engineering?.pvWatts,survey:b.snapshot.survey});
       selling = i.snapshot.quotationType?.saleType === "Cash Deal" ? i.snapshot.allocation.total : i.snapshot.allocation.subtotal;
       if (i.snapshot.peachtree?.taxMode !== "Tax Included" || i.snapshot.quotationType?.saleType === "Cash Deal")
         phaseSelling = Object.fromEntries(
