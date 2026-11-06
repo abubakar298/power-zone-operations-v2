@@ -66,7 +66,13 @@ export function ProcurementShell({ session, onLogout, viewingAs, onReturn }: { s
   const [openRequest, setOpenRequest] = useState<string>();
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const go = useCallback((next: View) => { setView(next); setMenuOpen(false); window.scrollTo(0, 0); window.history.replaceState(null, "", `/dashboard#workspace=${next}`); }, []);
+  const go = useCallback((next: View) => { setView(next); setMenuOpen(false); window.scrollTo(0, 0); window.history.pushState(null, "", `/dashboard#workspace=${next}`); }, []);
+  // Back (arrow or browser key) reopens the earlier page.
+  useEffect(() => {
+    const follow = () => { const wanted = new URLSearchParams(window.location.hash.slice(1)).get("workspace"); setView(wanted && (VIEWS as string[]).includes(wanted) ? (wanted as View) : "dashboard"); };
+    window.addEventListener("popstate", follow);
+    return () => window.removeEventListener("popstate", follow);
+  }, []);
   const load = useCallback(async () => {
     try { setData(await api<Overview>("/procurement/overview")); setError(""); }
     catch (e) { setError(e instanceof ApiError ? e.message : "Unable to load the Procurement workspace."); }
