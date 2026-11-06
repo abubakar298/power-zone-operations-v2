@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 // A small browser stand-in: a history stack with popstate, the address and events.
 type Entry={url:string;state:any};
 const entries:Entry[]=[{url:'http://local/dashboard',state:null}];let index=0;
+const store=new Map<string,string>();
 const listeners=new Map<string,Set<(e:any)=>void>>();
-const fire=(type:string)=>{let stopped=false;const event={type,stopImmediatePropagation:()=>{stopped=true;}};for(const f of [...(listeners.get(type)??[])]){if(stopped)break;f(event);}};
+const fire=(type:string)=>{for(const f of [...(listeners.get(type)??[])])f({type});};
 const fakeHistory:any={
  get state(){return entries[index].state;},
  pushState:(state:any,_u:string,url?:string)=>{entries.splice(index+1);entries.push({url:url?new URL(url,entries[index].url).href:entries[index].url,state});index++;},
@@ -14,7 +15,8 @@ const fakeHistory:any={
 };
 Object.assign(globalThis,{
  history:fakeHistory,
- location:{get href(){return entries[index].url;}},
+ location:{get href(){return entries[index].url;},get pathname(){return new URL(entries[index].url).pathname;}},
+sessionStorage:{getItem:(k:string)=>store.get(k)??null,setItem:(k:string,v:string)=>void store.set(k,v),removeItem:(k:string)=>void store.delete(k)},
  window:{addEventListener:(t:string,f:any)=>{if(!listeners.has(t))listeners.set(t,new Set());listeners.get(t)!.add(f);},removeEventListener:(t:string,f:any)=>listeners.get(t)?.delete(f),dispatchEvent:(e:Event)=>{fire(e.type);return true;}},
  document:{referrer:'',documentElement:{},querySelectorAll:()=>[]},
  MutationObserver:class{observe(){}},
@@ -36,18 +38,17 @@ test('each tab or page opened is one Back step; Back returns one step without re
  assert.equal(location.href,'http://local/dashboard');assert.equal(canGoBack(),false);
 });
 
-test('an opened window is a Back step: Back closes it and keeps the page; closing it yourself removes its step',async()=>{
+test('an open record is closed by Back first and never touches the browser history',async()=>{
  history.pushState(null,'','/operations/physical-documents');
- let pageHandlerRan=0;window.addEventListener('popstate',()=>{pageHandlerRan++;});
- let closedByBack=0;openStep(()=>{closedByBack++;});
- assert.equal(entries.length-1,index);const page=location.href;
+ const before=entries.length,page=location.href;
+ let closed=0;const remove=openStep(()=>{closed++;remove();});
+ assert.equal(entries.length,before,'opening a record adds no history entry');
  goBack();await tick();
- assert.equal(closedByBack,1);assert.equal(location.href,page,'still on the same page');
- assert.equal(pageHandlerRan,0,'the page itself does not react to closing a window');
- const close=openStep(()=>{closedByBack++;});
- close();await tick();
- assert.equal(closedByBack,1,'closing it yourself does not call Back');
- assert.equal(location.href,page);assert.equal(history.state?.pzStep,undefined,'its step is gone');
+ assert.equal(closed,1);assert.equal(location.href,page,'still on the same page');
+ // A record closed by its own button, followed straight away by a page change, must not move the browser back.
+ const removeSecond=openStep(()=>{});removeSecond();
+ history.pushState(null,'','/operations/batches');await tick();
+ assert.equal(location.href,'http://local/operations/batches','the new page stays');
  goBack();await tick();
- assert.equal(location.href,'http://local/dashboard','the next Back leaves the page');
+ assert.equal(location.href,page,'Back then returns to the previous page');
 });
