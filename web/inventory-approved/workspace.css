@@ -17,5 +17,6 @@
    then the main action across the full width);
    the opened menu drops down below it instead of covering the screen. */
 @media(max-width:700px){.approved-inventory-topbar{position:sticky;top:0;flex-wrap:wrap;gap:8px 12px;min-height:0;padding:10px 12px}.approved-inventory-topbar .approved-brand{order:0;margin-right:auto}.approved-header-actions{display:contents}.approved-header-actions>*{order:1}.approved-header-actions>.pz-button--primary{order:3;flex:1 1 100%}.approved-mobile-menu{order:2;margin-left:0}.approved-inventory-content{padding:16px 12px 24px}.approved-inventory-sidebar.is-open{position:static;width:auto;border-right:0;border-bottom:1px solid var(--pz-border);padding:16px 12px;max-height:70dvh}}
-/* Smallest phones: logo icon only (name kept for screen readers) so the top row fits. */
-@media(max-width:380px){.approved-inventory-topbar .brand-compact>div{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.approved-inventory-topbar{gap:8px}}
+/* Phones: keep the brand name available to screen readers while reserving room
+   for alerts, View as, account, Back and navigation on the primary row. */
+@media(max-width:700px){.approved-inventory-topbar .brand-compact>div{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.approved-inventory-topbar{gap:8px}}
