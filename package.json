@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@tesseract.js-data/eng": "^1.0.0",
-    "cookie": "^1.0.2",
+    "cookie": "^2.0.1",
     "decimal.js": "^10.6.0",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
