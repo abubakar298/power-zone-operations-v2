@@ -1,0 +1,173 @@
+{
+  "source": "Owner technical screenshot supplied 5 October 2026",
+  "items": [
+    {
+      "key": "technical-01",
+      "group": "DC Combiner Box",
+      "name": "DC Circuit Breaker (Roof DB)",
+      "specification": "(4-Pole) 1000V 20A",
+      "unit": "Nos"
+    },
+    {
+      "key": "technical-02",
+      "group": "DC Combiner Box",
+      "name": "DC Fuse with Holder (Roof DB)",
+      "specification": "(1 Pole) 1000V",
+      "unit": "Nos"
+    },
+    {
+      "key": "technical-03",
+      "group": "DC Combiner Box",
+      "name": "DC SPD",
+      "specification": "DC SPD Type II, 750V, 2P",
+      "unit": "Nos"
+    },
+    {
+      "key": "technical-04",
+      "group": "DC Combiner Box",
+      "name": "DC Circuit Breaker (Inverter Room DB)",
+      "specification": "(4-Pole) 1000V 20A",
+      "unit": "Nos"
+    },
+    {
+      "key": "technical-05",
+      "group": "DC Combiner Box",
+      "name": "PV String Combiner Box (Rooftop)",
+      "specification": "IP 66 Panel Box with DIN rail and cutouts",
+      "unit": "Nos"
+    },
+    {
+      "key": "technical-06",
+      "group": "DC Combiner Box",
+      "name": "PV String Combiner Box (Inverter Room)",
+      "specification": "IP 66 Panel Box with DIN rail and cutouts",
+      "unit": "Nos"
+    },
+    {
+      "key": "technical-07",
+      "group": "DC Combiner Box",
+      "name": "DC Cables (Red and Black for Positive and Negative)",
+      "specification": "DC Cable 6 mm² Tin Coated XLPO Dual Insulation",
+      "unit": "Meter"
+    },
+    {
+      "key": "technical-08",
+      "group": "DC Combiner Box",
+      "name": "Cable Glands / Termination Kits",
+      "specification": "Glands, Lugs, Ferrules, Termination Kits",
+      "unit": "Set"
+    },
+    {
+      "key": "technical-09",
+      "group": "DC Combiner Box",
+      "name": "Cable Pipe / Conduit",
+      "specification": "1.5\" and 2\" as per site",
+      "unit": "Set"
+    },
+    {
+      "key": "technical-10",
+      "group": "DC Combiner Box",
+      "name": "MC4 Connectors (Male/Female)",
+      "specification": "IP 68",
+      "unit": "Set"
+    },
+    {
+      "key": "technical-11",
+      "group": "DC Combiner Box",
+      "name": "DC Cable for Battery Bank",
+      "specification": "DC Cable 35 mm² Flexible",
+      "unit": "Set"
+    },
+    {
+      "key": "technical-12",
+      "group": "AC Combiner Box",
+      "name": "Grid Input Breaker",
+      "specification": "AC MCCB 100A, 4-Pole",
+      "unit": "Nos"
+    },
+    {
+      "key": "technical-13",
+      "group": "AC Combiner Box",
+      "name": "Inverter Output Breaker",
+      "specification": "AC MCCB 100A, 4-Pole",
+      "unit": "Nos"
+    },
+    {
+      "key": "technical-14",
+      "group": "AC Combiner Box",
+      "name": "AC SPD",
+      "specification": "AC SPD Type II, 415 V",
+      "unit": "Nos"
+    },
+    {
+      "key": "technical-15",
+      "group": "AC Combiner Box",
+      "name": "Changeover Switch",
+      "specification": "63A Breaker Type",
+      "unit": "Nos"
+    },
+    {
+      "key": "technical-16",
+      "group": "AC Combiner Box",
+      "name": "AC Cable for Inverter Termination",
+      "specification": "AC Cable 25 mm² 4-Core (Stranded/Flexible)",
+      "unit": "Meter"
+    },
+    {
+      "key": "technical-17",
+      "group": "AC Combiner Box",
+      "name": "AC Cable from AC Bus Bar to Load Panel",
+      "specification": "AC Cable 25 mm² 4-Core (Stranded/Flexible)",
+      "unit": "Meter"
+    },
+    {
+      "key": "technical-18",
+      "group": "AC Combiner Box",
+      "name": "Cable Pipe / Conduit",
+      "specification": "1.5\" and 2\" as per site",
+      "unit": "Set"
+    },
+    {
+      "key": "technical-19",
+      "group": "AC Combiner Box",
+      "name": "Lugs, Ferrules, Termination Kits",
+      "specification": "Lugs, Ferrules, Termination Kits",
+      "unit": "Set"
+    },
+    {
+      "key": "technical-20",
+      "group": "AC Combiner Box",
+      "name": "AC Combiner Box",
+      "specification": "24*24 MS Combiner Box with Din Rail and Cutouts",
+      "unit": "Set"
+    },
+    {
+      "key": "technical-21",
+      "group": "Earthing",
+      "name": "Earthing Pit with Copper Bonded Electrode",
+      "specification": "Less than 1 ohm",
+      "unit": "Nos"
+    },
+    {
+      "key": "technical-22",
+      "group": "Earthing",
+      "name": "Earth Cables Panel to Panel",
+      "specification": "Earthing Cable 2.5 mm Green/Yellow",
+      "unit": "Meter"
+    },
+    {
+      "key": "technical-23",
+      "group": "Earthing",
+      "name": "Panels/DC combiner box to DC Earth Pit",
+      "specification": "Earthing Cable 6 mm Green/Yellow",
+      "unit": "Meter"
+    },
+    {
+      "key": "technical-24",
+      "group": "Earthing",
+      "name": "Earth Cables (Inverter/AC Combiner box to AC Earth Pit)",
+      "specification": "Earthing Cable 10 mm Green/Yellow",
+      "unit": "Meter"
+    }
+  ]
+}

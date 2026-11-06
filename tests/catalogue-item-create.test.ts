@@ -1,0 +1,45 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import request from 'supertest';
+import {createApp} from '../server/app.js';
+import {readConfig} from '../server/config.js';
+import {hashPassword} from '../server/auth/crypto.js';
+import {testDatabase} from './database.js';
+import {MastersRepository} from '../server/masters/repository.js';
+test('Coordinator creates descriptive item IDs with duplicate, role and financial protections',async()=>{
+ const db=await testDatabase();try{
+ const repo=new MastersRepository(db.pool),actor=randomUUID(),design=randomUUID(),password='catalogue-create-test-password';
+ for(const [id,role] of [[actor,'Coordinator'],[design,'Design']])await db.pool.query('INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$3)',[id,id+'@example.test',role,await hashPassword(password)]);
+ const inventory=randomUUID(),keeper=randomUUID();
+ for(const id of [inventory,keeper])await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,'Inventory',$3,'Inventory')",[id,id+'@example.test',await hashPassword(password)]);
+ await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Lahore warehouse','dispatcher',$3),($2,'Lahore warehouse','storekeeper',$3)",[inventory,keeper,actor]);
+ await assert.rejects(repo.createCatalogueItem(keeper,{itemId:'KEEPER-NO',commercialDescription:'Rejected',itemGroup:'Other',unit:'piece'}),/access required/);
+ const invItem=await repo.createCatalogueItem(inventory,{itemId:'DISPATCHER-NEW',commercialDescription:'Dispatcher item',itemGroup:'Other',unit:'piece'});
+ await repo.saveCommercialDescription(inventory,invItem.item_id,invItem.version,'Updated dispatcher item');
+ const invList=await repo.catalogueDescriptions(inventory);assert(invList.catalogue.some(r=>r.item_id==='DISPATCHER-NEW'));assert(invList.catalogue.every(r=>!('rate_key' in r)&&!('reviewNotes' in r.payload)));
+ const rates=JSON.stringify((await db.pool.query('SELECT * FROM rate_versions ORDER BY key,version')).rows);
+ const input={itemId:'TEST-NEW-ITEM',commercialDescription:'New test item',itemGroup:'Cable',unit:'m'};
+ await assert.rejects(repo.createCatalogueItem(design,input),/access required/);
+ await assert.rejects(repo.createCatalogueItem(actor,{...input,rate:'99'}),/not accepted/);
+ const origin='http://localhost:3000',app=createApp(db.pool,readConfig({NODE_ENV:'test',APP_ORIGIN:origin,DATABASE_URL:db.url,ADMIN_SETUP_TOKEN:'isolated-catalogue-create-test-setup-only'}));
+ const login=await request(app).post('/api/auth/login').set('Origin',origin).send({email:actor+'@example.test',password}).expect(200),cookie=login.headers['set-cookie'][0].split(';')[0];
+ const invLogin=await request(app).post('/api/auth/login').set('Origin',origin).send({email:inventory+'@example.test',password}).expect(200),invCookie=invLogin.headers['set-cookie'][0].split(';')[0];
+ const dbResponse=await request(app).get('/api/material-dispatches/item-database').set('Cookie',invCookie).expect(200);assert(dbResponse.body.catalogue.length>0);assert(!JSON.stringify(dbResponse.body).includes('rate_key'));
+ await request(app).get('/api/masters').set('Cookie',invCookie).expect(403);
+ await request(app).post('/api/material-dispatches/item-database/catalogue-items').set('Origin',origin).set('Cookie',invCookie).send({...input,itemId:'INV-CSRF-REJECT'}).expect(403);
+ const inventorySaved=await request(app).post('/api/material-dispatches/item-database/catalogue-items').set('Origin',origin).set('Cookie',invCookie).set('X-CSRF-Token',invLogin.body.csrfToken).send({...input,itemId:'INV-HTTP-NEW'}).expect(201);assert.deepEqual(Object.keys(inventorySaved.body).sort(),['item_id','version']);
+ await request(app).post('/api/material-dispatches/item-database/catalogue-commercial-description').set('Origin',origin).set('Cookie',invCookie).set('X-CSRF-Token',invLogin.body.csrfToken).send({itemId:'INV-HTTP-NEW',version:1,commercialDescription:'Edited through Inventory'}).expect(200);
+ await request(app).post('/api/masters/catalogue-items').set('Origin',origin).set('Cookie',cookie).send(input).expect(403);
+ const response=await request(app).post('/api/masters/catalogue-items').set('Origin',origin).set('Cookie',cookie).set('X-CSRF-Token',login.body.csrfToken).send(input).expect(201);
+ assert.equal(response.body.item_id,input.itemId);assert.equal(response.body.rate_key,null);
+ assert.equal((await db.pool.query('SELECT item_id FROM inventory_catalogue_final_current WHERE item_id=$1',[input.itemId])).rowCount,1);
+ await assert.rejects(repo.createCatalogueItem(actor,{...input,itemId:'test-new-item'}),/already recorded/);
+ const existing=(await db.pool.query('SELECT item_id FROM inventory_catalogue_final_current LIMIT 1')).rows[0].item_id;
+ await assert.rejects(repo.createCatalogueItem(actor,{...input,itemId:existing}),/already recorded/);
+ const attempts=await Promise.allSettled([repo.createCatalogueItem(actor,{...input,itemId:'TEST-CONCURRENT'}),repo.createCatalogueItem(actor,{...input,itemId:'test-concurrent'})]);
+ assert.equal(attempts.filter(v=>v.status==='fulfilled').length,1);
+ assert.equal(JSON.stringify((await db.pool.query('SELECT * FROM rate_versions ORDER BY key,version')).rows),rates);
+ assert.equal((await db.pool.query("SELECT count(*)::int n FROM audit_log WHERE user_id=$1 AND action LIKE 'master.catalogue-item.created:%'",[actor])).rows[0].n,2);
+ }finally{await db.close();}
+});

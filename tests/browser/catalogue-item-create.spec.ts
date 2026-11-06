@@ -1,0 +1,26 @@
+import {test,expect} from '@playwright/test';
+import {actors,login} from './release-fixtures.js';
+test('Atif adds an item from Item Descriptions without costing fields',async({page})=>{
+ await actors(page.request);await login(page.request,'coordinator-release@example.test');
+ await page.goto('/dashboard#workspace=masters');
+ await page.getByRole('tab',{name:/Item Descriptions/}).click();
+ await page.getByRole('button',{name:'Add Item ID',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Add Item ID'});
+ await expect(dialog).toBeVisible();
+ await expect(dialog.getByText(/markup|cost price|selling price/i)).toHaveCount(0);
+ const id='E2E-ITEM-'+Date.now();
+ await dialog.getByLabel('Item ID',{exact:true}).fill(id);
+ await dialog.getByLabel('Unit',{exact:true}).fill('piece');
+ await dialog.getByLabel('Commercial description',{exact:true}).fill('Browser validation item');
+ await dialog.getByLabel('Item group',{exact:true}).fill('Accessories');
+ await dialog.getByRole('button',{name:'Add item',exact:true}).click();
+ await expect(dialog).not.toBeVisible();
+ await expect(page.getByRole('status').filter({hasText:id})).toBeVisible();
+ await expect(page.getByRole('cell',{name:id,exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Add Item ID',exact:true}).click();
+ await dialog.getByLabel('Item ID',{exact:true}).fill(id.toLowerCase());
+ await dialog.getByLabel('Unit',{exact:true}).fill('piece');
+ await dialog.getByLabel('Commercial description',{exact:true}).fill('Duplicate');
+ await dialog.getByRole('button',{name:'Add item',exact:true}).click();
+ await expect(dialog.getByRole('alert')).toContainText('already recorded');
+});

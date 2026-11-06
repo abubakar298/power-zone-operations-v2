@@ -1,0 +1,226 @@
+import {withAccountsIpo} from '../../shared/accounts-site-reference.js';
+import {createHash} from 'node:crypto';
+import {recoveryReport,recoveryFilteredRows} from '../../shared/recovery-report.js';
+import {recoveryPdf} from './recovery-pdf.js';
+import {consolidateCableInvoices,submitConsolidatedCable} from './cable-consolidations.js';
+import {materialCorrectionAlerts,flagMaterialCorrection} from '../inventory/material-correction-alerts.js';
+import {materialCostingQueue,markJobRecordedInPt,jobPtEntrySchema} from './material-costing.js';
+import {recordInvoiceUpdate,invoiceUpdateSchema} from './invoice-records.js';
+import {siteEvidence,siteEvidenceFile,originalsRegister,confirmOriginalReceipt,originalReceiptSchema} from './site-evidence.js';
+import {readLocalPurchases} from '../operations-board/local-purchases.js';
+import {groupAccountsCustomerDocuments} from '../../shared/accounts-customer-documents.js';
+import {customerDocuments,customerDocumentFile} from './customer-documents.js';
+import{correctInvoice,invoiceCorrectionSchema}from'./invoice-corrections.js';
+import{recordInvoiceReceipt,invoiceReceiptSchema}from'./invoice-receipts.js';
+import {managementProgrammes} from '../director/management-programmes.js';
+import { Router, type RequestHandler } from "express";
+import {invoiceRegister,recordInvoiceEntry,invoiceEntrySchema,recordInvoiceSubmission,invoiceSubmissionSchema} from './invoice-entries.js';
+import {ptEntrySchema} from './pt-entries.js';
+import {paymentRegister,recordPayment,paymentRecordSchema} from './payment-records.js';
+import type {AccountsSourceRegisters} from './source-registers.js';
+import type {OperationsBoardRepository} from '../operations-board/repository.js';
+import { z } from "zod";
+import { equalSecrets } from "../auth/crypto.js";
+import { HttpError } from "../http/errors.js";
+import { AccountsRepository, closureSchema } from "./repository.js";
+export function accountsHttp(
+  repo: AccountsRepository,
+  requireSession: RequestHandler,
+  sources: AccountsSourceRegisters,
+  operationsBoard: OperationsBoardRepository,
+) {
+  const r = Router();
+  r.use(requireSession);
+  r.use((req, _res, next) => {
+    if (
+      req.method !== "GET" &&
+      !equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken)
+    )
+      throw new HttpError(403, "Refresh and try again.");
+    next();
+  });
+  const parse = <T>(schema: z.ZodType<T>, value: unknown) => {
+    const p = schema.safeParse(value);
+    if (!p.success)
+      throw new HttpError(
+        400,
+        "Check the Accounts fields and required references.",
+      );
+    return p.data;
+  };
+  r.get("/", async (req, res) => {
+    const actor=req.authSession!.user.id;
+    const [overview,siteImport]=await Promise.all([repo.overview(actor),sources.summary(actor)]);
+    res.json({...overview,siteImport});
+  });
+  r.get('/programmes',async(req,res)=>res.json(await managementProgrammes(repo.pool,req.authSession!.user.id,true)));
+  r.get('/work-queues',async(req,res)=>{
+    const actor=req.authSession!.user.id;
+    const [invoices,payments]=await Promise.all([invoiceRegister(repo.pool,actor),paymentRegister(repo.pool,actor)]);
+    res.json({invoicesToSubmit:Object.values(invoices.submissionQueues).reduce((n,rows)=>n+rows.length,0),paymentsToRecord:payments.pending.length+payments.awaiting.length});
+  });
+  r.get('/closure-queue',async(req,res)=>res.json({closures:await repo.managementClosureQueue(req.authSession!.user.id)}));
+  r.get('/material-costing',async(req,res)=>{const data=await materialCostingQueue(repo.pool,req.authSession!.user.id);res.json(req.query.summary==='1'?{count:data.rows.length}:data);});
+  r.get('/material-corrections',async(req,res)=>{await repo.access(req.authSession!.user.id);res.json(await materialCorrectionAlerts(repo.pool));});
+  r.post('/material-corrections',async(req,res)=>res.json(await flagMaterialCorrection(repo.pool,req.authSession!.user.id,req.body)));
+  r.get('/billing',async(req,res)=>{const data=await sources.billing(req.authSession!.user.id);res.json({...data,rows:data.rows.map(r=>withAccountsIpo(r))});});
+  r.get('/invoice-entries',async(req,res)=>res.json(await invoiceRegister(repo.pool,req.authSession!.user.id)));
+  r.post('/invoice-updates',async(req,res)=>res.status(201).json(await recordInvoiceUpdate(repo.pool,req.authSession!.user.id,parse(invoiceUpdateSchema,req.body))));
+  r.post('/material-costing/pt-entry',async(req,res)=>res.status(201).json(await markJobRecordedInPt(repo.pool,req.authSession!.user.id,parse(jobPtEntrySchema,req.body))));
+  r.get('/originals',async(req,res)=>res.json(await originalsRegister(repo.pool,req.authSession!.user.id)));
+  r.get('/sites/:id/evidence',async(req,res)=>res.json(await siteEvidence(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id))));
+  r.get('/sites/:id/evidence/:fileId',async(req,res)=>{
+   const file=await siteEvidenceFile(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id),parse(z.uuid(),req.params.fileId));
+   res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);
+  });
+  r.post('/sites/:id/original-receipts',async(req,res)=>res.status(201).json(await confirmOriginalReceipt(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id),parse(originalReceiptSchema,req.body))));
+  r.post('/invoice-submissions',async(req,res)=>res.status(201).json(await recordInvoiceSubmission(repo.pool,req.authSession!.user.id,parse(invoiceSubmissionSchema,req.body))));
+  r.post('/invoice-corrections',async(req,res)=>res.status(201).json(await correctInvoice(repo.pool,req.authSession!.user.id,parse(invoiceCorrectionSchema,req.body))));
+  r.get('/cable-consolidations/:key/file',async(req,res)=>{await repo.access(req.authSession!.user.id);const key=parse(z.uuid(),req.params.key),source=(await repo.pool.query('SELECT snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0],row=source?.snapshot.cables.rows.find((r:any)=>r.key===key&&r.consolidation&&!r.supersededBy);if(!row)throw new HttpError(404,'Original consolidated invoice not found.');const file=row.consolidation.file;res.set({'Content-Type':/\.xlsx$/i.test(file.name)?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/pdf','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}).send(Buffer.from(file.base64,'base64'));});
+  r.post('/cable-consolidations',async(req,res)=>res.status(201).json(await consolidateCableInvoices(repo.pool,req.authSession!.user.id,req.body)));
+  r.post('/cable-consolidations/submit',async(req,res)=>res.status(201).json(await submitConsolidatedCable(repo.pool,req.authSession!.user.id,req.body)));
+  r.get('/payment-records',async(req,res)=>res.json(await paymentRegister(repo.pool,req.authSession!.user.id)));
+  r.get('/recovery.pdf',async(req,res)=>{
+   const filters=parse(z.object({search:z.string().max(500).optional(),customer:z.string().max(250).optional(),category:z.string().max(80).optional(),stage:z.string().max(100).optional(),amount:z.enum(['','missing','recorded']).optional()}).strict(),req.query);
+   const data=await paymentRegister(repo.pool,req.authSession!.user.id),asOf=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+   const rows=filters.category==='internet'?data.internet:data.awaiting,report=recoveryReport(recoveryFilteredRows(rows,filters,data.sourceVersion),asOf);
+   res.locals.downloadContext={customer:filters.customer||'All customers',site:'Recovery follow-up',documentType:'Recovery report',reference:asOf,identity:'accounts-recovery:'+asOf+':'+createHash('sha256').update(JSON.stringify(filters)).digest('hex')};
+   res.set({'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="Power-Zone-Recovery-${asOf}.pdf"`,'Cache-Control':'private, no-store'}).send(Buffer.from(recoveryPdf(report).output('arraybuffer')));
+  });
+  r.post('/invoice-receipts',async(req,res)=>res.status(201).json(await recordInvoiceReceipt(repo.pool,req.authSession!.user.id,parse(invoiceReceiptSchema,req.body))));
+  r.post('/payment-records',async(req,res)=>res.status(201).json(await recordPayment(repo.pool,req.authSession!.user.id,parse(paymentRecordSchema,req.body))));
+  r.post('/invoice-entries',async(req,res)=>res.status(201).json(await recordInvoiceEntry(repo.pool,req.authSession!.user.id,parse(invoiceEntrySchema,req.body))));
+  r.get('/sites',async(req,res)=>res.json(await sources.sites(req.authSession!.user.id)));
+  r.get('/site-local-purchases',async(req,res)=>{await repo.access(req.authSession!.user.id);const siteId=parse(z.string().trim().min(1).max(160),req.query.siteId);res.json(await readLocalPurchases(repo.pool,siteId));});
+  r.get('/customer-documents',async(req,res)=>{await repo.access(req.authSession!.user.id);const jobKey=req.query.jobKey===undefined?undefined:parse(z.string().trim().min(1).max(100),req.query.jobKey);const data=await customerDocuments(repo.pool,false,jobKey);res.json(req.query.summary==='1'?{count:groupAccountsCustomerDocuments(data.rows).length,documents:data.rows.length}:{rows:data.rows});});
+  r.get('/customer-documents/:id/file',async(req,res)=>{await repo.access(req.authSession!.user.id);const id=parse(z.string().regex(/^[a-f0-9]{64}$/),req.params.id),file=await customerDocumentFile(repo.pool,id);res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);});
+  r.get('/physical-documents',async(req,res)=>{
+    await repo.access(req.authSession!.user.id);
+    const data=await operationsBoard.physicalDocuments(req.authSession!.user.id);
+    res.json({...data,sites:data.sites.map((s:any)=>withAccountsIpo(s,'ipo','name'))});
+  });
+  r.post('/pt-entries',async(req,res)=>res.status(201).json(await repo.recordPtEntry(req.authSession!.user.id,parse(ptEntrySchema,req.body))));
+  r.post("/evidence", async (req, res) => {
+    const v = parse(
+      z
+        .object({
+          jobKey: z.string().max(100),
+          filename: z.string().trim().min(1).max(200),
+          mediaType: z.enum(["image/png", "image/jpeg", "application/pdf"]),
+          base64: z.string().max(11200000),
+        })
+        .strict(),
+      req.body,
+    );
+    res
+      .status(201)
+      .json(
+        await repo.uploadEvidence(
+          req.authSession!.user.id,
+          v.jobKey,
+          v.filename,
+          v.mediaType,
+          v.base64,
+        ),
+      );
+  });
+  r.get("/evidence/:id", async (req, res) => {
+    const f = await repo.evidenceFile(
+      req.authSession!.user.id,
+      parse(z.uuid(), req.params.id),
+    );
+    res
+      .set({
+        "Content-Type": f.media_type,
+        "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(f.filename)}`,
+        "X-Content-Type-Options": "nosniff",
+      })
+      .send(f.content);
+  });
+  r.get('/jobs/:key/operations-evidence/:version/:fileId',async(req,res)=>{
+    const file=await repo.operationsEvidenceFile(req.authSession!.user.id,
+      parse(z.string().regex(/^ipo:[0-9a-f-]{36}$/),req.params.key),
+      parse(z.coerce.number().int().positive(),req.params.version),parse(z.uuid(),req.params.fileId));
+    res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+      'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);
+  });
+  r.get("/ipos/:id", async (req, res) =>
+    res.json(
+      await repo.comparison(
+        req.authSession!.user.id,
+        parse(z.uuid(), req.params.id),
+      ),
+    ),
+  );
+  r.post("/ipo-reviews", async (req, res) =>
+    res.json(
+      await repo.review(
+        req.authSession!.user.id,
+        parse(
+          z
+            .object({
+              id: z.uuid(),
+              version: z.number().int().nonnegative(),
+              decision: z.enum(["Verified", "Returned for Revision"]),
+              notes: z.string().trim().min(1).max(2000),
+              requestKey: z.uuid(),
+            })
+            .strict(),
+          req.body,
+        ),
+      ),
+    ),
+  );
+  r.get("/job", async (req, res) =>
+    res.json(
+      await repo.job(req.authSession!.user.id, String(req.query.key ?? "")),
+    ),
+  );
+  r.post("/return-report", async (req, res) =>
+    res.json(
+      await repo.returnReport(
+        req.authSession!.user.id,
+        parse(
+          z
+            .object({
+              id: z.uuid(),
+              version: z.number().int().positive(),
+              notes: z.string().trim().min(1).max(2000),
+              requestKey: z.uuid(),
+            })
+            .strict(),
+          req.body,
+        ),
+      ),
+    ),
+  );
+  r.post("/closures", async (req, res) =>
+    res.json(
+      await repo.saveClosure(
+        req.authSession!.user.id,
+        parse(closureSchema, req.body),
+      ),
+    ),
+  );
+  r.post("/closure-decisions", async (req, res) =>
+    res.json(
+      await repo.decision(
+        req.authSession!.user.id,
+        parse(
+          z
+            .object({
+              id: z.uuid(),
+              version: z.number().int().positive(),
+              decision: z.enum(["Closed", "Returned for Revision"]),
+              notes: z.string().trim().min(1).max(2000),
+              requestKey: z.uuid(),
+            })
+            .strict(),
+          req.body,
+        ),
+      ),
+    ),
+  );
+  return r;
+}
+

@@ -1,0 +1,16 @@
+.accounts-ui .accounts-worklist-filters.accounts-invoice-filters{grid-template-columns:minmax(180px,2fr) repeat(3,minmax(140px,1fr)) auto;align-items:start}
+.accounts-ui .accounts-invoice-filters>.pz-button{align-self:start;margin-top:25px}
+@media(max-width:1000px){.accounts-ui .accounts-worklist-filters.accounts-invoice-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.accounts-ui .accounts-worklist-filters.accounts-invoice-filters{grid-template-columns:1fr}.accounts-ui .accounts-invoice-filters>.pz-button{margin-top:0}}
+
+.accounts-ui .accounts-payment-actions-column{width:1%;vertical-align:top}
+.accounts-ui .accounts-invoice-actions{display:flex;width:max-content;gap:8px;align-items:flex-start;flex-wrap:nowrap}
+.accounts-ui .accounts-invoice-actions>.pz-button{flex:0 0 auto;white-space:nowrap;min-height:38px;padding:8px 10px;font-size:13px}
+
+.accounts-recovery-export{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}.accounts-recovery-export>span{padding-top:11px}
+@media(max-width:700px){.accounts-recovery-export{width:100%;justify-content:space-between}}
+
+.accounts-filtered-total{display:grid;grid-template-columns:auto auto;column-gap:12px;row-gap:4px;align-items:start}.accounts-filtered-total>strong{text-align:right;white-space:nowrap}.accounts-filtered-total>small{grid-column:1/-1;text-align:right}.accounts-recovery-export>.accounts-filtered-total{padding-top:11px}
+@media(max-width:700px){.accounts-filtered-total{width:100%;grid-template-columns:minmax(0,1fr) auto}.accounts-recovery-export>.accounts-filtered-total{padding-top:0}}
+
+.accounts-ui .accounts-recovery-export{align-items:flex-start}.accounts-ui .accounts-panel-heading:has(.accounts-filtered-total){align-items:flex-start}

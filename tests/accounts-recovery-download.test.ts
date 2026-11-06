@@ -1,0 +1,20 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {randomUUID,randomBytes} from 'node:crypto';import request from 'supertest';
+import {testDatabase} from './database.js';import {createApp} from '../server/app.js';import {readConfig} from '../server/config.js';import {digest} from '../server/auth/crypto.js';import {AccountsSourceRegisters} from '../server/accounts/source-registers.js';import {recoveryFilteredRows,recoveryReport} from '../shared/recovery-report.js';
+test('recovery export retains customer, stage, category and search filters and only submitted outstanding invoices',()=>{
+ const rows=[{id:'UBL:SOLAR:1:advance',site:'Solar One',customer:'UBL',category:'System · advance',invoice:'ADV',submission:'Submitted',pending:'100',date:'2026-10-01'},{id:'UBL:SOLAR:1:completion',site:'Solar One',customer:'UBL',category:'System · completion',invoice:'BAL',submission:'Submitted',pending:'200',date:'2026-10-10'},{id:'internet',site:'Solar One',customer:'UBL',category:'Internet',invoice:'INT',submission:'Submitted',pending:'20',date:'2026-10-20'},{id:'other',site:'Other',customer:'MBL',category:'System',invoice:'OTHER',submission:'Submitted',pending:'50',date:'2026-10-02'}];
+ assert.deepEqual(recoveryReport(recoveryFilteredRows(rows,{customer:'UBL',category:'solar',stage:'50% Advance Invoice'},1),'2026-11-02').items.map(r=>r.invoice),['ADV']);
+ assert.deepEqual(recoveryReport(recoveryFilteredRows(rows,{search:'BAL'},1),'2026-11-02').items.map(r=>r.invoice),['BAL']);assert.equal(recoveryReport(recoveryFilteredRows(rows,{category:'internet'},1),'2026-11-02').total,'20.00');
+});
+test('Accounts recovery is an authenticated direct compressed PDF download with no browser generation or financial writes',async()=>{
+ const db=await testDatabase();try{
+ const users:Record<string,string>={},cookies:Record<string,string>={};for(const role of ['Admin','Accounts','Coordinator']){const id=users[role]=randomUUID(),token=randomBytes(32).toString('base64url');await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$3,$4)',[id,id+'@example.test',role,'fixture']);await db.pool.query("INSERT INTO auth_sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",[digest(token),id,randomUUID()]);cookies[role]='pz_session='+token;}
+ const source={sourceDate:'2026-11-02',manifest:[{name:'Recovery fixture',sha256:'a'.repeat(64)}],registers:[{rows:[{kind:'UPS',customer:'UBL',key:'UBL:UPS:recovery',ipo:'CHP-163',site:'Recovery Branch',po:'PO-TEST',invoiceReferences:['INV-TEST'],invoiceAmount:'100',singleInvoiceSubmitted:true}]}],cables:{rows:[]},internet:{rows:[]},sites:{rows:[]},evidence:{rows:[{customer:'United Bank Limited',invoice:'INV-TEST',status:'submitted',balance:'50',date:'2026-10-01'}],cableStageAdjustments:[]}};
+ await new AccountsSourceRegisters(db.pool).import(users.Admin,source,0);
+ const app=createApp(db.pool,readConfig({NODE_ENV:'test',APP_ORIGIN:'http://127.0.0.1:5173',DATABASE_URL:db.url,ADMIN_SETUP_TOKEN:'recovery-download-test-setup-token'}));
+ await request(app).get('/api/accounts-workspace/recovery.pdf').expect(401);await request(app).get('/api/accounts-workspace/recovery.pdf').set('Cookie',cookies.Coordinator).expect(403);
+ const res=await request(app).get('/api/accounts-workspace/recovery.pdf').query({customer:'United Bank Limited',category:'ups',search:'Recovery'}).set('Cookie',cookies.Accounts).expect(200);
+ assert.match(res.headers['content-type'],/application\/pdf/);assert.match(res.headers['content-disposition'],/attachment; filename="[^"]*Recovery report[^";]*\.pdf"/);assert.match(res.headers['cache-control'],/no-store/);assert.equal(res.body.subarray(0,5).toString(),'%PDF-');assert.ok(res.body.length<500000);
+ await request(app).get('/api/accounts-workspace/recovery.pdf').query({stage:['bad','input']}).set('Cookie',cookies.Accounts).expect(400);
+ for(const table of ['accounts_payment_records','accounts_invoice_entries','accounts_pt_entries','stock_on_hand_entries'])assert.equal((await db.pool.query('SELECT count(*)::int n FROM '+table)).rows[0].n,0);
+ }finally{await db.close();}
+});

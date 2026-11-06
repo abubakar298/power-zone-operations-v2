@@ -1,0 +1,110 @@
+import {BackButton} from '../components/BackButton.js';
+import {recentFirst} from '../../shared/recent-records.js';
+import {PagedTableBody} from '../ui/PagedTableBody.js';
+import {MaterialCorrectionAlerts} from '../components/MaterialCorrectionAlerts.js';
+import {groupDispatchDocumentSites,type DispatchDocumentRow} from '../../shared/dispatch-document-status.js';
+import {DispatchDocumentList} from '../components/DispatchDocumentList.js';
+import {StockPosition} from '../inventory-approved/StockPosition.js';
+import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
+import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
+import {navigateInventory} from '../inventory-approved/navigation.js';
+import {decimalDisplay} from '../numbers.js';
+import {useEffect,useRef,useState} from 'react';
+import {Decimal} from 'decimal.js';
+import {api,type Session} from '../api.js';
+import {Brand} from '../components/Brand.js';
+import {Icon} from '../components/Icon.js';
+import {InventoryNavigation,type InventorySection} from '../components/InventoryNavigation.js';
+import {PurchaseReceiving} from '../components/PurchaseReceiving.js';
+import {Button} from '../ui/Button.js';
+import {confirmLeaveWorkspace,useUnsavedChanges} from '../hooks/useUnsavedChanges.js';
+import './operations-board/operations-board.css';
+import './inventory-home.css';
+
+type Source={siteId:string;registeredSiteId?:string;ipo:string|null;siteName:string;customer:string;orderNumber?:string;authorization?:string;dispatchDate:string|null;installationDate?:string|null;linkStatus?:string;linkReview?:{status:string;reason:string}};
+type Intake={warehouses:string[];sources:Source[];registeredPending?:Source[]};
+type Draft={id:string;version:number;created_at:string;snapshot:{parent:boolean;kind:string;warehouse:string;sites:Source[]}};
+type Purchase={id:string;number:string;title:string;orderReference:string;orderedAt:string;expectedOn:string|null;deliveryTo:string;lines:{itemKey:string;name:string;due:string;unit:string;vendor:string}[]};
+
+type Position={itemId:string;description:string;unit:string;currentClosing:string|null;opening?:string|null;totalIn?:string|null;totalOut?:string|null;unknown:boolean;negative:boolean};
+type Movement={dispatches:{id:string;number:string;created_at:string}[];receipts:{id:string;number:string;created_at:string}[];lines:{item_id:string;unit:string;issued:string;returned:string;outstanding:string;used:null}[]};
+const shown=(value:unknown)=>{if(value===null||value===undefined||value==='')return 'Not recorded';try{return decimalDisplay(String(value),0);}catch{return 'Not recorded';}};
+const day=(value?:string|null)=>value?.slice(0,10)||'Not recorded';
+const viewTitles:Record<string,string>={dashboard:'Inventory Dashboard',stock:'Stock position','minimum-stock':'Minimum Closing Stock','purchase-receiving':'Purchase Receiving','site-ledger':'Site Ledger'};
+const buckets=[['ipos','Upcoming Projects'],['irr-pending','Dispatched — Awaiting QC'],['irr-received','Material Returns & Reconciliation'],['purchase','PRAs Received']] as const;
+
+/** Approved Inventory composition backed only by authenticated production APIs. */
+export function InventoryHome({session,onLogout,assignedKind}:{session:Session;onLogout:()=>void;assignedKind?:string}){
+ const path=location.pathname,view=path==='/inventory'?'dashboard':path.split('/')[2]||'dashboard';
+ const [mobile,setMobile]=useState(false),[intake,setIntake]=useState<Intake>(),[purchases,setPurchases]=useState<Purchase[]>(),[drafts,setDrafts]=useState<Draft[]>(),[documents,setDocuments]=useState<DispatchDocumentRow[]>(),[errors,setErrors]=useState<Record<string,string>>({}),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[bucket,setBucket]=useState<string>('ipos'),[search,setSearch]=useState(''),[schedule,setSchedule]=useState('all');
+ const loadEpoch=useRef(0);
+ async function load(){const epoch=++loadEpoch.current;const active=()=>epoch===loadEpoch.current;setLoading(true);setErrors({});try{
+  const access=assignedKind?{kind:assignedKind}:await api<{kind:string}>('/material-dispatches/access');if(!active())return;if(access.kind==='storekeeper'){location.replace('/inventory/gate-passes');return;}if(!['dispatcher','management'].includes(access.kind))throw Error('Inventory access is not assigned.');
+  if(view!=='dashboard'){
+   const scope=await api<{warehouses:string[]}>('/material-dispatches/warehouses');if(!active())return;setIntake({warehouses:scope.warehouses,sources:[]});
+   if(view==='purchase-receiving'){const value=await api<{toReceive:Purchase[]}>('/procurement/store');if(!active())return;setPurchases(value.toReceive.filter(r=>r.lines.some(l=>new Decimal(l.due).gt(0))));}
+   if(view==='site-ledger'){const value=await api<{drafts:Draft[]}>('/material-dispatches/drafts');if(active())setDrafts(value.drafts);}
+   return;
+  }
+  async function receive<T>(name:string,path:string,apply:(value:T)=>void){try{const value=await api<T>(path);if(active())apply(value);}catch(error){if(active())setErrors(old=>({...old,[name]:error instanceof Error?error.message:'Unable to load these records.'}));}}
+  await Promise.all([
+   receive<Intake>('intake','/material-dispatches/intake',setIntake),
+   receive<{toReceive:Purchase[]}>('purchase','/procurement/store',value=>setPurchases(value.toReceive.filter(r=>r.lines.some(l=>new Decimal(l.due).gt(0))))),
+   receive<{rows:DispatchDocumentRow[]}>('documents','/material-dispatches/document-status',value=>setDocuments(value.rows)),
+
+  ]);
+ }catch(e){if(active())setErrors({access:(e as Error).message});}finally{if(active())setLoading(false);}}
+ useEffect(()=>{void load();return()=>{loadEpoch.current++;};},[revision,session.user.id,assignedKind]);
+ // QC uploads can arrive while Inventory is open; refresh only the small signed-document projection.
+ useEffect(()=>{
+  if(view!=='dashboard')return;
+  let active=true,generation=0;
+  const refresh=()=>{if(document.visibilityState==='hidden')return;const request=++generation;void api<{rows:DispatchDocumentRow[]}>('/material-dispatches/document-status').then(value=>{if(active&&request===generation){setDocuments(value.rows);setErrors(old=>{const next={...old};delete next.documents;return next;});}}).catch(e=>{if(active&&request===generation)setErrors(old=>({...old,documents:e instanceof Error?e.message:'Unable to refresh signed documents.'}));});};
+  const timer=window.setInterval(refresh,30000);window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);
+  return()=>{active=false;generation++;window.clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);};
+ },[view,session.user.id,assignedKind]);
+ function go(path:string){if(confirmLeaveWorkspace())navigateInventory(path);}
+ async function logout(){if(!confirmLeaveWorkspace())return;try{await api('/auth/logout',{csrf:session.csrfToken,body:{}});onLogout();}catch(e){setErrors({...errors,logout:(e as Error).message});}}
+ const ipoRows=intake?[...intake.sources.filter(s=>s.authorization!=='forecast-only'),...(intake.registeredPending??[])]:undefined;
+ const dispatchProgress=(source:Source)=>{const matches=documents?.flatMap(d=>d.sites.filter(s=>s.siteId===source.siteId||!!source.registeredSiteId&&s.registeredSiteId===source.registeredSiteId));return matches?.some(s=>s.dispatchComplete)?'complete':matches?.length?'partial':undefined;};
+ const uniqueIpos=ipoRows?[...new Map(ipoRows.filter(s=>dispatchProgress(s)!=='complete').map(s=>[s.registeredSiteId??s.siteId,s])).values()]:undefined;
+ const documentSites=documents?groupDispatchDocumentSites(documents):undefined;
+ const pendingReports=documentSites?.filter(r=>r.status==='awaiting'),receivedReports=documentSites?.filter(r=>r.status==='ready');
+ const counts:Record<string,number|undefined>={purchase:purchases?.length,ipos:uniqueIpos?.length,'irr-pending':pendingReports?.length,'irr-received':receivedReports?.length};
+ const visibleSources=uniqueIpos?.filter(s=>`${s.ipo??''} ${s.siteName} ${s.customer} ${s.orderNumber??''}`.toLowerCase().includes(search.toLowerCase())&&(schedule==='all'||(schedule==='scheduled'?!!s.dispatchDate:!s.dispatchDate)));
+ const visiblePurchases=purchases?.filter(p=>`${p.number} ${p.title} ${p.orderReference} ${p.deliveryTo}`.toLowerCase().includes(search.toLowerCase()));
+ return <div className="ob-shell inventory-final-shell"><header className="ob-header"><Button className="ob-mobile-toggle" aria-label="Open navigation" onClick={()=>setMobile(!mobile)}><Icon name="menu"/></Button><Brand compact/><BackButton/><div className="ob-header-actions"><ManagementHeaderSwitcher session={session} value="inventory"/><WorkspaceAccountMenu name={session.user.displayName} label={'Inventory'} onSignOut={()=>void logout()}/></div></header><InventoryNavigation active={view as InventorySection} mobile={mobile}/><main className="ob-main inventory-home-main">{view!=='stock'&&<div className="ob-page-title"><div><h1>{viewTitles[view]??'Inventory'}</h1></div><Button disabled={loading} onClick={()=>{if(confirmLeaveWorkspace())setRevision(v=>v+1);}}>Refresh</Button></div>}
+ {Object.entries(errors).map(([key,message])=><p key={key} role="alert" className="form-error">{message}</p>)}
+ {view==='stock'&&intake&&<StockPosition warehouses={intake.warehouses} revision={revision}/>}
+ {view==='minimum-stock'&&intake&&<MinimumStock warehouses={intake.warehouses} session={session} revision={revision}/>}
+ {view==='purchase-receiving'&&<PurchaseList rows={visiblePurchases} warehouses={intake?.warehouses??[]} session={session} search={search} onSearch={setSearch} onReceived={()=>setRevision(v=>v+1)}/>}
+ {view==='site-ledger'&&drafts&&<SiteLedger drafts={drafts}/>}
+ {view==='dashboard'&&<MaterialCorrectionAlerts session={session} inventory/>}{view==='dashboard'&&<>
+ <div className="inventory-dashboard-buckets" aria-label="Inventory work buckets">{buckets.map(([id,label])=><Button key={id} className={bucket===id?'selected':''} aria-pressed={bucket===id} onClick={()=>{if(confirmLeaveWorkspace()){setBucket(id);setSearch('');setSchedule('all');}}}><strong>{counts[id]??'—'}</strong><span>{label}</span>{id==='ipos'&&<div className="inventory-schedule-split"><small>{uniqueIpos?uniqueIpos.filter(s=>!!s.dispatchDate).length:'—'} Scheduled</small><small>{uniqueIpos?uniqueIpos.filter(s=>!s.dispatchDate).length:'—'} Not scheduled</small></div>}</Button>)}</div>
+ <section className="pz-panel pz-stack inventory-dashboard-list"><div className="ob-section-title"><h2>{buckets.find(([id])=>id===bucket)?.[1]}</h2><span>{counts[bucket]===undefined?'Records unavailable':`${counts[bucket]} ${bucket==='irr-pending'||bucket==='irr-received'?'sites':'records'}`}</span></div>
+ {bucket==='purchase'?<PurchaseList rows={visiblePurchases} warehouses={intake?.warehouses??[]} session={session} search={search} onSearch={setSearch} onReceived={()=>setRevision(v=>v+1)}/>:bucket==='ipos'?<><div className="inventory-dashboard-tools"><label>Search site, IPO or customer<input type="search" value={search} onChange={e=>setSearch(e.target.value)}/></label>{bucket==='ipos'&&<label>Schedule<select value={schedule} onChange={e=>setSchedule(e.target.value)}><option value="all">All projects</option><option value="scheduled">Scheduled</option><option value="unscheduled">Not scheduled</option></select></label>}</div><div className="pz-table-scroll"><table className="ob-table"><thead><tr><th>SR#</th><th>Document</th><th>Site / Customer</th><th>Planned material dispatch</th><th>Status</th><th>Next Action</th></tr></thead><PagedTableBody label="sites and documents">{recentFirst(visibleSources??[]).map((s,i)=><tr key={s.registeredSiteId??s.siteId}><td>{i+1}</td><td><strong>{s.ipo??'IPO not recorded'}</strong>{s.orderNumber&&<small>Order {s.orderNumber}</small>}</td><td><strong>{s.siteName}</strong><small>{s.customer}</small></td><td><strong>{s.dispatchDate?day(s.dispatchDate):'Not Scheduled'}</strong>{s.installationDate&&<small>Installation planned: {day(s.installationDate)}</small>}</td><td>{s.linkStatus?<><strong>Confirmation required</strong><small>{s.linkReview?.reason??'Approved IPO / BOQ identity needs review.'}</small></>:dispatchProgress(s)==='partial'?'Partial delivery':'IPO received'}</td><td><Button disabled={!!s.linkStatus} onClick={()=>go('/inventory/materials?search='+encodeURIComponent(s.siteName))}>{s.linkStatus?'Awaiting confirmation':'Open materials'}</Button></td></tr>)}</PagedTableBody></table></div>{visibleSources?.length===0&&<p>No documents match these filters.</p>}</>:<DispatchDocumentList session={session} onChanged={()=>setRevision(v=>v+1)} key={bucket} rows={documents} status={bucket==='irr-pending'?'awaiting':'ready'}/>}
+ </section></>}
+ {loading&&!intake&&<p role="status">Loading Inventory records…</p>}
+ </main></div>;
+}
+
+function PurchaseList({rows,warehouses,session,search,onSearch,onReceived}:{rows?:Purchase[];warehouses:string[];session:Session;search:string;onSearch:(value:string)=>void;onReceived:()=>void}){return <div className="pz-stack"><label className="inventory-search">Search PRAs<input type="search" value={search} onChange={e=>onSearch(e.target.value)}/></label>{rows===undefined?<p role="status">Loading purchase receipt advices…</p>:<><div className="pz-table-scroll"><table className="ob-table"><thead><tr><th>Document</th><th>Expected date</th><th>Delivery to</th><th>Items due</th><th>Next Action</th></tr></thead><PagedTableBody label="sites and documents">{rows.map(r=><tr key={r.id}><td><strong>{r.number}</strong><small>{r.title}</small><small>{r.orderReference}</small></td><td>{day(r.expectedOn)}</td><td>{r.deliveryTo}</td><td>{r.lines.filter(l=>new Decimal(l.due).gt(0)).map(l=><div key={l.itemKey}><strong>{shown(l.due)} {l.unit}</strong><small>{l.name}</small></div>)}</td><td><PurchaseReceiving requestId={r.id} warehouses={warehouses} session={session} onReceived={onReceived}/></td></tr>)}</PagedTableBody></table></div>{!rows.length&&<p>No approved purchases are awaiting receipt.</p>}</>}</div>;}
+
+
+type Minimum={itemId:string;unit:string;minimum:string;version:number};
+function MinimumStock({warehouses,session,revision}:{warehouses:string[];session:Session;revision:number}){
+ const [positions,setPositions]=useState<(Position&{warehouse:string})[]>([]),[settings,setSettings]=useState<(Minimum&{warehouse:string})[]>([]),[drafts,setDrafts]=useState<Record<string,string>>({}),[search,setSearch]=useState(''),[warehouse,setWarehouse]=useState(''),[status,setStatus]=useState('all'),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
+ const key=(r:{warehouse:string;itemId:string;unit:string})=>JSON.stringify([r.warehouse,r.itemId,r.unit]);useUnsavedChanges(Object.keys(drafts).length>0);
+ async function load(){setBusy(true);setError('');try{const [overview,minimums]=await Promise.all([api<{positions:Record<string,Position[]>}>('/material-dispatches/stock-overview'),Promise.all(warehouses.map(async w=>{const v=await api<{settings:Minimum[]}>('/material-dispatches/minimum-stock?warehouse='+encodeURIComponent(w));return v.settings.map(r=>({...r,warehouse:w}));}))]);setPositions(Object.entries(overview.positions).flatMap(([w,rows])=>rows.map(r=>({...r,warehouse:w}))));setSettings(minimums.flat());}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ useEffect(()=>{void load();},[warehouses.join('|'),revision]);
+ const minimum=(r:{warehouse:string;itemId:string;unit:string})=>settings.find(v=>key(v)===key(r));const below=(r:Position&{warehouse:string})=>r.currentClosing!=null&&!!minimum(r)&&new Decimal(r.currentClosing).lt(minimum(r)!.minimum);
+ async function save(row:Position&{warehouse:string}){const value=drafts[key(row)];if(value===undefined)return;setBusy(true);setError('');try{await api('/material-dispatches/minimum-stock',{csrf:session.csrfToken,body:{warehouse:row.warehouse,itemId:row.itemId,unit:row.unit,minimum:value,version:minimum(row)?.version??0,requestKey:crypto.randomUUID(),reason:'Minimum closing quantity updated from Inventory settings'}});setDrafts(old=>{const next={...old};delete next[key(row)];return next;});setNotice('Minimum saved for '+row.itemId+' · '+row.warehouse+'. Stock quantities unchanged.');await load();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ const rows=positions.filter(r=>(!warehouse||r.warehouse===warehouse)&&`${r.itemId} ${r.description}`.toLowerCase().includes(search.toLowerCase())&&(status==='all'||status==='below'&&below(r)||status==='unset'&&!minimum(r))).sort((a,b)=>a.itemId.localeCompare(b.itemId,undefined,{numeric:true})||a.warehouse.localeCompare(b.warehouse));
+ return <section className="pz-panel pz-stack minimum-stock-page"><p>Set the minimum quantity per item, UOM and warehouse. Blank means no minimum is set.</p><div className="minimum-stock-filters"><label>Find an item<input type="search" placeholder="Item ID or description" value={search} onChange={e=>setSearch(e.target.value)}/></label><label>Warehouse<select value={warehouse} onChange={e=>setWarehouse(e.target.value)}><option value="">All warehouses</option>{warehouses.map(w=><option key={w}>{w}</option>)}</select></label><label>Status<select value={status} onChange={e=>setStatus(e.target.value)}><option value="all">All items</option><option value="below">Below minimum</option><option value="unset">Minimum not set</option></select></label><Button onClick={()=>{setSearch('');setWarehouse('');setStatus('all');}}>Clear filters</Button></div><div className="ob-section-title"><h2>Minimum balances</h2><small>{rows.length} warehouse / item rows</small></div>{error&&<p role="alert" className="form-error">{error}</p>}{notice&&<p role="status">{notice}</p>}<div className="pz-table-scroll minimum-stock-table"><table className="ob-table"><thead><tr><th>Item ID / description</th><th>Warehouse</th><th>UOM</th><th>Current closing</th><th>Minimum closing</th><th>Status</th><th>Next action</th></tr></thead><tbody>{rows.map(row=><tr key={key(row)}><td><strong>{row.itemId}</strong><small>{row.description}</small></td><td>{row.warehouse.replace(' warehouse','')}</td><td>{row.unit}</td><td>{shown(row.currentClosing)}</td><td><input aria-label={'Minimum '+row.itemId+' '+row.warehouse+' '+row.unit} type="number" min="0" step="0.001" value={drafts[key(row)]??minimum(row)?.minimum??''} placeholder="Not set" disabled={busy} onChange={e=>setDrafts({...drafts,[key(row)]:e.target.value})}/></td><td>{!minimum(row)?'Not set':row.currentClosing==null?'Closing unavailable':below(row)?'Below minimum':'At / above minimum'}</td><td><Button variant="secondary" disabled={busy||drafts[key(row)]===undefined||!/^\d+(?:\.\d{1,6})?$/.test(drafts[key(row)])} onClick={()=>void save(row)}>Save</Button></td></tr>)}</tbody></table></div>{busy&&<p role="status">Loading minimum settings…</p>}<p>Setting a minimum does not change stock, reserve material or create a purchase request.</p></section>;
+}
+
+function SiteLedger({drafts}:{drafts:Draft[]}){
+ const [search,setSearch]=useState(''),[selected,setSelected]=useState<Draft>(),[movement,setMovement]=useState<Movement>(),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ async function open(draft:Draft){setSelected(draft);setMovement(undefined);setBusy(true);setError('');try{setMovement(await api<Movement>('/material-dispatches/drafts/'+draft.id+'/movements'));}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ return <section className="pz-panel pz-stack">{!selected?<><label>Search site, IPO or item<input type="search" value={search} onChange={e=>setSearch(e.target.value)}/></label><div className="pz-table-scroll"><table className="ob-table"><thead><tr><th>Site / IPO</th><th>Warehouse</th><th>Material preparation</th><th>Action</th></tr></thead><PagedTableBody label="sites and documents">{drafts.filter(d=>`${d.snapshot.warehouse} ${d.snapshot.sites.map(s=>s.siteName+' '+s.ipo).join(' ')}`.toLowerCase().includes(search.toLowerCase())).map(d=><tr key={d.id}><td><strong>{d.snapshot.sites.map(s=>s.siteName).join(' · ')}</strong><small>{d.snapshot.sites.map(s=>s.ipo).filter(Boolean).join(' · ')}</small></td><td>{d.snapshot.warehouse}</td><td>{d.snapshot.parent?'Parent DO':d.snapshot.kind==='fixed'?'Fixed materials':'Variable materials'}<small>Version {d.version} · {day(d.created_at)}</small></td><td><Button onClick={()=>void open(d)}>View movements</Button></td></tr>)}</PagedTableBody></table></div>{!drafts.length&&<p>No saved material preparations are available.</p>}</>:<><Button onClick={()=>setSelected(undefined)}>Back to sites</Button><h2>{selected.snapshot.sites.map(s=>s.siteName).join(' · ')}</h2><p>{selected.snapshot.warehouse} · Actual issued and returned warehouse records for this preparation.</p>{error&&<p role="alert" className="form-error">{error}</p>}{busy?<p role="status">Loading movements…</p>:movement&&<><div className="pz-table-scroll"><table className="ob-table"><thead><tr><th>Item ID</th><th>Unit</th><th>Warehouse OUT</th><th>Verified IN</th><th>Outstanding custody</th></tr></thead><tbody>{movement.lines.map(l=><tr key={l.item_id+'|'+l.unit}><td>{l.item_id}</td><td>{l.unit}</td><td>{shown(l.issued)}</td><td>{shown(l.returned)}</td><td>{shown(l.outstanding)}</td></tr>)}</tbody></table></div><p>Outstanding custody includes site use and material still held; it is not a confirmed return.</p><div className="inventory-document-links">{movement.dispatches.map(d=><a key={d.id} href={'/api/material-dispatches/issued/'+d.id+'/document.pdf'} target="_blank" rel="noopener noreferrer">{d.number} · OUT · {day(d.created_at)}</a>)}{movement.receipts.map(d=><a key={d.id} href={'/api/material-dispatches/gate-passes/return/'+d.id+'/document.pdf'} target="_blank" rel="noopener noreferrer">{d.number} · IN · {day(d.created_at)}</a>)}</div></>}</>}</section>;
+}

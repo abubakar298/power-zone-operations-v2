@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["tests", "scripts", "web/assets.d.ts", "playwright.config.ts"],
+  "exclude": ["dist", "node_modules", ".rehearsal"]
+}

@@ -1,0 +1,12 @@
+packages:
+  - .
+overrides:
+  dompurify: 3.4.17
+  body-parser: 2.4.0
+allowBuilds:
+  esbuild: true
+  embedded-postgres: true
+  '@embedded-postgres/darwin-arm64': true
+  '@embedded-postgres/linux-x64': true
+  tesseract.js: false
+  core-js: false

@@ -1,0 +1,6 @@
+import{useState}from'react';import{api,type Session}from'../api.js';import{Button}from'../ui/Button.js';
+export function ProjectDocumentActions({record,session,onOpen,onPreview}:{record:any;session:Session;onOpen:(task:any)=>void;onPreview:()=>void}){
+ const[busy,setBusy]=useState(false),[error,setError]=useState('');
+ async function revise(){setBusy(true);setError('');try{const state=await api<any>(`/boqs/${record.id}/preparation`);if(state.canEdit){const result=await api<any>(`/boqs/${record.id}/edit-preparation`,{csrf:session.csrfToken,body:{}});onOpen({target:'newboq',draft_id:result.draftId});}else onOpen({...record.task,target:'newboq',reviseBoq:true});}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ return <div><div className="pz-action-row">{record.resource==='boq'?<><Button variant="neutral" onClick={onPreview}>Preview BOQ</Button><Button variant="secondary" loading={busy} disabled={record.current===false} onClick={()=>void revise()}>Revise BOQ</Button></>:['quotation','cni'].includes(record.resource)?<Button variant="secondary" disabled={record.current===false} onClick={()=>onOpen({...record.task,startQuotationRevision:true})}>Revise Quotation</Button>:<span className="pz-caption">—</span>}</div>{error&&<p role="alert" className="form-error">{error}</p>}</div>;
+}

@@ -1,0 +1,7 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {headsupRowsFromTable,parseHeadsupRows} from '../web/workspaces/headsup-reader.js';
+test('Excel heads-up headers populate rows and preserve leading zeros and absent branch code',()=>{assert.deepEqual(headsupRowsFromTable([['S no','Branch Code','Status','Vendor','Branch Name','System Size'],['1','152','Raised','Power Zone','Malir','20'],['2','','Raised','Power Zone','Shadiwal','35'],['','','','','','']]),[{branchCode:'0152',branchName:'Malir',solarKw:'20'},{branchCode:'',branchName:'Shadiwal',solarKw:'35'}]);});
+test('Screenshot row text retains missing code and exact received PV size',()=>{assert.deepEqual(parseHeadsupRows('1 2482 Raised Power Zone UBL Ameen Al Noor More, Karachi 25\n6 Raised Power Zone Shadiwal Branch, Lahore 35'),[{branchCode:'2482',branchName:'UBL Ameen Al Noor More, Karachi',solarKw:'25'},{branchCode:'',branchName:'Shadiwal Branch, Lahore',solarKw:'35'}]);});
+
+test('OCR serial digit mistaken for a letter does not contaminate the branch code',()=>{assert.equal(parseHeadsupRows('s 2771 Raised Power Zone Daska Road, Sialkot 30')[0].branchCode,'2771');});
+
+test('a status OCR error cannot drop a branch with a missing code',()=>{assert.deepEqual(parseHeadsupRows('| 6 | | Raced | Power Zone | Shadiwal Branch, Lahore | 35'),[{branchCode:'',branchName:'Shadiwal Branch, Lahore',solarKw:'35'}]);});

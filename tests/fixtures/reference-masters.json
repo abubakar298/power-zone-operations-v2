@@ -1,0 +1,3805 @@
+{
+  "sourceSha256": "c9a738a179b30b063f53e293af724ee3883cced83751856b5c0e9bd746d9d827",
+  "customers": [
+    {
+      "id": 0,
+      "name": "Demo Sites",
+      "shortCode": "DEMO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 1,
+      "name": "PowerZone",
+      "shortCode": "PZON",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 2,
+      "name": "Meezan Bank Limited",
+      "shortCode": "MBL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 3,
+      "name": "Bank Alfalah Limited",
+      "shortCode": "BAFL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 4,
+      "name": "Hafiz Farms",
+      "shortCode": "HAFA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 5,
+      "name": "United Bank Limited",
+      "shortCode": "UBL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 6,
+      "name": "Mr. Jehangir",
+      "shortCode": "JEHA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 7,
+      "name": "Mr. Murad",
+      "shortCode": "MURA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 8,
+      "name": "Glaxy Hotel & Rest House",
+      "shortCode": "GLHO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 9,
+      "name": "Mr. Irfan",
+      "shortCode": "IRFA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 10,
+      "name": "Kids Zone DHA Phase 8",
+      "shortCode": "KI8",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 11,
+      "name": "Mr. Abu Bakar",
+      "shortCode": "ABBA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 12,
+      "name": "Mr. Yousaf",
+      "shortCode": "YOUS",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 13,
+      "name": "Mr. Umer (Dr. Asha's Clinic)",
+      "shortCode": "UMER",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 14,
+      "name": "East Gate Industries",
+      "shortCode": "EAIN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 15,
+      "name": "Mr. Kamran Abid",
+      "shortCode": "KAAB",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 16,
+      "name": "Askari Bank Limited",
+      "shortCode": "ASKB",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 17,
+      "name": "Mr. Kamran Amir Khan",
+      "shortCode": "KAKA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 18,
+      "name": "Mr. Khizar",
+      "shortCode": "KHIZ",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 19,
+      "name": "Mr. Zahid S. Malik",
+      "shortCode": "ZAMA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 20,
+      "name": "Mr. Hafiz Shafiq (Rahimia Institute-Lahore)",
+      "shortCode": "HASH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 21,
+      "name": "Ghulam Mustafa",
+      "shortCode": "GHMU",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 22,
+      "name": "Mr. Abdul Rehman (Aashiyana Lights)",
+      "shortCode": "ABRE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 23,
+      "name": "Jawa Foods",
+      "shortCode": "JAFO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 24,
+      "name": "Mr. Saad Sultan (Nishat Dyeing)",
+      "shortCode": "SASU",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 25,
+      "name": "Mr. Khurram",
+      "shortCode": "KHUR",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 26,
+      "name": "Mr. Zafar Iqbal",
+      "shortCode": "ZAIQ",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 27,
+      "name": "Mr. Faizan",
+      "shortCode": "FAIZ",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 28,
+      "name": "Mr. Jamshaid",
+      "shortCode": "JAMS",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 29,
+      "name": "Allurey Events – Adda Plot (Mr. Faisal)",
+      "shortCode": "ALEV",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 30,
+      "name": "Osama Ahmad",
+      "shortCode": "OSAH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 31,
+      "name": "Mr. Amir Yaseen",
+      "shortCode": "AMYA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 32,
+      "name": "Mr. Junaid",
+      "shortCode": "JUNA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 33,
+      "name": "Smart Solar Solutions",
+      "shortCode": "SMSO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 34,
+      "name": "Mr. Nawaz (RN Scanner & Printers)",
+      "shortCode": "NAWA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 35,
+      "name": "Mr. Mohsin (Gilgit)",
+      "shortCode": "MOHS",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 36,
+      "name": "Arslan Butt",
+      "shortCode": "ARBU",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 37,
+      "name": "Mr. Usman Ahmad Mirza",
+      "shortCode": "USMI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 38,
+      "name": "Mr. Rizwan",
+      "shortCode": "RIZW",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 39,
+      "name": "Mr. Sheikh Furqan (Factory-Sadhoki)",
+      "shortCode": "SHFU",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 40,
+      "name": "Mr. Javaid Ali Builders",
+      "shortCode": "JABU",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 41,
+      "name": "Mr. Mohsin (Garden Town)",
+      "shortCode": "MOH2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 42,
+      "name": "Mr. Arbab",
+      "shortCode": "ARBA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 43,
+      "name": "Hardees",
+      "shortCode": "HARD",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 44,
+      "name": "Dr. Zain ul Abideen",
+      "shortCode": "ZAAB",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 45,
+      "name": "Mr. Aamir Shahzad",
+      "shortCode": "AASH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 46,
+      "name": "Mr. Sufyan",
+      "shortCode": "SUFY",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 47,
+      "name": "Mr. Altaf",
+      "shortCode": "ALTA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 48,
+      "name": "Mr. Hafeez",
+      "shortCode": "HAFE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 49,
+      "name": "Mr. Jawad Waseem",
+      "shortCode": "JAWA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 50,
+      "name": "Bata Shoes",
+      "shortCode": "BATA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 51,
+      "name": "Honda Showroom",
+      "shortCode": "HNDA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 52,
+      "name": "Ali Farms",
+      "shortCode": "ALIF",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 53,
+      "name": "Col. Saeed (Programmer Force)",
+      "shortCode": "SAEE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 54,
+      "name": "Mr. Ijaz",
+      "shortCode": "IJAZ",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 55,
+      "name": "Oasis Resort",
+      "shortCode": "OARE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 56,
+      "name": "Mr. Sanan Hayat (Greenage Power Solutions)",
+      "shortCode": "SAHA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 57,
+      "name": "Mr. Nashit Hussain (Multinet Pakistan Private Limited)",
+      "shortCode": "NAHU",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 58,
+      "name": "Mr. Saad Khan (Islamabad)",
+      "shortCode": "SAKH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 59,
+      "name": "Mr. Syed Shayan Jawaid (POWER PROFESSIONALS & ENGINEERS)",
+      "shortCode": "SHJA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 60,
+      "name": "Mr. Zahid Nagdha (Alpha College)",
+      "shortCode": "ZANA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 61,
+      "name": "Mr. Malik Sohail Abbas",
+      "shortCode": "MAAB",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 62,
+      "name": "Mr. Faiz Bhutta",
+      "shortCode": "FABH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 63,
+      "name": "Mr. M Kamran Khan",
+      "shortCode": "M2KH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 64,
+      "name": "Elite Renewables",
+      "shortCode": "ELRE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 65,
+      "name": "Mr. M Bilal Siddique",
+      "shortCode": "M2SI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 66,
+      "name": "Mr. Ashar Siddique",
+      "shortCode": "ASSI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 67,
+      "name": "Kia Motors (Home)",
+      "shortCode": "KIMO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 68,
+      "name": "Cakes & Bakes",
+      "shortCode": "CAKB",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 69,
+      "name": "Engr. Mansoor UL Hassan",
+      "shortCode": "MAHA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 70,
+      "name": "Choppers Salon",
+      "shortCode": "CHSA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 71,
+      "name": "Mr. Umar Sukhera",
+      "shortCode": "UMSU",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 72,
+      "name": "Mr. Irfan (DHA-6)",
+      "shortCode": "IRF2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 73,
+      "name": "Desol Energy (Karachi)",
+      "shortCode": "DEEN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 74,
+      "name": "Mr. Imran (Karachi)",
+      "shortCode": "IMRA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 75,
+      "name": "Mr. Hassan (Karachi)",
+      "shortCode": "HASS",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 76,
+      "name": "Mr. Irfan",
+      "shortCode": "IRF3",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 77,
+      "name": "Zayan Events (Adda Plot)",
+      "shortCode": "ZAEV",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 78,
+      "name": "Sapphire",
+      "shortCode": "SAPP",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 79,
+      "name": "Kami Studio (Layyah)",
+      "shortCode": "KAST",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 80,
+      "name": "Mr. Nadeem",
+      "shortCode": "NADE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 81,
+      "name": "Akbar Rai",
+      "shortCode": "AKRA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 82,
+      "name": "Maspro Energy Pvt. Ltd",
+      "shortCode": "MAEN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 83,
+      "name": "Mian Yousaf Salim",
+      "shortCode": "YOSA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 84,
+      "name": "Mr. Sheraz (AL-Nafey Poultry Farm)",
+      "shortCode": "SHER",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 85,
+      "name": "Mr. Mohsin (Karachi)",
+      "shortCode": "MOH3",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 86,
+      "name": "Mr. Nazeer Khan",
+      "shortCode": "NAKH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 87,
+      "name": "Mr. Usman Tauqir",
+      "shortCode": "USTA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 88,
+      "name": "Alpha College",
+      "shortCode": "ALCO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 89,
+      "name": "Habib Bank Limited",
+      "shortCode": "HBL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 90,
+      "name": "Dubai Islamic Bank",
+      "shortCode": "DIB",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 91,
+      "name": "Mr. Ahmad Khan (Solar Pulse)",
+      "shortCode": "AHKH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 92,
+      "name": "Mr. Idrees Shaikh",
+      "shortCode": "IDSH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 93,
+      "name": "Mr. Hasan Jafri",
+      "shortCode": "HAJA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 94,
+      "name": "Ali Farm-II",
+      "shortCode": "ALFA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 95,
+      "name": "Mr. Waheed (Poultry Farm)",
+      "shortCode": "WAHE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 96,
+      "name": "Mr. Aqeel Asghar",
+      "shortCode": "AQAS",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 97,
+      "name": "Mr. Wajih ul Haq Siddiqui",
+      "shortCode": "WASI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 98,
+      "name": "Mr. Abdul Hanan",
+      "shortCode": "ABHA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 99,
+      "name": "Shah Wilayat Public School",
+      "shortCode": "SHSC",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 100,
+      "name": "Mr. Miyan Zeeshan",
+      "shortCode": "MIZE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 101,
+      "name": "Azgard 9 - Unit III",
+      "shortCode": "AZII",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 102,
+      "name": "Mr. M Saad",
+      "shortCode": "M2SA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 103,
+      "name": "AL-Tibri Hostel",
+      "shortCode": "ALHO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 104,
+      "name": "Badar Engineering",
+      "shortCode": "BAEN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 105,
+      "name": "Christian Hospital (Tank City)",
+      "shortCode": "CHHO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 106,
+      "name": "Miss Anaya",
+      "shortCode": "ANAY",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 107,
+      "name": "Mr. Usama",
+      "shortCode": "USAM",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 108,
+      "name": "Syed Muhammad Ali",
+      "shortCode": "MUAL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 109,
+      "name": "Arham Zeeshan",
+      "shortCode": "ARZE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 110,
+      "name": "Mr. Owais Afzal",
+      "shortCode": "OWAF",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 111,
+      "name": "D International",
+      "shortCode": "DIIN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 112,
+      "name": "Mr. Saqib Javaid",
+      "shortCode": "SAJA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 113,
+      "name": "Material Plus Solutions",
+      "shortCode": "MASO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 114,
+      "name": "Mr. Mujtaba (Residence)",
+      "shortCode": "MUJT",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 115,
+      "name": "Mr. Khuram Shahnawaz",
+      "shortCode": "KHSH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 116,
+      "name": "AT Electricals",
+      "shortCode": "ATEL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 117,
+      "name": "Syed Hassan Raza Naqvi",
+      "shortCode": "HANA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 118,
+      "name": "Mr. Zaid (Flow Petroleum)",
+      "shortCode": "ZAID",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 119,
+      "name": "Mr. Jahanzaib Dar",
+      "shortCode": "JADA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 120,
+      "name": "Mr. Saleem Bloch",
+      "shortCode": "SABL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 121,
+      "name": "Mr. Rana Tariq sab",
+      "shortCode": "RATA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 122,
+      "name": "Mr. Sohail",
+      "shortCode": "SOHA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 123,
+      "name": "Mr. Naveed (Lake City)",
+      "shortCode": "NAVE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 124,
+      "name": "Mr. Nabeel Majeed",
+      "shortCode": "NAMA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 125,
+      "name": "Mr. Zubair",
+      "shortCode": "ZUBA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 126,
+      "name": "Mr. Muhammad Hassan Khan",
+      "shortCode": "MUKH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 127,
+      "name": "Morgan Energy Solutions",
+      "shortCode": "MOEN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 128,
+      "name": "Mr. Umair",
+      "shortCode": "UMAI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 129,
+      "name": "Mr. Nadeem",
+      "shortCode": "NAD2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 130,
+      "name": "Charania Renewables",
+      "shortCode": "CHRE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 131,
+      "name": "Engr Saqib Nawaz",
+      "shortCode": "SANA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 132,
+      "name": "US Apparel",
+      "shortCode": "USAP",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 133,
+      "name": "CATKIN Engineering",
+      "shortCode": "CAEN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 134,
+      "name": "Mr. Hassan Ali",
+      "shortCode": "HAAL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 135,
+      "name": "Mr. Nasir Ghani (Nixor College)",
+      "shortCode": "NAGH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 136,
+      "name": "Mr. Shahid Hussain Ansari (Grow Green Energy)",
+      "shortCode": "SHAN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 137,
+      "name": "Mr. Sohail Khattak",
+      "shortCode": "SOKH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 138,
+      "name": "Mr. Ali Nawaz (Genesys energy solution)",
+      "shortCode": "ALNA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 139,
+      "name": "Mr. Irfan (Sabzazar)",
+      "shortCode": "IRF4",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 140,
+      "name": "AK Builders",
+      "shortCode": "AKBU",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 141,
+      "name": "Al Baraka Bank (Pakistan) Limited",
+      "shortCode": "ABBL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 142,
+      "name": "Mr. Aslam Meher",
+      "shortCode": "ASME",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 143,
+      "name": "Wilshire Labs",
+      "shortCode": "WILA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 144,
+      "name": "Mr. Zafar Saleem",
+      "shortCode": "ZASA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 145,
+      "name": "Aghosh Homes (Alkhidmat)",
+      "shortCode": "AGHO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 146,
+      "name": "Bijli Bachao PVT Ltd",
+      "shortCode": "BIBA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 147,
+      "name": "Ankerio Salt Plant",
+      "shortCode": "ANPL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 148,
+      "name": "Mr. Abid (Karachi)",
+      "shortCode": "ABID",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 149,
+      "name": "Mr. Mujtaba Bloch",
+      "shortCode": "MUBL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 150,
+      "name": "Mr. Shahid Hussain Ansari",
+      "shortCode": "SHA2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 151,
+      "name": "Borjon",
+      "shortCode": "BORJ",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 152,
+      "name": "SunSage Private Limited",
+      "shortCode": "SUNS",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 153,
+      "name": "Mr. Saad",
+      "shortCode": "SAAD",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 154,
+      "name": "Mr. Umer Mumtaz",
+      "shortCode": "UMMU",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 155,
+      "name": "Mr. Ali",
+      "shortCode": "ALIX",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 156,
+      "name": "NRTC energies",
+      "shortCode": "NREN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 157,
+      "name": "Mr. Muhammad Ali (Sachal Engineering)",
+      "shortCode": "MUAL2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 158,
+      "name": "Elahi Energies",
+      "shortCode": "ELEN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 159,
+      "name": "Allied Bank Limited",
+      "shortCode": "ABL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 160,
+      "name": "Ocentra Engineering Services",
+      "shortCode": "OCSE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 161,
+      "name": "Col. Mohsin",
+      "shortCode": "MOH4",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 162,
+      "name": "Sialkot Mall",
+      "shortCode": "SIMA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 163,
+      "name": "Malik Traders",
+      "shortCode": "MATR",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 164,
+      "name": "Mr. Shahzad (Barki Lahore)",
+      "shortCode": "SHAH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 165,
+      "name": "Protech Solutions Pvt Ltd",
+      "shortCode": "PRSO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 166,
+      "name": "Mr. Faisal Noor (Ghalib House 597-A)",
+      "shortCode": "FANO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 167,
+      "name": "Mr. Rizwan",
+      "shortCode": "RIZ2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 168,
+      "name": "AF2 Embroidery",
+      "shortCode": "AFEM",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 169,
+      "name": "Mr. Talha Imran",
+      "shortCode": "TAIM",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 170,
+      "name": "Mr. Abdul Majid",
+      "shortCode": "ABMA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 171,
+      "name": "Mr. Ijaz",
+      "shortCode": "IJA2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 172,
+      "name": "Ali Gohar & Co. (D.I. Khan)",
+      "shortCode": "ALGO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 173,
+      "name": "Major Waseem",
+      "shortCode": "WASE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 174,
+      "name": "Mr. Khawar",
+      "shortCode": "KHAW",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 175,
+      "name": "Mr. Mansoor",
+      "shortCode": "MANS",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 176,
+      "name": "Iftikhar Ahmad & Co",
+      "shortCode": "IFAH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 177,
+      "name": "Mr. Ijaz",
+      "shortCode": "IJA3",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 178,
+      "name": "WENERGY International",
+      "shortCode": "WEIN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 179,
+      "name": "Techno-Control Corporation",
+      "shortCode": "TECO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 180,
+      "name": "Mr. Tariq Paracha C.O Kamran Paracha",
+      "shortCode": "TAPA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 181,
+      "name": "Mr. Amir",
+      "shortCode": "AMIR",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 182,
+      "name": "Sapphire Fibres Ltd",
+      "shortCode": "SAFI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 183,
+      "name": "Mr. Samiullah Riaz (My Renewable Energy)",
+      "shortCode": "SARI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 184,
+      "name": "K-Solar (Pvt) Ltd",
+      "shortCode": "KSOX",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 185,
+      "name": "Mr. Tanveer (Business Solution Service)",
+      "shortCode": "TANV",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 186,
+      "name": "UPS Power Solution",
+      "shortCode": "UPSO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 187,
+      "name": "Mian Nasir Azeem",
+      "shortCode": "NAAZ",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 188,
+      "name": "Mr. Zaid Ghani",
+      "shortCode": "ZAGH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 189,
+      "name": "Roofline (PVT) Ltd",
+      "shortCode": "ROOF",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 190,
+      "name": "Dr. Arif Jahan",
+      "shortCode": "ARJA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 191,
+      "name": "Qavi Engineering",
+      "shortCode": "QAEN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 192,
+      "name": "Mr. Malik Kamran",
+      "shortCode": "MAKA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 193,
+      "name": "ISKAAN Tech Labs (CBS Office)",
+      "shortCode": "ISTE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 194,
+      "name": "Mr. Junaid Ghani",
+      "shortCode": "JUGH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 195,
+      "name": "Babar Nizami",
+      "shortCode": "BANI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 196,
+      "name": "LogMate Engineering & Services",
+      "shortCode": "LOEN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 197,
+      "name": "Mr. Aurangzaib (AQUA BREW)",
+      "shortCode": "AURA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 198,
+      "name": "Solar Centrum Energy Pvt Ltd",
+      "shortCode": "SOCE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 199,
+      "name": "Mr. Syed Ali Hasnain (Leatherware Private Limited)",
+      "shortCode": "ALHA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 200,
+      "name": "SIALKOT INTERNATIONAL AIRPORT",
+      "shortCode": "SIAI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 201,
+      "name": "Mr. Nabeel Bari (The Solar Experts PVT Ltd.)",
+      "shortCode": "NABA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 202,
+      "name": "Mr. Munawar Khan (Prime Zone)",
+      "shortCode": "MUK2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 203,
+      "name": "Tahir Builders",
+      "shortCode": "TABU",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 204,
+      "name": "Famlen Mall",
+      "shortCode": "FAMA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 205,
+      "name": "APEX AUTO DROME (NHM Amusement World)",
+      "shortCode": "APDR",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 206,
+      "name": "Mr. Umer (Sialkot)",
+      "shortCode": "UME2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 207,
+      "name": "Mr. Faisal Farooq (DHA - KHI)",
+      "shortCode": "FAFA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 208,
+      "name": "Mr. Anam Ullah",
+      "shortCode": "ANUL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 209,
+      "name": "Mr. Sarfaraz Baloch",
+      "shortCode": "SABL2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 210,
+      "name": "Sakina Hussain haveli (Ugoki, Model Town, Sialkot)",
+      "shortCode": "SAHA2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 211,
+      "name": "Mr. Muzamil (BSS Plaza)",
+      "shortCode": "MUZA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 212,
+      "name": "Mr. Asif Rafiq (Duniya TV)",
+      "shortCode": "ASRA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 213,
+      "name": "Mughal e Azam",
+      "shortCode": "MUAZ",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 214,
+      "name": "Engr. Hafiz Muhammad Abdullah",
+      "shortCode": "HAAB",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 215,
+      "name": "Mr. Akhtar",
+      "shortCode": "AKHT",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 216,
+      "name": "Learning Alliance (C.O Elahi Energy)",
+      "shortCode": "LEAL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 217,
+      "name": "Arif Mehmood Hospital",
+      "shortCode": "ARHO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 218,
+      "name": "Mr. Junaid (Fish Farm - Gharo Sindh)",
+      "shortCode": "JUN2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 219,
+      "name": "Mr. Asghar",
+      "shortCode": "ASGH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 220,
+      "name": "Taheem Farms",
+      "shortCode": "TAFA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 221,
+      "name": "Mr. Ahmad",
+      "shortCode": "AHMA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 222,
+      "name": "Warehouse Arena, Defence Rd, Lahore",
+      "shortCode": "WAAR",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 223,
+      "name": "4S Energy, Multan",
+      "shortCode": "4SEN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 224,
+      "name": "PCSIR Fuel Research Center",
+      "shortCode": "PCSC",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 225,
+      "name": "Mr. Hassan Karachi",
+      "shortCode": "HAKA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 226,
+      "name": "Taha Muhammad Khan",
+      "shortCode": "TAKH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 227,
+      "name": "Mr. Farooq",
+      "shortCode": "FARO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 228,
+      "name": "Mr. Azam (CO Wajih UL HAQ)",
+      "shortCode": "AZAM",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 229,
+      "name": "Aoun Safder Jatt",
+      "shortCode": "AOJA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 230,
+      "name": "Mr. Imran Yousaf Zai",
+      "shortCode": "IMZA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 231,
+      "name": "Mr. Amir Chugtai (Powerzone)",
+      "shortCode": "AMCH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 232,
+      "name": "Mr. Zaigham (Ramzan & Sons)",
+      "shortCode": "ZAIG",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 233,
+      "name": "B CO Energy",
+      "shortCode": "B2EN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 234,
+      "name": "Mr. Athar",
+      "shortCode": "ATHA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 235,
+      "name": "Mr. Muzaffar Sheikh (AIG Sindh)",
+      "shortCode": "MUSH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 236,
+      "name": "Mr. Irfan Sajawal sb",
+      "shortCode": "IRSA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 237,
+      "name": "Mr. Umair Ashraf (GLOW LIGHT)",
+      "shortCode": "UMAS",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 238,
+      "name": "Hussain Mall ( Waseem Electronics), Sialkot",
+      "shortCode": "HUMA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 239,
+      "name": "Mr. Ishfaque Ahmed (Noorul Haq & Bros.)",
+      "shortCode": "ISAH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 240,
+      "name": "Mr. Shahid Baloch (CO Bakar sab)",
+      "shortCode": "SHBL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 241,
+      "name": "Sunshine Electro & Solar Power (PVT) Ltd",
+      "shortCode": "SUEP",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 242,
+      "name": "Mr. Umer Khan Thaheem (Thaheem International)",
+      "shortCode": "UMTH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 243,
+      "name": "Mr. Shahzad Malik",
+      "shortCode": "SHMA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 244,
+      "name": "Mr. Hannan (C.O Aatif Ali - UBL)",
+      "shortCode": "HANN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 245,
+      "name": "Mr. Kamran Paracha",
+      "shortCode": "KAPA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 246,
+      "name": "Mr. Asghar H. Siddiqui (ElekEn Associates)",
+      "shortCode": "ASSI2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 247,
+      "name": "Nestlé Pakistan",
+      "shortCode": "NSTL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 248,
+      "name": "Mr. Ibrar Rana (Model Town)",
+      "shortCode": "IBRA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 249,
+      "name": "Mr. Ather Masood",
+      "shortCode": "ATMA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 250,
+      "name": "Mr. Raja Zafar Alam (Power Security & Fire Services)",
+      "shortCode": "RAAL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 251,
+      "name": "Mr. Akbar Khan (Akbari Mandi Lahore)",
+      "shortCode": "AKKH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 252,
+      "name": "Mr. Arif (Karachi)",
+      "shortCode": "ARIF",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 253,
+      "name": "Grid Vance (Karachi)",
+      "shortCode": "GRVA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 254,
+      "name": "Mr. Mustaq",
+      "shortCode": "MUST",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 255,
+      "name": "Rajco Industry",
+      "shortCode": "RAIN",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 256,
+      "name": "Mr. Tahir (Blanco Restaurant)",
+      "shortCode": "TAHI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 257,
+      "name": "Mr. Salman Younas (Islamabad)",
+      "shortCode": "SAYO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 258,
+      "name": "Babies World (Allama Iqbal Town, Lahore)",
+      "shortCode": "BAWO",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 259,
+      "name": "Mr. Nazir Khan",
+      "shortCode": "NAKH2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 260,
+      "name": "Mr. Abrar Ul Haq (Sahara Trust)",
+      "shortCode": "ABHA2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 261,
+      "name": "Mr. Wamiq (C.O Saad walley)",
+      "shortCode": "WAMI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 262,
+      "name": "Mr. Zahid Azam (C.O Wajih Ul Haq - UBL)",
+      "shortCode": "ZAAZ",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 263,
+      "name": "Mr. Kaleem Sab (Saadi Town, Karachi)",
+      "shortCode": "KALE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 264,
+      "name": "Mr. Altaf (Lahore)",
+      "shortCode": "ALT2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 265,
+      "name": "Mr. Kamran",
+      "shortCode": "KAMR",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 266,
+      "name": "Mr. Abdul Wahab",
+      "shortCode": "ABWA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 267,
+      "name": "Daniyal",
+      "shortCode": "DANI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 268,
+      "name": "Mr. Mohsin (Karachi)",
+      "shortCode": "MOH5",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 269,
+      "name": "Flosun Private Ltd",
+      "shortCode": "FLOS",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 270,
+      "name": "Mr. Agif Shah (Alliance Energy System)",
+      "shortCode": "AGSH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 271,
+      "name": "Mr. Ali Farooq (Skylit Power)",
+      "shortCode": "ALFA2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 272,
+      "name": "Safemix",
+      "shortCode": "SAFE",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 273,
+      "name": "Mr. Asif Niyaz",
+      "shortCode": "ASNI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 274,
+      "name": "Mr. Ali Khalid Ghaznavi (C.O UBL)",
+      "shortCode": "ALGH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 275,
+      "name": "Bilal Mughal Farms",
+      "shortCode": "BIFA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 276,
+      "name": "Smart Power System Pvt Ltd",
+      "shortCode": "SMSY",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 277,
+      "name": "Dr. Zahid Shakoor (C.O Abdullah Fakhar)",
+      "shortCode": "ZASH",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 278,
+      "name": "Mr. Gillani (Ghani Gas)",
+      "shortCode": "GILL",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 279,
+      "name": "Mr. Amir Yaseen",
+      "shortCode": "AMY2",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 280,
+      "name": "Ch. Muhammad Ikram & Co",
+      "shortCode": "MUIK",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 281,
+      "name": "Colonel Majid (DHA-6, Lahore)",
+      "shortCode": "MAJI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 282,
+      "name": "Mr. Sultan Haider (TriacPower)",
+      "shortCode": "SUHA",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 283,
+      "name": "Mr. Mubin (Innovative Engineering and Services Pvt. Ltd)",
+      "shortCode": "MUBI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 284,
+      "name": "Garibsons (Pvt.) Ltd",
+      "shortCode": "GARI",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "id": 285,
+      "name": "Mr. Hammad",
+      "shortCode": "HAMM",
+      "contactPerson": "",
+      "phone": "",
+      "email": "",
+      "address": "",
+      "status": "Active",
+      "notes": ""
+    }
+  ],
+  "sites": [
+    {
+      "id": 1,
+      "customerId": 2,
+      "customerName": "Meezan Bank Limited",
+      "name": "Raiwind Road 0128",
+      "code": "0128",
+      "location": "",
+      "status": "Active"
+    },
+    {
+      "id": 2,
+      "customerId": 3,
+      "customerName": "Bank Alfalah Limited",
+      "name": "Skardu -2520",
+      "code": "2520",
+      "location": "",
+      "status": "Active"
+    },
+    {
+      "id": 3,
+      "customerId": 2,
+      "customerName": "Meezan Bank Limited",
+      "name": "Fasb 5858",
+      "code": "5858",
+      "location": "",
+      "status": "Active"
+    },
+    {
+      "id": 4,
+      "customerId": 3,
+      "customerName": "Bank Alfalah Limited",
+      "name": "jatli 5850",
+      "code": "5850",
+      "location": "",
+      "status": "Active"
+    }
+  ],
+  "brands": [
+    {
+      "category": "Solar Panel",
+      "name": "Jinko",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Solar Panel",
+      "name": "LONGi",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Solar Panel",
+      "name": "Canadian Solar",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Solar Panel",
+      "name": "Trina",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Solar Panel",
+      "name": "Risen",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Solar Panel",
+      "name": "Astronergy (ASTRO)",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Solar Panel",
+      "name": "Any of the Above",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Inverter",
+      "name": "Chint Power",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Inverter",
+      "name": "Sinexcel",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Inverter",
+      "name": "Aim Power",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Inverter",
+      "name": "Any of the Above",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Battery & BMS",
+      "name": "Chint Power",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Battery & BMS",
+      "name": "Aim Power",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Battery & BMS",
+      "name": "Any of the Above",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Cable",
+      "name": "Pakistan Cables",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Cable",
+      "name": "Fast Cables",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Cable",
+      "name": "GM Cables",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Cable",
+      "name": "Newage Cables",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Cable",
+      "name": "Any of the Above",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Switchgear",
+      "name": "CHINT",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Switchgear",
+      "name": "TOMZN",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Switchgear",
+      "name": "GADA",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Switchgear",
+      "name": "Schneider",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Switchgear",
+      "name": "ABB",
+      "status": "Active",
+      "notes": ""
+    },
+    {
+      "category": "Switchgear",
+      "name": "Any of the Above",
+      "status": "Active",
+      "notes": ""
+    }
+  ],
+  "rates": [
+    {
+      "key": "Solar PV Modules",
+      "unit": "W",
+      "rate": "39.0",
+      "status": "Active",
+      "notes": "Current buying rate"
+    },
+    {
+      "key": "Structure - L1",
+      "unit": "W",
+      "rate": "10.0",
+      "status": "Active",
+      "notes": "Per installed PV watt"
+    },
+    {
+      "key": "Structure - L2",
+      "unit": "W",
+      "rate": "10.0",
+      "status": "Active",
+      "notes": "Per installed PV watt"
+    },
+    {
+      "key": "Structure - L3",
+      "unit": "W",
+      "rate": "10.0",
+      "status": "Active",
+      "notes": "Per installed PV watt"
+    },
+    {
+      "key": "Structure - Elevated",
+      "unit": "W",
+      "rate": "20.0",
+      "status": "Active",
+      "notes": "Per installed PV watt"
+    },
+    {
+      "key": "AC & DC Boxes",
+      "unit": "No.",
+      "rate": "50000.0",
+      "status": "Active",
+      "notes": "Qty 2 = PKR 100,000 combined up to 35kW"
+    },
+    {
+      "key": "Labour",
+      "unit": "W",
+      "rate": "5.0",
+      "status": "Active",
+      "notes": "Per installed PV watt"
+    },
+    {
+      "key": "Delivery",
+      "unit": "W",
+      "rate": "3.0",
+      "status": "Active",
+      "notes": "Per installed PV watt"
+    },
+    {
+      "key": "Earthing Bore",
+      "unit": "No.",
+      "rate": "45000.0",
+      "status": "Active",
+      "notes": "2 standard bores"
+    },
+    {
+      "key": "6mm² DC Cable Red",
+      "unit": "m",
+      "rate": "420.0",
+      "status": "Needs Rate",
+      "notes": ""
+    },
+    {
+      "key": "6mm² DC Cable Black",
+      "unit": "m",
+      "rate": "420.0",
+      "status": "Needs Rate",
+      "notes": ""
+    },
+    {
+      "key": "2.5mm² Earthing Cable",
+      "unit": "m",
+      "rate": "193.0",
+      "status": "Needs Rate",
+      "notes": ""
+    },
+    {
+      "key": "6mm² Earthing Cable",
+      "unit": "m",
+      "rate": "380.0",
+      "status": "Needs Rate",
+      "notes": ""
+    },
+    {
+      "key": "10mm² Earthing Cable",
+      "unit": "m",
+      "rate": "665.0",
+      "status": "Needs Rate",
+      "notes": ""
+    },
+    {
+      "key": "16mm² 4C AC Cable",
+      "unit": "m",
+      "rate": "3350.0",
+      "status": "Needs Rate",
+      "notes": ""
+    },
+    {
+      "key": "25mm² 4C AC Cable",
+      "unit": "m",
+      "rate": "5500.0",
+      "status": "Needs Rate",
+      "notes": ""
+    },
+    {
+      "key": "DC Breaker",
+      "unit": "No.",
+      "rate": "4950.0",
+      "status": "Needs Rate",
+      "notes": "Roof + inverter room"
+    },
+    {
+      "key": "DC SPD",
+      "unit": "No.",
+      "rate": "10500.0",
+      "status": "Needs Rate",
+      "notes": "Roof DC box"
+    },
+    {
+      "key": "DC Fuse with Holder",
+      "unit": "No.",
+      "rate": "2900.0",
+      "status": "Needs Rate",
+      "notes": "Roof DC box"
+    },
+    {
+      "key": "100A 4P MCCB",
+      "unit": "No.",
+      "rate": "8800.0",
+      "status": "Needs Rate",
+      "notes": ""
+    },
+    {
+      "key": "63A 4P MCB",
+      "unit": "No.",
+      "rate": "2640.0",
+      "status": "Needs Rate",
+      "notes": ""
+    },
+    {
+      "key": "100A Rotary Changeover with Box",
+      "unit": "No.",
+      "rate": "25150",
+      "status": "Needs Rate",
+      "notes": "Single and double inverter"
+    },
+    {
+      "key": "Unused - Multiple-Inverter Changeover",
+      "unit": "No.",
+      "rate": null,
+      "status": "Inactive",
+      "notes": "Use 100A Rotary Changeover with Box instead"
+    },
+    {
+      "key": "AC SPD",
+      "unit": "No.",
+      "rate": "11000.0",
+      "status": "Needs Rate",
+      "notes": ""
+    },
+    {
+      "key": "Misc. Accessories",
+      "unit": "LS",
+      "rate": "50000.0",
+      "status": "Active",
+      "notes": "MC4s, pipes, ducts, glands, thimbles, shrugs, etc."
+    },
+    {
+      "key": "Extra Smart Meter",
+      "unit": "No.",
+      "rate": "50000.0",
+      "status": "Active",
+      "notes": "AC coupling / grid-tied inverter / genset monitoring"
+    },
+    {
+      "key": "Genset Synchronisation with Battery SOC",
+      "unit": "LS",
+      "rate": "50000.0",
+      "status": "Active",
+      "notes": "Optional integration"
+    },
+    {
+      "key": "HYB-3P-010",
+      "unit": "No.",
+      "rate": "317884.0",
+      "status": "Active",
+      "notes": "10 kW Hybrid Inverter — landed cost excl. GST"
+    },
+    {
+      "key": "HYB-3P-012",
+      "unit": "No.",
+      "rate": "363076.0",
+      "status": "Active",
+      "notes": "12 kW Hybrid Inverter — landed cost excl. GST"
+    },
+    {
+      "key": "HYB-3P-015",
+      "unit": "No.",
+      "rate": "380014.0",
+      "status": "Active",
+      "notes": "15 kW Hybrid Inverter — landed cost excl. GST"
+    },
+    {
+      "key": "HYB-3P-020",
+      "unit": "No.",
+      "rate": "412144.0",
+      "status": "Active",
+      "notes": "20 kW Hybrid Inverter — landed cost excl. GST"
+    },
+    {
+      "key": "BAT-HV-05 KW WO BMS",
+      "unit": "No.",
+      "rate": "231962.0",
+      "status": "Active",
+      "notes": "5 kWh Battery Module — without BMS; landed cost excl. GST"
+    },
+    {
+      "key": "CH-BMS-HV",
+      "unit": "No.",
+      "rate": "158996.0",
+      "status": "Active",
+      "notes": "HV BMS — maximum 4 battery modules per BMS; landed cost excl. GST"
+    }
+  ],
+  "rules": [
+    {
+      "key": "engineering-4",
+      "group": "PV / Strings",
+      "setting": "First string upper limit (panels)",
+      "value": "14.0",
+      "notes": "1–14 panels = 1 string"
+    },
+    {
+      "key": "engineering-5",
+      "group": "PV / Strings",
+      "setting": "Additional panels per string",
+      "value": "15.0",
+      "notes": "Then add 1 string for every additional 15 panels: 15–29 = 2, 30–44 = 3, etc."
+    },
+    {
+      "key": "engineering-6",
+      "group": "Battery",
+      "setting": "Battery module size (kWh)",
+      "value": "5.0",
+      "notes": "Battery Modules = Total Battery Capacity ÷ this value"
+    },
+    {
+      "key": "engineering-7",
+      "group": "Battery",
+      "setting": "Maximum modules per BMS",
+      "value": "4.0",
+      "notes": "BMS Qty = ROUNDUP(Battery Modules ÷ this value)"
+    },
+    {
+      "key": "engineering-8",
+      "group": "Battery",
+      "setting": "Maximum battery per inverter (kWh)",
+      "value": "60.0",
+      "notes": "Design limit per inverter"
+    },
+    {
+      "key": "engineering-9",
+      "group": "AC Cable - Single",
+      "setting": "16mm² 4C AC Cable total (m)",
+      "value": "30.0",
+      "notes": "Single inverter configurations"
+    },
+    {
+      "key": "engineering-10",
+      "group": "AC Cable - Single",
+      "setting": "25mm² 4C AC Cable total (m)",
+      "value": "0.0",
+      "notes": "Single inverter configurations"
+    },
+    {
+      "key": "engineering-11",
+      "group": "AC Cable - Dual",
+      "setting": "16mm² 4C termination per inverter (m)",
+      "value": "7.5",
+      "notes": "Dual inverter total = this value × 2"
+    },
+    {
+      "key": "engineering-12",
+      "group": "AC Cable - Dual",
+      "setting": "25mm² 4C common connection (m)",
+      "value": "20.0",
+      "notes": "Combined supply connection to client load panel"
+    },
+    {
+      "key": "engineering-13",
+      "group": "Earthing",
+      "setting": "Standard earthing bores (No.)",
+      "value": "2.0",
+      "notes": "Automatically budgeted for every project"
+    },
+    {
+      "key": "engineering-14",
+      "group": "AC Protection - Single",
+      "setting": "63A 4P MCB (No.)",
+      "value": "2.0",
+      "notes": "1 grid input + 1 inverter output"
+    },
+    {
+      "key": "engineering-15",
+      "group": "AC Protection - Single",
+      "setting": "100A 4P MCCB (No.)",
+      "value": "0.0",
+      "notes": "No common 100A MCCB for single inverter"
+    },
+    {
+      "key": "engineering-16",
+      "group": "AC Protection - Dual",
+      "setting": "63A 4P MCB (No.)",
+      "value": "4.0",
+      "notes": "2 grid input + 2 inverter output"
+    },
+    {
+      "key": "engineering-17",
+      "group": "AC Protection - Dual",
+      "setting": "100A 4P MCCB (No.)",
+      "value": "2.0",
+      "notes": "1 common grid input + 1 common output"
+    },
+    {
+      "key": "engineering-18",
+      "group": "Common Protection",
+      "setting": "100A Rotary Changeover with Box (No.)",
+      "value": "1.0",
+      "notes": "Every configuration"
+    },
+    {
+      "key": "engineering-19",
+      "group": "Common Protection",
+      "setting": "AC SPD (No.)",
+      "value": "1.0",
+      "notes": "Every configuration"
+    },
+    {
+      "key": "engineering-20",
+      "group": "Boxes",
+      "setting": "AC & DC Boxes (No.)",
+      "value": "2.0",
+      "notes": "Every configuration, including 2×20 kW"
+    },
+    {
+      "key": "engineering-21",
+      "group": "Accessories",
+      "setting": "Misc. Accessories (LS)",
+      "value": "1.0",
+      "notes": "Every project"
+    },
+    {
+      "key": "engineering-22",
+      "group": "DC Protection",
+      "setting": "DC Breakers per string",
+      "value": "2.0",
+      "notes": "1 roof + 1 inverter-room breaker per string"
+    },
+    {
+      "key": "engineering-23",
+      "group": "DC Protection",
+      "setting": "DC SPD per string",
+      "value": "1.0",
+      "notes": "Roof DC box"
+    },
+    {
+      "key": "engineering-24",
+      "group": "DC Protection",
+      "setting": "DC Fuse with Holder per string",
+      "value": "1.0",
+      "notes": "Roof DC box"
+    }
+  ],
+  "inverters": [
+    {
+      "configuration": "10 kW",
+      "totalKw": 10.0,
+      "sku": "HYB-3P-010",
+      "quantity": 1.0
+    },
+    {
+      "configuration": "12 kW",
+      "totalKw": 12.0,
+      "sku": "HYB-3P-012",
+      "quantity": 1.0
+    },
+    {
+      "configuration": "15 kW",
+      "totalKw": 15.0,
+      "sku": "HYB-3P-015",
+      "quantity": 1.0
+    },
+    {
+      "configuration": "20 kW",
+      "totalKw": 20.0,
+      "sku": "HYB-3P-020",
+      "quantity": 1.0
+    },
+    {
+      "configuration": "2×15 kW",
+      "totalKw": 30.0,
+      "sku": "HYB-3P-015",
+      "quantity": 2.0
+    },
+    {
+      "configuration": "2×20 kW",
+      "totalKw": 40.0,
+      "sku": "HYB-3P-020",
+      "quantity": 2.0
+    }
+  ],
+  "classifications": [
+    {
+      "phase": "Solar Panels",
+      "epcCategory": "",
+      "itemRule": "Solar PV Modules",
+      "notes": "Qty = Panels × Panel Wattage (W)"
+    },
+    {
+      "phase": "Structure",
+      "epcCategory": "",
+      "itemRule": "Selected Structure",
+      "notes": "Qty = installed PV watts; Rate Master key = Structure - selected type"
+    },
+    {
+      "phase": "BESS",
+      "epcCategory": "",
+      "itemRule": "Hybrid Inverter / Battery Module / HV BMS",
+      "notes": "Battery SKU = BAT-HV-05 KW WO BMS; BMS SKU = CH-BMS-HV"
+    },
+    {
+      "phase": "EPC",
+      "epcCategory": "Electrical Labour",
+      "itemRule": "Labour",
+      "notes": "Qty = installed PV watts"
+    },
+    {
+      "phase": "EPC",
+      "epcCategory": "Earthing Cost",
+      "itemRule": "Earthing Bore",
+      "notes": "Earthing Cost category contains bores only"
+    },
+    {
+      "phase": "EPC",
+      "epcCategory": "Deliveries",
+      "itemRule": "Delivery",
+      "notes": "Qty = installed PV watts"
+    },
+    {
+      "phase": "EPC",
+      "epcCategory": "Installation Cost",
+      "itemRule": "Remaining installation materials & integration",
+      "notes": "Includes cables, protection, switchgear, boxes, accessories, smart meter and genset synchronisation"
+    }
+  ]
+}

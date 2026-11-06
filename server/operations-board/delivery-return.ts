@@ -1,0 +1,11 @@
+import {HttpError} from '../http/errors.js';
+import {siteBucket,type WorkflowSite} from './workflow.js';
+export type DeliveryReturnInput={scope:'full'|'partial';date?:string;dateUnknown:boolean;warehouse:string;reference:string;reason:string};
+export function recordDeliveryReturn(site:WorkflowSite,input:DeliveryReturnInput,now:string):WorkflowSite{
+ if(siteBucket(site)==='completed'||site.qcJob||Object.keys(site.qc??{}).length)throw new HttpError(409,'A site with recorded installation needs Management review before reversing delivery.');
+ if(!(site.stage==='delivered'||site.stage==='awaiting'))throw new HttpError(409,'Record a delivery attempt before recording returned material.');
+ if(input.dateUnknown?!!input.date:!input.date)throw new HttpError(422,'Enter the return date or choose Date unknown.');
+ if(input.date&&input.date>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now)))throw new HttpError(422,'Return date cannot be in the future.');
+ const returned={...input,date:input.date??null,recordedAt:now,inventoryStatus:'Receipt verification required',priorDeliveryDate:site.deliveryDate??null,priorDispatchDate:site.dispatchDate??null,priorDeliveries:site.deliveries??[],priorPlanningBatches:site.planningBatches};
+ return {...site,stage:input.scope==='full'?'received':'awaiting',completed:false,partial:input.scope==='partial',deliveryDate:input.scope==='full'?undefined:site.deliveryDate,deliveryRecordedAt:input.scope==='full'?undefined:site.deliveryRecordedAt,dispatchDate:undefined,planSavedAt:undefined,stageStartedAt:now,deliveries:input.scope==='full'?[]:site.deliveries,planningBatches:[],deliveryReturns:[...(site.deliveryReturns??[]),returned],history:[...site.history,{date:now,description:`${input.scope==='full'?'All material returned; nothing delivered':'Part of the delivery returned'} · ${input.date??'Date unknown'} · ${input.reason}. Inventory receipt must be verified separately.`}],accounts:[...site.accounts,{id:`${site.id}:delivery-return:${(site.deliveryReturns?.length??0)+1}`,type:'Delivery returned',date:now,ipo:site.ipo,site:site.name,returnDate:input.date??null,scope:input.scope,description:input.reason,stockPosted:false}]};
+}

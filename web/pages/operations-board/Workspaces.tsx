@@ -1,0 +1,24 @@
+import {useEffect,useState} from 'react';
+import {api,type Session} from '../../api.js';
+import {Button} from '../../ui/Button.js';
+import {Field} from '../../ui/Field.js';
+import {Editor,Section,useSave} from './forms.js';
+import {day,type Access,type Vendor} from './types.js';
+import {targetStageIds,targetLabels} from '../../../shared/operations-stages.js';
+type TargetsData={version:number;values:Partial<Record<typeof targetStageIds[number],{amount:number;unit:'hours'|'days'}|null>>};
+export function Targets({session,access}:{session:Session;access:Access}){
+ const [data,setData]=useState<TargetsData>(),[error,setError]=useState(''),[editing,setEditing]=useState(false);
+ useEffect(()=>{void api<TargetsData>('/operations-board/targets').then(v=>{setData(v);setEditing(v.version===0&&['owner','head'].includes(access.kind));}).catch(e=>setError(e.message));},[]);
+ return <div className="pz-stack"><div className="ob-page-title"><div><h1>Stage targets</h1><p>Allowances for stage progress and original documents.</p></div>{data&&!editing&&['owner','head'].includes(access.kind)&&<Button variant="neutral" onClick={()=>setEditing(true)}>Edit targets</Button>}</div>{error&&<p role="alert" className="form-error">{error}</p>}{data?<TargetForm key={data.version+':'+editing} session={session} data={data} editing={editing} onCancel={()=>setEditing(false)} onSaved={value=>{setData(value);setEditing(false);}}/>:<p role="status">Loading stage targets…</p>}</div>;
+}
+function TargetForm({session,data,editing,onSaved,onCancel}:{session:Session;data:TargetsData;editing:boolean;onSaved:(v:TargetsData)=>void;onCancel:()=>void}){
+ const [amounts,setAmounts]=useState(()=>Object.fromEntries(targetStageIds.map(id=>[id,data.values[id]?.amount?.toString()??'']))),[units,setUnits]=useState(()=>Object.fromEntries(targetStageIds.map(id=>[id,data.values[id]?.unit??'hours']))),[reason,setReason]=useState(''),[dirty,setDirty]=useState(false),post=useSave(session);
+ const table=<div className="pz-table-scroll"><table className="ob-table ob-target-table"><thead><tr><th>Project</th><th>Stage</th><th>Allowance</th><th>Unit</th></tr></thead><tbody>{targetStageIds.map(id=><tr key={id}><td>{targetLabels[id].group}</td><td>{targetLabels[id].label}</td><td>{editing?<input type="number" aria-label={`${targetLabels[id].label} allowance`} value={amounts[id]} min="0.01" step="any" placeholder="Not set" onChange={e=>{setAmounts({...amounts,[id]:e.target.value});setDirty(true);}}/>:data.values[id]?.amount??'Not set'}</td><td>{editing?<select aria-label={`${targetLabels[id].label} unit`} value={units[id]} onChange={e=>{setUnits({...units,[id]:e.target.value as "hours"|"days"});setDirty(true);}}><option value="hours">Hours</option><option value="days">Days</option></select>:data.values[id]?.unit??'—'}</td></tr>)}</tbody></table></div>;
+ return <Section title="Target allowances">{editing?<Editor dirty={dirty} onCancel={onCancel} onSubmit={()=>void post.save<TargetsData>('/operations-board/targets',{version:data.version,reason,values:Object.fromEntries(targetStageIds.map(id=>[id,amounts[id]?{amount:Number(amounts[id]),unit:units[id]}:null]))},onSaved)} busy={post.busy} error={post.error} label="Save targets" {...(data.version?{reason,onReason:(v:string)=>{setReason(v);setDirty(true);}}:{})}>{table}<p className="pz-caption">Leave an allowance blank when no target is set.</p></Editor>:table}</Section>;
+}
+export function Alerts({onOpen}:{onOpen:(id:string)=>void}){
+ const [data,setData]=useState<{sites:{id:string;site:string;ipo:string;blockers:{id:string;reason:string;stage:string}[];delays:{id:string;stage:string;due:string;hoursOverdue:number}[]}[]}>(),[error,setError]=useState('');
+ async function load(){setError('');try{setData(await api<NonNullable<typeof data>>('/operations-board/alerts'));}catch(e){setError((e as Error).message);}}
+ useEffect(()=>{void load();},[]);
+ return <div className="pz-stack"><div className="ob-page-title"><div><h1>Alerts</h1><p>One case per site · blockers and overdue stages.</p></div></div>{error&&<p role="alert" className="form-error">{error}</p>}{error?<Section title="Alerts unavailable"><p>Site alerts could not be loaded. Try again to verify the current position.</p><Button variant="primary" onClick={()=>void load()}>Try again</Button></Section>:!data?<p role="status">Loading site alerts…</p>:data?.sites.length?data.sites.map(s=><Section key={s.id} title={s.site} action={<Button variant="secondary" onClick={()=>onOpen(s.id)}>Open site</Button>}><small>{s.ipo}</small>{s.blockers.map(b=><div className="ob-blocker" key={b.id}><strong>{b.reason}</strong><small>{b.stage}</small></div>)}{s.delays.map(d=><p key={d.id}>{d.stage} · {d.hoursOverdue} hours overdue<small>Due {day(d.due)}</small></p>)}</Section>):<Section title="No active alerts"><p>There are no recorded blockers or overdue targets for your assigned sites.</p></Section>}</div>;
+}

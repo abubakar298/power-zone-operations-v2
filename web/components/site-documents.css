@@ -1,0 +1,32 @@
+/* Primary line first; secondary text sits underneath without moving neighbours. */
+.site-documents-table td{vertical-align:top}
+.site-documents-table td>strong{display:block;min-height:1.5rem}
+.site-documents-table td>small{display:block;color:var(--pz-muted)}
+.site-documents-actions{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px}
+.site-documents-actions .evidence-preview{display:inline-flex}
+.site-documents-group{display:grid;gap:10px;padding:12px 0;border-top:1px solid var(--pz-border)}
+.site-documents-group:first-of-type{border-top:0;padding-top:0}
+.site-documents-group-heading strong{display:block}
+.site-documents-group-heading small{color:var(--pz-muted)}
+.site-documents-pictures{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.site-documents-picture{display:grid;gap:6px;align-content:start;padding:10px;border:1px solid var(--pz-border);border-radius:10px;min-width:0}
+.site-documents-picture>small{overflow-wrap:anywhere;color:var(--pz-muted)}
+.invoice-records-table td{vertical-align:top}
+.invoice-records-table td>strong{display:block;min-height:1.5rem;white-space:nowrap}
+.invoice-records-table .site-documents-actions,.site-documents-table .site-documents-actions{flex-wrap:nowrap}
+.invoice-records-table .site-documents-actions .pz-button,.site-documents-table .site-documents-actions .pz-button{white-space:nowrap}
+.invoice-records-table td>small{display:block;color:var(--pz-muted)}
+.invoice-record-form{display:grid;gap:12px;margin-top:12px;padding:16px;border:1px solid var(--pz-border);border-radius:10px}
+.invoice-flag{color:var(--pz-danger);font-weight:600}
+@media(max-width:700px){.site-documents-pictures{grid-template-columns:1fr}}
+/* Wide record dialogs: the window never scrolls sideways; only a table may, inside its own box. */
+.accounts-record-dialog--wide{width:min(1180px,calc(100vw - 32px))}
+.accounts-record-dialog--wide .accounts-dialog-body{overflow-x:hidden}
+.accounts-record-dialog--wide .accounts-dialog-body>*{min-width:0}
+.accounts-record-dialog--wide .pz-table-scroll{max-width:100%;overflow-x:auto}
+.invoice-review-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.invoice-review-summary>section{min-width:0;padding:20px;border:1px solid var(--pz-border);border-radius:12px}
+.invoice-review-summary h3{font-size:14px;font-weight:600;margin:0 0 12px}
+.invoice-review-summary p{margin:0 0 6px;overflow-wrap:anywhere}
+/* Smaller screens: action buttons wrap within their cell so the invoice table fits. */
+@media(max-width:1280px){.invoice-records-table .site-documents-actions{flex-wrap:wrap}.invoice-records-table td>strong{white-space:normal;overflow-wrap:anywhere}}

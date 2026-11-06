@@ -1,0 +1,11 @@
+ALTER TABLE survey_drafts ADD COLUMN base_revision_id uuid REFERENCES boq_revisions(id);
+ALTER TABLE survey_drafts ADD COLUMN revision_reason text NOT NULL DEFAULT '';
+ALTER TABLE boq_revisions ADD COLUMN revision_reason text NOT NULL DEFAULT 'Initial BOQ';
+CREATE TABLE boq_draft_finalizations(draft_id uuid PRIMARY KEY REFERENCES survey_drafts(id), revision_id uuid UNIQUE NOT NULL REFERENCES boq_revisions(id));
+INSERT INTO boq_draft_finalizations SELECT b.draft_id,r.id FROM boqs b JOIN boq_revisions r ON r.boq_id=b.id AND r.revision=0;
+CREATE TABLE boq_review_submissions(id uuid PRIMARY KEY,draft_id uuid NOT NULL REFERENCES survey_drafts(id),draft_version integer NOT NULL,base_revision_id uuid REFERENCES boq_revisions(id),revision_reason text NOT NULL DEFAULT '',snapshot jsonb NOT NULL,fingerprint text NOT NULL,submitted_by uuid NOT NULL REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(draft_id,draft_version));
+CREATE TABLE boq_review_decisions(submission_id uuid PRIMARY KEY REFERENCES boq_review_submissions(id),outcome text NOT NULL CHECK(outcome IN ('Approved','Changes requested')),comments text NOT NULL,reviewed_by uuid NOT NULL REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),CHECK(outcome='Approved' OR length(trim(comments))>0));
+CREATE INDEX boq_review_draft ON boq_review_submissions(draft_id,created_at DESC);
+CREATE TRIGGER immutable_boq_submission BEFORE UPDATE OR DELETE ON boq_review_submissions FOR EACH ROW EXECUTE FUNCTION prevent_master_version_mutation();
+CREATE TRIGGER immutable_boq_decision BEFORE UPDATE OR DELETE ON boq_review_decisions FOR EACH ROW EXECUTE FUNCTION prevent_master_version_mutation();
+CREATE TRIGGER immutable_boq_finalization BEFORE UPDATE OR DELETE ON boq_draft_finalizations FOR EACH ROW EXECUTE FUNCTION prevent_master_version_mutation();

@@ -1,0 +1,10 @@
+.quotation-pdf-pages[hidden]{display:none}
+.quotation-browser-fallback{background:#fff;color:#28282d;padding:24px;border:1px solid #e5e2ed;border-radius:8px;min-width:0}
+.quotation-browser-fallback header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;background:#51428d;color:white;padding:16px}
+.quotation-browser-fallback header img{width:155px;height:72px;object-fit:contain;object-position:left top}
+.quotation-browser-identity{display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,.6fr);gap:24px;margin:20px 0;align-items:start}
+.quotation-browser-identity strong{display:block;min-height:1.5rem}.quotation-browser-identity p{margin:4px 0 0}
+.quotation-browser-fallback table{width:100%;border-collapse:collapse;font-size:12px}.quotation-browser-fallback th,.quotation-browser-fallback td{padding:8px;vertical-align:top;border:1px solid #e5e2ed;white-space:pre-line}.quotation-browser-fallback th{background:#f4f1fa;text-align:left}.quotation-browser-fallback .numeric{text-align:right;white-space:nowrap}
+.quotation-browser-fallback dl{max-width:440px;margin:16px 0 20px auto}.quotation-browser-fallback dl>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(110px,.6fr);gap:18px;align-items:start;padding:7px 0}.quotation-browser-fallback dd{text-align:right;margin:0;font-variant-numeric:tabular-nums}.quotation-browser-fallback dl>div:last-child{font-weight:700;border-top:1px solid #ddd}
+.quotation-browser-fallback h4{margin-bottom:8px}.quotation-browser-fallback li{font-size:12px;white-space:pre-line;margin:4px 0}
+@media(max-width:600px){.quotation-browser-fallback{padding:12px}.quotation-browser-identity{grid-template-columns:1fr;gap:12px}.quotation-browser-fallback header{flex-wrap:wrap}}

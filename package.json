@@ -1,0 +1,60 @@
+{
+  "name": "power-zone-operations-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "tsx watch server/main.ts",
+    "dev:web": "vite --host 127.0.0.1",
+    "build": "node scripts/verify-document-formats.mjs && node scripts/verify-pdf-compression.mjs && tsc -p tsconfig.app.json --noEmit && vite build && node scripts/ocr-assets.mjs && tsc -p tsconfig.server.json",
+    "start": "node dist/server/main.js",
+    "migrate": "tsx server/db/migrate-cli.ts",
+    "migrate:production": "node dist/server/db/migrate-cli.js",
+    "typecheck": "tsc --noEmit",
+    "typecheck:app": "tsc -p tsconfig.app.json --noEmit",
+    "typecheck:tools": "tsc -p tsconfig.tools.json --noEmit",
+    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
+    "test:e2e": "node scripts/browser-tests.mjs",
+    "db:local": "tsx scripts/local-db.ts"
+  },
+  "dependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
+    "cookie": "^1.0.2",
+    "decimal.js": "^10.6.0",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
+    "pdfjs-dist": "^6.2.108",
+    "pg": "^8.16.3",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tesseract.js": "^6.0.1",
+    "tesseract.js-core": "^6.1.2",
+    "zod": "^4.6.6",
+    "fflate": "^0.8.3",
+    "html2canvas": "1.4.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
+    "@playwright/test": "^1.55.0",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.3.0",
+    "@types/pg": "^8.15.5",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@types/supertest": "^6.0.3",
+    "@vitejs/plugin-react": "^5.0.2",
+    "embedded-postgres": "^17.6.0-beta.15",
+    "prettier": "^3.9.9",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.4"
+  },
+  "packageManager": "pnpm@11.25.0"
+}

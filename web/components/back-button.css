@@ -1,0 +1,7 @@
+.pz-back-button{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;min-height:38px;padding:0 12px;border:1px solid #e3e0ec;border-radius:9px;background:#fff;color:#4f449c;font-size:13px;font-weight:600;line-height:1;cursor:pointer;transition:background .15s,border-color .15s}
+.pz-back-button:hover{background:#f4f2fd;border-color:#d6d0f3}
+.pz-back-button:focus-visible{outline:3px solid #cfc8fb;outline-offset:2px}
+.pz-back-button svg{flex-shrink:0}
+@media(max-width:700px){.pz-back-button{min-height:36px;padding:0 9px}.pz-back-button span{display:none}}
+/* Inside an opened window: the arrow sits above the window heading. */
+.pz-dialog-back{display:flex;width:max-content;margin:14px 0 6px 18px}

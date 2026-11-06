@@ -1,0 +1,3 @@
+# Frontend implementation requirements
+Read ../PRODUCT_DESIGN_STANDARDS.md before adding or changing frontend UI.
+Reuse web/ui design tokens, Button, StatusBadge, Field, FinancialValue and documented layout classes. Avoid new hard-coded semantic colors or a parallel formatter. New/edited shared controls must respect semantic variants,44px targets, accessible focus and aligned helper text. Preserve existing approved product identity and customer PDF templates. Migrate touched UI incrementally; do not redesign unrelated screens. Business rules and backend permissions remain authoritative. These presentation standards are code, never editable business master data.

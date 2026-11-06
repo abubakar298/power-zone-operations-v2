@@ -1,0 +1,9 @@
+.pz-list-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:16px;color:var(--pz-muted);font-size:13px}
+.pz-list-pagination>div{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pz-list-pagination .pz-button{min-height:44px}
+
+.customer-search-results{max-height:none;overflow:visible}
+.customer-search-results>[role="listbox"]{max-height:16rem;overflow-y:auto}
+.customer-search-results>.pz-list-pagination{padding:8px;margin-top:4px;gap:8px}
+.ob-site-picker>.pz-list-pagination{grid-column:1/-1}
+.pr-hits .pz-list-pagination .pz-button{width:auto;display:inline-flex}

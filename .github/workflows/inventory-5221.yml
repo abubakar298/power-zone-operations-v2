@@ -1,0 +1,35 @@
+name: Inventory 5221 release verification
+on:
+  push:
+    branches: ['codex/inventory-5221-**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pinned package manager
+        run: corepack enable && corepack prepare pnpm@11.25.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Production build and document guards
+        run: pnpm build
+      - name: Native PostgreSQL Inventory integration and template tests
+        run: pnpm exec tsx --test --test-concurrency=1 tests/saved-site-issuance.test.ts tests/site-material-plans.test.ts tests/material-stock.test.ts tests/material-drafts.test.ts tests/material-replacements.test.ts tests/warehouse-transfers.test.ts tests/inventory-minimum-stock.test.ts tests/material-source-links.test.ts tests/material-source-link.test.ts tests/material-source-bulk-read.test.ts tests/material-preparation.test.ts tests/material-document-pdf.test.ts tests/material-documents.test.ts tests/inventory-5221-parity.test.ts tests/inventory-operations-batches.test.ts
+      - name: Install browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Inventory batch navigation browser test
+        run: pnpm exec playwright test inventory-batch-materials.spec.ts
+        env:
+          PZ_E2E_PREBUILT: '1'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: inventory-release-failure-evidence
+          path: test-results/
+          retention-days: 7
