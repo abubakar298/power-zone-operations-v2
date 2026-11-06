@@ -12,6 +12,10 @@ const layers:Layer[]=[];
 const depth=()=>Number((history.state as {pzDepth?:number}|null)?.pzDepth??0);
 const notify=()=>window.dispatchEvent(new Event(EVENT));
 export const recentPush=(ms=600)=>Date.now()-lastPush<ms;
+const IN_PORTAL='pz-in-portal';
+const outside=()=>location.pathname==='/'||/^\/(login|setup|account-link|forgot-password)(\/|$)/.test(location.pathname);
+// Signed-in pages mark this tab as inside the portal; the sign-in pages clear it.
+function rememberPortal(){try{if(outside())sessionStorage.removeItem(IN_PORTAL);else sessionStorage.setItem(IN_PORTAL,'1');}catch{}}
 export function installBackSteps(){
  if(installed||typeof window==='undefined')return;installed=true;
  const push=history.pushState.bind(history),replace=history.replaceState.bind(history);
@@ -19,14 +23,17 @@ export function installBackSteps(){
   const target=url==null?location.href:new URL(String(url),location.href).href;
   // Re-opening the page already shown is not a new step.
   if(target===location.href){replace({...(history.state??{}),...(data as object??{})},unused,url);notify();return;}
-  push({...(data as object??{}),pzDepth:depth()+1},unused,url);lastPush=Date.now();notify();
+  push({...(data as object??{}),pzDepth:depth()+1},unused,url);lastPush=Date.now();rememberPortal();notify();
  }) as History['pushState'];
  history.replaceState=((data:unknown,unused:string,url?:string|URL|null)=>{
-  replace({...(history.state??{}),...(data as object??{}),pzDepth:depth()},unused,url);notify();
+  replace({...(history.state??{}),...(data as object??{}),pzDepth:depth()},unused,url);rememberPortal();notify();
  }) as History['replaceState'];
  window.addEventListener('popstate',notify);
- // Arriving from another portal page (a full page change) still has a page to go back to.
- if(history.state==null&&document.referrer){try{const from=new URL(document.referrer);if(from.origin===location.origin&&!/^\/(login|setup|account-link)/.test(from.pathname))replace({pzDepth:1},'');}catch{}}
+ // Arriving from another portal page by a full page change (for example Dashboard → Inventory)
+ // still has a page to go back to. The browser hides the previous address, so this tab
+ // remembers that it is already inside the portal.
+ try{if(history.state==null&&!outside()&&sessionStorage.getItem(IN_PORTAL))replace({pzDepth:1},'');}catch{}
+ rememberPortal();
  observeDialogs();
 }
 export function canGoBack(){return layers.length>0||depth()>0;}

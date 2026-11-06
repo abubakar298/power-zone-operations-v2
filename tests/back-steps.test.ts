@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 // A small browser stand-in: a history stack with popstate, the address and events.
 type Entry={url:string;state:any};
 const entries:Entry[]=[{url:'http://local/dashboard',state:null}];let index=0;
+const store=new Map<string,string>();
 const listeners=new Map<string,Set<(e:any)=>void>>();
 const fire=(type:string)=>{for(const f of [...(listeners.get(type)??[])])f({type});};
 const fakeHistory:any={
@@ -14,7 +15,8 @@ const fakeHistory:any={
 };
 Object.assign(globalThis,{
  history:fakeHistory,
- location:{get href(){return entries[index].url;}},
+ location:{get href(){return entries[index].url;},get pathname(){return new URL(entries[index].url).pathname;}},
+sessionStorage:{getItem:(k:string)=>store.get(k)??null,setItem:(k:string,v:string)=>void store.set(k,v),removeItem:(k:string)=>void store.delete(k)},
  window:{addEventListener:(t:string,f:any)=>{if(!listeners.has(t))listeners.set(t,new Set());listeners.get(t)!.add(f);},removeEventListener:(t:string,f:any)=>listeners.get(t)?.delete(f),dispatchEvent:(e:Event)=>{fire(e.type);return true;}},
  document:{referrer:'',documentElement:{},querySelectorAll:()=>[]},
  MutationObserver:class{observe(){}},
