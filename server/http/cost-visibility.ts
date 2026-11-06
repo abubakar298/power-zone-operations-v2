@@ -34,6 +34,7 @@ export function restrictedCostView(value: any, commercial = false): any {
     "recommendedDiscount" in value && value.original && value.proposed;
   const boq = Array.isArray(value.lines) && value.engineering && value.survey;
   for (const [key, v] of Object.entries(value)) {
+    if(key==='approvedCostSnapshot')continue;
     if(key==='discountStrategy')continue; // Frozen internal per-item costs/allowances stay server-side.
     if (key === "budgeted_markup") continue;
     if(commercial && key==='standardDiscountStrategy' && (v as any)?.version==='PZ-STANDARD-DISCOUNT-2')continue;
@@ -168,6 +169,18 @@ export function restrictedCostView(value: any, commercial = false): any {
     result.rows = result.rows.map((r: any) =>
       r.key === "additional" ? { ...r, cost: undefined, markup: undefined } : r,
     );
+  if (boq && value.approvedAgreement) {
+    const hide = (line:any) => ({...restrictedCostView(line),rate:null,total:null,cost:null,costRestricted:true});
+    result.costVisibility = "Internal approved agreement costs restricted";
+    result.lines = value.lines.map(hide);
+    result.contractualBoq = (value.contractualBoq ?? []).map(hide);
+    result.installationAllowance = {warehouseModules:value.installationAllowance?.warehouseModules,smartMeterIncludedWithInverter:true,budgetChargedOnce:true};
+    result.epc = (value.epc ?? []).map((entry:any)=>({name:entry.name,cost:null,perWatt:null}));
+    result.summary = [];
+    result.total = null;
+    result.perWatt = null;
+    return result;
+  }
   if (boq) {
     result.costVisibility = "Excluding BESS";
     result.lines = value.lines.map((l: any) =>

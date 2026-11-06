@@ -1,3 +1,4 @@
+import {ublPoConfigurations,ublPoConfigurationChange} from './ubl-po-configuration.js';
 import {queueIssuedPo,queueSharedIpo} from '../ipo-email/queue.js';
 import {sentSurveyAwaitingDesign} from '../../shared/sent-survey-requests.js';
 import {linkCreatedOperationsMaterialSource} from '../inventory/source-links.js';
@@ -128,6 +129,8 @@ function saleInput(basis: any, received: any) {
     evidenceType: received.confirmationType,
     workflowEvidenceId: received.evidenceId,
     evidenceNotes: received.notes,
+    customerNtn: received.customerNtn?.trim() || basis.order.input.customerNtn || "",
+    customerStrn: received.customerStrn?.trim() || basis.order.input.customerStrn || "",
   };
 }
 const note = (v: any) => z.string().trim().min(1).max(4000).parse(v);
@@ -289,10 +292,10 @@ export class ProjectWorkflowRepository {
         setting,
         value,
       })),
-      features: {directPoUps:process.env.ENABLE_DEFERRED_UPS_WORKFLOW==='true'},
+      features: {directPoUps:process.env.ENABLE_DEFERRED_UPS_WORKFLOW==='true',directPoAgreements:true},
       frameworks: (
         await this.pool.query(
-          "SELECT id,customer_id,configuration_key,version,source_reference,payload->>'type' AS type,payload->>'pricingStage' AS pricing_stage,payload->'routes' AS routes FROM project_framework_current WHERE ($1 OR payload->>'type' IS DISTINCT FROM 'bank-ups') ORDER BY customer_id,configuration_key",
+          "SELECT id,customer_id,configuration_key,version,source_reference,payload->>'type' AS type,payload->>'pricingStage' AS pricing_stage,payload->'routes' AS routes,payload->>'label' AS label,COALESCE(payload#>>'{approved,total}',payload#>>'{commercial,totalIncludingGst}',payload#>>'{profile,sellingPriceInclusiveTaxPkr}') AS total_including_gst FROM project_framework_current WHERE ($1 OR payload->>'type' IS DISTINCT FROM 'bank-ups') ORDER BY customer_id,configuration_key",
           [process.env.ENABLE_DEFERRED_UPS_WORKFLOW==='true'],
         )
       ).rows,
@@ -547,6 +550,7 @@ export class ProjectWorkflowRepository {
         surveyTeam: data.surveyTeam ?? [],
         returnReason: data.returnReason ?? "",
         designHandoffAt: data.designHandoffAt ?? null,
+        customerConfigurationChange:data.customerConfigurationChange??null,
         reviewDocumentId: data.reviewDocumentId ?? null,
         recipientId: data.recipientId ?? null,
         dispatchVia: data.dispatchVia ?? null,
@@ -568,6 +572,8 @@ export class ProjectWorkflowRepository {
         ublSurveyPackageStatus: data.ublSurveyPackageStatus ?? null,
         surveySubmissionGroupId: data.surveySubmissionGroupId ?? null,
         basisSource: data.basis?.source ?? null,
+        frameworkFamily: data.basis?.boq?.survey?.family ?? null,
+        agreedSurveyInputs: data.basis?.boq?.approvedAgreement ? data.basis.boq.survey : null,
         receiptId: data.receiptId ?? null,
         ipoId: data.ipoId ?? shared?.ipo_id ?? null,
         operationsId: data.operationsId ?? shared?.operations_id ?? null,
@@ -688,7 +694,7 @@ export class ProjectWorkflowRepository {
       ).rows;
     const files = (
       await this.pool.query(
-        "SELECT id,kind,filename,mime,created_at FROM project_workflow_files WHERE record_id=$1 AND NOT id::text IN (SELECT jsonb_array_elements_text(COALESCE(data->'removedRequestFileIds','[]'::jsonb)) FROM project_workflow_records WHERE id=$1) ORDER BY created_at",
+        "SELECT id,kind,filename,mime,created_at FROM project_workflow_files f WHERE (record_id=$1 OR EXISTS(SELECT 1 FROM approved_configuration_batches b JOIN approved_configuration_batch_sites m ON m.batch_id=b.id WHERE b.evidence_id=f.id AND m.record_id=$1)) AND NOT id::text IN (SELECT jsonb_array_elements_text(COALESCE(data->'removedRequestFileIds','[]'::jsonb)) FROM project_workflow_records WHERE id=$1) ORDER BY created_at",
         [id],
       )
     ).rows;
@@ -825,6 +831,7 @@ export class ProjectWorkflowRepository {
   async unbindReady(actor: string, id: string, input: unknown) {
     return unbindReady(this, actor, id, input);
   }
+  async customerPoConfigurations(actor:string,id:string){const {u,r}=await this.record(actor,id);this.requireRole(u,['Coordinator']);return ublPoConfigurations(this.pool,r);}
   async configurationChoices(actor: string, id: string) {
     return configurationChoices(this, actor, id);
   }
@@ -1455,10 +1462,10 @@ export class ProjectWorkflowRepository {
       return result;
     });
   }
-  async action(actor: string, id: string, raw: unknown) {
+  async action(actor: string, id: string, raw: unknown, client?:PoolClient) {
     const v = actionSchema.parse(raw),
       input: any = v.input;
-    return transaction(this.pool, async (c) => {
+    const execute=async (c:PoolClient) => {
       await c.query("SELECT pg_advisory_xact_lock(742019004)");
       const { u, r } = await this.record(actor, id, c, true);
       this.requireRole(u, ["Design", "Coordinator"]);
@@ -1524,7 +1531,7 @@ export class ProjectWorkflowRepository {
           "This survey needs review because no feasible solution was found. Return it to Design for a revised solution before commercial processing.",
         );
       if(v.action==='save-direct-po-details'){
-        this.requireRole(u,['Coordinator']);requireStage(['po_receipt']);requireDirectUps(r);
+        this.requireRole(u,['Coordinator']);requireStage(['po_receipt']);if(r.route!=='direct-framework'||r.data.basis?.source?.type!=='framework')throw new HttpError(422,'Use an approved Direct PO configuration.');
         const fields=z.object(Object.fromEntries(directPoFields.map(([key])=>[key,key==='poNumber'?z.string().trim().max(100).default(''):z.string().trim().max(key==='siteAddress'||key==='billingAddress'?1000:200)]))).strict();
         const saved=z.object({evidenceId:z.uuid(),evidenceType:z.enum(['Customer PO','Email approval','WhatsApp approval']),extracted:fields,sourceText:z.string().max(150000).default('').transform(value=>value.replace(/\u0000/g,'').replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,'\uFFFD')),values:fields,notes:z.string().max(2000)}).strict().parse(input);
         await this.requireFile(c,r,saved.evidenceId,'PO / confirmation');
@@ -1574,7 +1581,7 @@ export class ProjectWorkflowRepository {
         const remarks = note(input.notes);
         const files = (
           await c.query(
-            "SELECT id,kind,filename,mime FROM project_workflow_files WHERE record_id=$1 AND NOT id::text IN (SELECT jsonb_array_elements_text(COALESCE(data->'removedRequestFileIds','[]'::jsonb)) FROM project_workflow_records WHERE id=$1) ORDER BY created_at",
+            "SELECT id,kind,filename,mime FROM project_workflow_files f WHERE (record_id=$1 OR EXISTS(SELECT 1 FROM approved_configuration_batches b JOIN approved_configuration_batch_sites m ON m.batch_id=b.id WHERE b.evidence_id=f.id AND m.record_id=$1)) AND NOT id::text IN (SELECT jsonb_array_elements_text(COALESCE(data->'removedRequestFileIds','[]'::jsonb)) FROM project_workflow_records WHERE id=$1) ORDER BY created_at",
             [id],
           )
         ).rows;
@@ -1794,7 +1801,7 @@ export class ProjectWorkflowRepository {
           );
         const requestFile = (
           await c.query(
-            "SELECT id FROM project_workflow_files WHERE record_id=$1 AND kind='Request evidence' AND NOT id::text IN (SELECT jsonb_array_elements_text(COALESCE(data->'removedRequestFileIds','[]'::jsonb)) FROM project_workflow_records WHERE id=$1) ORDER BY created_at DESC,id DESC LIMIT 1",
+            "SELECT id FROM project_workflow_files f WHERE (record_id=$1 OR EXISTS(SELECT 1 FROM approved_configuration_batches b JOIN approved_configuration_batch_sites m ON m.batch_id=b.id WHERE b.evidence_id=f.id AND m.record_id=$1)) AND kind='Request evidence' AND NOT id::text IN (SELECT jsonb_array_elements_text(COALESCE(data->'removedRequestFileIds','[]'::jsonb)) FROM project_workflow_records WHERE id=$1) ORDER BY created_at DESC,id DESC LIMIT 1",
             [r.id],
           )
         ).rows[0];
@@ -1939,7 +1946,7 @@ export class ProjectWorkflowRepository {
         ).rows[0];
         const combinedUbl =
           r.route === "survey-framework" &&
-          surveyCustomer?.short_code?.toUpperCase() === "UBL";
+          surveyCustomer?.short_code?.toUpperCase() === "UBL" && data.basis?.boq?.survey?.family!=="bess-only";
         if (combinedUbl && v.action === "save-survey-inputs")
           throw new HttpError(
             422,
@@ -2247,7 +2254,7 @@ export class ProjectWorkflowRepository {
           );
         if (
           r.route === "survey-framework" &&
-          reportCustomer?.short_code?.toUpperCase() === "UBL"
+          reportCustomer?.short_code?.toUpperCase() === "UBL" && data.basis?.boq?.survey?.family!=="bess-only"
         ) {
           const template = (await customerSurveyTemplates(c)).find(
             (t: any) => t.key === "ubl-solar-survey",
@@ -2807,6 +2814,8 @@ export class ProjectWorkflowRepository {
             "The PO already has issued documents. Open its issuance history.",
           );
         const received = receiptSchema.parse(input);
+        const taxMaster=(await c.query('SELECT ntn,strn FROM customers WHERE id=$1',[r.customer_id])).rows[0];
+        received.customerNtn=received.customerNtn?.trim()||taxMaster.ntn||'';received.customerStrn=received.customerStrn?.trim()||taxMaster.strn||'';
         if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);}
         await this.requireFile(c, r, received.evidenceId, "PO / confirmation");
         let basis: any;
@@ -2865,7 +2874,8 @@ export class ProjectWorkflowRepository {
             [r.customer_id, received.reference],
           )
         ).rows;
-        if (previous.some((p) => p.record_id !== id))
+        const batchPeers=(await c.query("SELECT m2.record_id FROM approved_configuration_batch_sites m JOIN approved_configuration_batch_sites m2 ON m2.batch_id=m.batch_id JOIN approved_configuration_batches b ON b.id=m.batch_id WHERE m.record_id=$1 AND b.route='direct-framework' AND lower(b.snapshot#>>'{po,reference}')=lower($2)",[id,received.reference])).rows.map(p=>p.record_id);
+        if (previous.some((p) => p.record_id !== id && !batchPeers.includes(p.record_id)))
           throw new HttpError(
             409,
             "This customer PO reference belongs to another site.",
@@ -2876,6 +2886,7 @@ export class ProjectWorkflowRepository {
           const changes=directPoChanges(previous,values);
           if(changes.length)data.directPoDetails={...data.directPoDetails,values,history:[...data.directPoDetails.history,{actor,actorName:u.display_name,at:new Date().toISOString(),evidenceId:received.evidenceId,changes}]};
         }
+        const configurationChange=await ublPoConfigurationChange(c,r,received,basis);
         const differences =
             received.confirmationType !== "Customer PO"
               ? []
@@ -2902,10 +2913,16 @@ export class ProjectWorkflowRepository {
           ],
         );
         data.receiptId = rid;
+        if(configurationChange)data.originalRecommendedConfiguration??={source:r.data.basis.source,comparison:r.data.basis.comparison};
         data.basis = basis;
         stage = differences.length ? "order_exception" : "po_receipt";
         reason = received.notes;
         if (!differences.length) {
+          if(configurationChange){
+            data.originalRecommendedConfiguration??={source:r.data.basis.source,comparison:r.data.basis.comparison};
+            data.customerConfigurationChange=configurationChange;
+            await c.query('INSERT INTO ubl_customer_configuration_changes(id,record_id,receipt_id,snapshot,created_by) VALUES($1,$2,$3,$4,$5)',[randomUUID(),r.id,rid,configurationChange,actor]);
+          }
           const decision = (
             await c.query(
               "INSERT INTO project_order_decisions(id,receipt_id,record_id,outcome,reason,authorised_basis,created_by) VALUES($1,$2,$3,'Matched',$4,$5,$6) RETURNING *",
@@ -3123,7 +3140,8 @@ export class ProjectWorkflowRepository {
         `project.workflow.${v.action}:${id}:v${r.version + 1}`,
       ]);
       return { id, version: r.version + 1, stage, repeated: false };
-    });
+    };
+    return client?execute(client):transaction(this.pool,execute);
   }
   async requireFile(
     c: PoolClient,
@@ -3133,7 +3151,7 @@ export class ProjectWorkflowRepository {
   ) {
     const f = (
       await c.query(
-        "SELECT * FROM project_workflow_files WHERE id=$1 AND record_id=$2 AND kind=$3",
+        "SELECT * FROM project_workflow_files f WHERE id=$1 AND (record_id=$2 OR EXISTS(SELECT 1 FROM approved_configuration_batches b JOIN approved_configuration_batch_sites m ON m.batch_id=b.id WHERE b.evidence_id=f.id AND m.record_id=$2)) AND kind=$3",
         [
           fileId,
           typeof recordId === "string" ? recordId : (recordId as any).id,
@@ -3149,7 +3167,7 @@ export class ProjectWorkflowRepository {
     return boq.lines
       .filter(
         (l: any) =>
-          new Decimal(l.qty).gt(0) &&
+          new Decimal(l.qty).gt(0) && !l.nonStockBudget &&
           !/(labour|labor|delivery|logistics|synchronization|synchronisation|internet service)/i.test(
             l.description ?? l.key,
           ),
@@ -3260,9 +3278,10 @@ export class ProjectWorkflowRepository {
         original_ipo_reference: reference,
       };
     }
+    const configurationBatch=(await c.query("SELECT b.id,b.snapshot,p.customer_po_id FROM approved_configuration_batches b JOIN approved_configuration_batch_sites m ON m.batch_id=b.id LEFT JOIN approved_configuration_batch_pos p ON p.batch_id=b.id WHERE m.record_id=$1 AND b.route='direct-framework' AND b.customer_id=$2 AND lower(b.snapshot#>>'{po,reference}')=lower($3) AND b.snapshot#>>'{po,date}'=$4",[r.id,r.customer_id,receipt.input.reference,receipt.input.date])).rows[0];
     const sharedHistoricalPo=!!historical?.sharedPoOrder;
     if(sharedHistoricalPo&&(!['MBL-UPS-6-5','MBL-UPS-6-10','UBL-UPS-6-10'].includes(basis.source.key)||historical!.sharedPoOrder!==basis.order.input.orderNumber||!/^([1-9][0-9]{0,5})\/([1-9][0-9]{0,5})$/.test(historical!.sharedPoOrder!)))throw new HttpError(409,'Historical shared PO order must match the approved UPS framework and exact order.');
-    if (!sharedHistoricalPo&&
+    if (!sharedHistoricalPo&&!configurationBatch?.customer_po_id&&
       (
         await c.query(
           "SELECT 1 FROM customer_purchase_orders WHERE customer_id=$1 AND lower(po_number)=lower($2)",
@@ -3325,7 +3344,7 @@ export class ProjectWorkflowRepository {
         [draft, revisionId],
       );
     }
-    const po = randomUUID(),
+    const po = configurationBatch?.customer_po_id ?? randomUUID(),
       ipo = randomUUID(),
       ops = randomUUID(),
       number = await ipoReference(c,r,ipo,receipt.input.ipoNumber,basis.order.input.orderNumber),
@@ -3360,13 +3379,15 @@ export class ProjectWorkflowRepository {
       checkedBy: r.coordinator,
       workflowRecordId: r.id,
       approvedCommercialSource: basis.source,
+      ...(data.customerConfigurationChange?{customerConfigurationChange:data.customerConfigurationChange}:{}),
+      ...(configurationBatch?{sharedConfigurationBatchId:configurationBatch.id}:{}),
       orderDecisionId: decisionId,
       approvalChannel: "Exact approved commercial basis",
       documentLayoutVersion: 4,
       approvedPanelQty: await this.approvedPanelQuantity(r,c),
       peachtree: ptDetail(basis.order,basis.boq,await this.approvedPanelQuantity(r,c)),
     };
-    await c.query(
+    if(!configurationBatch?.customer_po_id)await c.query(
       "INSERT INTO customer_purchase_orders(id,quotation_id,boq_revision_id,customer_id,po_number,document_id,input,created_by,shared_order_number) VALUES($1,$2,$3,$4,$5,NULL,$6,$7,$8)",
       [
         po,
@@ -3374,11 +3395,12 @@ export class ProjectWorkflowRepository {
         basis.source.type === "quotation" ? revisionId : null,
         r.customer_id,
         receipt.input.reference,
-        input,
+        configurationBatch?{...input,approvedConfigurationBatch:{id:configurationBatch.id,total:configurationBatch.snapshot.total,siteCount:configurationBatch.snapshot.sites.length}}:input,
         r.coordinator_id,
         historical?.sharedPoOrder??null,
       ],
     );
+    if(configurationBatch&&!configurationBatch.customer_po_id)await c.query('INSERT INTO approved_configuration_batch_pos(batch_id,customer_po_id) VALUES($1,$2)',[configurationBatch.id,po]);
     await c.query(
       "INSERT INTO internal_purchase_orders(id,customer_po_id,submission_id,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,NULL,$3,$4,$5,$6,$7)",
       [
@@ -3469,10 +3491,10 @@ export class ProjectWorkflowRepository {
     }
     return { ipo_id: ipo, operations_id: ops };
   }
-  async attach(actor: string, id: string, input: any) {
+  async attach(actor: string, id: string, input: any, client?:PoolClient) {
     const { fileSchema } = await import("./schema.js");
     const v = fileSchema.parse(input);
-    return transaction(this.pool, async (c) => {
+    const execute=async (c:PoolClient) => {
       const { u, r } = await this.record(actor, id, c, true);
       this.requireRole(u, ["Design", "Coordinator"]);
       await this.requireReceivingDepartment(u, r, c);
@@ -3544,7 +3566,8 @@ export class ProjectWorkflowRepository {
         `project.workflow.attach:${id}:${saved.id}`,
       ]);
       return saved;
-    });
+    };
+    return client?execute(client):transaction(this.pool,execute);
   }
   async removeRequestFile(actor: string, id: string, fileId: string) {
     return transaction(this.pool, async (c) => {
@@ -3553,6 +3576,8 @@ export class ProjectWorkflowRepository {
       await this.requireReceivingDepartment(u, r, c);
       if (r.stage !== "request_review")
         throw new HttpError(409, "Request evidence can only be removed before sending to Design.");
+      if ((await c.query('SELECT 1 FROM approved_configuration_batches WHERE evidence_id=$1',[fileId])).rowCount)
+        throw new HttpError(409, "This attachment is the shared batch request. Keep it with the batch and attach any correction separately.");
       const removed = (await c.query(
         "SELECT filename FROM project_workflow_files WHERE id=$1 AND record_id=$2 AND kind='Request evidence'",
         [fileId, id],
@@ -3570,7 +3595,7 @@ export class ProjectWorkflowRepository {
     if ((r.data.removedRequestFileIds ?? []).includes(fileId)) throw new HttpError(404, "Attachment not found.");
     const f = (
       await this.pool.query(
-        "SELECT * FROM project_workflow_files WHERE id=$1 AND record_id=$2",
+        "SELECT * FROM project_workflow_files f WHERE id=$1 AND (record_id=$2 OR EXISTS(SELECT 1 FROM approved_configuration_batches b JOIN approved_configuration_batch_sites m ON m.batch_id=b.id WHERE b.evidence_id=f.id AND m.record_id=$2))",
         [fileId, id],
       )
     ).rows[0];
@@ -3594,6 +3619,8 @@ export class ProjectWorkflowRepository {
     this.requireRole(u, ["Coordinator"]);
     await this.requireReceivingDepartment(u, r);
     if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(this.pool,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);}
+    const taxMaster=(await this.pool.query('SELECT ntn,strn FROM customers WHERE id=$1',[r.customer_id])).rows[0];
+    received.customerNtn=received.customerNtn?.trim()||taxMaster.ntn||'';received.customerStrn=received.customerStrn?.trim()||taxMaster.strn||'';
     const current = await this.decorate(r, u);
     if (r.stage !== "customer_tracking" && current.coordinationBucket !== "Customer Decision & Order Tracking" && !(r.stage === "po_receipt" && r.route === "direct-framework" && !r.data.originalOrderPreserved))
       throw new HttpError(
@@ -3619,6 +3646,7 @@ export class ProjectWorkflowRepository {
               r,
               uuid(received.frameworkId ?? r.framework_id),
             );
+    await ublPoConfigurationChange(this.pool,r,received,basis);
     const differences =
       received.confirmationType !== "Customer PO"
         ? []

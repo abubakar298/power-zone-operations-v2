@@ -1,3 +1,4 @@
+import {createConfigurationBatch,configurationBatchPreview,confirmConfigurationBatch} from './configuration-batches.js';
 import {saveHeadsup,submitHeadsup} from './headsup.js';
 import {customerSendEvidence,attachCustomerSendEvidence,removeCustomerSendEvidence,sendPackageToCustomer} from "./ubl-customer-send.js";
 import { buildIpoPdf, buildPeachtreePdf } from "../orders/document-renderers.js";
@@ -90,6 +91,7 @@ export function projectWorkflowHttp(
   r.post("/:id/revision-source", async (req, res) =>
     res.json(await repo.frameworkRevisionSource(actor(req), id(req))),
   );
+  r.get('/:id/po-configurations',async(req,res)=>res.json({choices:await repo.customerPoConfigurations(actor(req),id(req))}));
   r.get("/:id/configuration-choices", async (req, res) =>
     res.json({ choices: await repo.configurationChoices(actor(req), id(req)) }),
   );
@@ -197,6 +199,10 @@ export function projectWorkflowHttp(
       .set("Content-Disposition", `attachment; filename="${file.name}"`)
       .send(file.content);
   });
+  r.post('/configuration-batches',async(req,res)=>res.status(201).json(await createConfigurationBatch((repo as any).pool,actor(req),req.body)));
+  r.get('/configuration-batches/:id',async(req,res)=>res.json(await configurationBatchPreview((repo as any).pool,actor(req),id(req))));
+  r.post('/configuration-batches/:id/preview',async(req,res)=>res.json(await configurationBatchPreview((repo as any).pool,actor(req),id(req),true)));
+  r.post('/configuration-batches/:id/confirm',async(req,res)=>res.json(await confirmConfigurationBatch((repo as any).pool,actor(req),id(req),req.body)));
   r.get("/:id", async (req, res) =>
     res.json(await repo.detail(actor(req), id(req))),
   );

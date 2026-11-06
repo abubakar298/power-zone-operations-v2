@@ -1,3 +1,5 @@
+import {ApprovedConfigurationBatch} from './ApprovedConfigurationBatch.js';
+import {money} from '../numbers.js';
 import {FileUpload} from '../ui/FileUpload.js';
 import {DirectPoDetailsFields} from './DirectPoDetailsFields.js';
 import {useRef,useState} from 'react';
@@ -8,8 +10,8 @@ import {extractText} from '../ocr.js';
 import {directPoSuggestions,directPoSiteMatches,validOrderPosition,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
 import {useUnsavedChanges} from '../hooks/useUnsavedChanges.js';
 import {poSuggestions,ublPoSuggestions} from '../../server/orders/po-extraction.js';
-const agreements=['MBL-UPS-6-5','MBL-UPS-6-10','UBL-UPS-6-10'];
 export function DirectPo({refs,session,records,onPrepared,onCancel}:any){
+ const [batchMode,setBatchMode]=useState(false),[customerChoice,setCustomerChoice]=useState('');
  const [agreement,setAgreement]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[progress,setProgress]=useState(''),[reading,setReading]=useState<any>();
  const [evidenceType,setEvidenceType]=useState('Customer PO');
  const [pendingFile,setPendingFile]=useState<File>();
@@ -56,20 +58,23 @@ export function DirectPo({refs,session,records,onPrepared,onCancel}:any){
    await onPrepared(id,{recordId:id,reviewIpo:true,values,evidenceType,document:{...file,filename:reading.file.filename,mime:reading.file.mime},text:reading.text,amounts:reading.amounts});
   }catch(e){setError(e instanceof Error?e.message:'Unable to open PO review.');}finally{setBusy(false);}
  }
+ if(batchMode)return <ApprovedConfigurationBatch {...{refs,session}} route="direct-framework" onCancel={()=>setBatchMode(false)} onOpen={(id:string)=>onPrepared(id,undefined)}/>;
  return <section className="pz-panel pz-stack pz-workflow-form pz-direct-po-form">
-  <div><Button variant="neutral" onClick={onCancel}>Back to PO Receipt</Button></div><h2>Direct PO</h2>
+  <div><Button variant="neutral" onClick={onCancel}>Back to PO Receipt</Button></div><h2>Direct PO</h2><div className="pz-action-row"><Button variant="secondary" onClick={()=>setBatchMode(true)}>Enter a batch</Button></div>
   <div className="pz-form-grid">
-   <Field id="direct-po-agreement" label="Accepted quotation"><select id="direct-po-agreement" disabled={busy} value={agreement} onChange={e=>{setAgreement(e.target.value);setEvidenceType('Customer PO');setReading(undefined);setPendingFile(undefined);setValues({});setError('');request.current=crypto.randomUUID();}}><option value="">Select accepted quotation</option>{agreements.map(key=>{const f=refs.frameworks.find((v:any)=>v.configuration_key===key&&v.routes?.includes('direct-framework'));return f?<option key={key} value={f.id}>{key.replace('-UPS-',' (')})</option>:null;})}</select></Field>
+   <Field id="direct-po-customer" label="Customer"><select id="direct-po-customer" value={customerChoice} disabled={busy} onChange={e=>{setCustomerChoice(e.target.value);setAgreement('');setReading(undefined);setPendingFile(undefined);setValues({});}}><option value="">All approved customers</option>{refs.customers.filter((c:any)=>refs.frameworks.some((f:any)=>f.customer_id===c.id&&f.routes?.includes('direct-framework'))).map((c:any)=><option key={c.id} value={c.id}>{c.short_code} · {c.name}</option>)}</select></Field>
+   <Field id="direct-po-agreement" label="Accepted quotation"><select id="direct-po-agreement" disabled={busy} value={agreement} onChange={e=>{setAgreement(e.target.value);setEvidenceType('Customer PO');setReading(undefined);setPendingFile(undefined);setValues({});setError('');request.current=crypto.randomUUID();}}><option value="">Select accepted quotation</option>{refs.frameworks.filter((f:any)=>f.routes?.includes('direct-framework')&&(!customerChoice||String(f.customer_id)===customerChoice)).map((f:any)=><option key={f.id} value={f.id}>{f.label??(/-UPS-/.test(f.configuration_key)?f.configuration_key.replace('-UPS-',' (')+')':f.configuration_key+' · v'+f.version)}</option>)}</select></Field>
    <Field id="direct-po-evidence-type" label="Approval evidence"><select id="direct-po-evidence-type" value={evidenceType} disabled={busy||!customer} onChange={e=>{setEvidenceType(e.target.value);setReading(undefined);setPendingFile(undefined);setValues({});setError('');request.current=crypto.randomUUID();}}><option>Customer PO</option>{meezan&&<option>Email approval</option>}</select></Field>
    <div className="pz-field-wide pz-direct-po-evidence-row"><Field id="direct-po-upload" label={emailApproval?"Upload email evidence":"Upload PO"} hint="PDF, PNG or JPEG · up to 8 MB"><FileUpload selectedFiles={pendingFile?[pendingFile]:[]} attachments={reading?[{id:'direct-po-evidence',filename:reading.file.filename}]:undefined} onRemoveAttachment={()=>{setReading(undefined);setPendingFile(undefined);setValues({});setError('');setIpoWarning('');}} onClear={()=>{setReading(undefined);setPendingFile(undefined);setValues({});setError('');setIpoWarning('');}} key={agreement+evidenceType} id="direct-po-upload" type="file" accept="application/pdf,image/png,image/jpeg" disabled={!customer||busy} onChange={e=>{setPendingFile(e.target.files?.[0]);setReading(undefined);setValues({});setError('');setIpoWarning('');}}/></Field><Button variant="primary" className="pz-direct-po-upload-action" loading={busy} loadingLabel="Reading…" disabled={!pendingFile||!customer||busy} onClick={()=>void read(pendingFile)}>{reading&&!pendingFile?'Uploaded':'Upload'}</Button></div>
   </div>
 
 
 
+  {framework&&<p className="pz-caption">Approved agreement: {framework.label??framework.configuration_key} · v{framework.version} · Selling including GST: {money(framework.total_including_gst)}</p>}
   {progress&&<p role="status">{progress}</p>}
   {reading&&<section className="pz-stack pz-direct-po-details" aria-label="PO details, please verify"><header className="pz-direct-po-details-heading"><h3>PO details, please verify</h3><p>Review the autofilled information and enter any missing details.</p></header>
    {capacityIssues.length>0&&<p role="alert" className="form-error">{capacityIssues.join(" ")}</p>}
-   <p className="pz-caption pz-direct-po-configuration">Configuration: {framework?.configuration_key}</p>
+   <p className="pz-caption pz-direct-po-configuration">Configuration: {framework?.configuration_key} · v{framework?.version}</p>
    {framework?.configuration_key==='UBL-UPS-6-10'&&values.siteCode==='0999'&&<p className="form-note">0999: branch under construction; branch code not assigned. This code may be shared by different sites. A shared UPS IPO uses a different order number for each site.</p>}
    <DirectPoDetailsFields values={values} disabled={busy} onChange={(key,value)=>{setValues(old=>({...old,[key]:value}));setError('');if(key==='ipoNumber'||key==='orderNumber')setIpoWarning('');}} onIpoBlur={async()=>{if(!values.ipoNumber?.trim())return;try{const result=await api<any>(`/project-workflow/ipo-number-availability?number=${encodeURIComponent(values.ipoNumber.trim())}&frameworkId=${encodeURIComponent(agreement)}&orderNumber=${encodeURIComponent(values.orderNumber??'')}`);setIpoWarning(result.available?'':'This IPO number is in use. For the same UPS batch, enter a different order unit with the same total.');}catch(e){setIpoWarning((e as Error).message);}}}/>
 

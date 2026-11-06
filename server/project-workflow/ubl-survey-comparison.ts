@@ -8,7 +8,7 @@ export function ublConfigurationReview(s:any, approved:any) {
  const differences:string[]=[];
  const watts=new Decimal(approved.pvWatts??0),panelWatts=new Decimal(s.panelWattage||0);
  const roundedPanelCount=panelWatts.gt(0)?watts.div(panelWatts).toDecimalPlaces(0,Decimal.ROUND_HALF_DOWN):null;
- if(!roundedPanelCount||!roundedPanelCount.eq(s.panelQty??-1)) differences.push('PV capacity differs from the agreed configuration beyond whole-panel rounding.');
+ if(watts.eq(0)?new Decimal(s.panelQty??0).mul(panelWatts).gt(0):!roundedPanelCount||!roundedPanelCount.eq(s.panelQty??-1)) differences.push('PV capacity differs from the agreed configuration beyond whole-panel rounding.');
  if(parts.length===3){
   if(!inverter||!new Decimal(inverter[1]??1).mul(inverter[2]).eq(parts[1])) differences.push('Inverter capacity differs from the agreed configuration.');
   if(!new Decimal(s.batteryKwh??-1).eq(parts[2])) differences.push('Battery capacity differs from the agreed configuration.');
@@ -44,8 +44,8 @@ export async function ublSurveyComparison(c:Pool|PoolClient,r:any,basis:any){
   add('Battery capacity (kWh)',configuration[2],s.batteryKwh,true);
   add('Inverter quantity',sum(l=>/HYB|inverter/i.test(l.key)&&l.phase==='BESS'),match?match[1]??'1':null,true);
  }
- add('Structure',lines.find((l:any)=>l.key.startsWith('Structure'))?.key.replace('Structure - ',''),s.structure);
- for(const colour of ['black','red'])add(`6mm² DC cable ${colour} (m)`,q(`DC cable ${colour} 6mm²`),s.dcMetres==null?null:dcConductorMetres(s.dcMetres),true);
+ if(basis.boq.survey.family!=='bess-only')add('Structure',lines.find((l:any)=>l.key.startsWith('Structure'))?.key.replace('Structure - ',''),s.structure);
+ for(const colour of (basis.boq.survey.family==='bess-only'?[]:['black','red']))add(`6mm² DC cable ${colour} (m)`,q(`DC cable ${colour} 6mm²`),s.dcMetres==null?null:dcConductorMetres(s.dcMetres),true);
  for(const [field,key,description] of [
   ['16mm² inverter cable (m)','acInverter16','16mm² 4C inverter cable'],
   ['25mm² inverter cable (m)','acInverter25','25mm² 4C inverter cable'],
@@ -55,8 +55,8 @@ export async function ublSurveyComparison(c:Pool|PoolClient,r:any,basis:any){
   ['6mm² DC earth cable (m)','earth6','6mm² DC earth'],
   ['10mm² AC earth cable (m)','earth10','10mm² AC earth']
  ])add(field,q(description),s[key]??'0',true);
- add('Include Earthing Bore?',new Decimal(q('UBL earthing bore')).gt(0)?'Yes':'No',s.spIncludeEarthingBore===false?'No':'Yes');
- add('Genset synchronisation',new Decimal(q('UBL genset synchronization')).gt(0)?'Yes':'No',s.genset?'Yes':'No');
+ add('Include Earthing Bore?',new Decimal(basis.boq.approvedAgreement?'1':q('UBL earthing bore')).gt(0)?'Yes':'No',s.spIncludeEarthingBore===false?'No':'Yes');
+ add('Genset synchronisation',new Decimal(basis.boq.approvedAgreement?basis.boq.installationAllowance.gensetSynchronization:q('UBL genset synchronization')).gt(0)?'Yes':'No',s.genset?'Yes':'No');
  add('Extra smart meter',basis.boq.survey.smartMeter===true?'Yes':'No',s.smartMeter==null?null:s.smartMeter?'Yes':'No');
  const brands=(await c.query('SELECT id,name FROM brands')).rows;
  for(const [key,label,test] of [

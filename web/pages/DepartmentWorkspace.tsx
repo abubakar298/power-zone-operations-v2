@@ -1,3 +1,4 @@
+import {ApprovedConfigurationBatch} from '../components/ApprovedConfigurationBatch.js';
 import {useBackStep} from '../navigation/useBackStep.js';
 import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
@@ -564,7 +565,7 @@ export function DepartmentWorkspace({
         <section className="pz-panel">
           <h2>PO Receipt / Heads-up</h2>
           <div className="pz-action-row">
-            {refs?.features?.directPoUps&&<Button variant="secondary" onClick={()=>setCreating("Direct PO")}>Direct PO</Button>}
+            {(refs?.features?.directPoUps||refs?.features?.directPoAgreements)&&<Button variant="secondary" onClick={()=>setCreating("Direct PO")}>Direct PO</Button>}
             <Button
               variant="secondary"
               onClick={() => setCreating("Record Customer Heads-up")}
@@ -583,6 +584,7 @@ export function DepartmentWorkspace({
         <SavedHeadsupReports session={session} refresh={headsupRefresh} />
       </div>
     );
+  if(creating==='Approved survey batch')return <ApprovedConfigurationBatch refs={refs} session={session} route='survey-framework' onCancel={()=>setCreating(undefined)} onOpen={async(id:string)=>{await load();await open(id,false);}}/>;
   if(creating==='Direct PO')return <DirectPo {...{refs,session}} records={rows} onCancel={()=>setCreating(undefined)} onPrepared={async(id:string,draft:any)=>{setDirectPoDraft(draft);await load();await open(id,false);}}/>;
   if(approvalTarget) return <div className="pz-stack"><Button variant="neutral" onClick={()=>setApprovalTarget(undefined)}>Back to Management Review</Button><h2>Record Quotation Approval</h2><p>{approvalTarget.number}</p><QuotationApproval session={session} quotationId={approvalTarget.quotationId} cniId={approvalTarget.cniId} onApproved={approvalRecorded}/></div>;
   if (quotationReview) return <CoordinatorQuotationReview session={session} record={quotationReview} onApproved={approvalRecorded} onBack={()=>setQuotationReview(undefined)} onOpen={onOpen}/>;
@@ -724,7 +726,7 @@ export function DepartmentWorkspace({
           "Record Customer Heads-up",
           "Record PO / Customer Confirmation",
         ].includes(creating) && (
-          <CreateRecord
+          <CreateRecord onBatch={()=>setCreating("Approved survey batch")}
             {...{ refs, session, creating, manager, onOpen, selectedSite }}
             onCreated={async (id: string) => {
               await load();
@@ -1777,6 +1779,7 @@ function CreateRecord({
   selectedSite,
   existingRequest,
   onEdited,
+  onBatch,
 }: any) {
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [customers, setCustomers] = useState(
@@ -1902,6 +1905,7 @@ function CreateRecord({
         }}
       >
         <p>{creating}</p>
+        {route.startsWith('survey')&&!onEdited&&<Button variant="secondary" onClick={onBatch}>Create pre-agreed survey batch</Button>}
         {creating === "Create BOQ" && (
           <Button
             variant="secondary"
@@ -1940,7 +1944,7 @@ function CreateRecord({
           </label>
           <label>
             Workflow route
-            <select value={route} onChange={(e) => setRoute(e.target.value)}>
+            <select aria-label="Workflow route" value={route} onChange={(e) => setRoute(e.target.value)}>
               {Object.entries(routeNames)
                 .filter(
                   ([v]) =>
@@ -2049,7 +2053,7 @@ function CreateRecord({
           {route === "direct-framework" && (
             <label>
               Approved configuration and price version
-              <select name="frameworkId" required>
+              <select aria-label="Approved configuration and price version" name="frameworkId" required>
                 <option value="">Select approved agreement</option>
                 {refs.frameworks
                   .filter(
@@ -2905,6 +2909,7 @@ function RecordEditor({
               <p>{r.data.noFeasibleSolution.remarks}</p>
             </div>
           )}
+          {r.data.customerConfigurationChange&&<section className="pz-panel pz-stack" aria-label="Customer-requested UBL configuration change"><h3>Customer-requested configuration change</h3><p>{r.data.customerConfigurationChange.recommended.source.key} → {r.data.customerConfigurationChange.ordered.source.key}</p><div className="pz-form-grid"><div><strong>Recommended selling total</strong><p>{money(r.data.customerConfigurationChange.recommended.total)}</p></div><div><strong>Customer PO selling total</strong><p>{money(r.data.customerConfigurationChange.ordered.total)}</p></div><div><strong>Difference</strong><p>{money(r.data.customerConfigurationChange.sellingDifference)}</p></div></div><p>PO: {r.data.customerConfigurationChange.poReference} · {r.data.customerConfigurationChange.reason}</p><p className="pz-caption">Existing approved UBL configuration and rates. Management notification only; IPO issuance is not awaiting a new approval. The original survey and recommendation remain in history.</p></section>}
           <p>{r.data.notes}</p>
           {r.route.startsWith("survey") && (
             <p className="pz-caption">
@@ -3974,11 +3979,11 @@ function SurveyCompletion({ session, refs, detail, action }: any) {
     useState<string>("ubl-solar-survey");
   const r = detail.record;
   const ubl =
-    r.customerCode?.toUpperCase() === "UBL" && r.route === "survey-framework";
+    r.customerCode?.toUpperCase() === "UBL" && r.route === "survey-framework" && r.data.frameworkFamily!=="bess-only";
   const customerForms = (refs.surveyFormTemplates ?? []).filter(
     (template: any) =>
       r.route === "survey-framework" &&
-      template.customerCode.toUpperCase() === r.customerCode.toUpperCase(),
+      template.customerCode.toUpperCase() === r.customerCode.toUpperCase() && r.data.frameworkFamily!=="bess-only",
   );
   return (
     <section className="pz-panel pz-stack">
@@ -4572,10 +4577,10 @@ function StandardSurveyBoqInputs({
 }: any) {
   const r = detail.record;
   const manual =
-    r.customerCode?.toUpperCase() === "UBL" && r.route === "survey-framework";
+    r.customerCode?.toUpperCase() === "UBL" && r.route === "survey-framework" && r.data.frameworkFamily!=="bess-only";
   const initial = useMemo(
     () =>
-      r.data.surveyInputs ??
+      r.data.surveyInputs ?? r.data.agreedSurveyInputs ??
       (manual
         ? { bessId: "", sourceMode: "Survey", acTerminationMode: "Measured" }
         : (r.data.surveyReading?.standardInputs ?? {
@@ -4814,7 +4819,7 @@ function FrameworkSelect({
           )
           .map((f: any) => (
             <option key={f.id} value={f.id}>
-              {f.configuration_key} · v{f.version}
+              {f.type==='ubl-solar'?'Solar with BESS · ':f.type==='ubl-bess-installation'?'BESS with installation · ':''}{f.configuration_key} · v{f.version}
             </option>
           ))}
       </select>
@@ -5140,7 +5145,7 @@ function TechnicalReview({ session, refs, detail, action }: any) {
         <>
           <p>
             {framework
-              ? "Review the exact approved customer configuration. Financial snapshots stay fixed."
+              ? "Select the solution family and approved configuration after reviewing the survey. UBL options include Solar with BESS and BESS with installation; approved rates stay fixed."
               : "Review the approved engineering rules, configuration and survey quantities."}
           </p>
           {framework ? (

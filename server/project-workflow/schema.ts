@@ -105,6 +105,7 @@ export const receiptSchema = z
     frameworkId: z.uuid().optional(),
     actual: comparisonSchema.optional(),
     ipoNumber:manualIpoSchema.optional(),
+    configurationChangeReason: text.default(""),
     confirmationType:z.enum(["Customer PO","WhatsApp approval","Email approval"]).default("Customer PO"),
     saleDetails:z.record(z.string(),z.string().max(2000)).optional(),
     reviewed: z.literal(true),

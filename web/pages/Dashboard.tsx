@@ -140,7 +140,7 @@ export function Dashboard({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [directPoEnabled,setDirectPoEnabled]=useState(false);
-  useEffect(()=>{if(session.user.role==='Coordinator')void api<any>('/project-workflow/references').then(r=>setDirectPoEnabled(r.features?.directPoUps===true)).catch(()=>setDirectPoEnabled(false));},[session.user.id]);
+  useEffect(()=>{if(session.user.role==='Coordinator')void api<any>('/project-workflow/references').then(r=>setDirectPoEnabled(r.features?.directPoUps===true||r.features?.directPoAgreements===true)).catch(()=>setDirectPoEnabled(false));},[session.user.id]);
   const [workspaceVisit, setWorkspaceVisit] = useState(0);
   const [departmentView,setDepartmentView]=useState<ManagementDepartment|undefined>(()=>managementDepartments.find(d=>d.role===departmentUser?.role)?.view);
   const [departmentPage, setDepartmentPage] = useState("Workspace");

@@ -19,6 +19,7 @@ export function ptDetail(snapshot:any,boq:any,approvedPanelQty=boq.survey?.panel
    const source=lines.filter((l:any)=>phaseOf(l)===p.name||(p.name==='BESS'&&['Inverter','Batteries','BMS','BESS'].includes(phaseOf(l))));
    return {...p,itemId:[...new Set(source.map((l:any)=>l.itemId??l.key))].join('\n'),description:source.map((l:any)=>`${l.qty} ${l.unit} x ${l.specification||l.description||l.key}`).join('\n')||p.description};
  });
+ if(snapshot.allocation?.policy==='ubl-bess-approved-proportional-v1'){if(d.epcBreakup?.reduce((s:Decimal,p:any)=>s.add(p.amount),new Decimal(0)).toFixed(2)!==new Decimal(d.phases.find((p:any)=>p.name==='EPC')?.amount??0).toFixed(2))throw Error('Approved BESS EPC detail does not reconcile.');return d;}
  const epc=d.phases.find((p:any)=>p.name==='EPC');if(!epc)return d;
  if(snapshot.allocation?.policy===DISCOUNT_POLICY){
    const field=d.taxMode==='Tax Included'?'total':'beforeTax';

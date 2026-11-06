@@ -122,7 +122,7 @@ export function compareBasis(expected: any, actual: any) {
 }
 export function commercialComparison(boq: any, snapshot: any, terms: any = {}) {
   return {
-    materials: boq.lines
+    materials: (boq.approvedAgreement?boq.lines.map((line:any)=>line.contractItemId?{...line,itemId:line.contractItemId,description:'25mm² 4C inverter cable (contractual)',specification:line.contractSpecification}:line):boq.lines)
       .filter((l: any) => new Decimal(l.qty).gt(0))
       .map((l: any, index: number) => ({
         lineId: `material-${index}`,
@@ -163,7 +163,7 @@ export function safeCosting(
 ) {
   const restricted = !["Admin", "Management"].includes(role);
   const lines = boq.lines.map((l: any) => {
-    const hidden = restricted && isBessEquipment(l);
+    const hidden = restricted && (boq.approvedAgreement || isBessEquipment(l));
     const rate = new Decimal(l.rate ?? 0),
       cost = new Decimal(l.total ?? 0),
       markup = markups[l.key] ?? "0";

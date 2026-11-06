@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Decimal } from "decimal.js";
 import { api } from "../api.js";
 import { Button } from "../ui/Button.js";
+import { Field } from "../ui/Field.js";
 import { Icon } from "./Icon.js";
 import { DocumentPreview } from "./DocumentPreview.js";
 import { saleConfirmationFields } from "../pages/Orders.js";
@@ -40,12 +41,16 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
     framework = r.route.endsWith("framework");
   const directUps = r.route==='direct-framework' && ['MBL-UPS-6-5','MBL-UPS-6-10','UBL-UPS-6-10'].includes(detail.basis?.source?.key);
   const savedDirectPo=r.data?.directPoDetails;
-  const reviewingDirectPo = directUps && !!(initialDirectPo?.reviewIpo || savedDirectPo);
+  const reviewingDirectPo = r.route==='direct-framework' && !!(initialDirectPo?.reviewIpo || savedDirectPo);
   const draftValues=savedDirectPo?.values??initialDirectPo?.values??{};
   const [editingRecord,setEditingRecord]=useState(false),[recordValues,setRecordValues]=useState<Record<string,string>>({});
   const attachedDirectPo=initialDirectPo?.document??detail.files?.find((f:any)=>f.id===savedDirectPo?.evidenceId);
   const preAgreedBank = framework && (String(r.customerCode??c.short_code).toUpperCase()==='UBL'||directUps);
   const [ipoError,setIpoError]=useState(''),[ipoCheck,setIpoCheck]=useState('');
+  const allowPoConfiguration=r.route==='survey-framework'&&r.customerCode?.toUpperCase()==='UBL'&&!!r.data.designHandoffAt;
+  const [orderedFramework,setOrderedFramework]=useState(r.frameworkId??''),[poConfigurationChoices,setPoConfigurationChoices]=useState<any[]>([]),[configurationChangeReason,setConfigurationChangeReason]=useState('');
+  const configurationChanged=allowPoConfiguration&&orderedFramework!==r.frameworkId;
+  useEffect(()=>{if(allowPoConfiguration)void api<any>(`/project-workflow/${r.id}/po-configurations`).then(v=>setPoConfigurationChoices(v.choices)).catch(e=>setError(e.message));},[r.id]);
   const preAgreedUbl = framework && String(r.customerCode ?? c.short_code).toUpperCase() === "UBL";
   const [input, setInput] = useState<Record<string, string>>({
       evidenceType: initialDirectPo?.evidenceType??savedDirectPo?.evidenceType??"",
@@ -94,7 +99,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
     void api<any>(`/project-workflow/${r.id}/preview`, {
       csrf: session.csrfToken,
       body: framework
-        ? { kind: "framework", frameworkId: r.frameworkId }
+        ? { kind: "framework", frameworkId: orderedFramework }
         : { kind: "quotation", quotationId: r.quotation?.id },
     })
       .then((value) => {
@@ -127,6 +132,8 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
                   )
                   .map(([key, value]) => [key, String(value)]),
               ),
+              customerNtn:old.customerNtn?.trim()||value.customerNtn?.trim()||c.ntn||'',
+              customerStrn:old.customerStrn?.trim()||value.customerStrn?.trim()||c.strn||'', 
             }));
         })
         .catch((e) => {
@@ -135,7 +142,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
     return () => {
       active = false;
     };
-  }, [r.id]);
+  }, [r.id,orderedFramework]);
   const change = (field: string, value: string) => {
     setInput((old) => ({ ...old, [field]: value }));
     setError("");
@@ -174,7 +181,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
     ...(!input.orderDate ? ["Enter the Order Date."] : []),
     ...(po && !input.poNumber ? ["Enter the Customer PO reference."] : []),
     ...issues,
-
+    ...(configurationChanged&&!configurationChangeReason.trim()?['Record the customer-requested configuration change reason.']:[]),
   ];
   function renderField([field, label]: any) {
     if (field === 'ipoNumber' || (
@@ -277,6 +284,8 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
               .filter(([, value]) => typeof value === "string")
               .map(([key, value]) => [key, String(value)]),
           ),
+          customerNtn:old.customerNtn?.trim()||c.ntn||'',
+          customerStrn:old.customerStrn?.trim()||c.strn||'',
         }));
         const ubl=preAgreedBank?ublPoSuggestions(read.text):undefined;
         if(ubl?.poNumber||ubl?.orderDate)setInput(old=>({...old,...(ubl.poNumber?{poNumber:ubl.poNumber}:{}),...(ubl.orderDate?{orderDate:ubl.orderDate}:{})}));
@@ -298,6 +307,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
     scope,
     poTotal,
     poTax,
+    orderedFramework,configurationChangeReason,
   });
   const currentPreview =
     salePreview?.key === previewKey ? salePreview : undefined;
@@ -314,6 +324,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
       saleDetails: {...input,...(preAgreedBank?{poRecordedTotal:poTotal,poRecordedTax:poTax,poAmountSource:poTotal?"Customer PO reading; compared against accepted agreement":"Accepted agreement; PO amount unreadable or redacted",poPrintedTax,poTaxTreatment:poInclusive?"Tax-inclusive payable; approved GST allocation retained":"As printed"}:{})},
       actual: po ? structuredClone(basis.comparison) : undefined,
       reviewed: true,
+      configurationChangeReason:configurationChanged?configurationChangeReason:'',
       customerNtn: input.customerNtn ?? "",
       customerStrn: input.customerStrn ?? "",
       notes: input.evidenceNotes,
@@ -449,11 +460,12 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
                 value={input.evidenceType}
                 onChange={(e) => {
                   change("evidenceType", e.target.value);
+                  if(e.target.value!=='Customer PO'){setOrderedFramework(r.frameworkId??'');setConfigurationChangeReason('');}
                   setInput((old) => ({
                     ...old,
                     poNumber: "",
-                    customerNtn: directUps ? (c.ntn??"") : "",
-                    customerStrn: directUps ? (c.strn??"") : "",
+                    customerNtn: old.customerNtn?.trim() || c.ntn || "",
+                    customerStrn: old.customerStrn?.trim() || c.strn || "",
                     orderDate: e.target.value === "Customer PO" ? "" : today(),
                   }));
                   setDocument(undefined);
@@ -473,6 +485,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
             </label>
             {directUps && <div className="pz-field-wide">{evidenceUpload}</div>}
           </fieldset>
+          {allowPoConfiguration&&po&&<section className="pz-panel pz-stack" aria-label="Customer ordered configuration"><Field id="customer-po-configuration" label="Configuration requested in customer PO"><select id="customer-po-configuration" aria-label="Configuration requested in customer PO" value={orderedFramework} onChange={e=>{setOrderedFramework(e.target.value);setSalePreview(undefined);setPreviewReviewed(false);setAccepted(false);setError('');}}><option value={r.frameworkId}>Recommended: {detail.basis?.source?.key}</option>{poConfigurationChoices.filter(f=>f.id!==r.frameworkId).map(f=><option key={f.id} value={f.id}>{f.label} · v{f.version} · {money(f.total)}</option>)}</select></Field>{configurationChanged&&<><p>Recommended: {detail.basis?.source?.key} → Customer ordered: {basis?.source?.key??'Loading selected configuration…'}. Existing approved BOQ and rates apply. Management is notified; no new approval blocks issuance.</p><Field id="customer-po-configuration-reason" label="Customer configuration change reason" hint="Explain the configuration requested in the attached customer PO."><textarea id="customer-po-configuration-reason" rows={3} aria-label="Customer configuration change reason" value={configurationChangeReason} onChange={e=>setConfigurationChangeReason(e.target.value)}/></Field></>}</section>}
           <h3>PO details, please verify</h3>
           <fieldset disabled={busy} className="order-fields">
             {directUps&&<label>Order number (unit / total)<input value={input.orderNumber??''} placeholder="For example 20/60" onChange={e=>change('orderNumber',e.target.value)}/><small>Unit sequence within the customer's order; separate from its PO reference.</small></label>}

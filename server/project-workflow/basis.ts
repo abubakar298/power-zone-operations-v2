@@ -1,3 +1,4 @@
+import {approvedBessBasis} from '../ubl/bess-framework.js';
 import type { Pool, PoolClient } from "pg";
 import { Decimal } from "decimal.js";
 import { calculate, calculateTechnicalReview } from "../boq/engine.js";
@@ -126,8 +127,8 @@ function orderInput(customer: any, r: any, extra: any = {}) {
     invoiceCompany: extra.invoiceCompany ?? "PZES (PVT Ltd)",
     salesPerson: "Atif",
     customerAccepted: true,
-    customerNtn: extra.customerNtn ?? "",
-    customerStrn: extra.customerStrn ?? "",
+    customerNtn: extra.customerNtn?.trim() || customer.ntn || "",
+    customerStrn: extra.customerStrn?.trim() || customer.strn || "",
     contactPerson: customer.contact_person ?? "",
     phone: customer.phone ?? "",
     email: customer.email ?? "",
@@ -291,6 +292,7 @@ export async function frameworkBasis(
   id: string,
   extra: any = {},
 ) {
+  if(r.data?.basis?.boq?.approvedAgreement && r.data.basis.source.id===id)return structuredClone(r.data.basis);
   const f = (
     await c.query(
       "SELECT * FROM project_framework_versions WHERE id=$1 AND customer_id=$2",
@@ -325,6 +327,8 @@ export async function frameworkBasis(
       shortCode: customer.short_code,
     };
     order = structuredClone(p.orderSnapshot);
+  } else if (p.type === "ubl-bess-installation") {
+    ({boq,order}=approvedBessBasis(r,p,m));
   } else if (p.type === "ubl-solar") {
     boq = savedUblBoq(r, p, m);
     const base = {
