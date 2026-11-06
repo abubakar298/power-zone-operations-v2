@@ -105,8 +105,11 @@ test("Atif selects frozen BESS agreements individually and issues mixed solar/BE
   await expect(
     page.getByRole("heading", { name: "Review the saved batch", exact: true }),
   ).toBeVisible();
+  // A mixed batch renders IPO and PT PDFs for every site. Allow bounded CI
+  // rendering time without weakening the HTTP, document or issuance assertions.
   const preview = page.waitForResponse((r) =>
     r.url().endsWith("/configuration-batches/" + batch.id + "/preview"),
+    { timeout: 60_000 },
   );
   await page
     .getByRole("button", { name: "Review IPO and PT documents", exact: true })
@@ -131,6 +134,7 @@ test("Atif selects frozen BESS agreements individually and issues mixed solar/BE
   page.once("dialog", (dialog) => dialog.accept());
   const issued = page.waitForResponse((r) =>
     r.url().endsWith("/configuration-batches/" + batch.id + "/confirm"),
+    { timeout: 60_000 },
   );
   await page
     .getByRole("button", { name: "Issue batch IPOs and PT", exact: true })
