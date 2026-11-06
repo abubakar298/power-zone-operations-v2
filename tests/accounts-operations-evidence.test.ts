@@ -80,6 +80,13 @@ test('historical Solar closure shows exact-site typed DO, acknowledgement and ph
   const saved=await repo.command(actor,id,{...base,requestKey:randomUUID(),version:3,edit:true,category:'handover',acknowledgementId:ack.id,variableSignoffId:vso.id,photographIds:[photo.id]});
   assert.equal(saved.completed,true);assert.equal(saved.deliveryDate,original.deliveryDate);assert.deepEqual(saved.accounts,original.accounts);assert.equal(saved.qc,undefined);
   const complete=await projectOperationsClosureEvidence(db.pool,key);assert.ok(complete.signature);assert.equal(complete.hold,undefined);assert.equal(complete.evidence.length,4);
+  const coordinator=randomUUID();await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[coordinator,coordinator+'@example.test','Coordinator fixture','Coordinator','isolated']);
+  const sample=(await createDashboardSamples(db.pool,coordinator,actor)).find((r:any)=>r.ipoId)!;
+  const nativeKey='ipo:'+sample.ipoId,reportId=randomUUID();
+  await db.pool.query('INSERT INTO inventory_reports(id,job_key,created_by) VALUES($1,$2,$3)',[reportId,nativeKey,actor]);
+  await db.pool.query('INSERT INTO inventory_report_versions(id,report_id,version,stage,snapshot,request_key,created_by) VALUES($1,$2,1,$3,$4,$5,$6)',[randomUUID(),reportId,'Sent to Accounts',{qcUsage:{boardId:id,source:'QC historical usage'}},randomUUID(),actor]);
+  const native=await projectOperationsClosureEvidence(db.pool,nativeKey);assert.ok(native.signature,'The exact approved historical QC report supplies the native IPO link without a display-name match');assert.equal(native.evidence.length,4);
+  assert.equal((await projectOperationsClosureEvidence(db.pool,'ipo:'+randomUUID())).source,null,'A different native job cannot borrow the historical report linkage');
   const picture=complete.evidence.find(e=>e.kind==='Site photographs')!;assert.equal(picture.id,photo.id);assert.ok((await operationsClosureEvidenceFile(db.pool,key,picture.source)).content.length);
   await assert.rejects(operationsClosureEvidenceFile(db.pool,'ubl:999999999',picture.source),/not found/);
   await assert.rejects(repo.command(actor,id,{...base,requestKey:randomUUID(),version:4,edit:true,category:'handover',acknowledgementId:ack.id,variableSignoffId:vso.id,photographIds:[ack.id]}),/distinct site photographs/);

@@ -25,7 +25,14 @@ async function project(c:Client,jobKey:string,options:{lock?:boolean;version?:nu
  const historical=/^ubl:(\d+)$/.exec(jobKey);
  if((!ipo||!ipo.success)&&!historical)return held('This historical job has no exact approved IPO-to-Operations source link.');
  if(options.lock&&typeof (c as PoolClient).release!=='function')throw new Error('Operations evidence locking requires the caller transaction client.');
- const link=historical?(await c.query(`SELECT s.id AS board_site_id FROM ubl_site_orders o JOIN operations_board_sites s ON s.id='registered-UBL:SOLAR:'||o.legacy_ipo_number WHERE o.site_id=$1${options.lock?' FOR SHARE OF s':''}`,[historical[1]])).rows[0]:(await c.query(`SELECT l.board_site_id FROM inventory_material_source_links l JOIN operations_board_sites s ON s.id=l.board_site_id WHERE l.ipo_id=$1${options.lock?' FOR SHARE OF s':''}`,[ipo&&ipo.success?ipo.data:null])).rows[0];
+ let link=historical?(await c.query(`SELECT s.id AS board_site_id FROM ubl_site_orders o JOIN operations_board_sites s ON s.id='registered-UBL:SOLAR:'||o.legacy_ipo_number WHERE o.site_id=$1${options.lock?' FOR SHARE OF s':''}`,[historical[1]])).rows[0]:(await c.query(`SELECT l.board_site_id FROM inventory_material_source_links l JOIN operations_board_sites s ON s.id=l.board_site_id WHERE l.ipo_id=$1${options.lock?' FOR SHARE OF s':''}`,[ipo&&ipo.success?ipo.data:null])).rows[0];
+ // The reviewed historical QC usage handoff is also an exact, immutable job-to-site source.
+ // Older native framework IPOs predate material-source-link rows; never match their names.
+ if(!link&&ipo?.success)link=(await c.query(`SELECT s.id AS board_site_id FROM inventory_reports r
+  JOIN LATERAL(SELECT stage,snapshot FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true
+  JOIN operations_board_sites s ON s.id=v.snapshot#>>'{qcUsage,boardId}'
+  WHERE r.job_key=$1 AND v.stage='Sent to Accounts' AND v.snapshot#>>'{qcUsage,source}'='QC historical usage'
+  AND s.id ~ '^registered-UBL:SOLAR:[0-9]+$'${options.lock?' FOR SHARE OF s':''}`,[jobKey])).rows[0];
  if(!link)return held('The approved IPO has no exact Operations source link.');
  const row=(await c.query(`SELECT version,snapshot FROM operations_board_versions WHERE site_id=$1${options.version!==undefined?' AND version=$2':''} ORDER BY version DESC LIMIT 1`,options.version!==undefined?[link.board_site_id,options.version]:[link.board_site_id])).rows[0];
  if(!row)return held('The linked Operations evidence version is unavailable.');
