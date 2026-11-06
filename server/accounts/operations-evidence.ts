@@ -5,8 +5,8 @@ import {workflowSiteSchema,type Entry} from '../operations-board/workflow.js';
 import {HttpError} from '../http/errors.js';
 
 type Client=Pool|PoolClient;
-export type OperationsEvidenceSource={kind:'Operations';boardSiteId:string;version:number;fileId:string;sha256:string;date:string;purpose:'acknowledgement'|'irr'|'variable-signoff'|'qc-photo'};
-export type OperationsClosureEvidence={id:string;job_key:string;kind:'Client acknowledgment'|'IRR'|'Variable items sign-off'|'Site photographs';filename:string;media_type:string;sha256:string;created_at:Date;created_by:string;downloadUrl:string;source:OperationsEvidenceSource};
+export type OperationsEvidenceSource={kind:'Operations';boardSiteId:string;version:number;fileId:string;sha256:string;date:string;purpose:'acknowledgement'|'irr'|'variable-signoff'|'qc-photo'|'signed-do'};
+export type OperationsClosureEvidence={id:string;job_key:string;kind:'Signed DO'|'Client acknowledgment'|'IRR'|'Variable items sign-off'|'Site photographs';filename:string;media_type:string;sha256:string;created_at:Date;created_by:string;downloadUrl:string;source:OperationsEvidenceSource};
 export type OperationsClosureProjection={evidence:OperationsClosureEvidence[];signature:string|null;source:{boardSiteId:string;version:number}|null;hold?:string};
 const fileId=z.uuid(),date=z.iso.date();
 const imageTypes=new Set(['image/png','image/jpeg','image/webp','image/heic','image/heif']);
@@ -22,9 +22,10 @@ function actualImage(type:string,header:Buffer){
 async function project(c:Client,jobKey:string,options:{lock?:boolean;version?:number}={}):Promise<OperationsClosureProjection>{
  const match=/^ipo:(.+)$/.exec(jobKey),ipo=match&&fileId.safeParse(match[1]);
  const held=(hold:string,source:OperationsClosureProjection['source']=null):OperationsClosureProjection=>({evidence:[],signature:null,source,hold});
- if(!ipo||!ipo.success)return held('This historical job has no exact approved IPO-to-Operations source link.');
+ const historical=/^ubl:(\d+)$/.exec(jobKey);
+ if((!ipo||!ipo.success)&&!historical)return held('This historical job has no exact approved IPO-to-Operations source link.');
  if(options.lock&&typeof (c as PoolClient).release!=='function')throw new Error('Operations evidence locking requires the caller transaction client.');
- const link=(await c.query(`SELECT l.board_site_id FROM inventory_material_source_links l JOIN operations_board_sites s ON s.id=l.board_site_id WHERE l.ipo_id=$1${options.lock?' FOR SHARE OF s':''}`,[ipo.data])).rows[0];
+ const link=historical?(await c.query(`SELECT s.id AS board_site_id FROM ubl_site_orders o JOIN operations_board_sites s ON s.id='registered-UBL:SOLAR:'||o.legacy_ipo_number WHERE o.site_id=$1${options.lock?' FOR SHARE OF s':''}`,[historical[1]])).rows[0]:(await c.query(`SELECT l.board_site_id FROM inventory_material_source_links l JOIN operations_board_sites s ON s.id=l.board_site_id WHERE l.ipo_id=$1${options.lock?' FOR SHARE OF s':''}`,[ipo&&ipo.success?ipo.data:null])).rows[0];
  if(!link)return held('The approved IPO has no exact Operations source link.');
  const row=(await c.query(`SELECT version,snapshot FROM operations_board_versions WHERE site_id=$1${options.version!==undefined?' AND version=$2':''} ORDER BY version DESC LIMIT 1`,options.version!==undefined?[link.board_site_id,options.version]:[link.board_site_id])).rows[0];
  if(!row)return held('The linked Operations evidence version is unavailable.');
@@ -34,6 +35,7 @@ async function project(c:Client,jobKey:string,options:{lock?:boolean;version?:nu
  if(site.id!==source.boardSiteId)return held('The linked Operations snapshot identity needs verification.',source);
  if(site.installation!==true||site.scopePending||site.projectType==='delivery-only')return held('This record does not establish completed installation scope.',source);
  if(site.completed!==true)return held('Operations has not recorded installation completion.',source);
+ if(historical||(!site.qcJob&&!site.qc?.signoff&&!site.qc?.handover&&site.documents?.some(d=>d.id===site.id+':historical-handover-documents')))return historicalProjection(c,jobKey,site,source);
  const type=site.projectType;
  if(!type||!['solar','solar-bess','bess','ups'].includes(type))return held('The installation project type needs explicit verification.',source);
  const stageNames=type==='ups'?['job']:type==='bess'?['cabinet','panel','bessTesting','handover']:['civil','electrical','testing','signoff'];
@@ -63,6 +65,34 @@ async function project(c:Client,jobKey:string,options:{lock?:boolean;version?:nu
  const signature=createHash('sha256').update(JSON.stringify({boardSiteId:source.boardSiteId,type,completed:true,installation:true,...final.noVariableItemsUsed?{noVariableItemsUsed:true}:{},completion:entries.map(({stage,entry})=>({stage,date:entry!.date,...type==='ups'?{checks:entry!.checks}:{}})),documents:typed.map(t=>({purpose:t.purpose,id:t.ref!.id,sha256:byId.get(t.ref!.id).sha256})),photos:photos.map(p=>({...p,sha256:byId.get(p.id).sha256})).sort((a,b)=>a.stage.localeCompare(b.stage)||a.id.localeCompare(b.id))})).digest('hex');
  return {evidence,signature,source};
 }
+
+/** Exact legacy IPO identity; use typed uploads without replaying historical QC stages. */
+async function historicalProjection(c:Client,jobKey:string,site:import('../operations-board/workflow.js').WorkflowSite,source:NonNullable<OperationsClosureProjection['source']>):Promise<OperationsClosureProjection>{
+ const handover=site.documents?.find(d=>d.id===site.id+':historical-handover-documents'&&d.completionEvidenceVersion===2);
+ const delivery=site.documents?.find(d=>d.id===site.id+':historical-delivery-documents');
+ const typed:Array<{id:string;kind:OperationsClosureEvidence['kind'];purpose:OperationsEvidenceSource['purpose'];date:string}>=[];
+ const add=(ref:any,kind:OperationsClosureEvidence['kind'],purpose:OperationsEvidenceSource['purpose'],when:unknown)=>{if(ref&&fileId.safeParse(ref.id).success&&date.safeParse(when).success)typed.push({id:ref.id,kind,purpose,date:when as string});};
+ const when=handover?.evidenceDate??handover?.createdDate??handover?.date;
+ add(handover?.acknowledgement,'Client acknowledgment','acknowledgement',when);
+ add(handover?.irr,'IRR','irr',when);
+ add(handover?.variableSignoff,'Variable items sign-off','variable-signoff',when);
+ for(const ref of (Array.isArray(handover?.photographs)?handover.photographs:[]))add(ref,'Site photographs','qc-photo',when);
+ // Historical delivery saves the signed DO first and the optional material photo second.
+ add(delivery?.evidence?.[0],'Signed DO','signed-do',delivery?.evidenceDate??delivery?.createdDate??delivery?.date);
+ for(const d of site.deliveries??[])add(d.signedDo,'Signed DO','signed-do',d.deliveryDate);
+ const ids=[...new Set(typed.map(t=>t.id))];
+ const files=ids.length?(await c.query('SELECT id,filename,media_type,sha256,created_at,created_by,substring(content from 1 for 4096) AS header FROM operations_board_files WHERE site_id=$1 AND id=ANY($2::uuid[])',[source.boardSiteId,ids])).rows:[];
+ const byId=new Map(files.map(f=>[f.id,f]));
+ const documentIds=new Set(typed.filter(t=>t.purpose!=='qc-photo').map(t=>t.id));
+ const evidence:OperationsClosureEvidence[]=typed.filter((t,n,all)=>{
+  const f=byId.get(t.id);return f&&all.findIndex(other=>other.id===t.id&&other.purpose===t.purpose)===n&&(t.purpose!=='qc-photo'||!documentIds.has(t.id)&&imageTypes.has(f.media_type)&&actualImage(f.media_type,f.header));
+ }).map(t=>{const f=byId.get(t.id)!;return {id:t.id,job_key:jobKey,kind:t.kind,filename:f.filename,media_type:f.media_type,sha256:f.sha256,created_at:f.created_at,created_by:f.created_by,downloadUrl:`/api/accounts-workspace/jobs/${encodeURIComponent(jobKey)}/operations-evidence/${source.version}/${t.id}`,source:{kind:'Operations',...source,fileId:t.id,sha256:f.sha256,date:t.date,purpose:t.purpose}};});
+ const missing=[...(!evidence.some(e=>e.kind==='Signed DO')?['signed DO']:[]),...(!evidence.some(e=>e.kind==='Client acknowledgment')?['customer acknowledgment']:[]),...(!handover?.noVariableItemsUsed&&!evidence.some(e=>e.kind==='Variable items sign-off')?['variable-items sign-off']:[]),...(!evidence.some(e=>e.kind==='Site photographs')?['site photographs']:[])];
+ if(files.length!==ids.length)missing.push('valid site-scoped files');
+ const signature=missing.length?null:createHash('sha256').update(JSON.stringify({boardSiteId:source.boardSiteId,completed:true,installation:true,noVariableItemsUsed:handover?.noVariableItemsUsed===true,evidence:evidence.map(e=>({id:e.id,sha256:e.sha256,date:e.source.date,purpose:e.source.purpose})).sort((a,b)=>a.id.localeCompare(b.id)||a.purpose.localeCompare(b.purpose))})).digest('hex');
+ return {evidence,source,signature,...missing.length?{hold:'Historical QC evidence still needs: '+missing.join(', ')+'.'}:{}};
+}
+
 /** Internal read projection. Caller must authorise Accounts job access. */
 export async function projectOperationsClosureEvidence(c:Client,jobKey:string,options:{lock?:boolean}={}):Promise<OperationsClosureProjection>{return project(c,jobKey,options);}
 /** Caller must separately allow a current source reference or a frozen closure reference. */

@@ -1276,7 +1276,7 @@ export function AccountsWorkspace({
               Uploaded by QC. Accounts reviews receipt status and does not enter
               these references.
             </p>
-            {["Client acknowledgment", "Site photographs", ...(job.evidence?.some((e:any)=>e.source?.kind==='Operations')?["IRR", "Variable items sign-off"]:[])].map((kind) => {
+            {["Client acknowledgment", "Site photographs", ...(job.evidence?.some((e:any)=>e.source?.kind==='Operations')?["Signed DO", "IRR", "Variable items sign-off"]:[])].map((kind) => {
               const files =
                 job.evidence?.filter((e: any) => e.kind === kind) ?? [];
               return (

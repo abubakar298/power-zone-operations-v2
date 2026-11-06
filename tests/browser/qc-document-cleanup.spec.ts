@@ -29,3 +29,18 @@ for(const type of ['ups','solar-bess'])test(`QC ${type} keeps photos, completion
  await completion.getByRole('button',{name:'acknowledgment.pdf',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await expect(page.getByRole('dialog').getByRole('img',{name:'acknowledgment.pdf · page 1',exact:true})).toBeVisible();expect(downloads).toBe(0);await page.setViewportSize({width:390,height:844});const bounds=await page.getByRole('dialog').boundingBox();expect(bounds!.width).toBeLessThanOrEqual(390);expect(bounds!.height).toBeLessThanOrEqual(844);await page.getByRole('dialog').getByRole('button',{name:'Close preview',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
  await page.screenshot({path:`test-results/qc-${type}-cleanup.png`,fullPage:true});
 });
+
+test('historical completed Solar evidence keeps signoffs and photographs separate without re-entering stages',async({page})=>{
+ await actors(page.request);await login(page.request);
+ const ack={id:'ack',name:'original-ack.pdf',mediaType:'application/pdf'},vso={id:'vso',name:'original-vso.pdf',mediaType:'application/pdf'},photo={id:'photo',name:'original-site.jpg',mediaType:'image/jpeg'};
+ const site={id:'historical-ui',ipo:'CHP-HIST',name:'Historical Solar fixture',customer:'UBL',operationsTeam:'central',installation:true,projectType:'solar-bess',stage:'delivered',completed:true,deliveryDate:'2026-10-01',version:4,accounts:[],history:[],blockers:[],documents:[{id:'historical-ui:historical-handover-documents',label:'Historical handover',date:'2026-10-02',evidenceDate:'2026-10-02',location:'At site',completionEvidenceVersion:2,acknowledgement:ack,variableSignoff:vso,photographs:[photo],evidence:[ack,vso,photo],history:[]}]};
+ await page.route('**/api/operations-board/sites',r=>r.fulfill({json:{sites:[site],access:{kind:'qc',team:'central',name:'QC'}}}));
+ await page.route('**/api/operations-board/sites/historical-ui',r=>r.fulfill({json:site}));
+ await page.route('**/api/operations-board/sites/historical-ui/files',r=>r.fulfill({json:{files:[]}}));
+ await page.goto('/operations/sites/historical-ui');await page.getByRole('button',{name:'Edit handover evidence',exact:true}).click();
+ await expect(page.getByLabel('Document date',{exact:true})).toHaveValue('2026-10-02');
+ const photos=page.getByLabel('Site photographs · existing completed installation',{exact:true});await expect(photos).toHaveAttribute('multiple','');
+ await expect(page.getByRole('button',{name:'original-site.jpg',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'original-ack.pdf',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'original-vso.pdf',exact:true})).toBeVisible();
+ await expect(page.getByLabel('Completion date',{exact:true})).toHaveCount(0);await expect(page.getByLabel('Reason for this change',{exact:true})).toBeVisible();
+ await page.screenshot({path:'test-results/historical-qc-photos.png',fullPage:true});
+});

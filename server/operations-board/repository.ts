@@ -384,11 +384,13 @@ export class OperationsBoardRepository{
    }else if(v.action==='historical-evidence'){
     if(v.category==='handover'&&(!v.variableSignoffId&&!v.noVariableItemsUsed||!v.variableSignoffId&&!v.acknowledgementId))throw new HttpError(422,'Upload the available historical sign-off, or an acknowledgement confirming no variable items were used.');
     if(v.category==='handover'&&v.noVariableItemsUsed&&v.variableSignoffId)throw new HttpError(422,'Choose no variable items used or a sign-off, not both.');
-    const ids=v.category==='delivery'?[v.signedDoId,...(v.materialPhotoId?[v.materialPhotoId]:[])]:[...(v.acknowledgementId?[v.acknowledgementId]:[]),...(v.irrId?[v.irrId]:[]),...(v.variableSignoffId?[v.variableSignoffId]:[])];
+    const ids=v.category==='delivery'?[v.signedDoId,...(v.materialPhotoId?[v.materialPhotoId]:[])]:[...(v.acknowledgementId?[v.acknowledgementId]:[]),...(v.irrId?[v.irrId]:[]),...(v.variableSignoffId?[v.variableSignoffId]:[]),...(v.photographIds??[])];
     if(ids.some(id=>!id))throw new HttpError(422,v.category==='delivery'?'Upload the signed DO.':'Upload the acknowledgement and variable-items sign-off.');
     const files=await this.references(c,id,ids as string[]),references=(ids as string[]).map(file=>files.get(file)!);
     if(v.category==='delivery'&&references[1]&&!references[1].mediaType.startsWith('image/'))throw new HttpError(422,'Upload a photo of the delivered material.');
-    snapshot=attachHistoricalEvidence(site,{category:v.category,date:v.date,files:references,...v.category==='handover'?{completionEvidenceVersion:2,acknowledgement:files.get(v.acknowledgementId!),irr:v.irrId?files.get(v.irrId):undefined,variableSignoff:v.variableSignoffId?files.get(v.variableSignoffId):undefined,noVariableItemsUsed:v.noVariableItemsUsed}:{}},now,v.edit);kind='Existing site evidence recorded';audiences=['accounts'];
+    if(v.category==='delivery'&&v.photographIds?.length)throw new HttpError(422,'Attach site photographs to installation handover.');
+    if((v.photographIds??[]).some(photo=>!files.get(photo)?.mediaType.startsWith('image/')||[v.acknowledgementId,v.irrId,v.variableSignoffId].includes(photo)))throw new HttpError(422,'Choose distinct site photographs, separate from signed documents.');
+    snapshot=attachHistoricalEvidence(site,{category:v.category,date:v.date,files:references,...v.category==='handover'?{completionEvidenceVersion:2,acknowledgement:files.get(v.acknowledgementId!),irr:v.irrId?files.get(v.irrId):undefined,variableSignoff:v.variableSignoffId?files.get(v.variableSignoffId):undefined,noVariableItemsUsed:v.noVariableItemsUsed,photographs:(v.photographIds??[]).map(photo=>files.get(photo)!)}:{}},now,v.edit);kind='Existing site evidence recorded';audiences=['accounts'];
    }else if(v.action==='blocker'){
     if(v.edit)throw new HttpError(422,'Resolve the saved blocker or add a new reason.');
     const stage=currentStage(site);if(site.blockers.some(b=>b.status==='open'&&b.stage===stage&&b.reason===v.text))throw new HttpError(409,'This blocker reason is already recorded.');

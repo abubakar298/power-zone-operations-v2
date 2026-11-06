@@ -139,7 +139,7 @@ export function accountsHttp(
   });
   r.get('/jobs/:key/operations-evidence/:version/:fileId',async(req,res)=>{
     const file=await repo.operationsEvidenceFile(req.authSession!.user.id,
-      parse(z.string().regex(/^ipo:[0-9a-f-]{36}$/),req.params.key),
+      parse(z.string().regex(/^(?:ipo:[0-9a-f-]{36}|ubl:\d+)$/),req.params.key),
       parse(z.coerce.number().int().positive(),req.params.version),parse(z.uuid(),req.params.fileId));
     res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
       'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);

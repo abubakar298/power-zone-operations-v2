@@ -508,7 +508,7 @@ export class AccountsRepository {
   }
   async operationsEvidenceFile(actor:string,key:string,version:number,id:string){
     await this.access(actor);
-    if(!/^ipo:[0-9a-f-]{36}$/.test(key))throw new HttpError(404,'Evidence not found.');
+    if(!/^(?:ipo:[0-9a-f-]{36}|ubl:\d+)$/.test(key))throw new HttpError(404,'Evidence not found.');
     // Receiving this exact job's approved Inventory report establishes Accounts scope.
     if(!(await this.pool.query("SELECT 1 FROM inventory_reports r JOIN LATERAL(SELECT stage FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true WHERE r.job_key=$1 AND v.stage='Sent to Accounts'",[key])).rowCount)throw new HttpError(404,'Evidence not found.');
     const projection=await projectOperationsClosureEvidence(this.pool,key);
