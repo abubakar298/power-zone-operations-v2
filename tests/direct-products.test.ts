@@ -28,6 +28,14 @@ test('Direct Product Sale uses approved equipment, policy prices, safe visibilit
  assert.equal(b.lines.length,4);assert.equal(b.lines.some(l=>/Labour|Delivery|Cable|Bore|Structure/.test(l.key)),false);
  const safe=restrictedCostView(b);assert.equal(safe.lines.filter((l:any)=>l.phase==='BESS').every((l:any)=>l.rate===null&&l.total===null),true);assert.equal(safe.total,b.lines.find(l=>l.key==='Extra Smart Meter')!.total);
  const hv=calculate({...s,directProducts:[{kind:'bess',key:'BESS-24-40',qty:'2'}]},m as any);assert.equal(hv.lines.find(l=>l.key==='HYB-3P-012')!.qty,'4');assert.equal(hv.lines.find(l=>l.key==='BAT-HV-05 KW WO BMS')!.qty,'16');assert.equal(hv.lines.find(l=>l.key==='CH-BMS-HV')!.qty,'4');
+ const batteryBrand=m.brands.find(b=>b.status==='Active'&&b.category==='Battery & BMS'&&b.name==='Chint Power')!;assert.ok(batteryBrand);
+ const additions=[{kind:'item' as const,key:'BAT-HV-05 KW WO BMS',qty:'14',brandId:batteryBrand.id},{kind:'item' as const,key:'CH-BMS-HV',qty:'4',brandId:batteryBrand.id}];
+ for(const directProducts of [[{kind:'bess' as const,key:'BESS-30-40',qty:'1'},...additions],[...additions,{kind:'bess' as const,key:'BESS-30-40',qty:'1'}]]){
+  const mixed=calculate({...s,directProducts},m as any);
+  for(const [key,qty] of [['BAT-HV-05 KW WO BMS','22'],['CH-BMS-HV','6']]){const lines=mixed.lines.filter(l=>l.key===key);assert.equal(lines.length,1);assert.equal(lines[0].qty,qty);assert.equal(lines[0].brand,'Chint Power');assert.ok(lines[0].itemId);}
+ }
+ const wrongBrand={id:999999,name:'Different battery make',category:'Battery & BMS',status:'Active'};
+ assert.throws(()=>calculate({...s,directProducts:[{kind:'bess',key:'BESS-30-40',qty:'1'},{...additions[0],brandId:wrongBrand.id}]},{...m,brands:[...m.brands,wrongBrand]} as any),/different brands|Different stock variants|Selected Item ID and brand do not match/);
  const individual=calculate({...s,directProducts:[{kind:'item',key:'Extra Smart Meter',qty:'1'}]},m as any);assert.equal(individual.lines.length,1);assert.equal(individual.lines[0].phase,'EPC');
  assert.throws(()=>calculate({...s,directProducts:[{kind:'item',key:'FORGED',qty:'1'}]},m as any),/active item/);
  assert.throws(()=>calculate({...s,directProducts:[{kind:'bess',key:'6-10',qty:'1.5'}]},m as any),/whole/);

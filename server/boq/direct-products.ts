@@ -1,5 +1,5 @@
 import {isSolarPanelProduct} from './solar-product.js';
-import {identifyLines} from '../masters/catalogue.js';
+import {identifyLines,selectCatalogueItem} from '../masters/catalogue.js';
 import {productBrandCategory} from './product-brand-category.js';
 import {Decimal} from 'decimal.js';
 import {HttpError} from '../http/errors.js';
@@ -40,7 +40,17 @@ export function calculateDirectProducts(s:Survey,m:Masters):BoqSnapshot {
     const stock=component.itemId?m.catalogue?.find(i=>i.item_id===component.itemId):undefined;
     if(stock&&brand&&!/Any of the Above|General/i.test(brand.name)&&stock.payload.brandCategory!==brand.name)throw new HttpError(400,'Selected Item ID and brand do not match.');
     const existing=lines.find(l=>l.key===component.key);
-    if(existing){if(stock&&existing.itemId&&existing.itemId!==stock.item_id)throw new HttpError(400,'Different stock variants must be reviewed separately.');if(existing.brand!==(brand?.name??''))throw new HttpError(400,'The same product cannot use different brands in one BOQ.');existing.qty=new Decimal(existing.qty).add(quantity).toString();existing.total=new Decimal(existing.qty).mul(existing.rate).toString();continue;}
+    if(existing){
+      // Packages have no brand selector. Resolve their approved stock identity before
+      // comparing them with explicitly branded individual additions of the same item.
+      const previous=existing.itemId?m.catalogue?.find(i=>i.item_id===existing.itemId):selectCatalogueItem(m,component.key,existing.brand,s.panelWattage);
+      const incoming=stock??selectCatalogueItem(m,component.key,brand?.name??'',s.panelWattage);
+      if(previous&&incoming&&previous.item_id!==incoming.item_id)throw new HttpError(400,'Different stock variants must be reviewed separately.');
+      const sameStock=previous&&incoming&&previous.item_id===incoming.item_id;
+      if(!sameStock&&existing.brand!==(brand?.name??''))throw new HttpError(400,'The same product cannot use different brands in one BOQ.');
+      if(!existing.brand&&brand)existing.brand=brand.name;
+      existing.qty=new Decimal(existing.qty).add(quantity).toString();existing.total=new Decimal(existing.qty).mul(existing.rate).toString();continue;
+    }
     if(item.status!=='Approved'||!item.approved_specification)warnings.push(`${component.key}: approved specification requires review.`);
     if(rate.status==='Needs Rate')warnings.push(`${component.key}: rate marked Needs Rate; current numeric rate used.`);
     lines.push({itemId:stock?.item_id,itemVersion:stock?.version,stockBrand:stock?.payload.brandCategory,costingCategory:stock?.payload.category,key:component.key,description:component.key,brand:brand?.name??'',brandAlternatives:[],specification:s.specifications?.[component.key]??(item.status==='Approved'?item.approved_specification:null),specVersion:s.specifications?.[component.key]?null:item.version,qty:quantity.toString(),unit:rate.unit,rate:new Decimal(rate.rate!).toString(),rateVersion:rate.version,rateStatus:rate.status,total:quantity.mul(rate.rate!).toString(),phase:bess?'BESS':isSolarPanelProduct({key:component.key,item_group:stock?.payload.itemGroup,costingCategory:stock?.payload.category})?'Solar Panels':'EPC',epc:''});
