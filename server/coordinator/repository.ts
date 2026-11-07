@@ -1,3 +1,4 @@
+import {requireUnarchivedQuotation} from '../commercial/archives.js';
 import {loadDocumentListMetadata} from '../documents/list-metadata.js';
 import {finalizeCustomerBoq} from '../boq/lifecycle.js';
 import {archivedDocumentIds} from '../maintenance/archived-documents.js';
@@ -361,6 +362,7 @@ export class CoordinatorRepository {
           throw new HttpError(409, "Choose the latest quotation.");
       }
       if (!q) throw new HttpError(404, "Quotation not found.");
+      await requireUnarchivedQuotation(c,input.quotationId??input.cniVersionId!);
       if (
         u.role === "Coordinator" &&
         (input.quotationId
@@ -438,6 +440,7 @@ export class CoordinatorRepository {
         ])
       ).rows[0];
       if (!q) throw new HttpError(404, "Quotation not found.");
+      await requireUnarchivedQuotation(c,quotationId);
       const management = ["Admin", "Management"].includes(u.role);
       // Authority derives only from the immutable saved pricing and quotation, never a client flag.
       const pricing=(await c.query('SELECT snapshot FROM commercial_pricing_versions WHERE id=$1',[q.pricing_id])).rows[0]?.snapshot;

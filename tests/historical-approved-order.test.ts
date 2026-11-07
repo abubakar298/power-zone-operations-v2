@@ -1,3 +1,6 @@
+import {ublProgrammeLinks} from '../server/ubl/programme-links.js';
+import {UblRepository} from '../server/ubl/repository.js';
+import {ProjectCheckpointsRepository} from '../server/projects/repository.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -27,6 +30,10 @@ test('register an existing revised PO from original evidence without creating an
   await assert.rejects(repo.action(manager,r.id,r.version,'verify',{...input,verified:true}),/survey report/,'Normal technical verification still needs a survey');
   await repo.action(manager,r.id,r.version,'historical-po',input);
   const source=await historicalApprovedOrder(db.pool,siteKey);assert.equal(source.configuration_id,'20-20-30');assert.equal(source.baseline.sellingIncludingGst,'5279116');assert.equal(source.legacy_ipo_number,'315');assert.ok(source.baseline.sellingExcludingGst);
+  const link=(await ublProgrammeLinks(db.pool)).find(l=>l.jobKey==='ubl:'+siteKey);assert.equal(link.configuration,'20-20-30');assert.equal(link.status,'Active');assert.equal(link.poNumber,input.poNumber);assert.equal(link.ipo,'CHP-315');
+  const linkedSite=(await new UblRepository(db.pool).sites(manager)).find(s=>String(s.site_id)===siteKey);assert.equal(linkedSite.status,'Active');assert.equal(linkedSite.configuration_id,'20-20-30');assert.equal(linkedSite.baseline.sellingIncludingGst,input.approvedTotal);
+  const checkpoint=(await new ProjectCheckpointsRepository(db.pool).list(manager)).find(s=>s.key==='ubl:'+siteKey);assert.equal(checkpoint.status,'Active');assert.equal(checkpoint.configuration,'20-20-30');assert.ok(!checkpoint.flags.includes('PO revision pending'));
+
   const job=await new InventoryRepository(db.pool).job(manager,'ubl:'+siteKey);assert.ok(job.lines.some(l=>l.key==='DC cable red 6mm²'&&l.approved==='135'));
   const board=new OperationsBoardRepository(db.pool),boardId='registered-UBL:SOLAR:315';await board.importSource(manager,{sourceSha256:'a'.repeat(64),rows:[{id:boardId,ipo:'CHP-315',name:'Sukho',customer:'UBL',installation:true,projectType:'solar',stage:'delivered',completed:true,operationsTeam:'central'}]});
   const doFile=await board.upload(manager,boardId,{filename:'DO.pdf',mediaType:'application/pdf',base64:Buffer.concat([Buffer.from('%PDF-1.7\nDO fixture'),Buffer.alloc(9*1024*1024)]).toString('base64')}),vso=await board.upload(manager,boardId,{filename:'VSO.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7\nVSO fixture').toString('base64')});

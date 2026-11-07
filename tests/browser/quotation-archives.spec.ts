@@ -1,0 +1,23 @@
+import {test,expect} from '@playwright/test';
+import {actors,login} from './release-fixtures.js';
+test('Management archives and restores quotations from a paginated register with confirmation',async({page})=>{
+ await actors(page.request);await login(page.request,'management-release@example.test');
+ let rows=Array.from({length:12},(_,index)=>({id:`quote-${index}`,kind:'quotation',number:`ARCHIVE-QT-${index}`,version:1,created_at:'2026-11-07T08:00:00Z',customer:'Archive customer',site:`Site ${index}`,archived:false}));
+ const posts:any[]=[];
+ await page.route('**/api/commercial/quotation-archive-register',r=>r.fulfill({json:{quotations:rows}}));
+ await page.route('**/api/commercial/quotation-archive/*',async r=>{const input=r.request().postDataJSON();posts.push(input);rows=rows.map(row=>row.id==='quote-0'?{...row,archived:input.archived}:row);await r.fulfill({json:{id:'quote-0',...input}});});
+ await page.goto('/dashboard');await page.getByRole('button',{name:/^Quotations /}).click();
+ await page.getByRole('button',{name:'Manage quotation archives',exact:true}).click();
+ const register=page.getByRole('region',{name:'Manage quotation archives'});
+ await expect(register.getByText('ARCHIVE-QT-9',{exact:true})).toBeVisible();await expect(register.getByText('ARCHIVE-QT-10',{exact:true})).toHaveCount(0);
+ await register.getByRole('button',{name:'Next',exact:true}).click();await expect(register.getByText('ARCHIVE-QT-10',{exact:true})).toBeVisible();
+ await page.getByLabel('Search quotations to archive or restore').fill('ARCHIVE-QT-0');
+ await register.getByRole('button',{name:'Archive quotation',exact:true}).click();await page.getByRole('dialog',{name:'Archive quotation',exact:true}).getByRole('button',{name:'Cancel',exact:true}).click();expect(posts).toEqual([]);
+ await register.getByRole('button',{name:'Archive quotation',exact:true}).click();await page.getByRole('dialog',{name:'Archive quotation',exact:true}).getByRole('button',{name:'Archive',exact:true}).click();
+ await expect(register.getByText('ARCHIVE-QT-0',{exact:true})).toHaveCount(0);
+ await register.getByRole('button',{name:'Archived quotations',exact:true}).click();await expect(register.getByText('ARCHIVE-QT-0',{exact:true})).toBeVisible();
+ await page.screenshot({path:'test-results/management-quotation-archives.png',fullPage:true});
+ await register.getByRole('button',{name:'Restore quotation',exact:true}).click();await page.getByRole('dialog',{name:'Restore quotation',exact:true}).getByRole('button',{name:'Restore',exact:true}).click();
+ await expect(register.getByText('ARCHIVE-QT-0',{exact:true})).toHaveCount(0);expect(posts.map(p=>p.archived)).toEqual([true,false]);
+ await login(page.request,'coordinator-release@example.test');expect((await page.request.get('/api/commercial/quotation-archive-register')).status()).toBe(403);
+});

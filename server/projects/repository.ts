@@ -24,7 +24,7 @@ export class ProjectCheckpointsRepository{
   const present=new Set([...rows,...regular].map(r=>r.key));for(const l of links)if(!present.has(l.jobKey))regular.push({key:l.jobKey,job_id:l.ipo??'Survey request',site_name:l.siteName,configuration_id:l.configuration,status:l.status});
   const versions=(await this.pool.query('SELECT DISTINCT ON(job_key,department) job_key,department,version,snapshot,created_at FROM project_checkpoint_versions ORDER BY job_key,department,version DESC')).rows;
   return [...rows,...regular].map(r=>{
-   const link=links.find(l=>l.jobKey===r.key);if(link?.configuration)r.configuration_id=link.configuration;if(link?.agreedTotal&&!r.key.startsWith('ubl:'))r.agreed_total=link.agreedTotal;
+   const link=links.find(l=>l.jobKey===r.key);if(link?.configuration)r.configuration_id=link.configuration;if(link?.historicalOrder){r.status=link.status;r.agreed_total=link.agreedTotal;}if(link?.agreedTotal&&!r.key.startsWith('ubl:'))r.agreed_total=link.agreedTotal;
    const imported=r.imported,source=imported?.site;
    const ops=versions.find(v=>v.job_key===r.key&&v.department==='Operations');
    const accounts=versions.find(v=>v.job_key===r.key&&v.department==='Accounts');

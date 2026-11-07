@@ -149,6 +149,11 @@ export function commercialHttp(
       await repo.pricingGet(req.authSession!.user.id, id(req.params.id)),
     ),
   );
+  r.get('/quotation-archive-register',managementOnly,async(req,res)=>res.json({quotations:await repo.quotationArchiveRegister(req.authSession!.user.id)}));
+  r.post('/quotation-archive/:id',managementOnly,async(req,res)=>{
+    const input=parse(z.object({kind:z.enum(['quotation','cni']),archived:z.boolean()}).strict(),req.body);
+    res.json(await repo.quotationArchive(req.authSession!.user.id,id(req.params.id),input.kind,input.archived));
+  });
   r.get("/quotations", async (req, res) =>
     res.json({
       quotations: await repo.quotationList(req.authSession!.user.id),

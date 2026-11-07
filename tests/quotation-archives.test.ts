@@ -1,0 +1,43 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {testDatabase} from './database.js';
+import {BoqRepository} from '../server/boq/repository.js';
+import {surveySchema} from '../server/boq/schema.js';
+import {CommercialRepository} from '../server/commercial/repository.js';
+import {pricingSchema,quotationSchema} from '../server/commercial/schema.js';
+import {setQuotationArchived,quotationArchiveRegister,requireUnarchivedQuotation} from '../server/commercial/archives.js';
+import {archivedDocumentIds} from '../server/maintenance/archived-documents.js';
+import {CoordinatorRepository} from '../server/coordinator/repository.js';
+test('Management can reversibly archive unwanted quotations without rewriting saved BOQs or quotes',async()=>{
+ const db=await testDatabase();try{
+  const manager=randomUUID(),coordinator=randomUUID();
+  for(const [id,role] of [[manager,'Management'],[coordinator,'Coordinator']])await db.pool.query('INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,$4,$5)',[id,id+'@example.test',role,'not-a-login-hash',role]);
+  const boqs=new BoqRepository(db.pool),commercial=new CommercialRepository(db.pool);
+  const input=surveySchema.parse({family:'direct-product',customerId:3,siteName:'Archive fixture',siteCode:'ARCHIVE',location:'',panelQty:0,panelWattage:'0',structure:'L1',dcMetres:'0',earth25:'0',earth6:'0',earth10:'0',inverter:'Products',batteryKwh:0,brands:{},smartMeter:false,genset:false,preparedBy:'Fixture',directProducts:[{kind:'bess',key:'BESS-30-40',qty:'1'}]});
+  const draft=await boqs.draft(coordinator,undefined,0,input),preview=await boqs.preview(input),boq=await boqs.save(coordinator,draft.id,draft.version,preview.fingerprint);
+  const pricingInput=pricingSchema.parse({boqRevisionId:boq.id,presentation:'Full Breakup',taxMode:'Show Sales Tax Separately',preparedBy:'Fixture'}),p=await commercial.pricingPreview(coordinator,pricingInput),pricing=await commercial.pricingSave(coordinator,pricingInput,p.fingerprint,randomUUID());
+  const quotationInput=quotationSchema.parse({pricingId:pricing.id,quotedDate:'2026-11-07',validity:'7 days',proposedBy:'Fixture'}),q=await commercial.quotationPreview(coordinator,quotationInput),saved=await commercial.quotationSave(coordinator,quotationInput,q.fingerprint,randomUUID());
+  const before=JSON.stringify((await commercial.quotationGet(saved.id)).snapshot);
+  await assert.rejects(setQuotationArchived(db.pool,coordinator,saved.id,'quotation',true),/Only Management/);
+  await setQuotationArchived(db.pool,manager,saved.id,'quotation',true);
+  await setQuotationArchived(db.pool,manager,saved.id,'quotation',true);
+  assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM quotation_archive_events')).rows[0].n,1);
+  assert.ok((await archivedDocumentIds(db.pool)).has(saved.id));
+  assert.equal((await commercial.quotationList(coordinator)).some(r=>r.id===saved.id),false);
+  assert.equal((await new CoordinatorRepository(db.pool).overview(manager,true)).tasks.some((r:any)=>r.id===saved.id),false);
+  await assert.rejects(requireUnarchivedQuotation(db.pool,saved.id),/archived/);
+  assert.equal((await quotationArchiveRegister(db.pool,manager)).find(r=>r.id===saved.id).archived,true);
+  assert.equal(JSON.stringify((await commercial.quotationGet(saved.id)).snapshot),before);
+  await setQuotationArchived(db.pool,manager,saved.id,'quotation',false);
+  await requireUnarchivedQuotation(db.pool,saved.id);
+  assert.equal((await commercial.quotationList(coordinator)).some(r=>r.id===saved.id),true);
+  assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM quotation_archive_events')).rows[0].n,2);
+  await db.pool.query('INSERT INTO customer_purchase_orders(id,quotation_id,boq_revision_id,customer_id,po_number,input,created_by)VALUES($1,$2,$3,3,$4,$5,$6)',[randomUUID(),saved.id,boq.id,'PO-ARCHIVE-FIXTURE',{},coordinator]);
+  await assert.rejects(setQuotationArchived(db.pool,manager,saved.id,'quotation',true),/linked to a customer PO or IPO/);
+  const proposal=randomUUID();await db.pool.query('INSERT INTO cni_proposals(id,created_by,customer_id)VALUES($1,$2,3)',[proposal,coordinator]);
+  const version=randomUUID();await db.pool.query('INSERT INTO cni_proposal_versions(id,proposal_id,version,number,snapshot,internal_cost_snapshot,created_by)VALUES($1,$2,1,$3,$4,$5,$6)',[version,proposal,'ARCHIVE-CNI',{customer:{name:'Fixture'},siteName:'CNI archive fixture'},{},coordinator]);
+  await setQuotationArchived(db.pool,manager,proposal,'cni',true);assert.ok((await archivedDocumentIds(db.pool)).has(version));
+  await setQuotationArchived(db.pool,manager,proposal,'cni',false);assert.ok(!(await archivedDocumentIds(db.pool)).has(version));
+ }finally{await db.close();}
+});

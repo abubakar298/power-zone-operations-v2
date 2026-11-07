@@ -1,3 +1,4 @@
+import {requireUnarchivedQuotation} from './archives.js';
 import {cniCommercialItem} from './cni-commercial-description.js';
 import {
   externalEvidenceSchema,
@@ -65,7 +66,7 @@ export function cniHttp(pool: Pool, requireSession: RequestHandler) {
       `SELECT p.id,p.customer_id,v.id AS version_id,v.version,v.number,v.snapshot,v.created_at,
    (SELECT action FROM cni_proposal_actions WHERE version_id=v.id ORDER BY created_at DESC,id DESC LIMIT 1) AS action
    FROM cni_proposals p JOIN LATERAL (SELECT * FROM cni_proposal_versions WHERE proposal_id=p.id ORDER BY version DESC LIMIT 1) v ON true
-   WHERE ($1::boolean OR p.created_by=$2) AND NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND (a.records->'localPreviewDocumentIds' ? p.id::text OR a.records->'localPreviewDocumentIds' ? v.id::text)) ORDER BY v.created_at DESC`,
+   WHERE ($1::boolean OR p.created_by=$2) AND NOT EXISTS(SELECT 1 FROM quotation_archives_current a WHERE a.cni_proposal_id=p.id AND a.archived) AND NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND (a.records->'localPreviewDocumentIds' ? p.id::text OR a.records->'localPreviewDocumentIds' ? v.id::text)) ORDER BY v.created_at DESC`,
       [actor.role !== "Coordinator", actor.id],
     );
     res.json({ proposals: rows.rows, policy: cniPolicy });
@@ -123,6 +124,7 @@ export function cniHttp(pool: Pool, requireSession: RequestHandler) {
       const id = v.proposalId ?? randomUUID();
       let version = 1;
       if (v.proposalId) {
+        await requireUnarchivedQuotation(client,id);
         const existing = await client.query(
           "SELECT * FROM cni_proposals WHERE id=$1 FOR UPDATE",
           [id],
@@ -232,6 +234,7 @@ export function cniHttp(pool: Pool, requireSession: RequestHandler) {
         ])
       ).rows[0];
       if (!p) throw new HttpError(404, "Proposal not found.");
+      await requireUnarchivedQuotation(c,id);
       const v = (
         await c.query(
           "SELECT * FROM cni_proposal_versions WHERE proposal_id=$1 ORDER BY version DESC LIMIT 1",
@@ -368,6 +371,7 @@ export function cniHttp(pool: Pool, requireSession: RequestHandler) {
         "SELECT id FROM cni_proposals WHERE id=$1 FOR UPDATE",
         [id],
       );
+      await requireUnarchivedQuotation(client,id);
       const latest = await client.query(
         "SELECT * FROM cni_proposal_versions WHERE proposal_id=$1 ORDER BY version DESC LIMIT 1",
         [id],

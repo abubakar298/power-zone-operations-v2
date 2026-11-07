@@ -1,3 +1,4 @@
+import {quotationArchiveRegister,setQuotationArchived,requireUnarchivedQuotation} from './archives.js';
 import {lockBoqPreparation} from '../boq/preparation.js';
 import {cashDeal} from "./deal.js";
 import { allocateReference, revisedReference, boqIdentity } from "../documents/references.js";
@@ -51,6 +52,7 @@ export class CommercialRepository {
       ).rows[0];
       if (!user?.active) throw new HttpError(401, "Your access has ended.");
       await this.manager(c, actor, intent !== 'return');
+      await requireUnarchivedQuotation(c,sourceId);
       if(user.role==='Coordinator' && !(await c.query(resourceOwnership.quotation,[sourceId,actor])).rowCount)
         throw new HttpError(404,'Document not found or unavailable to your account.');
       const previous = (
@@ -700,6 +702,7 @@ export class CommercialRepository {
     const newId=await transaction(this.pool,async c=>{
       await c.query("SELECT pg_advisory_xact_lock(742019003)");
       await this.manager(c,actor,false);
+      await requireUnarchivedQuotation(c,id);
       const q=(await c.query("SELECT * FROM quotation_versions WHERE id=$1 FOR UPDATE",[id])).rows[0];
       if(!q)throw new HttpError(404,"Quotation not found.");
       const latest=(await c.query("SELECT id,version FROM quotation_versions WHERE boq_revision_id=$1 ORDER BY version DESC LIMIT 1",[q.boq_revision_id])).rows[0];
@@ -741,10 +744,12 @@ export class CommercialRepository {
     });
     return this.quotationGet(newId);
   }
+  async quotationArchiveRegister(actor:string){return quotationArchiveRegister(this.pool,actor);}
+  async quotationArchive(actor:string,id:string,kind:'quotation'|'cni',archived:boolean){return setQuotationArchived(this.pool,actor,id,kind,archived);}
   async quotationList(actor?: string) {
     return (
       await this.pool.query(
-        `SELECT q.id,q.number,q.version,q.pricing_id,q.boq_revision_id,q.created_at,(SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS workflow_status,NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS workflow_latest,EXISTS(SELECT 1 FROM quotation_revision_requests_current r WHERE r.source_quotation_id=q.id) AS revision_requested,q.snapshot->>'boqNumber' AS boq_number,q.snapshot->'customer'->>'name' AS customer,q.snapshot->>'siteName' AS site FROM quotation_versions q ${actor ? `WHERE ${ownedCondition("quotation", "q.id", "$1")}` : "WHERE true"} AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? q.id::text) ORDER BY q.created_at DESC LIMIT 200`,
+        `SELECT q.id,q.number,q.version,q.pricing_id,q.boq_revision_id,q.created_at,(SELECT e.kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS workflow_status,NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AS workflow_latest,EXISTS(SELECT 1 FROM quotation_revision_requests_current r WHERE r.source_quotation_id=q.id) AS revision_requested,q.snapshot->>'boqNumber' AS boq_number,q.snapshot->'customer'->>'name' AS customer,q.snapshot->>'siteName' AS site FROM quotation_versions q ${actor ? `WHERE ${ownedCondition("quotation", "q.id", "$1")}` : "WHERE true"} AND NOT EXISTS(SELECT 1 FROM quotation_archives_current a WHERE a.quotation_id=q.id AND a.archived) AND NOT EXISTS(SELECT 1 FROM test_workflow_archives archived WHERE archived.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND archived.records->'localPreviewDocumentIds' ? q.id::text) ORDER BY q.created_at DESC LIMIT 200`,
         actor ? [actor] : [],
       )
     ).rows;
