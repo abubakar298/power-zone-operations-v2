@@ -1,3 +1,4 @@
+import {AccountsClosureWaiting} from '../components/AccountsClosureWaiting.js';
 import {useBackStep} from '../navigation/useBackStep.js';
 import {confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 import {recentFirst,recordedTimestamp} from '../../shared/recent-records.js';
@@ -1088,7 +1089,7 @@ export function AccountsWorkspace({
             </table>
           </div>
           {!preparationReports.length&&!awaitingReconciliation.length&&<div className="accounts-empty"><h3>No jobs ready for closure</h3><p>Jobs appear here after they are marked as recorded in PT.</p></div>}
-          {awaitingReconciliation.length>0&&<div className="table-scroll"><h3>Recorded in PT · awaiting Inventory reconciliation</h3><table><thead><tr><th>SR#</th><th>Job / site</th><th>PT reference</th><th>Status</th></tr></thead><tbody>{awaitingReconciliation.map((p:any,n:number)=><tr key={p.id}><td>{n+1}</td><td><strong>{p.snapshot.siteName}</strong><small>{p.snapshot.ipo}</small></td><td>{p.pt_reference}<small>{p.entry_date}</small></td><td>Closure costing opens when Inventory sends its reconciliation; it will not ask for PT entry again.</td></tr>)}</tbody></table></div>}
+          {awaitingReconciliation.length>0&&<AccountsClosureWaiting entries={awaitingReconciliation}/>}
         </section>
       )}
       {tab === "Job Closure" && job && (
