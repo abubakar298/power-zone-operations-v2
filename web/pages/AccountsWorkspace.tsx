@@ -1081,7 +1081,7 @@ export function AccountsWorkspace({
                     <td>{jobLabel(r)}</td>
                     <td>
                       {data.closures.find((c: any) => c.job_key === r.job_key)
-                        ?.stage ?? "IRR received"}
+                        ?.stage ?? (r.qcMaterialSource?.deliveryOnly?"Signed DO verified":r.qcMaterialSource?"QC usage verified":"Ready for costing")}
                     </td>
                     <td>
                       <Button onClick={() => void openJob(r.job_key)}>
@@ -1283,13 +1283,13 @@ export function AccountsWorkspace({
             <p>
               Photographs support invoicing and do not block Job Closure.
             </p>
-            {["Client acknowledgment", "Site photographs", ...(job.evidence?.some((e:any)=>e.source?.kind==='Operations')?["Signed DO", "IRR", "Variable items sign-off"]:[])].map((kind) => {
+            {["Client acknowledgment", "Site photographs", ...((job.qcMaterialSource||job.evidence?.some((e:any)=>e.source?.kind==='Operations'))?["Signed DO", "Variable items sign-off", ...(job.evidence?.some((e:any)=>e.kind==='IRR')?["IRR"]:[])]:[])].map((kind) => {
               const files =
-                job.evidence?.filter((e: any) => e.kind === kind) ?? [];
+                (job.evidence?.filter((e: any) => e.kind === kind) ?? []).concat(kind==='Signed DO'&&job.qcMaterialSource?(job.qcMaterialSource.sources.signedDos??[]).filter((f:any)=>!job.evidence?.some((e:any)=>e.kind===kind&&e.id===f.id)).map((f:any)=>({id:f.id,filename:'Signed DO',downloadUrl:'/api/accounts-workspace/sites/'+encodeURIComponent(job.qcMaterialSource.siteId)+'/evidence/'+f.id})):[]);
               return (
                 <div key={kind}>
                   <strong>{kind}:</strong>{" "}
-                  {files.length ? "Received" : "Not received"}{" "}
+                  {files.length ? "Received" : kind==='Variable items sign-off'&&job.qcMaterialSource?.ready?"Verified / not applicable in QC usage":"Not received"}{" "}
                   {files.map((e: any) => (
                     <EvidencePreview key={e.id}
                       url={e.downloadUrl??`/api/accounts-workspace/evidence/${e.id}`} title={e.filename} filename={e.filename}/>
