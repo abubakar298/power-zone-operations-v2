@@ -33,6 +33,7 @@ async function project(c:Client,jobKey:string,options:{lock?:boolean;version?:nu
   JOIN operations_board_sites s ON s.id=v.snapshot#>>'{qcUsage,boardId}'
   WHERE r.job_key=$1 AND v.stage='Sent to Accounts' AND v.snapshot#>>'{qcUsage,source}'='QC historical usage'
   AND s.id ~ '^registered-UBL:SOLAR:[0-9]+$'${options.lock?' FOR SHARE OF s':''}`,[jobKey])).rows[0];
+ if(!link&&ipo?.success){const exact=(await c.query("SELECT site_id AS board_site_id FROM (SELECT DISTINCT ON(site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC) v WHERE snapshot#>>'{origin,ipoId}'=$1 AND coalesce((snapshot->>'superseded')::boolean,false)=false",[ipo.data])).rows;if(exact.length===1)link=exact[0];}
  if(!link)return held('The approved IPO has no exact Operations source link.');
  const row=(await c.query(`SELECT version,snapshot FROM operations_board_versions WHERE site_id=$1${options.version!==undefined?' AND version=$2':''} ORDER BY version DESC LIMIT 1`,options.version!==undefined?[link.board_site_id,options.version]:[link.board_site_id])).rows[0];
  if(!row)return held('The linked Operations evidence version is unavailable.');

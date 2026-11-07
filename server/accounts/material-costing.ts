@@ -1,3 +1,4 @@
+import {qcMaterialHandoff,qcMaterialHandoffs} from './qc-material-handoff.js';
 import {accountsIpoLabel} from '../../shared/accounts-site-reference.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
@@ -18,7 +19,17 @@ export async function materialCostingQueue(pool:Pool,actor:string){
   pool.query("SELECT source_id,source_version,pt_reference FROM accounts_pt_entries WHERE source_kind='Inventory'"),
   pool.query('SELECT job_key FROM accounts_job_pt_entries')
  ]);
- return {rows:projectMaterialCostingQueue(documents.rows,reports,closures.rows,entries.rows,jobEntries.rows),stockPosting:false};
+ const rows=projectMaterialCostingQueue(documents.rows,reports,closures.rows,entries.rows,jobEntries.rows);
+ const handoffs=await qcMaterialHandoffs(pool);
+ for(const source of handoffs){
+  if(jobEntries.rows.some(p=>[source.jobKey,...source.aliases].includes(p.job_key))||closures.rows.some(c=>[source.jobKey,...source.aliases].includes(c.job_key)&&['Closed','Awaiting Management'].includes(c.stage)))continue;
+  let row=rows.find(r=>r.key===source.jobKey||source.aliases.includes(r.key));
+  if(row?.report)continue;
+  if(!row&&!source.ready)continue;
+  if(!row){row={key:source.jobKey,jobKey:source.jobKey,siteId:source.siteId,siteName:source.siteName,ipo:source.ipo,customer:source.customer,receivedAt:source.receivedAt,report:null,documents:[],status:''};rows.push(row);}
+  Object.assign(row,{qcMaterialSource:source,status:source.ready?'Ready for PT entry':source.holds.join('; ')});
+ }
+ return {rows,stockPosting:false};
 }
 export function projectMaterialCostingQueue(documents:any[],reports:any[],closures:any[],entries:any[],jobEntries:any[]=[]){
  // A job marked as recorded in PT leaves this queue even before Inventory reconciles.
@@ -56,6 +67,7 @@ export async function markJobRecordedInPt(pool:Pool,actor:string,raw:unknown,now
   if((await c.query('SELECT 1 FROM accounts_job_pt_entries WHERE job_key=$1',[input.jobKey])).rowCount)throw new HttpError(409,'This job is already marked as recorded in PT.');
   const row=queue.rows.find(r=>r.key===input.jobKey);
   if(!row)throw new HttpError(409,'This job is no longer pending Material Costing & PT Entry. Refresh the queue.');
+  if(!row.report){const qc=await qcMaterialHandoff(c,row.jobKey??input.jobKey);if(!qc?.ready)throw new HttpError(409,qc?.holds.join('; ')||'Complete the applicable QC material usage before recording PT.');if(row.qcMaterialSource&&qc.signature!==row.qcMaterialSource.signature)throw new HttpError(409,'QC material usage changed. Reopen the material usage before recording PT.');}
   // Use the reconciliation current at save time; a changed version needs a fresh review.
   const report=row.report?(await c.query("SELECT v.id,v.version,v.stage FROM inventory_report_versions v WHERE v.report_id=$1 ORDER BY v.version DESC LIMIT 1",[row.report.id])).rows[0]:undefined;
   if(row.report&&(report?.version!==row.report.version||report.stage!=='Sent to Accounts'))throw new HttpError(409,'Inventory changed this reconciliation. Reopen the material usage before marking PT.');

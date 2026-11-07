@@ -13,7 +13,7 @@ import {customerDocuments,customerDocumentFile} from './customer-documents.js';
 import{correctInvoice,invoiceCorrectionSchema}from'./invoice-corrections.js';
 import{recordInvoiceReceipt,invoiceReceiptSchema}from'./invoice-receipts.js';
 import {managementProgrammes} from '../director/management-programmes.js';
-import { Router, type RequestHandler } from "express";
+import { json, Router, type RequestHandler } from "express";
 import {invoiceRegister,recordInvoiceEntry,invoiceEntrySchema,recordInvoiceSubmission,invoiceSubmissionSchema} from './invoice-entries.js';
 import {ptEntrySchema} from './pt-entries.js';
 import {paymentRegister,recordPayment,paymentRecordSchema} from './payment-records.js';
@@ -194,6 +194,10 @@ export function accountsHttp(
       ),
     ),
   );
+  r.post('/jobs/:key/supplementary-evidence',json({limit:'12mb'}),async(req,res)=>{
+    const input=parse(z.object({filename:z.string().min(1).max(300),mediaType:z.enum(['application/pdf','image/png','image/jpeg']),base64:z.string().min(1),kind:z.enum(['PT costing screenshot','Signed DO','Variable items sign-off','Client acknowledgment','Site photographs'])}).strict(),req.body);
+    res.status(201).json(await repo.uploadEvidence(req.authSession!.user.id,String(req.params.key),input.filename,input.mediaType,input.base64,input.kind));
+  });
   r.post("/closures", async (req, res) =>
     res.json(
       await repo.saveClosure(

@@ -79,7 +79,7 @@ test('Accounts confirms only the originals received; QC arrival alone confirms n
  }finally{await db.close();}
 });
 
-test('Mark as Recorded in PT removes the job from Material Costing without an Inventory reconciliation',async()=>{
+test('Mark as Recorded in PT requires complete QC usage before leaving Material Costing',async()=>{
  assert.deepEqual(projectMaterialCostingQueue([{id:'d',jobKey:'ipo:x',siteId:'s',siteName:'S',ipo:'I',customer:'C',receivedAt:'2026-10-01'}],[],[],[],[{job_key:'ipo:x'}]),[]);
  const {db,ids}=await fixture();try{
   await site(db,ids.Admin,'pt-site',{name:'PT site',ipo:'IPO-PT',customer:'United Bank Limited',installation:true,completed:true,stage:'completed',deliveries:[{deliveryDate:'2026-10-10',partial:false,signedDo:file(1,'application/pdf'),materialPhoto:file(2)}],documents:[]});
@@ -88,10 +88,9 @@ test('Mark as Recorded in PT removes the job from Material Costing without an In
   const input={jobKey:row.key,ptReference:'PT-JV-1001',entryDate:'2026-11-02',notes:'Material costs entered',requestKey:randomUUID()};
   await assert.rejects(markJobRecordedInPt(db.pool,ids.Management,input,now),/PT entry access/);
   await assert.rejects(markJobRecordedInPt(db.pool,ids.Accounts,{...input,entryDate:'2026-11-09',requestKey:randomUUID()},now),/future/);
-  const saved=await markJobRecordedInPt(db.pool,ids.Accounts,input,now);
-  assert.equal((await markJobRecordedInPt(db.pool,ids.Accounts,input,now)).id,saved.id);
-  await assert.rejects(markJobRecordedInPt(db.pool,ids.Accounts,{...input,requestKey:randomUUID()},now),/already marked|no longer pending/);
-  assert.equal((await materialCostingQueue(db.pool,ids.Accounts)).rows.some((r:any)=>r.siteId==='pt-site'),false);
+  await assert.rejects(markJobRecordedInPt(db.pool,ids.Accounts,input,now),/QC material usage|material linkage/);
+  assert.equal((await materialCostingQueue(db.pool,ids.Accounts)).rows.some((r:any)=>r.siteId==='pt-site'),true);
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM accounts_job_pt_entries')).rows[0].n,0);
   for(const table of ['accounts_job_closures','stock_on_hand_entries','accounts_invoice_entries'])assert.equal((await db.pool.query('SELECT count(*)::int n FROM '+table)).rows[0].n,0,'PT marking closes no job, posts no stock and creates no invoice');
  }finally{await db.close();}
 });

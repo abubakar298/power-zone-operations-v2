@@ -7,8 +7,8 @@
 .accounts-ui .accounts-closure-waiting-table th:first-child{width:56px}
 .accounts-ui .accounts-closure-waiting-table th:nth-child(2){width:36%}
 .accounts-ui .accounts-closure-waiting-table th:nth-child(3){width:auto}
-.accounts-ui .accounts-closure-waiting-table th:last-child{width:124px}
+.accounts-ui .accounts-closure-waiting-table th:last-child{width:26%}
 .accounts-ui .accounts-closure-waiting-table th,.accounts-ui .accounts-closure-waiting-table td{vertical-align:top;text-align:left;padding:10px 12px;overflow-wrap:anywhere}
 .accounts-ui .accounts-closure-waiting-table td strong{display:block;line-height:20px;min-height:20px}
 .accounts-ui .accounts-closure-waiting-table td small{display:block;margin-top:4px;line-height:18px}
-.accounts-ui .accounts-closure-waiting-table td:last-child{white-space:nowrap;font-variant-numeric:tabular-nums}
+.accounts-ui .accounts-closure-waiting-table td:last-child{white-space:normal}
