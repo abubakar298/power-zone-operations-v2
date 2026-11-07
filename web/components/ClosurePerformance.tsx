@@ -1,4 +1,5 @@
 import { Decimal } from "decimal.js";
+import {closureEpcSelling} from "../../server/accounts/phase-comparison.js";
 import { money, wholeMoney, decimalDisplay } from "../numbers.js";
 const ptNames = [
   "Solar Panels",
@@ -114,7 +115,10 @@ export function ClosureCostTables({
   const total = sum(costs, ptNames);
   const split = sum(epc, epcNames);
   const epcTotal = val(epcAggregate);
-  const average = job.configurationComparison?.averageActualMarkupPercent;
+  const epcSelling = closureEpcSelling(job.phaseSelling?.EPC, job.epcBudget, job.budget?.EPC, job.epcSelling);
+  const averageMarkup = (peer: any) => peer?.averageActualMarkupPercent == null
+    ? "Not available"
+    : decimalDisplay(peer.averageActualMarkupPercent, 2) + "%";
   const cells = (name: string, b: any, a: Decimal | null, totalRow = false) => (
     <>
       <td className="pz-number">{name === "Total" ? money(job.selling)
@@ -165,9 +169,8 @@ export function ClosureCostTables({
               : job.phaseSelling?.[name], a?.toString())}
       </td>
       <td className="pz-number">
-        {totalRow && name === "Total" && average != null
-          ? money(average) + "%"
-          : "Not available"}
+        {averageMarkup(name === "Total" ? job.phaseCostComparison?.total
+          : job.phaseCostComparison?.phases?.[name === "BESS subtotal" ? "BESS" : name])}
       </td>
     </>
   );
@@ -292,9 +295,9 @@ export function ClosureCostTables({
                         ? "Not entered"
                         : money(val(epc[p])!.sub(job.epcBudget[p]).toString())}
                     </td>
-                    <td>Not available</td>
-                    <td>Not available</td>
-                    <td>Not available</td>
+                    <td className="pz-number">{wholeMarkup(epcSelling?.[p], job.epcBudget[p])}</td>
+                    <td className="pz-number">{wholeMarkup(epcSelling?.[p], val(epc[p])?.toString())}</td>
+                    <td className="pz-number">{averageMarkup(job.phaseCostComparison?.epc?.[p])}</td>
                   </tr>
                 ))}
               </tbody>
@@ -310,9 +313,9 @@ export function ClosureCostTables({
                       ? "Not entered"
                       : val(job.budget.EPC) === null ? "Not available" : money(split.sub(job.budget.EPC).toString())}
                   </td>
-                  <td>Not available</td>
-                  <td>Not available</td>
-                  <td>Not available</td>
+                  <td className="pz-number">{wholeMarkup(job.phaseSelling?.EPC, job.budget.EPC)}</td>
+                  <td className="pz-number">{wholeMarkup(job.phaseSelling?.EPC, split?.toString())}</td>
+                  <td className="pz-number">{averageMarkup(job.phaseCostComparison?.phases?.EPC)}</td>
                 </tr>
               </tfoot>
             </table>
