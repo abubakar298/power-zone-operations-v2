@@ -211,6 +211,7 @@ test("UBL customer PO selects a different approved configuration, previews its p
         exact: true,
       })
       .fill("Customer PO confirms the selected approved agreement");
+    await page.getByLabel("Invoice terms", { exact: true }).selectOption("completion");
     const preview = page.waitForResponse((res) =>
       res.url().endsWith("/sale-preview"),
     );

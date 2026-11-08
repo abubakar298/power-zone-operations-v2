@@ -1,3 +1,5 @@
+import { defaultIpoInvoiceTerms, type IpoInvoiceTerms } from "../../shared/ipo-invoice-terms.js";
+import { IpoInvoiceTermsField } from "./IpoInvoiceTermsField.js";
 import {FileUpload} from '../ui/FileUpload.js';
 import {DirectPoDetailsFields} from './DirectPoDetailsFields.js';
 import {directPoCapacityIssues,directPoSuggestions,directPoFields} from '../../shared/direct-po-reading.js';
@@ -43,6 +45,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
   const savedDirectPo=r.data?.directPoDetails;
   const reviewingDirectPo = r.route==='direct-framework' && !!(initialDirectPo?.reviewIpo || savedDirectPo);
   const draftValues=savedDirectPo?.values??initialDirectPo?.values??{};
+  const [chosenTerms, setChosenTerms] = useState<IpoInvoiceTerms | "">(savedDirectPo?.invoiceTerms ?? initialDirectPo?.invoiceTerms ?? detail.receipt?.input?.invoiceTerms ?? "");
   const [editingRecord,setEditingRecord]=useState(false),[recordValues,setRecordValues]=useState<Record<string,string>>({});
   const attachedDirectPo=initialDirectPo?.document??detail.files?.find((f:any)=>f.id===savedDirectPo?.evidenceId);
   const preAgreedBank = framework && (String(r.customerCode??c.short_code).toUpperCase()==='UBL'||directUps);
@@ -300,8 +303,9 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
       setProgress("");
     }
   }
+  const invoiceTerms = chosenTerms || (framework ? defaultIpoInvoiceTerms(basis?.source?.key) : "");
   const previewKey = JSON.stringify({
-    input,
+    input, invoiceTerms,
     documentId: document?.id,
     basis: basis?.fingerprint,
     scope,
@@ -317,6 +321,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
       reference: po && input.poNumber.trim() && !/^n\/?a$/i.test(input.poNumber.trim()) ? input.poNumber.trim() : `${input.evidenceType==="Email approval"?"EMAIL":"WA"}-${r.siteCode}-${input.orderDate}-${r.id.slice(0,8)}`,
       date: input.orderDate,
       evidenceId: document.id,
+      invoiceTerms: invoiceTerms || undefined,
       basisType: framework ? "framework" : "quotation",
       frameworkId: framework ? basis.source.id : undefined,
       quotationId: !framework ? basis.source.id : undefined,
@@ -333,6 +338,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
   function validation(forPreview = false) {
     return [
       ...confirmationRequirements,
+      ...(!forPreview && !invoiceTerms ? ["Select invoice terms."] : []),
       ...(!forPreview && !accepted ? ["Confirm the customer approved the selected document."] : []),
       ...(editingRecord?["Save or cancel the record corrections before previewing or confirming sale."]:[]),
       ...(ipoError?[ipoError]:[]),
@@ -584,6 +590,9 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
               </label>}
             </>
           )}
+          <div className="pz-form-grid">
+            <IpoInvoiceTermsField id="sale-invoice-terms" value={invoiceTerms} onChange={value => {setChosenTerms(value); setPreviewReviewed(false);}} disabled={busy}/>
+          </div>
           <label className="pz-review-check">
             <input
               type="checkbox"

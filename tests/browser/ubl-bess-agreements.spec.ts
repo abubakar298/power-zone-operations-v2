@@ -130,6 +130,9 @@ test("Atif selects frozen BESS agreements individually and issues mixed solar/BE
   await page
     .getByRole("button", { name: "Close preview", exact: true })
     .click();
+  await page.getByLabel("Batch invoice terms", { exact: true }).selectOption("completion");
+  const firstSite = page.getByLabel(/^Invoice terms for /).first();
+  await firstSite.selectOption("partial-delivery-and-completion");
   await page.getByRole("checkbox").check();
   page.once("dialog", (dialog) => dialog.accept());
   const issued = page.waitForResponse((r) =>

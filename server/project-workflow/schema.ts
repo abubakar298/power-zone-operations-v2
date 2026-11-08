@@ -1,5 +1,6 @@
 import {manualIpoSchema} from "../documents/manual-ipo.js";
 import { z } from "zod";
+import { ipoInvoiceTerms } from "../../shared/ipo-invoice-terms.js";
 import { surveySchema } from "../boq/schema.js";
 export const workflowRoutes = [
   "survey-quote",
@@ -100,6 +101,7 @@ export const receiptSchema = z
     reference: short.min(1),
     date: z.iso.date(),
     evidenceId: z.uuid(),
+    invoiceTerms: z.enum(ipoInvoiceTerms).optional(),
     basisType: z.enum(["quotation", "framework"]),
     quotationId: z.uuid().optional(),
     frameworkId: z.uuid().optional(),

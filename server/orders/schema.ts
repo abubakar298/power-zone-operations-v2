@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { ipoInvoiceTerms } from "../../shared/ipo-invoice-terms.js";
 import {manualIpoSchema} from "../documents/manual-ipo.js";
 const optional = z.string().trim().max(300).default("");
 export const orderBasisInputSchema = z
   .object({
     quotationId: z.uuid(),
+    invoiceTerms: z.enum(ipoInvoiceTerms).optional(),
     entryVersion: z.literal(2).optional(),
     evidenceType: z.enum([
       "Customer PO",

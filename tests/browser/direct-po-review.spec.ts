@@ -28,6 +28,7 @@ for(const readable of [false,true])test(`Saved Consumer Hub Direct PO ${readable
   await page.goto('/dashboard');
   await page.locator('tr').filter({hasText:name}).getByRole('button',{name:'Open site record',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Review IPO',exact:true})).toBeVisible();
+  await expect(page.getByLabel('Invoice terms',{exact:true})).toHaveValue('completion');
   const reference=page.getByLabel('Customer PO reference',{exact:true});
   await expect(reference).toHaveValue(readable?'MBL-CH-0201':'');
   if(!readable){
@@ -37,6 +38,7 @@ for(const readable of [false,true])test(`Saved Consumer Hub Direct PO ${readable
   }
   if(!readable){const response=page.waitForResponse(r=>r.url().endsWith(`/${id}/sale-preview`));await page.getByRole('button',{name:'Preview IPO & PT',exact:true}).click();expect((await response).status()).toBe(200);}
   await expect(page.getByLabel('I reviewed the IPO and PT breakup for Accounts.',{exact:true})).toBeVisible();
+  expect(previews.at(-1).invoiceTerms).toBe('completion');
   expect(previews.at(-1).reference).toBe(readable?'MBL-CH-0201':'MBL-CH-CORRECTED');
   await expect(page.getByRole('alert')).toHaveCount(0);
   await page.getByRole('button',{name:'Edit record',exact:true}).click();

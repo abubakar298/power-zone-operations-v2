@@ -1,3 +1,5 @@
+import { defaultIpoInvoiceTerms, type IpoInvoiceTerms } from "../../shared/ipo-invoice-terms.js";
+import { IpoInvoiceTermsField } from "../components/IpoInvoiceTermsField.js";
 import {ApprovedConfigurationBatch} from '../components/ApprovedConfigurationBatch.js';
 import {useBackStep} from '../navigation/useBackStep.js';
 import {recentFirst} from '../../shared/recent-records.js';
@@ -5377,10 +5379,12 @@ function PoEntry({ session, refs, detail, action }: any) {
   const r = detail.record,
     [basis, setBasis] = useState<any>(detail.basis),
     [actual, setActual] = useState<any>(detail.receipt?.input.actual),
+    [chosenTerms, setChosenTerms] = useState<IpoInvoiceTerms | "">(detail.receipt?.input?.invoiceTerms ?? ""),
     [differences, setDifferences] = useState<any[]>(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const framework = r.route.endsWith("framework");
+  const invoiceTerms = chosenTerms || (framework ? defaultIpoInvoiceTerms(basis?.source?.key) : "");
   return (
     <Action
       title="Complete & Send — compare PO and issue"
@@ -5389,6 +5393,7 @@ function PoEntry({ session, refs, detail, action }: any) {
           throw new Error(
             "Load the approved basis and enter the received PO comparison.",
           );
+        if (!invoiceTerms) throw new Error("Select invoice terms.");
         if (!f.has("reviewed"))
           throw new Error(
             "Confirm that all quantities, brands, values, tax and terms were checked against the attachment.",
@@ -5404,6 +5409,7 @@ function PoEntry({ session, refs, detail, action }: any) {
           reference: f.get("reference"),
           date: f.get("date"),
           evidenceId: f.get("evidenceId"),
+          invoiceTerms,
           basisType: framework ? "framework" : "quotation",
           frameworkId: framework ? basis?.source.id : undefined,
           quotationId: !framework ? basis?.source.id : undefined,
@@ -5514,6 +5520,7 @@ function PoEntry({ session, refs, detail, action }: any) {
             Show differences before saving
           </Button>
           {differences && <DifferenceTable differences={differences} />}
+          <div className="pz-form-grid"><IpoInvoiceTermsField id="po-comparison-invoice-terms" value={invoiceTerms} onChange={setChosenTerms} disabled={busy}/></div>
           <label>
             <input type="checkbox" name="reviewed" required /> I checked the
             entered scope, quantities, prices, taxes and terms against the

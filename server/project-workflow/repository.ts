@@ -1,3 +1,4 @@
+import { ipoInvoiceTerms } from "../../shared/ipo-invoice-terms.js";
 import {ublPoConfigurations,ublPoConfigurationChange} from './ubl-po-configuration.js';
 import {queueIssuedPo,queueSharedIpo} from '../ipo-email/queue.js';
 import {sentSurveyAwaitingDesign} from '../../shared/sent-survey-requests.js';
@@ -121,6 +122,7 @@ function saleInput(basis: any, received: any) {
     ...Object.fromEntries(
       Object.entries(sale).filter(([key]) => saleFields.includes(key)),
     ),
+    ...(received.invoiceTerms ? { invoiceTerms: received.invoiceTerms } : {}),
     orderNumber: sale.orderNumber??basis.order.input.orderNumber??"",
     poNumber: received.saleDetails?.poNumber ?? (received.confirmationType === "Customer PO" ? received.reference : ""),
     ...(basis.order.allocation?.policy==="fixed-bank-ups"?{salesPerson:"Waqas ul Haq"}:{}),
@@ -1533,7 +1535,7 @@ export class ProjectWorkflowRepository {
       if(v.action==='save-direct-po-details'){
         this.requireRole(u,['Coordinator']);requireStage(['po_receipt']);if(r.route!=='direct-framework'||r.data.basis?.source?.type!=='framework')throw new HttpError(422,'Use an approved Direct PO configuration.');
         const fields=z.object(Object.fromEntries(directPoFields.map(([key])=>[key,key==='poNumber'?z.string().trim().max(100).default(''):z.string().trim().max(key==='siteAddress'||key==='billingAddress'?1000:200)]))).strict();
-        const saved=z.object({evidenceId:z.uuid(),evidenceType:z.enum(['Customer PO','Email approval','WhatsApp approval']),extracted:fields,sourceText:z.string().max(150000).default('').transform(value=>value.replace(/\u0000/g,'').replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,'\uFFFD')),values:fields,notes:z.string().max(2000)}).strict().parse(input);
+        const saved=z.object({evidenceId:z.uuid(),evidenceType:z.enum(['Customer PO','Email approval','WhatsApp approval']),invoiceTerms:z.enum(ipoInvoiceTerms).optional(),extracted:fields,sourceText:z.string().max(150000).default('').transform(value=>value.replace(/\u0000/g,'').replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,'\uFFFD')),values:fields,notes:z.string().max(2000)}).strict().parse(input);
         await this.requireFile(c,r,saved.evidenceId,'PO / confirmation');
         if(saved.evidenceType==='Email approval'&&!/^MBL-UPS-/.test(data.basis?.source?.key??''))throw new HttpError(422,'Email approval is available for Meezan Direct PO agreements only.');
         if(saved.values.siteCode!==r.site_code)throw new HttpError(422,'The edited branch code must match this order site. Open a Direct PO for the correct branch.');
@@ -1544,7 +1546,7 @@ export class ProjectWorkflowRepository {
         const capacityIssues=directPoCapacityIssues(saved.sourceText,data.basis?.source?.key??'');if(capacityIssues.length)throw new HttpError(422,capacityIssues.join(' '));
         const previous=data.directPoDetails;
         const changes=directPoChanges(previous?.values??saved.extracted,saved.values);
-        data.directPoDetails={...saved,savedAt:new Date().toISOString(),savedBy:actor,history:[...(previous?.history??[]),{actor,actorName:u.display_name,at:new Date().toISOString(),evidenceId:saved.evidenceId,extracted:saved.extracted,changes}]};
+        data.directPoDetails={...saved,invoiceTerms:saved.invoiceTerms??previous?.invoiceTerms,savedAt:new Date().toISOString(),savedBy:actor,history:[...(previous?.history??[]),{actor,actorName:u.display_name,at:new Date().toISOString(),evidenceId:saved.evidenceId,extracted:saved.extracted,changes}]};
         reason='Direct PO evidence details saved'+(changes.length?': '+changes.map(x=>x.label).join(', '):' without corrections');
       } else if (v.action === "review-survey-handoff") {
         this.requireRole(u, ["Coordinator"]);
@@ -3248,6 +3250,7 @@ export class ProjectWorkflowRepository {
         originalHistoricalVersion: historical?.version ?? null,
         poReference: receipt.input.reference,
         poDate: receipt.input.date,
+        ...(receipt.input.invoiceTerms ? { invoiceTerms: receipt.input.invoiceTerms } : {}),
         evidenceId: receipt.input.evidenceId,
         approvedSource: basis.source,
         comparison: basis.comparison,
@@ -3357,6 +3360,7 @@ export class ProjectWorkflowRepository {
       );
     const input = {
       ...basis.order.input,
+      ...(receipt.input.invoiceTerms ? { invoiceTerms: receipt.input.invoiceTerms } : {}),
       poNumber:
         !historical && receipt.input.confirmationType && receipt.input.confirmationType !== "Customer PO"
           ? ""
