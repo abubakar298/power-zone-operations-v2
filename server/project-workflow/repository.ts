@@ -85,6 +85,7 @@ const saleFields = [
   "phone",
   "email",
   "billingAddress",
+  "deliveryAddress",
   "paymentContact",
   "paymentPhone",
   "paymentMode",
@@ -1245,7 +1246,8 @@ export class ProjectWorkflowRepository {
       if (site.status !== "Active")
         throw new HttpError(409, "This site is inactive.");
       let siteChange: any;
-      if (input.siteId) {
+      // Direct PO evidence can describe this delivery without editing the branch register.
+      if (input.siteId && (input.route !== "direct-framework" || input.confirmSiteChange)) {
         const before = {
           name: site.name,
           code: site.code,

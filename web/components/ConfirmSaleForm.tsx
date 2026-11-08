@@ -315,6 +315,8 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
   });
   const currentPreview =
     salePreview?.key === previewKey ? salePreview : undefined;
+  const evidenceNotes = input.evidenceNotes.trim() ||
+    (reviewingDirectPo && po && document && input.poNumber.trim() ? `Customer PO ${input.poNumber.trim()}` : "");
   function receiptPayload() {
     return {
       ...(input.ipoNumber?.trim()?{ipoNumber:input.ipoNumber.trim()}:{}),
@@ -326,13 +328,13 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
       frameworkId: framework ? basis.source.id : undefined,
       quotationId: !framework ? basis.source.id : undefined,
       confirmationType: input.evidenceType,
-      saleDetails: {...input,...(preAgreedBank?{poRecordedTotal:poTotal,poRecordedTax:poTax,poAmountSource:poTotal?"Customer PO reading; compared against accepted agreement":"Accepted agreement; PO amount unreadable or redacted",poPrintedTax,poTaxTreatment:poInclusive?"Tax-inclusive payable; approved GST allocation retained":"As printed"}:{})},
+      saleDetails: {...input, evidenceNotes, ...(reviewingDirectPo ? { deliveryAddress: draftValues.siteAddress || r.data.siteAddress || "" } : {}), ...(preAgreedBank?{poRecordedTotal:poTotal,poRecordedTax:poTax,poAmountSource:poTotal?"Customer PO reading; compared against accepted agreement":"Accepted agreement; PO amount unreadable or redacted",poPrintedTax,poTaxTreatment:poInclusive?"Tax-inclusive payable; approved GST allocation retained":"As printed"}:{})},
       actual: po ? structuredClone(basis.comparison) : undefined,
       reviewed: true,
       configurationChangeReason:configurationChanged?configurationChangeReason:'',
       customerNtn: input.customerNtn ?? "",
       customerStrn: input.customerStrn ?? "",
-      notes: input.evidenceNotes,
+      notes: evidenceNotes,
     };
   }
   function validation(forPreview = false) {
@@ -344,7 +346,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
       ...(ipoError?[ipoError]:[]),
       ...(!input.invoiceCompany.trim() ? ["Enter the invoice company."] : []),
       ...(!input.salesPerson.trim() ? ["Enter the sales person."] : []),
-      ...(!input.evidenceNotes.trim()
+      ...(!evidenceNotes
         ? ["Enter the approval evidence details."]
         : []),
     ];
