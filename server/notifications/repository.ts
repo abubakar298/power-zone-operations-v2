@@ -1,4 +1,4 @@
-import {closureEmailIdentity} from './closure-identity.js';
+import {closureEmailIdentity,closureNotificationId,closureNotificationIdentities} from './closure-identity.js';
 import {OperationsIncidentProjector} from './operations-incidents.js';
 import {PlanningReminderProjector} from '../operations-board/planning-reminders.js';
 import {OperationsNotificationProjector,operationsNotificationRecipientAllowed} from './operations-projector.js';
@@ -81,9 +81,9 @@ export class NotificationsRepository {
   async list(user: User, id?: string, cursor?: { time: string; id: string }) {
     // Empty/new inboxes must not plan or execute the cross-department event view.
     if(!(await this.pool.query("SELECT 1 FROM notifications WHERE user_id=$1 AND kind<>'Stock shortage' AND ($2::uuid IS NULL OR id=$2) LIMIT 1",[user.id,id??null])).rowCount)return [];
-    return (
+    const rows = (
       await this.pool.query(
-        `WITH candidates AS MATERIALIZED (SELECT * FROM notifications WHERE user_id=$1 AND kind<>'Stock shortage' AND ($3::uuid IS NULL OR id=$3)), inbox_events AS MATERIALIZED (SELECT source_key,audience,owner_id FROM notification_events e WHERE e.source_key IN(SELECT split_part(split_part(source_key,'/reminder',1),'/escalation',1) FROM candidates) AND ( $2 IN('Admin','Management') OR (e.audience='owner' AND e.owner_id=$1 AND $2='Coordinator') OR (e.audience IN('security','assigned') AND e.owner_id=$1) OR e.audience=$2)), inbox AS (SELECT COUNT(*) FILTER(WHERE n.read_at IS NULL AND n.resolved_at IS NULL) OVER()::integer AS unread_count,n.id,n.kind,COALESCE(t.title,n.title) AS title,n.reference,n.target,n.actionable,n.created_at,n.read_at,n.resolved_at,COALESCE(u.display_name,'Power Zone') AS actor FROM candidates n JOIN inbox_events e ON e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1) LEFT JOIN notification_types t ON t.kind=n.kind LEFT JOIN users u ON u.id=n.actor_id WHERE n.user_id=$1 AND n.kind<>'Stock shortage' AND ($3::uuid IS NULL OR n.id=$3) AND ((e.audience='management' AND $2 IN('Admin','Management')) OR (e.audience='owner' AND e.owner_id=$1 AND $2 IN('Admin','Management','Coordinator')) OR (e.audience IN('security','assigned') AND e.owner_id=$1) OR e.audience=$2 OR (n.kind='Escalation' AND $2 IN('Admin','Management'))) ) SELECT * FROM inbox WHERE ($4::timestamptz IS NULL OR (created_at,id)<($4::timestamptz,$5::uuid)) ORDER BY created_at DESC,id DESC LIMIT 100`,
+        `WITH candidates AS MATERIALIZED (SELECT * FROM notifications WHERE user_id=$1 AND kind<>'Stock shortage' AND ($3::uuid IS NULL OR id=$3)), inbox_events AS MATERIALIZED (SELECT source_key,audience,owner_id FROM notification_events e WHERE e.source_key IN(SELECT split_part(split_part(source_key,'/reminder',1),'/escalation',1) FROM candidates) AND ( $2 IN('Admin','Management') OR (e.audience='owner' AND e.owner_id=$1 AND $2='Coordinator') OR (e.audience IN('security','assigned') AND e.owner_id=$1) OR e.audience=$2)), inbox AS (SELECT COUNT(*) FILTER(WHERE n.read_at IS NULL AND n.resolved_at IS NULL) OVER()::integer AS unread_count,n.id,n.kind,n.source_key,COALESCE(t.title,n.title) AS title,n.reference,n.target,n.actionable,n.created_at,n.read_at,n.resolved_at,COALESCE(u.display_name,'Power Zone') AS actor FROM candidates n JOIN inbox_events e ON e.source_key=split_part(split_part(n.source_key,'/reminder',1),'/escalation',1) LEFT JOIN notification_types t ON t.kind=n.kind LEFT JOIN users u ON u.id=n.actor_id WHERE n.user_id=$1 AND n.kind<>'Stock shortage' AND ($3::uuid IS NULL OR n.id=$3) AND ((e.audience='management' AND $2 IN('Admin','Management')) OR (e.audience='owner' AND e.owner_id=$1 AND $2 IN('Admin','Management','Coordinator')) OR (e.audience IN('security','assigned') AND e.owner_id=$1) OR e.audience=$2 OR (n.kind='Escalation' AND $2 IN('Admin','Management'))) ) SELECT * FROM inbox WHERE ($4::timestamptz IS NULL OR (created_at,id)<($4::timestamptz,$5::uuid)) ORDER BY created_at DESC,id DESC LIMIT 100`,
         [
           user.id,
           user.role,
@@ -93,6 +93,15 @@ export class NotificationsRepository {
         ],
       )
     ).rows;
+    const mayViewClosures = user.role === 'Admin' || user.role === 'Management';
+    const closureIds = mayViewClosures ? rows.flatMap(row => {
+      const key = closureNotificationId(row.source_key);
+      return key ? [key] : [];
+    }) : [];
+    const identities = await closureNotificationIdentities(this.pool,[...new Set(closureIds)]);
+    return rows.map(({source_key,...row}) => ({
+      ...row, reference: (mayViewClosures ? identities.get(closureNotificationId(source_key) ?? '')?.reference : undefined) ?? row.reference,
+    }));
   }
   async read(user: User, id?: string) {
     await this.pool.query(

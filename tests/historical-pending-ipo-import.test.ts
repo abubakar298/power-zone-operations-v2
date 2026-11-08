@@ -66,7 +66,7 @@ test('authorised historical pending orders use real approved issuance calculatio
   const qc=await qcMaterialHandoff(db.pool,'ipo:'+restored.ipoId);
   assert.ok(qc?.aliases.includes('site:'+boardId),'Accounts retains the exact existing PT entry alias');
   assert.equal((await db.pool.query('SELECT pt_reference FROM accounts_job_pt_entries WHERE id=$1',[ptId])).rows[0].pt_reference,'PT-UNCHANGED');
-  assert.ok(!(await new MaterialDraftRepository(db.pool).intake(users.inventory)).sources.some(s=>s.id===restored.ipoId),'Delivered site does not become a new dispatch');
+  assert.ok(!(await new MaterialDraftRepository(db.pool).intake(users.inventory)).sources.some(s=>s.siteId===restored.ipoId),'Delivered site does not become a new dispatch');
   for(const table of ['ipo_accounts_handoffs','accounts_job_closures','stock_on_hand_entries','inventory_material_dispatches'])assert.equal((await db.pool.query('SELECT count(*)::int n FROM '+table)).rows[0].n,0);
   await assert.rejects(db.pool.query('DELETE FROM historical_pending_ipo_imports'));
   assert.equal(receiptSchema.safeParse({historicalImport:true}).success,false,'Normal employee PO receipt schema cannot enable operator-only historical import.');
