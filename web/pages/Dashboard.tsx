@@ -1320,14 +1320,21 @@ export function Dashboard({
                 (bucketTask?.kind === "C&I proposal" ? (
                   <CniProposals
                     followupPreview={Boolean(bucketTask.followupPreview)}
+                    startRevision={Boolean(bucketTask.startCniRevision)}
                     reviewOnly
                     session={session}
                     masters={{ customers: [] }}
                     initialProposalId={bucketTask.id}
                     onLogout={onLogout}
-                    onBack={() =>
-                      navigate(origin as Parameters<typeof navigate>[0])
-                    }
+                    onBack={() => {
+                      if (!bucketTask.followupPreview) {
+                        navigate(origin as Parameters<typeof navigate>[0]);
+                        return;
+                      }
+                      if (navigate("dashboard")) {
+                        sessionStorage.setItem("pz:department-page", sharedCoordinationBuckets[5]);
+                      }
+                    }}
                   />
                 ) : (
                   <Commercial

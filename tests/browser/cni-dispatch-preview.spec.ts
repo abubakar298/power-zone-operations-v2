@@ -25,6 +25,17 @@ test('approved CNI review exposes saved-version dispatch evidence and records se
  await form.getByRole('button',{name:'Dispatch Approved Quotation',exact:true}).click();await expect(form.getByRole('status')).toContainText('Marked sent to Salesperson');
  const record=(await(await page.request.get(`/api/coordinator/dispatch?cniVersionId=${saved.versionId}`)).json()).record;expect(record.cni_version_id).toBe(saved.versionId);
  const detail=await(await page.request.get(`/api/cni/${saved.id}`)).json();expect(detail.versions).toHaveLength(1);expect(detail.versions[0].snapshot).toEqual(saved.snapshot);
+ await page.goto('/dashboard#workspace=dashboard&page=PO+%2F+Confirmation+Receipt');
+ await expect(page.getByRole('heading',{name:'Customer Follow-up',exact:true,level:2})).toBeVisible();
+ const row=page.getByRole('row').filter({hasText:'CNI dispatch regression'});
+ await expect(row.getByRole('button',{name:'Confirm Sale',exact:true})).toBeDisabled();
+ await row.getByRole('button',{name:'Review',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Quotation Summary',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Back to Customer Follow-up',exact:true}).click();
+ await row.getByRole('button',{name:'Revise',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Revision Settings',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Save & send for approval',exact:true})).toBeEnabled();
+ await expect(page.getByLabel('Site / Project name',{exact:true})).toHaveValue('CNI dispatch regression');
 });
 
 test('quotation PDF renders when newer JavaScript Promise helpers are unavailable and still downloads unchanged',async({page})=>{

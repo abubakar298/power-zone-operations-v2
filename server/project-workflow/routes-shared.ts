@@ -41,4 +41,4 @@ const bucketLabels: Record<string,string> = {
 export const bucketLabel = (key:string) => bucketLabels[key] ?? key;
 
 export const iposSharedBucket = "IPOs Shared";
-export const visibleCoordinationBuckets = [...coordinationBuckets.slice(0,7),iposSharedBucket];
+export const visibleCoordinationBuckets = [...coordinationBuckets.slice(0,6),iposSharedBucket];

@@ -37,7 +37,7 @@ const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(
     new Date(),
   );
-export function ConfirmSaleForm({ session, detail, action, onBack, initialDirectPo }: any) {
+export function ConfirmSaleForm({ session, detail, action, onBack, initialDirectPo, backLabel }: any) {
   const r = detail.record,
     c = detail.masterReview.customer,
     framework = r.route.endsWith("framework");
@@ -427,7 +427,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
     <div className="pz-stack orders-module">
       <div>
         <Button variant="neutral" onClick={onBack}>
-          Back to PO Receipt
+          Back to {backLabel}
         </Button>
       </div>
       <section className="pz-panel">

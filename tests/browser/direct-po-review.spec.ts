@@ -26,7 +26,8 @@ for(const readable of [false,true])test(`Saved Consumer Hub Direct PO ${readable
   let issued=0;const previews:any[]=[];
   page.on('request',request=>{if(request.method()==='POST'&&request.url().endsWith(`/${id}/actions`)&&request.postDataJSON()?.action==='receipt')issued++;if(request.url().endsWith(`/${id}/sale-preview`))previews.push(request.postDataJSON());});
   await page.goto('/dashboard');
-  await page.locator('tr').filter({hasText:name}).getByRole('button',{name:'Open site record',exact:true}).click();
+  await page.getByRole('navigation',{name:'Atif shortcuts'}).getByRole('button',{name:'Direct PO',exact:true}).click();
+  await page.getByRole('row').filter({hasText:name}).getByRole('button',{name:'Review IPO',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Review IPO',exact:true})).toBeVisible();
   await expect(page.getByLabel('Invoice terms',{exact:true})).toHaveValue('completion');
   const reference=page.getByLabel('Customer PO reference',{exact:true});

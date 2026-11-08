@@ -2,7 +2,7 @@ import {openWorkspaceSection} from './navigation.js';
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
-test("Inventory workspace: job search, draft, attachment, immutable handoff and QC-gated Accounts closure", async ({
+test("Inventory workspace: job search, draft, attachment, immutable handoff and Accounts closure", async ({
   page,
   request,
 }) => {
@@ -155,16 +155,18 @@ test("Inventory workspace: job search, draft, attachment, immutable handoff and 
     }),
   ).toBeVisible();
   await expect(page.getByLabel('Client acknowledgment reference',{exact:true})).toHaveCount(0);
-  await expect(page.getByRole('heading',{name:'QC supporting documents',exact:true}).locator('..').locator('div').filter({hasText:'Not received'})).toHaveCount(2);
+  const supporting = page.getByRole('heading',{name:'Supporting documents',exact:true}).locator('..');
+  await expect(supporting.getByText('Photographs support invoicing and do not block Job Closure.')).toBeVisible();
+  await expect(supporting.locator('div').filter({hasText:'Not received'})).toHaveCount(2);
   await page.locator('#closure-pt-upload').setInputFiles({name:'pt-costing.png',mimeType:'image/png',buffer:await page.screenshot()});
   await expect(page.getByText('pt-costing.png',{exact:true}).first()).toBeVisible();
   await page.getByLabel('Accounts remarks / cost variance explanation',{exact:true}).fill('Isolated browser fixture; awaiting QC evidence.');
   await page.getByRole('button',{name:'Save closure draft',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'Closure draft saved'})).toBeVisible();
-  // Accounts cannot manufacture QC evidence by entering a free-text reference.
-  // Native closure tests cover submission/approval with separately supplied QC files.
+  // This historical handoff already has a PT entry. Missing invoicing
+  // evidence remains visible while the closure goes to Management.
   await page.getByRole('button',{name:'Submit closure to Management',exact:true}).click();
   await page.getByRole('dialog',{name:'Submit closure to Management',exact:true})
     .getByRole('button',{name:'Submit closure to Management',exact:true}).click();
-  await expect(page.getByRole('alert')).toContainText('await client acknowledgment and site photographs from QC');
-  await expect(page.getByRole('button',{name:'Save closure draft',exact:true})).toBeEnabled();
+  await expect(page.getByRole('status').filter({hasText:'Closure submitted to Management'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Save closure draft',exact:true})).toHaveCount(0);
 });

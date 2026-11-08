@@ -10,16 +10,23 @@ for(const stage of ['ready','followup'] as const)test(`Coordinator starts a ${st
  await page.route('**/api/project-workflow/'+record.id,r=>r.fulfill({json:{record,files:[]}}));
  await page.goto('/dashboard#workspace=coordination');
  await page.getByRole('button',{name:stage==='ready'?/^Ready to Send/:/^Customer Follow-up/}).click();
+ const revisionButton=stage==='ready'?'Create Revision':'Revise';
  const row=page.getByRole('row').filter({hasText:inputs.siteName});
- await expect(row.getByRole('button',{name:'Create Revision',exact:true})).toBeVisible();
+ await expect(row.getByRole('button',{name:revisionButton,exact:true})).toBeVisible();
  // Review and revision remain parallel actions; descriptions cannot stretch or recenter them.
- const boxes=await Promise.all(['Review','Create Revision'].map(name=>row.getByRole('button',{name,exact:true}).boundingBox()));
- expect(Math.abs(boxes[0]!.y-boxes[1]!.y)).toBeLessThan(2);
+ const boxes=await Promise.all((stage==='ready'?['Review',revisionButton]:['Review',revisionButton,'Confirm Sale']).map(name=>row.getByRole('button',{name,exact:true}).boundingBox()));
+ expect(boxes.every(box=>Math.abs(box!.y-boxes[0]!.y)<2)).toBe(true);
  if(stage==='followup'){
+  await expect(page.getByRole('columnheader',{name:'Customer response'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:/^PO Receipt/})).toHaveCount(0);
+  await page.getByRole('button',{name:'Record Heads-up',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Record Heads-up',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Back to Customer Follow-up',exact:true}).click();
   await row.getByRole('button',{name:'Review',exact:true}).click();
   await expect(page.getByRole('button',{name:'Create Revision',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Back to Customer Follow-up',exact:true}).click();
  }
- await page.getByRole('button',{name:'Create Revision',exact:true}).click();
+ await row.getByRole('button',{name:revisionButton,exact:true}).click();
  await page.getByLabel('Revision reason',{exact:true}).fill('Customer requested an isolated '+stage+' revision');
  await page.getByLabel('Revision source',{exact:true}).selectOption('Customer');
  await page.getByLabel('Requires costing change',{exact:true}).selectOption(stage==='ready'?'no':'yes');

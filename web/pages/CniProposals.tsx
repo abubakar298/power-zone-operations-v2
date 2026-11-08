@@ -28,9 +28,11 @@ export function CniProposals({
   initialContext,
   reviewOnly = false,
   followupPreview = false,
+  startRevision = false,
 }: {
   reviewOnly?: boolean;
   followupPreview?: boolean;
+  startRevision?: boolean;
   initialProposalId?: string;
   initialContext?: any;
   session: Session;
@@ -78,10 +80,28 @@ export function CniProposals({
       taxRate: cniPolicy.taxRate,
     });
   } catch {}
+  function editReview(proposal: any) {
+    const version = proposal.versions[0];
+    const snapshot = version.snapshot;
+    setEditingReview(true);
+    setEditing({ id: proposal.id, version: version.version });
+    setCustomerId(String(snapshot.customer.id));
+    setSearch(snapshot.customer.name);
+    setSiteName(snapshot.siteName);
+    setSiteCode(snapshot.siteCode ?? "");
+    setQuantity(String(snapshot.pricing.quantity));
+    setSaleType(snapshot.pricing.saleType ?? "Tax Deal");
+    setCashGstTreatment(snapshot.pricing.cashGstTreatment ?? "No GST added");
+    setPresentation(snapshot.pricing.presentation);
+    setDiscount(proposal.actions.filter((a: any) => a.version_id === version.id).at(-1)?.instructions?.recommendedDiscount ?? snapshot.pricing.discount);
+    setNotice("Original values loaded. Saving creates a new version for approval.");
+  }
   const open = async (id: string) => {
     setBusy(true);
     try {
-      setDetail(await api<any>(`/cni/${id}`));
+      const proposal = await api<any>(`/cni/${id}`);
+      setDetail(proposal);
+      if (startRevision && proposal.versions.length) editReview(proposal);
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -91,7 +111,7 @@ export function CniProposals({
   };
   useEffect(() => {
     if (initialProposalId) void open(initialProposalId);
-  }, [initialProposalId]);
+  }, [initialProposalId, startRevision]);
   const reset = () => {
     if (!confirmLeaveWorkspace()) return;
     setDirty(false);
@@ -368,29 +388,10 @@ export function CniProposals({
       <details><summary>Quotation History</summary><div className="pz-table-scroll"><table><thead><tr><th>Document</th><th>Date</th></tr></thead><tbody>{detail.versions.map((v:any)=><tr key={v.id}><td>{v.number}</td><td>{displayDate(v.created_at)}</td></tr>)}</tbody></table></div>{detail.actions.map((a:any)=><p key={a.id}>{a.action} · {displayDate(a.created_at)}{a.remarks?` · ${a.remarks}`:''}</p>)}</details></section>
       {management&&<CniFinancialReview id={detail.id} versionId={current.id} session={session} pending={action==='Approval requested'} onChanged={async()=>{await load();setDetail(await api(`/cni/${detail.id}`));}}/>}
       <section className="pz-panel"><DocumentPreview title={action==='Approved'?'Approved Quotation Preview':'Submitted Quotation Preview'} url={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`}/>
-      <div className="pz-action-row">{!followupPreview&&action==='Approval requested'&&<Button variant="success" onClick={()=>setRecordingApproval(v=>!v)} aria-expanded={recordingApproval}>Record Approval</Button>}<a className="button" href={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`} download>Download PDF for Sharing</a>{!followupPreview&&<button disabled={busy} aria-expanded={editingReview} onClick={()=>{              setEditingReview(true);
-              const s = current.snapshot;
-              setEditing({ id: detail.id, version: current.version });
-              setCustomerId(String(s.customer.id));
-              setSearch(s.customer.name);
-              setSiteName(s.siteName);
-              setSiteCode(s.siteCode ?? "");
-              setQuantity(String(s.pricing.quantity));
-              setSaleType(s.pricing.saleType ?? "Tax Deal");setCashGstTreatment(s.pricing.cashGstTreatment ?? "No GST added");
-              setPresentation(s.pricing.presentation);
-              setDiscount(
-                detail.actions
-                  .filter((a: any) => a.version_id === current.id)
-                  .at(-1)?.instructions?.recommendedDiscount ??
-                  s.pricing.discount,
-              );
-              setNotice(
-                "Original values loaded above. Saving creates a new immutable version.",
-              );
-}}>Revise Quotation</button>}</div></section>
+      <div className="pz-action-row">{!followupPreview&&action==='Approval requested'&&<Button variant="success" onClick={()=>setRecordingApproval(v=>!v)} aria-expanded={recordingApproval}>Record Approval</Button>}<a className="button" href={`/api/cni/${detail.id}/versions/${current.id}/proposal.pdf`} download>Download PDF for Sharing</a>{!followupPreview&&<button disabled={busy} aria-expanded={editingReview} onClick={()=>editReview(detail)}>Revise Quotation</button>}</div></section>
       {!followupPreview&&action==='Approved'&&<QuotationDispatch key={current.id} session={session} cniVersionId={current.id}/>}
       {!followupPreview&&recordingApproval&&action==='Approval requested'&&<QuotationApproval session={session} cniId={detail.id} onApproved={async()=>{window.dispatchEvent(new CustomEvent('pz:workflow-completed',{detail:{message:'Approval recorded — moved to Ready to Send.'}}));onBack();}}/>}
-      {!followupPreview&&editingReview&&<section className="pz-panel"><h2>Revision Settings</h2>{notice&&<p role="status">{notice}</p>}{revisionForm}</section>}
+      {(!followupPreview||startRevision)&&editingReview&&<section className="pz-panel"><h2>Revision Settings</h2>{notice&&<p role="status">{notice}</p>}{revisionForm}</section>}
     </>}
   </section>;
   return (
