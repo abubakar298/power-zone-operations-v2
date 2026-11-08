@@ -1,6 +1,6 @@
 # Shared production release
 
-Production must deploy the shared `codex/production-release` branch. Feature branches must merge into that branch before deployment; do not switch the production service to a feature branch.
+Production must deploy the shared `main` branch, automatically after the GitHub checks pass. Feature branches must merge into `main` through a pull request before deployment; do not switch the production service to a feature branch. `codex/production-release` is retired and kept only as a backup: do not push to it or open pull requests into it.
 
 Before merging, fetch the current production deploy commit and all current release heads. Verify that the candidate contains the deployed commit with `git merge-base --is-ancestor <deployed-sha> <candidate-sha>`. If not, merge the missing history, resolve conflicts, and run verification again. Never force-push the release branch.
 
