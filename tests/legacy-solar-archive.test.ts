@@ -25,7 +25,23 @@ test('native read projections retain source, document/history and financial evid
  assert.deepEqual((await board.sites(admin)).sites.map((s:any)=>s.id),['registered-UBL:SOLAR:315']);assert.equal((await board.physicalDocuments(accounts)).sites.length,1);
  assert.equal((await board.site(admin,'registered-'+archivedLegacySolarKeys[0])).documents?.[0]?.label,'Signed DO');assert.equal((await board.history(admin,'registered-'+archivedLegacySolarKeys[0])).versions.length,1);
  await assert.rejects(board.command(admin,'registered-'+archivedLegacySolarKeys[0],{action:'assign-team',team:'central',version:1,requestKey:randomUUID(),edit:false,reason:'Attempt new work'}),/read-only/);
- const register=await invoiceRegister(db.pool,accounts);assert.equal(register.queues.completion.length,1);assert.equal(register.queues.completion[0].key,'registered-UBL:SOLAR:315');
+ assert.equal((await invoiceRegister(db.pool,accounts)).queues.completion.length,0,'Completion without uploads does not enter the invoice queue');
  assert.deepEqual((await repo.billing(accounts)).generalReceipts,billing.generalReceipts);assert.deepEqual(await contents(),before);
+ const siteId='registered-UBL:SOLAR:315';
+ const files=await Promise.all(['Signed DO','Customer acknowledgment','VSO','Installation photo'].map(async (name,i)=>{
+  const file={id:randomUUID(),name,mediaType:i===3?'image/jpeg':'application/pdf'};
+  await db.pool.query('INSERT INTO operations_board_files(id,site_id,filename,media_type,sha256,content,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[file.id,siteId,file.name,file.mediaType,String(i+1).repeat(64),Buffer.from(name),admin]);
+  return file;
+ }));
+ const [signedDo,acknowledgement,variableSignoff,photo]=files;
+ await db.pool.query(`INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by)
+  SELECT site_id,2,snapshot||$1::jsonb,'QC evidence recorded','Fixture',$2,$3
+  FROM operations_board_versions WHERE site_id=$4 AND version=1`,[
+   {deliveries:[{signedDo,deliveryDate:'2026-10-26'}],qc:{signoff:{date:'2026-10-28',acknowledgement,variableSignoff,evidence:photo}}},
+   randomUUID(),admin,siteId,
+ ]);
+ const afterEvidence=await contents();
+ const register=await invoiceRegister(db.pool,accounts);assert.equal(register.queues.completion.length,1);assert.equal(register.queues.completion[0].key,siteId);
+ assert.deepEqual(await contents(),afterEvidence);
  }finally{await db.close();}
 });
