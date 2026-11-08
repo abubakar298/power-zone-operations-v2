@@ -7,7 +7,7 @@ import {completionEvidence} from '../../shared/qc-completion-evidence.js';
 import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
 import {dispatchReconciliationEligibleSql} from '../inventory/dispatch-reconciliation-eligibility.js';
 type Db=Pool|PoolClient;
-export type QcMaterialHandoff={jobKey:string;aliases:string[];siteId:string;siteName:string;ipo:string;customer:string;ready:boolean;holds:string[];signature:string;usage:any[];localPurchases:any[];completedDate:string;receivedAt:string;deliveryOnly:boolean;sources:any};
+export type QcMaterialHandoff={jobKey:string;aliases:string[];siteId:string;siteName:string;ipo:string;customer:string;ready:boolean;holds:string[];signature:string;usage:any[];localPurchases:any[];completedDate:string;receivedAt:string;deliveryOnly:boolean;historicalReportId?:string;historicalReportVersion?:number;sources:any};
 /** One exact site, all actually issued preparations. No warehouse returns or photos. */
 export function materialUsageHolds(input:{deliveryOnly:boolean;completed:boolean;signedDos:number;drafts:{parent:boolean;kind:string;lineKeys:string[];usage:any}[];localDeclared:boolean;noVariableItemsUsed?:boolean;noWarehouseMaterials?:boolean}):string[]{
  const holds:string[]=[];
@@ -34,11 +34,12 @@ export async function qcMaterialHandoffs(db:Db):Promise<QcMaterialHandoff[]>{
   ()=>db.query('SELECT DISTINCT ON(draft_id,site_id) draft_id,site_id,version,snapshot FROM inventory_material_site_usage_versions ORDER BY draft_id,site_id,version DESC'),
   ()=>db.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_site_local_purchase_versions ORDER BY site_id,version DESC'),
   ()=>db.query('SELECT id,site_id,sha256 FROM operations_board_files'),
+  ()=>db.query("SELECT r.id,r.job_key,v.version,v.snapshot->'qcUsage' AS usage FROM inventory_reports r JOIN LATERAL(SELECT version,stage,snapshot FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true WHERE v.stage='Sent to Accounts' AND v.snapshot#>>'{qcUsage,source}'='QC historical usage'"),
   ()=>db.query(`SELECT d.id,d.draft_id,d.snapshot->'combinedPlan' AS combined_plan,l.line_key,l.quantity::text FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE l.quantity>0 AND ${dispatchReconciliationEligibleSql}`),
  ];
  const values:QueryResult<any>[]=[];
  if(typeof (db as PoolClient).release==='function'){for(const query of queries)values.push(await query());}else values.push(...await Promise.all(queries.map(query=>query())));
- const [b,i,l,o,d,u,p,f,issued]=values;
+ const [b,i,l,o,d,u,p,f,reports,issued]=values;
  const result:QcMaterialHandoff[]=[];
  for(const board of b.rows){
   const s=board.snapshot;if(s.superseded||s.sample===true||s.archived===true||isArchivedLegacySolar({...s,id:board.site_id}))continue;
@@ -64,15 +65,22 @@ export async function qcMaterialHandoffs(db:Db):Promise<QcMaterialHandoff[]>{
     usage.push({key:draft.id+':'+line.key,itemId:line.itemId,description:line.description||line.itemId,unit:line.unit,issued:draft.snapshot.parent?null:outs.filter(v=>v.line_key===line.key).reduce((n,v)=>n.add(v.quantity),new Decimal(0)).toString(),used:used??null,parent:!!draft.snapshot.parent});}
   }
   const local=p.rows.find(v=>v.site_id===board.site_id),localItems=local?.snapshot.items??[];
-  const final=s.qcJob??s.qc?.handover??s.qc?.signoff??completionEvidence(s.documents?.find((v:any)=>v.id===board.site_id+':completion-documents'));
-  let holds=materialUsageHolds({deliveryOnly,completed:s.completed===true,signedDos:signedDos.length,drafts,localDeclared:!!local,noWarehouseMaterials:local?.snapshot.noWarehouseMaterials===true,noVariableItemsUsed:final?.noVariableItemsUsed===true});
+  const final=s.qcJob??s.qc?.handover??s.qc?.signoff??completionEvidence(s.documents?.find((v:any)=>v.id===board.site_id+':completion-documents'||v.id===board.site_id+':historical-handover-documents'));
+  const verifiedHistorical=(!deliveryOnly&&!drafts.length&&signedDos.length&&final?.variableSignoff?.id)
+   ? reports.rows.find(report=>{
+     const verified=report.usage;
+     const vsoId=final.variableSignoff.id;
+     return report.job_key===jobKey&&verified.boardId===board.site_id&&verified.input?.verify===true
+      &&Array.isArray(verified.evidenceIds)&&verified.evidenceIds.includes(vsoId)
+      &&f.rows.some(file=>file.site_id===board.site_id&&file.id===vsoId)
+      &&signedDos.every((file:any)=>file.id!==vsoId&&verified.evidenceIds.includes(file.id));
+    }) : undefined;
+  const holds=verifiedHistorical?[]:materialUsageHolds({deliveryOnly,completed:s.completed===true,signedDos:signedDos.length,drafts,localDeclared:!!local,noWarehouseMaterials:local?.snapshot.noWarehouseMaterials===true,noVariableItemsUsed:final?.noVariableItemsUsed===true});
   const unsignedDeliveries=(s.deliveries??[]).filter((v:any)=>!v.signedDo||!f.rows.some((file:any)=>file.site_id===board.site_id&&file.id===v.signedDo.id));
   if(unsignedDeliveries.length)holds.push('Signed DO pending for '+unsignedDeliveries.length+' delivery / deliveries');
-  // Installation-only scopes may explicitly confirm no warehouse material was issued.
-  if(local?.snapshot.noWarehouseMaterials===true)holds=holds.filter(h=>h!=='Issued material linkage or no-material confirmation pending');
-  const source={ready:holds.length===0,siteId:board.site_id,completed:deliveryOnly?s.completed===true:true,deliveryOnly,usage:sources,noVariableItemsUsed:final?.noVariableItemsUsed===true,noWarehouseMaterials:local?.snapshot.noWarehouseMaterials===true,localVersion:local?.version??null,localItems,signedDos:signedDos.map((v:any)=>({id:v.id,sha256:f.rows.find(file=>file.id===v.id)?.sha256}))};
+  const source={ready:holds.length===0,siteId:board.site_id,completed:deliveryOnly?s.completed===true:true,deliveryOnly,usage:sources,noVariableItemsUsed:final?.noVariableItemsUsed===true,noWarehouseMaterials:local?.snapshot.noWarehouseMaterials===true,localVersion:local?.version??null,localItems,signedDos:signedDos.map((v:any)=>({id:v.id,sha256:f.rows.find(file=>file.id===v.id)?.sha256})),...(verifiedHistorical?{historicalReportId:verifiedHistorical.id,historicalReportVersion:verifiedHistorical.version}:{})};
   const signature=createHash('sha256').update(JSON.stringify(source)).digest('hex');
-  result.push({jobKey,aliases:['site:'+board.site_id],siteId:board.site_id,siteName:s.name,ipo:s.ipo??i.rows.find(r=>r.id===native)?.number??'',customer:s.customer??'',ready:source.ready,holds,signature,usage,localPurchases:localItems,completedDate:final?.date??s.qcDelivery?.date??'',receivedAt:new Date(board.created_at).toISOString(),deliveryOnly,sources:source});
+  result.push({jobKey,aliases:['site:'+board.site_id],siteId:board.site_id,siteName:s.name,ipo:s.ipo??i.rows.find(r=>r.id===native)?.number??'',customer:s.customer??'',ready:source.ready,holds,signature,usage,localPurchases:localItems,completedDate:final?.date??s.qcDelivery?.date??'',receivedAt:new Date(board.created_at).toISOString(),deliveryOnly,historicalReportId:source.historicalReportId,historicalReportVersion:source.historicalReportVersion,sources:source});
  }
  // Multiple live Operations records for one IPO must be resolved, never silently merged.
  for(const row of result)if(result.filter(v=>v.jobKey===row.jobKey).length>1){row.ready=false;row.holds.push('Multiple Operations site links need review');row.sources.ready=false;}

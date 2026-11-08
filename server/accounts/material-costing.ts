@@ -57,7 +57,10 @@ export function routeMaterialCosting(initial: any[], handoffs: Awaited<ReturnTyp
    });
    continue;
   }
-  const report = existing?.report && historicalClosureException(source.jobKey) ? existing.report : null;
+  const currentReport = existing?.report;
+  const report = currentReport && (historicalClosureException(source.jobKey) ||
+   source.ready && currentReport.id===source.historicalReportId && currentReport.version===source.historicalReportVersion)
+   ? currentReport : null;
   const canRecord = !entry && (source.ready || Boolean(report));
   rows.set(source.jobKey, {
    ...existing, key:source.jobKey,jobKey:source.jobKey,siteId:source.siteId,siteName:source.siteName,
@@ -124,7 +127,7 @@ export async function markJobRecordedInPt(pool:Pool,actor:string,raw:unknown,now
   if(!row)throw new HttpError(409,'This job is no longer pending Material Costing & PT Entry. Refresh the queue.');
   if(row.ptRecorded)throw new HttpError(409,'This job is already marked as recorded in PT.');
   if(row.canRecord===false)throw new HttpError(409,row.status);
-  if(!row.report){const qc=await qcMaterialHandoff(c,row.jobKey??input.jobKey);if(!qc?.ready)throw new HttpError(409,qc?.holds.join('; ')||'Complete the applicable QC material usage before recording PT.');if(row.qcMaterialSource&&qc.signature!==row.qcMaterialSource.signature)throw new HttpError(409,'QC material usage changed. Reopen the material usage before recording PT.');}
+  if(!row.report||row.qcMaterialSource?.historicalReportId===row.report.id&&!historicalClosureException(row.jobKey)){const qc=await qcMaterialHandoff(c,row.jobKey??input.jobKey);if(!qc?.ready)throw new HttpError(409,qc?.holds.join('; ')||'Complete the applicable QC material usage before recording PT.');if(row.qcMaterialSource&&qc.signature!==row.qcMaterialSource.signature)throw new HttpError(409,'QC material usage changed. Reopen the material usage before recording PT.');}
   // Use the reconciliation current at save time; a changed version needs a fresh review.
   const report=row.report?(await c.query("SELECT v.id,v.version,v.stage FROM inventory_report_versions v WHERE v.report_id=$1 ORDER BY v.version DESC LIMIT 1",[row.report.id])).rows[0]:undefined;
   if(row.report&&(report?.version!==row.report.version||report.stage!=='Sent to Accounts'))throw new HttpError(409,'Inventory changed this reconciliation. Reopen the material usage before marking PT.');
