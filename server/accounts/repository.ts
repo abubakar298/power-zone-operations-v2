@@ -50,12 +50,8 @@ export const closureSchema = z
     operationsEvidenceSignature: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(),
     requestKey: z.uuid(),
     amendmentReason: z.string().trim().min(3).max(2000).optional(),
-    // Temporary: old records sent to Management without the evidence documents.
-    legacyEvidenceBypass: z.object({ reason: z.string().trim().min(10).max(1000) }).strict().optional(),
   })
   .strict();
-/** Temporary bypass for old records: only closures started before this moment may use it. */
-export const LEGACY_EVIDENCE_BYPASS_BEFORE = "2026-11-07T00:00:00+05:00";
 const D = (v: string) => new Decimal(v),
   m = (v: Decimal) => v.toFixed(2);
 export function financialSummary(
@@ -81,12 +77,7 @@ export function financialSummary(
   };
 }
 export class AccountsRepository {
-  constructor(readonly pool: Pool, private readonly legacyBypassBefore = LEGACY_EVIDENCE_BYPASS_BEFORE) {}
-  /** An old record may skip the evidence documents once: its closure draft started before the cutoff. */
-  private legacyBypassEligible(history: { stage: string; created_at: string | Date }[]) {
-    const first = history.at(-1);
-    return history[0]?.stage === "Draft" && !!first && new Date(first.created_at).getTime() < new Date(this.legacyBypassBefore).getTime();
-  }
+  constructor(readonly pool: Pool) {}
   async access(
     actor: string,
     c: Pool | PoolClient = this.pool,
@@ -148,7 +139,7 @@ export class AccountsRepository {
     await this.access(actor,this.pool,true);
     return (await this.pool.query(`SELECT id,job_key,version,stage,created_at,
       jsonb_build_object('identity',snapshot->'identity','source',snapshot->'source','jobId',snapshot->'jobId','title',snapshot->'title',
-        'summary',jsonb_build_object('selling',snapshot->'summary'->'selling','actual',snapshot->'summary'->'actual'),'legacyEvidenceBypass',snapshot->'legacyEvidenceBypass') AS snapshot
+        'summary',jsonb_build_object('selling',snapshot->'summary'->'selling','actual',snapshot->'summary'->'actual')) AS snapshot
       FROM (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures ORDER BY job_key,version DESC) latest
       WHERE stage='Awaiting Management' ORDER BY created_at DESC,id`)).rows;
   }
@@ -498,7 +489,6 @@ export class AccountsRepository {
       epcBudget,
       basis,
       history,
-      legacyEvidenceBypassEligible: this.legacyBypassEligible(history),
     };
   }
   async evidence(actor: string, key: string) {
@@ -602,18 +592,9 @@ export class AccountsRepository {
     await this.access(actor);
     if(input.amendmentReason!==undefined)return this.amendSubmittedClosure(actor,input);
     const job = await this.job(actor, input.jobKey);
-    const bypass = input.legacyEvidenceBypass;
-    if (bypass) {
-      // Temporary and narrow: Accounts only, old drafts only, sending to Management only.
-      if (input.stage !== "Awaiting Management") throw new HttpError(400, "Old-record bypass applies only when sending to Management.");
-      if ((await this.pool.query("SELECT role FROM users WHERE id=$1", [actor])).rows[0]?.role !== "Accounts")
-        throw new HttpError(403, "Only Accounts can send an old record without evidence.");
-      if (!job.legacyEvidenceBypassEligible)
-        throw new HttpError(409, "Only old records already in Draft can be sent without evidence. Attach the evidence documents for this job.");
-    }
-    if(!bypass&&input.stage==='Awaiting Management'&&job.operationsEvidenceSource&&!job.operationsEvidenceSignature)
+    if(input.stage==='Awaiting Management'&&job.operationsEvidenceSource&&!job.operationsEvidenceSignature)
       throw new HttpError(409,'The linked Operations QC handover is incomplete. Complete the customer sign-offs and site photograph evidence before submitting closure.');
-    if(!bypass&&input.stage==='Awaiting Management'&&(input.operationsEvidenceSignature??null)!==(job.operationsEvidenceSignature??null))
+    if(input.stage==='Awaiting Management'&&(input.operationsEvidenceSignature??null)!==(job.operationsEvidenceSignature??null))
       throw new HttpError(409,'QC handover evidence changed. Reload and review it before submitting closure.');
     const keys = [...phases.slice(0, 5), ...epcNames];
     if (
@@ -657,13 +638,12 @@ export class AccountsRepository {
       input.stage === "Awaiting Management" &&
       (!financialComplete ||
         !input.remarks ||
-        (!bypass && (
         !job.evidence.some((e: any) => e.kind === "Client acknowledgment") ||
         !job.evidence.some((e: any) => e.kind === "Site photographs") ||
         !job.evidence.some(
           (e: any) =>
             e.kind === "PT costing screenshot" && e.id === input.ptAttachmentId,
-        ))))
+        ))
     )
       throw new HttpError(
         400,
@@ -678,7 +658,6 @@ export class AccountsRepository {
       ...job,
       history: undefined,
       input,
-      ...(bypass ? { legacyEvidenceBypass: { reason: bypass.reason, by: actor, at: new Date().toISOString(), label: "Sent without evidence – old record" } } : {}),
       complete: financialComplete,
       epcBreakdownComplete: epcNames.every(
         (n) => input.epc[n] !== undefined && input.epc[n] !== "",
@@ -711,13 +690,9 @@ export class AccountsRepository {
         return old;
       }
       await this.currentReport(c, input.jobKey, job.reportVersionId);
-      if(bypass){
-        const rows=(await c.query("SELECT stage,created_at FROM accounts_active_job_closures WHERE job_key=$1 ORDER BY version DESC",[input.jobKey])).rows;
-        if(!this.legacyBypassEligible(rows))throw new HttpError(409,'Only old records already in Draft can be sent without evidence. Attach the evidence documents for this job.');
-      }
       if(input.stage==='Awaiting Management'){
-        const currentEvidence=bypass?null:await this.evidenceBundle(actor,input.jobKey,c,true);
-        if(currentEvidence&&(currentEvidence.operationsEvidenceSource&&!currentEvidence.operationsEvidenceSignature||currentEvidence.operationsEvidenceSignature!==job.operationsEvidenceSignature))
+        const currentEvidence=await this.evidenceBundle(actor,input.jobKey,c,true);
+        if(currentEvidence.operationsEvidenceSource&&!currentEvidence.operationsEvidenceSignature||currentEvidence.operationsEvidenceSignature!==job.operationsEvidenceSignature)
           throw new HttpError(409,'QC handover evidence changed. Reload and review it before submitting closure.');
         // A job marked recorded in PT before Inventory sent its reconciliation also counts.
         const entered=(await c.query("SELECT p.id FROM accounts_pt_entries p JOIN inventory_report_versions v ON v.report_id=p.source_id AND v.version=p.source_version WHERE p.source_kind='Inventory' AND v.id=$1 UNION ALL SELECT id FROM accounts_job_pt_entries WHERE job_key=$2 AND report_version_id IS NULL",[job.reportVersionId,input.jobKey])).rows[0];
@@ -757,11 +732,6 @@ export class AccountsRepository {
         actor,
         "accounts.closure." + input.stage + ":" + row.id,
       ]);
-      if (bypass)
-        await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
-          actor,
-          "accounts.closure.legacy-evidence-bypass:" + row.id,
-        ]);
       return row;
     });
   }

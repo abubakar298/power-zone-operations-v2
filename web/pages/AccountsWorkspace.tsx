@@ -427,23 +427,12 @@ export function AccountsWorkspace({
       setBusy(false);
     }
   }
-  // Temporary: Accounts may send an old record to Management without the evidence documents.
-  const [bypassOpen,setBypassOpen]=useState(false),[bypassReason,setBypassReason]=useState("");
-  async function save(stage: string, legacyEvidenceBypass?: { reason: string }) {
+  async function save(stage: string) {
     setError("");
     setErrorAction("closure");
     if (busy || !job) return;
     if (
-      legacyEvidenceBypass &&
-      !(await confirmAccountsAction(
-        "Send without evidence (old record)",
-        "This old record goes to Management without the client acknowledgment, site photographs and PT screenshot. Your reason is recorded and Management will see that the evidence was bypassed.",
-        "Send without evidence",
-      ))
-    )
-      return;
-    if (
-      stage === "Awaiting Management" && !legacyEvidenceBypass &&
+      stage === "Awaiting Management" &&
       !(await confirmAccountsAction(
         "Submit closure to Management",
         "Actual costs and evidence references will be frozen for review. The job closes only after Management approval.",
@@ -471,18 +460,14 @@ export function AccountsWorkspace({
           operationsEvidenceSignature: job.operationsEvidenceSignature??null,
           requestKey: crypto.randomUUID(),
           ...(editingSubmitted?{amendmentReason}:{}),
-          ...(legacyEvidenceBypass?{legacyEvidenceBypass}:{}),
         },
       });
-      setBypassOpen(false);setBypassReason("");
       await openJob(job.jobKey);
       await load();
       setMessage(
         stage === "Draft"
           ? "Closure draft saved."
-          : legacyEvidenceBypass
-            ? "Old record sent to Management without evidence. The reason is recorded."
-            : "Closure submitted to Management.",
+          : "Closure submitted to Management.",
       );
     } catch (e) {
       setError((e as Error).message);
@@ -656,7 +641,7 @@ export function AccountsWorkspace({
         return <><section className="accounts-list-panel accounts-pt-panel"><header className="accounts-panel-heading"><div><h2>{kind==='IPO'?'IPO Entries':'Inventory Reconciliations · PT Entries'}</h2>{kind==='Inventory'&&<p>Open jobs only. Closed jobs remain in Job Closure → Closed; original documents and PT records are retained.</p>}</div><div className="accounts-queue-switch"><Button variant="neutral" aria-pressed={!recorded} onClick={()=>navigate(kind==='IPO'?'IPOs Received':'Inventory PT Entries')}>Awaiting PT · {queueRecords.filter((r:any)=>!ptRecorded(kind,r)).length}</Button><Button variant="neutral" aria-pressed={recorded} onClick={()=>navigate(kind==='IPO'?'IPOs Recorded in PT':'Inventory Recorded in PT')}>Recorded · {queueRecords.filter((r:any)=>ptRecorded(kind,r)).length}</Button></div></header><div className="accounts-worklist-filters">
 <Field id="pt-document-search" label="Search document or site"><input id="pt-document-search" value={search} onChange={e=>setSearch(e.target.value)}/></Field>{kind==='Inventory'&&<Field id="inventory-document-kind" label="Document type"><select id="inventory-document-kind" value={inventoryType??'all'} onChange={e=>setInventoryType(e.target.value==='all'?null:e.target.value)}><option value="all">All documents</option><option value="installation">IRRs &amp; Variable Items</option><option value="delivery">Delivery-only DOs</option></select></Field>}</div><div className="pz-table-scroll"><table className="accounts-entry-table"><thead><tr><th>Site / IPO</th><th>{recorded?'PT Reference':'Received'}</th><th>Action</th></tr></thead><PagedTableBody label="sites and documents">{recentFirst(rows).map((r:any)=>{const entry=ptRecorded(kind,r);return <tr key={r.id}><td><strong>{r.snapshot?.siteName||r.site_name||jobLabel(r)}</strong><small>{r.number||r.job_id||r.job_key}{kind==='Inventory'?' · '+accountsDocumentLabel(r):''}</small></td><td>{entry?<>{entry.pt_reference}<small>{String(entry.entry_date).slice(0,10)}</small></>:r.received_at||r.created_at?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Karachi'}).format(new Date(r.received_at||r.created_at)):'Not recorded'}</td><td><Button variant="neutral" onClick={()=>kind==='IPO'?void openIpo(r.id):void openInventoryDocuments(r)}>View documents</Button>{kind==='Inventory'&&!isDeliveryOnlyDo(r)&&<Button variant="neutral" onClick={()=>{setInventoryReport(r);void navigate('Inventory Reconciliations');}}>View reconciliation</Button>}{!entry&&<Button variant="secondary" onClick={()=>{setPtDocument({...r,kind});setPtEntryReference('');setPtEntryNotes('');setError('');}}>Record PT entry</Button>}{entry&&kind==='Inventory'&&!isDeliveryOnlyDo(r)&&<Button variant="secondary" onClick={()=>void openJob(r.job_key)}>Prepare job closure</Button>}</td></tr>;})}</PagedTableBody></table>{rows.length===0&&<p>{kind==='Inventory'&&inventoryType==='delivery'?'No approved delivery-only DOs have been received yet.':'No documents in this bucket.'}</p>}</div></section></>;
       })()}
-      {['Awaiting Management','Closed Jobs'].includes(tab)&&<section className="accounts-list-panel accounts-closure-list"><header className="accounts-panel-heading"><h2>{tab}</h2></header><div className="pz-table-scroll"><table><thead><tr><th>Job / site</th><th>Stage</th><th>Action</th></tr></thead><PagedTableBody label="sites and documents">{recentFirst(data.closures.filter((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management'))).map((c:any)=><tr key={c.id}><td>{jobLabel(c.snapshot)}</td><td>{c.stage}{c.snapshot?.legacyEvidenceBypass&&<small>{c.snapshot.legacyEvidenceBypass.label}</small>}</td><td><div className="pz-action-row"><Button variant="secondary" onClick={()=>void openJob(c.job_key)}>View closure</Button>{c.stage==="Awaiting Management"&&!managementReview&&<Button variant="neutral" onClick={()=>void openJob(c.job_key,true)}>Edit</Button>}</div></td></tr>)}</PagedTableBody></table>{!data.closures.some((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management'))&&<div className="accounts-empty"><h3>No jobs in this bucket</h3><p>Jobs appear here as they progress through Management review.</p></div>}</div></section>}
+      {['Awaiting Management','Closed Jobs'].includes(tab)&&<section className="accounts-list-panel accounts-closure-list"><header className="accounts-panel-heading"><h2>{tab}</h2></header><div className="pz-table-scroll"><table><thead><tr><th>Job / site</th><th>Stage</th><th>Action</th></tr></thead><PagedTableBody label="sites and documents">{recentFirst(data.closures.filter((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management'))).map((c:any)=><tr key={c.id}><td>{jobLabel(c.snapshot)}</td><td>{c.stage}</td><td><div className="pz-action-row"><Button variant="secondary" onClick={()=>void openJob(c.job_key)}>View closure</Button>{c.stage==="Awaiting Management"&&!managementReview&&<Button variant="neutral" onClick={()=>void openJob(c.job_key,true)}>Edit</Button>}</div></td></tr>)}</PagedTableBody></table>{!data.closures.some((c:any)=>c.stage===(tab==='Closed Jobs'?'Closed':'Awaiting Management'))&&<div className="accounts-empty"><h3>No jobs in this bucket</h3><p>Jobs appear here as they progress through Management review.</p></div>}</div></section>}
       {tab === "IPO Review" && (
         <>
           {!selected&&!samplePreview&&<>
@@ -1108,7 +1093,7 @@ export function AccountsWorkspace({
       )}
       {tab === "Job Closure" && job && (
         <article className="detail-panel accounts-closure-form">
-          <header className="accounts-panel-heading"><h3>{jobLabel(job)}</h3><div className="pz-action-row">{latest?.stage==="Awaiting Management"&&!managementReview&&!editingSubmitted&&<Button variant="secondary" disabled={busy} onClick={()=>setEditingSubmitted(true)}>Edit submitted closure</Button>}<Button variant="neutral" onClick={()=>navigate("Job Closure")}>Back to jobs</Button></div></header>{editingSubmitted&&<p className="pz-caption">Edit costs and remarks, then save a new version for Management review. The submitted version and signed evidence remain in history.</p>}{latest?.snapshot?.legacyEvidenceBypass&&<p className="form-error" role="note"><strong>{latest.snapshot.legacyEvidenceBypass.label}</strong> · Reason: {latest.snapshot.legacyEvidenceBypass.reason}</p>}
+          <header className="accounts-panel-heading"><h3>{jobLabel(job)}</h3><div className="pz-action-row">{latest?.stage==="Awaiting Management"&&!managementReview&&!editingSubmitted&&<Button variant="secondary" disabled={busy} onClick={()=>setEditingSubmitted(true)}>Edit submitted closure</Button>}<Button variant="neutral" onClick={()=>navigate("Job Closure")}>Back to jobs</Button></div></header>{editingSubmitted&&<p className="pz-caption">Edit costs and remarks, then save a new version for Management review. The submitted version and signed evidence remain in history.</p>}
           <p>
             {latest?.stage ?? "New closure"} · {job.basis}
             {latest && <> · Recorded by {latest.recorded_by}</>}
@@ -1377,18 +1362,7 @@ export function AccountsWorkspace({
                 {editingSubmitted?"Save changes for Management review":"Submit closure to Management"}
               </Button>
               {editingSubmitted&&<Button variant="neutral" disabled={busy} onClick={()=>void openJob(job.jobKey)}>Cancel editing</Button>}
-              {!editingSubmitted&&session.user.role==="Accounts"&&job.legacyEvidenceBypassEligible&&!bypassOpen&&<Button variant="warning" disabled={busy} onClick={()=>setBypassOpen(true)}>Send without evidence (old record)</Button>}
             </div>
-          )}
-          {!readonly&&!editingSubmitted&&session.user.role==="Accounts"&&job.legacyEvidenceBypassEligible&&bypassOpen&&(
-            <section className="accounts-record-section pz-stack" aria-label="Send without evidence">
-              <p>Temporary, for old records only: send this job to Management without the client acknowledgment, site photographs and PT screenshot. Actual costs and remarks are still required.</p>
-              <Field id="closure-bypass-reason" label="Reason (required)"><textarea id="closure-bypass-reason" maxLength={1000} value={bypassReason} onChange={e=>setBypassReason(e.target.value)} placeholder="For example: historical record, originals not available"/></Field>
-              <div className="pz-action-row">
-                <Button variant="warning" disabled={busy||bypassReason.trim().length<10} onClick={()=>void save("Awaiting Management",{reason:bypassReason.trim()})}>Send without evidence</Button>
-                <Button variant="neutral" disabled={busy} onClick={()=>{setBypassOpen(false);setBypassReason("");}}>Cancel</Button>
-              </div>
-            </section>
           )}
           {error && errorAction === "closure" && (
             <p role="alert" className="form-error">
