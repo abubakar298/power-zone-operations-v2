@@ -1,5 +1,5 @@
+import {historicalClosureException} from '../../shared/historical-closure-exceptions.js';
 import {HistoricalClosureDocuments} from '../components/HistoricalClosureDocuments.js';
-import {AccountsClosureWaiting} from '../components/AccountsClosureWaiting.js';
 import {useBackStep} from '../navigation/useBackStep.js';
 import {confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 import {recentFirst,recordedTimestamp} from '../../shared/recent-records.js';
@@ -525,7 +525,11 @@ export function AccountsWorkspace({
   // Match the latest authoritative closure by exact job key, never by site name or shared IPO.
   const closedJobKeys = new Set(data.closures.filter((c:any)=>c.stage==='Closed').map((c:any)=>c.job_key));
   const reports = inventoryReports.filter(r=>!closedJobKeys.has(r.job_key));
-  const closureReports=[...reports,...(data.qcMaterialJobs??[]).filter((r:any)=>r.qcMaterialSource.ready&&!inventoryReports.some(v=>v.job_key===r.job_key)&&!closedJobKeys.has(r.job_key))];
+  const qcJobs = data.qcMaterialJobs ?? [];
+  const closureReports = [
+    ...reports.filter(r => historicalClosureException(r.job_key) || !qcJobs.some((q:any)=>(q.job_key===r.job_key||q.qcMaterialSource.aliases.includes(r.job_key))&&!q.qcMaterialSource.ready)),
+    ...qcJobs.filter((r:any)=>r.qcMaterialSource.ready&&!inventoryReports.some(v=>v.job_key===r.job_key)&&!closedJobKeys.has(r.job_key)),
+  ];
   const ptRecorded=(kind:string,r:any)=>(data.ptEntries??[]).find((p:any)=>p.source_kind===kind&&p.source_id===r.id&&p.source_version===(kind==='IPO'?1:r.version));
   const filtered = data.ipos.filter((i: any) =>
     `${i.number} ${i.snapshot.siteName} ${i.snapshot.customer?.name ?? ""}`
@@ -536,9 +540,8 @@ export function AccountsWorkspace({
     (r) => !data.closures.some((c: any) => c.job_key === r.job_key),
   );
   // A job marked recorded in PT before Inventory sent its reconciliation is also ready.
-  const jobPtRecorded=(jobKey:string)=>(data.jobPtEntries??[]).some((p:any)=>(p.job_key===jobKey||(data.qcMaterialJobs??[]).find((r:any)=>r.job_key===jobKey)?.qcMaterialSource.aliases.includes(p.job_key))&&!p.report_version_id);
+  const jobPtRecorded=(jobKey:string)=>(data.jobPtEntries??[]).some((p:any)=>(p.job_key===jobKey||(data.qcMaterialJobs??[]).find((r:any)=>r.job_key===jobKey)?.qcMaterialSource.aliases.includes(p.job_key)));
   const preparationReports=closureReports.filter(r=>isClosurePreparationJob({latestClosure:data.closures.find((c:any)=>c.job_key===r.job_key),ptRecorded:!!ptRecorded('Inventory',r)||jobPtRecorded(r.job_key)}));
-  const awaitingReconciliation=(data.jobPtEntries??[]).filter((p:any)=>!p.report_version_id&&!closureReports.some(r=>r.job_key===p.job_key||r.qcMaterialSource?.aliases.includes(p.job_key))&&!data.closures.some((c:any)=>c.job_key===p.job_key)).map((p:any)=>({...p,hold:(data.qcMaterialJobs??[]).find((r:any)=>r.job_key===p.job_key||r.qcMaterialSource.aliases.includes(p.job_key))?.qcMaterialSource.holds.join('; ')||'Approved site / material linkage needs review'}));
   const total = (v: Record<string, string>, keys: string[]) =>
     keys.reduce((n, k) => n.add(v[k] || "0"), new Decimal(0));
   let actualTotal: Decimal | null = null,
@@ -1093,8 +1096,7 @@ export function AccountsWorkspace({
               </PagedTableBody>
             </table>
           </div>
-          {!preparationReports.length&&!awaitingReconciliation.length&&<div className="accounts-empty"><h3>No jobs ready for closure</h3><p>Jobs appear here after they are marked as recorded in PT.</p></div>}
-          {awaitingReconciliation.length>0&&<AccountsClosureWaiting entries={awaitingReconciliation}/>}
+          {!preparationReports.length&&<div className="accounts-empty"><h3>No jobs ready for closure</h3><p>Jobs appear here after they are marked as recorded in PT.</p></div>}
         </section>
       )}
       {tab === "Job Closure" && job && (

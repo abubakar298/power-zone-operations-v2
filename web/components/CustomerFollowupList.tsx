@@ -32,7 +32,7 @@ function SitesTable({
             const cni = record.legacyTask?.kind === "C&I proposal";
             const canRevise = cni || record.quotation?.id || record.sourceQuotationId || record.route === "survey-framework";
             const canConfirm = record.legacyTask
-              ? record.legacyTask.kind === "Sale confirmation" && Boolean(record.legacyTask.boq_revision_id)
+              ? cni || (record.legacyTask.kind === "Sale confirmation" && Boolean(record.legacyTask.boq_revision_id))
               : record.route === "survey-framework" || Boolean(record.quotation?.id);
             return (
               <tr key={record.id}>
@@ -52,7 +52,7 @@ function SitesTable({
                   </div>
                   {!canConfirm && (
                     <span className="pz-followup-secondary">
-                      {cni ? "C&I sale confirmation is unavailable here." : "No approved quotation or configuration is linked."}
+                      No approved quotation or configuration is linked.
                     </span>
                   )}
                 </td>

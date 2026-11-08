@@ -1,3 +1,4 @@
+import {historicalInvoiceTerms, issuedInvoiceTerms, invoiceMilestones} from './invoice-milestones.js';
 import {withAccountsIpo} from '../../shared/accounts-site-reference.js';
 import {ublProgrammeLinks,withProgrammeAccounts} from '../ubl/programme-links.js';
 import {partialSolarInvoiceDate} from './partial-solar-delivery.js';
@@ -15,20 +16,23 @@ import {billingRows,invoicingQueues,invoiceIdentity} from './billing-model.js';
 import {invoiceStages,invoiceMoney,invoiceState,latestInvoiceUpdates,normalizedInvoiceReference,invoiceReferenceParts,entryInvoiceKey,siteInvoiceKey,defaultInvoiceStage,delayReasonLabels} from './invoice-records.js';
 export const invoiceEntrySchema=z.object({sourceKind:z.enum(['Operations','Source register']),siteKey:z.string().min(1).max(160),sourceVersion:z.number().int().positive(),milestone:z.enum(['delivery','completion']),ptReference:z.string().trim().min(1).max(200).refine(v=>!(/\s+\/\s+|,|\s*&\s*/.test(v)),'Enter one invoice number per record.'),entryDate:z.iso.date(),notes:z.string().trim().max(2000),invoiceStage:z.enum(invoiceStages).optional(),invoiceLabel:z.string().trim().min(1).max(200).optional(),amount:invoiceMoney.optional(),requestKey:z.uuid()}).strict();
 type Db=Pool|PoolClient;
-export function operationsInvoiceRows(rows:any[],registers:any[]=[]){
+export function operationsInvoiceRows(rows:any[],registers:any[]=[],routing?:{ipoBySite:Map<string,any>;filesBySite:Map<string,Map<string,string>>}){
  const result:any[]=[];
+ const sourceRows=registers.flatMap(r=>r.rows??[]);
  for(const row of rows){const s=row.snapshot;
-  if(isArchivedLegacySolar({...s,id:row.site_id})||s.cancelled||s.transferred||s.scopePending)continue;
-  const sourceRows=registers.flatMap(r=>r.rows??[]),exact=sourceRows.filter(r=>row.site_id==='registered-'+r.key||!!s.sourceKey&&r.key===s.sourceKey||!!s.origin?.ipoId&&r.ipoId===s.origin.ipoId),matches=exact.length?exact:sourceRows.filter(r=>r.ipo===s.ipo&&r.site===s.name);
+  if(isArchivedLegacySolar({...s,id:row.site_id})||s.superseded||s.cancelled||s.transferred||s.scopePending)continue;
+  const exact=sourceRows.filter(r=>row.site_id==='registered-'+r.key||row.site_id===r.recordKey||!!s.sourceKey&&r.key===s.sourceKey||!!s.origin?.ipoId&&r.ipoId===s.origin.ipoId),matches=exact.length?exact:sourceRows.filter(r=>r.ipo===s.ipo&&r.site===s.name);
   const approved=matches.length===1?matches[0]:undefined;
-  const deliveryOnly=s.installation===false||s.projectType==='delivery-only';
+  const terms=routing&&(issuedInvoiceTerms(routing.ipoBySite.get(row.site_id))??historicalInvoiceTerms(exact.length===1?exact[0]:undefined));
+  const milestones=terms?invoiceMilestones(row.site_id,s,terms,routing!.filesBySite.get(row.site_id)??new Map(),approved):undefined;
+  const deliveryOnly=terms ? terms==='delivery' : s.installation===false||s.projectType==='delivery-only';
   const ups=approved?.kind==='UPS'||s.projectType==='ups';
   const deliveryMilestone=deliveryOnly||!ups&&(approved?.program==='Solar 70'||s.invoiceOnDelivery===true);
   const completionMilestone=!deliveryOnly&&(s.installation===true||ups||approved?.program==='Solar 70');
-  const partialInvoiceDate=partialSolarInvoiceDate(s,approved);
-  const base={deliveryOnly,partialDelivery:!!partialInvoiceDate,advance:approved?.advance,completion:approved?.completion,key:row.site_id,sourceKind:'Operations',sourceVersion:row.version,sourceKey:approved?.key??s.sourceKey??(row.site_id.startsWith('registered-')?row.site_id.slice(11):undefined),customer:s.customer,site:s.name,ipo:s.ipo,po:s.customerPo??s.po??'',program:approved?.program??s.projectType??'',deliveryDate:partialInvoiceDate??s.deliveryDate,installationDate:s.qc?.handover?.date??s.qc?.signoff?.date??s.qcJob?.date,documents:s.documents??[],evidence:(s.documents??[]).flatMap((d:any)=>(d.evidence??[]).filter((f:any)=>z.uuid().safeParse(f.id).success).map((f:any)=>({id:f.id,filename:f.name??'Supporting document',url:`/api/operations-board/sites/${encodeURIComponent(row.site_id)}/files/${f.id}`})))};
-  if(deliveryMilestone&&(s.stage==='delivered'||s.stage==='completed'||s.completed===true||!!partialInvoiceDate))result.push({...base,milestone:'delivery'});
-  if(completionMilestone&&(s.completed===true||s.stage==='completed'))result.push({...base,milestone:'completion'});
+  const partialInvoiceDate=milestones?milestones.partial:partialSolarInvoiceDate(s,approved);
+  const base={deliveryOnly,invoiceTerms:terms,partialDelivery:!!partialInvoiceDate,advance:approved?.advance,completion:approved?.completion,key:row.site_id,sourceKind:'Operations',documentSiteId:row.site_id,sourceVersion:row.version,sourceKey:approved?.key??s.sourceKey??(row.site_id.startsWith('registered-')?row.site_id.slice(11):undefined),customer:s.customer,site:s.name,ipo:s.ipo,po:s.customerPo??s.po??'',program:approved?.program??s.projectType??'',deliveryDate:partialInvoiceDate??s.deliveryDate,installationDate:s.qc?.handover?.date??s.qc?.signoff?.date??s.qcJob?.date,documents:s.documents??[],evidence:(s.documents??[]).flatMap((d:any)=>(d.evidence??[]).filter((f:any)=>z.uuid().safeParse(f.id).success).map((f:any)=>({id:f.id,filename:f.name??'Supporting document',url:`/api/operations-board/sites/${encodeURIComponent(row.site_id)}/files/${f.id}`})))};
+  if(milestones?.delivery ?? (deliveryMilestone&&(s.stage==='delivered'||s.stage==='completed'||s.completed===true||!!partialInvoiceDate)))result.push({...base,milestone:'delivery'});
+  if(milestones?.completion ?? (completionMilestone&&(s.completed===true||s.stage==='completed')))result.push({...base,milestone:'completion'});
  }
  return result;
 }
@@ -69,13 +73,42 @@ async function candidates(c:Db){
  // Scope the invoice-only link to the exact old native record and labels.
  const approvedFor=(o:any)=>{const old=operationsById.get(o.key)?.snapshot;const upgrade=o.key==='live-ipo:ddb6711e-97b3-41a2-9994-22c768cf590c'&&old?.ipo==='CHP-338 · 20/60'&&old?.name==='Consumer Hub Lahore'?'MBL:CHP-233:20-site order:2/20':undefined;const key=upgrade??(o.key.startsWith('registered-')?o.key.slice('registered-'.length):old?.sourceKey);const exact=sourceByKey.get(key)??[];return exact.length===1?exact[0]:undefined;};
  const submitted=(o:any)=>{const row=approvedFor(o);if(!row)return false;return row.program==='Solar 70'?row[o.milestone==='delivery'?'advance':'completion']?.submitted===true||row[o.milestone==='delivery'?'advance':'completion']?.received===true:row.singleInvoiceSubmitted===true||row.singlePaymentReceived===true;};
- const operations=operationsInvoiceRows(savedOperations,source?.snapshot.registers??[]),imported=importedInvoiceEntries(savedOperations,source);
+ const ipos=(await c.query(`SELECT id,jsonb_build_object('input',snapshot->'input','approvedCommercialSource',snapshot->'approvedCommercialSource','customer',jsonb_build_object('shortCode',snapshot#>>'{customer,shortCode}'),'solutionId',snapshot->'solutionId') snapshot FROM internal_purchase_orders`)).rows;
+ const ipoById=new Map(ipos.map(i=>[i.id,i.snapshot]));
+ const explicitLinks=new Map<string,Set<string>>();
+ for(const link of (await c.query('SELECT board_site_id,ipo_id FROM inventory_material_source_links')).rows){
+  if(!explicitLinks.has(link.board_site_id))explicitLinks.set(link.board_site_id,new Set());
+  explicitLinks.get(link.board_site_id)!.add(link.ipo_id);
+ }
+ const ipoBySite=new Map<string,any>();
+ for(const board of savedOperations){
+  const linked=explicitLinks.get(board.site_id);
+  const ipoId=board.snapshot.origin?.ipoId??(linked?.size===1?[...linked][0]:undefined);
+  if(ipoId&&ipoById.has(ipoId))ipoBySite.set(board.site_id,ipoById.get(ipoId));
+ }
+ const filesBySite=new Map<string,Map<string,string>>();
+ for(const file of (await c.query('SELECT site_id,id,media_type FROM operations_board_files')).rows){
+  if(!filesBySite.has(file.site_id))filesBySite.set(file.site_id,new Map());
+  filesBySite.get(file.site_id)!.set(file.id,file.media_type);
+ }
+ const boardsBySourceKey=new Map<string,string[]>();
+ for(const board of savedOperations){
+  if(board.snapshot.superseded||board.snapshot.cancelled||board.snapshot.transferred)continue;
+  const keys=new Set<string>([board.site_id.replace(/^registered-/,''),board.snapshot.sourceKey].filter(Boolean));
+  for(const key of keys)boardsBySourceKey.set(key,[...(boardsBySourceKey.get(key)??[]),board.site_id]);
+ }
+ const exactOperationsKeys=new Set(boardsBySourceKey.keys());
+ const attachSite=(row:any)=>{
+  const boards=boardsBySourceKey.get(row.sourceKey??row.key)??[];
+  return {...row,documentSiteId:boards.length===1?boards[0]:undefined,invoiceTerms:historicalInvoiceTerms(row)};
+ };
+ const operations=operationsInvoiceRows(savedOperations,source?.snapshot.registers??[],{ipoBySite,filesBySite}),imported=importedInvoiceEntries(savedOperations,source);
  const queues=source?invoicingQueues(source.snapshot.registers):{delivery:[],completion:[],alreadyIssued:[]};
  const sameSite=(a:any,b:any)=>String(a.ipo??'').trim().toLowerCase()===String(b.ipo??'').trim().toLowerCase()&&String(a.site??'').trim().toLowerCase()===String(b.site??'').trim().toLowerCase();
  const issued=(queues.alreadyIssued as any[]);
  const eligibleOperations=operations.filter(o=>!submitted(o)&&!imported.some(e=>e.snapshot.key===o.key&&e.knownMilestones.includes(o.milestone))&&!issued.some(r=>sameSite(r,o)&&(r.milestone===o.milestone||r.milestone==='advance'&&o.milestone==='delivery')));
- const legacy=['delivery','completion'].flatMap(milestone=>(queues[milestone as 'delivery'|'completion'] as any[]).filter(r=>!isArchivedLegacySolar(r)&&!operations.some(o=>o.ipo===r.ipo&&o.site===r.site)).map(r=>({...r,sourceKind:'Source register',sourceVersion:source.version,milestone})));
- return {rows:[...eligibleOperations,...legacy],imported,alreadyIssued:issued.filter(r=>!isArchivedLegacySolar(r)).map(r=>({...r,sourceKind:'Source register',sourceVersion:source.version,milestone:r.milestone==='advance'?'delivery':r.milestone}))};
+ const legacy=['delivery','completion'].flatMap(milestone=>(queues[milestone as 'delivery'|'completion'] as any[]).filter(r=>!isArchivedLegacySolar(r)&&!(historicalInvoiceTerms(r)&&exactOperationsKeys.has(r.key))&&!operations.some(o=>o.ipo===r.ipo&&o.site===r.site)).map(r=>({...attachSite(r),sourceKind:'Source register',sourceVersion:source.version,milestone})));
+ return {rows:[...eligibleOperations,...legacy],imported,alreadyIssued:issued.filter(r=>!isArchivedLegacySolar(r)).map(r=>({...attachSite(r),sourceKind:'Source register',sourceVersion:source.version,milestone:r.milestone==='advance'?'delivery':r.milestone}))};
 }
 
 /** Creation of a PT invoice is separate from submission to the bank. Keep created
@@ -83,7 +116,11 @@ async function candidates(c:Db){
 export function invoiceSubmissionRows(ready:any[],issued:any[],entries:any[],submissions:any[]=[],updates:any[]=[]){
  const result:any[]=[];
  const same=(a:any,b:any)=>(a.key&&b.key&&String(a.key).replace(/^registered-/, '')===String(b.key).replace(/^registered-/, ''))||(String(a.ipo??'').trim().toLowerCase()===String(b.ipo??'').trim().toLowerCase()&&String(a.site??'').trim().toLowerCase()===String(b.site??'').trim().toLowerCase());
- for(const candidate of [...ready,...issued]){
+ const recorded=entries.filter(e=>e.snapshot?.key).map(e=>({
+  ...e.snapshot,key:e.site_key,sourceKind:e.source_kind,sourceVersion:e.source_version,milestone:e.milestone,recordingHeld:true,
+  ...(e.source_kind==='Operations'?{documentSiteId:e.site_key}:{}),
+ }));
+ for(const candidate of [...ready,...issued,...recorded]){
   // Several separate PT invoices may belong to one site milestone, oldest first.
   const own=entries.filter(e=>e.milestone===candidate.milestone&&((e.source_kind===candidate.sourceKind&&e.site_key===candidate.key)||same(e.snapshot,candidate))).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))||String(a.id).localeCompare(String(b.id)));
   const refs=own.length?own.map(e=>e.pt_reference):candidate.invoiceReferences??[];

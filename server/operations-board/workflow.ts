@@ -34,7 +34,7 @@ export const qcStagesFor=(site:WorkflowSite)=>qcType(site)==='bess'?bessStages:s
 export const siteBucket=operationsSiteBucket;
 export const today=(now:string)=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now));
 function event(site:WorkflowSite,now:string,description:string){return [...site.history,{date:now,description}];}
-function validCompletionDate(date:string,previous:string|undefined,now:string){if(date>today(now)||previous&&date<previous)throw new HttpError(422,'Enter a date on or after the previous stage and not in the future.');}
+export function validCompletionDate(date:string,previous:string|undefined,now:string){if(date>today(now)||previous&&date<previous)throw new HttpError(422,'Enter a date on or after the previous stage and not in the future.');}
 export function saveDispatchPlan(site:WorkflowSite,plan:Planning,now:string,editing=false):WorkflowSite{
  if(editing&&!site.dispatchDate)throw new HttpError(409,'There is no saved dispatch plan to edit.');
  if(site.dispatchDate&&!editing)throw new HttpError(409,'The saved dispatch plan is locked. Use Edit and give a reason.');

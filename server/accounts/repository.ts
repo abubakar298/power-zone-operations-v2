@@ -699,6 +699,10 @@ export class AccountsRepository {
       }
       await this.currentReport(c, input.jobKey, job.reportVersionId,job.qcMaterialSignature);
       if(input.stage==='Awaiting Management'){
+        if (job.reportVersionId && !historical) {
+          const qc = await qcMaterialHandoff(c, input.jobKey);
+          if (qc && !qc.ready) throw new HttpError(409, qc.holds.join('; '));
+        }
         // A job marked recorded in PT before Inventory sent its reconciliation also counts.
         const entered=(await c.query("SELECT p.id FROM accounts_pt_entries p JOIN inventory_report_versions v ON v.report_id=p.source_id AND v.version=p.source_version WHERE p.source_kind='Inventory' AND v.id=$1 UNION ALL SELECT id FROM accounts_job_pt_entries WHERE job_key=$2 AND report_version_id IS NULL",[job.reportVersionId,input.jobKey])).rows[0]??(job.qcMaterialSource?(await c.query('SELECT id FROM accounts_job_pt_entries WHERE job_key=ANY($1::text[])',[[input.jobKey,...job.qcMaterialSource.aliases]])).rows[0]:null);
         if(!entered)throw new HttpError(409,'Record the current approved IRR and variable items in PT before submitting job closure.');

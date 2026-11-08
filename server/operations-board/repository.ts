@@ -17,7 +17,7 @@ import {transaction} from '../db/transaction.js';
 import {installationDocumentsAtKarachi} from './batch-documents.js';
 import {projectOriginals} from '../accounts/site-evidence.js';
 import {fileSchema,importSchema,movementSchema,commandSchema,vendorSchema,targetsSchema,batchSchema,batchDeleteSchema,type BatchInput,type BoardCommand,type BoardSite} from './schema.js';
-import {workflowSiteSchema,saveDispatchPlan,confirmDelivery,completeQcStage,completeUpsJob,currentStage,siteBucket as siteBucketForBatch,qcType as qcTypeForBatch,type WorkflowSite,type FileReference,type Entry} from './workflow.js';
+import {workflowSiteSchema,saveDispatchPlan,confirmDelivery,validCompletionDate,completeQcStage,completeUpsJob,currentStage,siteBucket as siteBucketForBatch,qcType as qcTypeForBatch,type WorkflowSite,type FileReference,type Entry} from './workflow.js';
 import type {z} from 'zod';
 
 type Access={qcDelegated?:boolean;name:string;kind:'owner'|'head'|'lead'|'qc'|'accounts';team:'central'|'south'|null};
@@ -370,7 +370,7 @@ export class OperationsBoardRepository{
      if(v.partial!==old.partial)throw new HttpError(422,'Record remaining material as a new delivery instead of changing a saved partial delivery.');
      const qcDates=[...Object.values(site.qc??{}),...(site.qcJob?[site.qcJob]:[])].map(q=>q.date).sort();
      if(qcDates[0]&&v.deliveryDate>qcDates[0])throw new HttpError(422,'Delivery cannot be moved after a recorded QC stage.');
-     confirmDelivery({...site,stage:'awaiting',deliveries:site.deliveries?.slice(0,-1)},value,now);
+     validCompletionDate(value.deliveryDate,site.deliveries?.at(-2)?.deliveryDate,now);
      snapshot={...site,...value,deliveries:[...site.deliveries!.slice(0,-1),{...value,documentId:old.documentId}],documents:(site.documents??[]).map(d=>d.id===(old.documentId??old.signedDo.id)?{...d,evidence:[value.signedDo]}:d),accounts:site.accounts.map(e=>(old.documentId?e.documentId===old.documentId:Array.isArray(e.evidence)&&e.evidence.includes(old.signedDo.id))?{...e,deliveryDate:value.deliveryDate,evidence:[value.signedDo.id,value.materialPhoto.id],correctedAt:now}:e),history:[...site.history,{date:now,description:`${a.name} corrected the delivery. Reason: ${v.reason}`}]};
     }else snapshot=confirmDelivery(site,value,now);
     kind=v.partial?'Partial delivery update':site.invoiceOnDelivery?'Delivery invoice due':'Delivery update';audiences=['accounts'];

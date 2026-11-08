@@ -10,7 +10,7 @@ test('later historical evidence preserves completion, clocks and financial hando
   for(const [key,id] of Object.entries(users))await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[id,id+'@example.test',key,key==='owner'?'Admin':key==='accounts'?'Accounts':'Operations','isolated']);
   for(const [key,kind,team] of [['qc','qc','central'],['south','qc','south'],['lead','lead','central']])await db.pool.query('INSERT INTO operations_board_access(user_id,kind,team,granted_by) VALUES($1,$2,$3,$4)',[users[key],kind,team,users.owner]);
   const repo=new OperationsBoardRepository(db.pool),original={id:'historical',ipo:'IPO-H',name:'Historical fixture',stage:'delivered' as const,installation:true,completed:true,projectType:'ups' as const,operationsTeam:'central' as const,deliveryDate:'2026-01-01',stageStartedAt:'2026-01-01T00:00:00Z',accounts:[{id:'existing-financial-handoff',type:'Installation completed'}]};
-  await repo.importSource(users.owner,{sourceSha256:'d'.repeat(64),rows:[original,{...original,id:'pending',stage:'received',completed:false},{...original,id:'other'}]});
+  await repo.importSource(users.owner,{sourceSha256:'d'.repeat(64),rows:[original,{...original,id:'correct-delivery'},{...original,id:'pending',stage:'received',completed:false},{...original,id:'other'}]});
   const pdf=await repo.upload(users.qc,'historical',{filename:'combined-signoff.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7\nSafe test evidence').toString('base64')});
   const other=await repo.upload(users.owner,'other',{filename:'other.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7\nOther fixture').toString('base64')});
   const partial=await repo.command(users.owner,'other',{edit:false,reason:'Historical VSO available; acknowledgement not located',action:'historical-evidence',category:'handover',date:'2026-01-02',version:1,requestKey:randomUUID(),variableSignoffId:other.id});
@@ -34,5 +34,19 @@ test('later historical evidence preserves completion, clocks and financial hando
  const delivered=await repo.command(users.qc,'historical',{edit:false,reason:'Entered by Rafiq from the existing IPO thread; delivery photo unavailable.',action:'historical-evidence',category:'delivery',version:3,date:'2026-01-01',requestKey:randomUUID(),signedDoId:pdf.id});
   assert.equal(delivered.version,4);assert.equal(delivered.documents?.find((d:any)=>d.id==='historical:historical-delivery-documents')?.evidence.length,1);assert.deepEqual(delivered.accounts,original.accounts);assert.equal(delivered.deliveryDate,original.deliveryDate);assert.equal(delivered.completed,true);
   assert.match((await db.pool.query("SELECT reason FROM operations_board_versions WHERE site_id=$1 AND version=4",['historical'])).rows[0].reason,/Entered by Rafiq/);
+  const existing=await repo.upload(users.qc,'correct-delivery',{filename:'original.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7\nOriginal').toString('base64')});
+  const replacement=await repo.upload(users.qc,'correct-delivery',{filename:'corrected.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7\nCorrected').toString('base64')});
+  const photo=await repo.upload(users.qc,'correct-delivery',{filename:'delivered.png',mediaType:'image/png',base64:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jFGcAAAAASUVORK5CYII='});
+  const delivery={deliveryDate:'2026-01-01',signedDo:existing,materialPhoto:photo,partial:false,documentId:'correct-delivery:delivery-document:1'};
+  await db.pool.query(`INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by)
+   SELECT site_id,2,snapshot||$1::jsonb,'Historical delivery imported','Fixture',$2,$3
+   FROM operations_board_versions WHERE site_id='correct-delivery' AND version=1`,
+   [{deliveries:[delivery],documents:[{id:delivery.documentId,label:'Delivery DO',location:'At site',date:delivery.deliveryDate,evidence:[existing]}]},randomUUID(),users.owner]);
+  const changed=await repo.command(users.qc,'correct-delivery',{action:'delivery',version:2,requestKey:randomUUID(),edit:true,reason:'Replace the DO with the corrected signed copy',signedDoId:replacement.id,materialPhotoId:photo.id,deliveryDate:delivery.deliveryDate,partial:false});
+  assert.equal(changed.dispatchDate,undefined);
+  assert.equal(changed.deliveries?.length,1);
+  assert.equal(changed.deliveries?.[0].signedDo.id,replacement.id);
+  assert.equal(changed.documents?.[0].evidence[0].id,replacement.id);
+  assert.equal(changed.completed,true);
  }finally{await db.close();}
 });

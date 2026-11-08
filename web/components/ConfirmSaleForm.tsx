@@ -41,6 +41,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
   const r = detail.record,
     c = detail.masterReview.customer,
     framework = r.route.endsWith("framework");
+  const cabinet = Boolean(r.data?.cniProposalId);
   const directUps = r.route==='direct-framework' && ['MBL-UPS-6-5','MBL-UPS-6-10','UBL-UPS-6-10'].includes(detail.basis?.source?.key);
   const savedDirectPo=r.data?.directPoDetails;
   const reviewingDirectPo = r.route==='direct-framework' && !!(initialDirectPo?.reviewIpo || savedDirectPo);
@@ -101,7 +102,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
     setBasisError("");
     void api<any>(`/project-workflow/${r.id}/preview`, {
       csrf: session.csrfToken,
-      body: framework
+      body: cabinet ? { kind: "cni" } : framework
         ? { kind: "framework", frameworkId: orderedFramework }
         : { kind: "quotation", quotationId: r.quotation?.id },
     })
@@ -324,9 +325,10 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
       date: input.orderDate,
       evidenceId: document.id,
       invoiceTerms: invoiceTerms || undefined,
-      basisType: framework ? "framework" : "quotation",
+      basisType: cabinet ? "cni" : framework ? "framework" : "quotation",
+      cniVersionId: cabinet ? basis.source.id : undefined,
       frameworkId: framework ? basis.source.id : undefined,
-      quotationId: !framework ? basis.source.id : undefined,
+      quotationId: !framework && !cabinet ? basis.source.id : undefined,
       confirmationType: input.evidenceType,
       saleDetails: {...input, evidenceNotes, ...(reviewingDirectPo ? { deliveryAddress: draftValues.siteAddress || r.data.siteAddress || "" } : {}), ...(preAgreedBank?{poRecordedTotal:poTotal,poRecordedTax:poTax,poAmountSource:poTotal?"Customer PO reading; compared against accepted agreement":"Accepted agreement; PO amount unreadable or redacted",poPrintedTax,poTaxTreatment:poInclusive?"Tax-inclusive payable; approved GST allocation retained":"As printed"}:{})},
       actual: po ? structuredClone(basis.comparison) : undefined,
@@ -496,6 +498,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
           {allowPoConfiguration&&po&&<section className="pz-panel pz-stack" aria-label="Customer ordered configuration"><Field id="customer-po-configuration" label="Configuration requested in customer PO"><select id="customer-po-configuration" aria-label="Configuration requested in customer PO" value={orderedFramework} onChange={e=>{setOrderedFramework(e.target.value);setSalePreview(undefined);setPreviewReviewed(false);setAccepted(false);setError('');}}><option value={r.frameworkId}>Recommended: {detail.basis?.source?.key}</option>{poConfigurationChoices.filter(f=>f.id!==r.frameworkId).map(f=><option key={f.id} value={f.id}>{f.label} · v{f.version} · {money(f.total)}</option>)}</select></Field>{configurationChanged&&<><p>Recommended: {detail.basis?.source?.key} → Customer ordered: {basis?.source?.key??'Loading selected configuration…'}. Existing approved BOQ and rates apply. Management is notified; no new approval blocks issuance.</p><Field id="customer-po-configuration-reason" label="Customer configuration change reason" hint="Explain the configuration requested in the attached customer PO."><textarea id="customer-po-configuration-reason" rows={3} aria-label="Customer configuration change reason" value={configurationChangeReason} onChange={e=>setConfigurationChangeReason(e.target.value)}/></Field></>}</section>}
           <h3>PO details, please verify</h3>
           <fieldset disabled={busy} className="order-fields">
+            {cabinet && <label>Order number (optional)<input value={input.orderNumber??''} onChange={e=>change('orderNumber',e.target.value)}/></label>}
             {directUps&&<label>Order number (unit / total)<input value={input.orderNumber??''} placeholder="For example 20/60" onChange={e=>change('orderNumber',e.target.value)}/><small>Unit sequence within the customer's order; separate from its PO reference.</small></label>}
             {<label>IPO Number (optional)
               <input value={input.ipoNumber??''} maxLength={100} placeholder="Automatic numbering if blank" onChange={e=>{change('ipoNumber',e.target.value);setIpoError('');setIpoCheck('');}} onBlur={async()=>{const number=input.ipoNumber?.trim();if(!number)return;setIpoCheck('Checking IPO number…');try{const result=await api<{available:boolean}>(`/project-workflow/ipo-number-availability?number=${encodeURIComponent(number)}&recordId=${encodeURIComponent(r.id)}&orderNumber=${encodeURIComponent(input.orderNumber??'')}`);setIpoCheck(result.available?'IPO number is available.':'');setIpoError(result.available?'':'This IPO number is in use. For the same UPS batch, enter a different order unit with the same total.');}catch(e){setIpoCheck('');setIpoError(e instanceof Error?e.message:'Unable to check IPO number.');}}}/>

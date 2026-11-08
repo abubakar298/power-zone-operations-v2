@@ -394,12 +394,13 @@ export function DepartmentWorkspace({
         return;
       }
       const task = record.legacyTask;
-      const adopted = await api<any>("/project-workflow/adopt", {
+      const cabinet = task.kind === "C&I proposal";
+      const adopted = await api<any>(cabinet ? "/project-workflow/adopt-cabinet" : "/project-workflow/adopt", {
         csrf: session.csrfToken,
-        body: {boqRevisionId: task.boq_revision_id},
+        body: cabinet ? {proposalId: task.id} : {boqRevisionId: task.boq_revision_id},
       });
       await load();
-      await open(adopted.id, false, true, task.id);
+      await open(adopted.id, false, true, cabinet ? undefined : task.id);
     } catch (e) {
       setError((e as Error).message);
     }

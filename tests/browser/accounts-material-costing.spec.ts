@@ -4,7 +4,7 @@ test('one material queue shows usage beside documents and opens PT entry, with t
  await actors(page.request);await login(page.request,'accounts-release@example.test');
  await page.route('**/api/accounts-workspace',r=>r.fulfill({json:{ipos:[],closures:[],ptEntries:[]}}));
  const report={id:'report',job_key:'ubl:68',version:2,site_name:'Jhudo',job_id:'CHP-294'};
- const rows=Array.from({length:12},(_,i)=>({key:'site'+i,jobKey:'ubl:'+i,siteId:'site'+i,siteName:i?'Site '+i:'Jhudo',ipo:'CHP-'+i,customer:'UBL',status:i?'Awaiting QC usage':'Ready for PT entry',report:i?null:report,documents:[]}));
+ const rows=Array.from({length:12},(_,i)=>({key:'site'+i,jobKey:'ubl:'+i,siteId:'site'+i,siteName:i?'Site '+i:'Jhudo',ipo:'CHP-'+i,customer:'UBL',status:i?'Awaiting QC usage':'Ready for PT entry',report:i?null:report,documents:[],...(i===11?{ptRecorded:true,ptReference:'PT-EXISTING-11',ptDate:'2026-11-07',canRecord:false,status:'Parent DO variable usage pending'}:{})}));
  await page.route('**/api/accounts-workspace/material-costing',r=>r.fulfill({json:{rows}}));
  await page.route('**/api/inventory-reconciliation/reports/report',r=>r.fulfill({json:{versions:[{version:2,stage:'Sent to Accounts',snapshot:{entry:{extra:[{description:'CH-CBL-CNT-1.5MM/2C',unit:'m',used:'40'}]},reconciliation:{sections:[{rows:[{key:'fixed',description:'Fixed material with a long description on a second line',unit:'pcs',approved:'4',installed:'3'},{key:'cable',description:'Cable',unit:'m',approved:'20',installed:'15'}]}]}}}],files:[]}}));
  await page.route('**/api/accounts-workspace/site-local-purchases?siteId=*',r=>r.fulfill({json:{items:[]}}));
@@ -17,4 +17,13 @@ test('one material queue shows usage beside documents and opens PT entry, with t
  await dialog.getByRole('button',{name:'Mark as Recorded in PT',exact:true}).click();
  await expect(page.getByRole('dialog').getByLabel('PT reference (required)',{exact:true})).toBeVisible();
  await page.screenshot({path:'test-results/accounts-material-costing-pt.png',fullPage:true});
+ await page.getByRole('dialog',{name:'Mark as Recorded in PT'}).getByRole('button',{name:'Cancel',exact:true}).click();
+ await page.getByRole('searchbox',{name:'Search site, IPO or PT reference'}).fill('PT-EXISTING-11');
+ const held=table.getByRole('row').filter({hasText:'Site 11'});
+ await expect(held).toContainText('PT recorded · awaiting QC');
+ await expect(held).toContainText('Parent DO variable usage pending');
+ await expect(held.getByRole('button',{name:'Mark as Recorded in PT',exact:true})).toBeDisabled();
+ await held.getByRole('button',{name:'View Material Usage & Documents',exact:true}).click();
+ await expect(dialog).toContainText('PT-EXISTING-11');
+
 });

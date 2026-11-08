@@ -75,6 +75,7 @@ import {
   receiptSchema,
 } from "./schema.js";
 import { designCalculation, frameworkBasis, quotationBasis } from "./basis.js";
+import { approvedCabinet, cabinetBasis } from "./cni-basis.js";
 const management = (role: string) => ["Admin", "Management"].includes(role);
 const uuid = (v: any) => z.uuid().parse(v);
 const saleFields = [
@@ -99,7 +100,7 @@ function saleInput(basis: any, received: any) {
   if(received.confirmationType==='Email approval'&&!/^MBL-UPS-6-(5|10)$/.test(basis.source?.key??''))
     throw new HttpError(422,'Email approval is available for Meezan Direct PO agreements only.');
   const sale = received.saleDetails ?? {};
-  if(sale.orderNumber&&!validOrderPosition(sale.orderNumber))throw new HttpError(422,'Enter the order unit and total, for example 20/60.');
+  if(sale.orderNumber&&basis.source.type!=="cni"&&!validOrderPosition(sale.orderNumber))throw new HttpError(422,'Enter the order unit and total, for example 20/60.');
   if (received.saleDetails) {
     if (
       !["PZES", "PZES (PVT Ltd)", "Energy Solutions"].includes(
@@ -583,6 +584,7 @@ export class ProjectWorkflowRepository {
         amendmentId: data.amendmentId ?? null,
         originalIpoReference: data.originalIpoReference ?? null,
         draftId: data.draftId ?? null,
+        cniProposalId: data.cniProposalId ?? null,
         originalOrderPreserved: data.originalOrderPreserved ?? false,
         legacyType: r.legacy_type,
         legacyId: r.legacy_id,
@@ -608,7 +610,7 @@ export class ProjectWorkflowRepository {
       throw new HttpError(403, "Team Tasks require Management permission.");
     const rows = (
       await this.pool.query(
-        `SELECT r.*,c.name AS customer,c.short_code,s.code AS canonical_site_code,p.display_name AS planner,t.display_name AS technical_owner,k.display_name AS coordinator FROM project_workflow_records r JOIN customers c ON c.id=r.customer_id LEFT JOIN sites s ON s.id=r.site_id LEFT JOIN users p ON p.id=r.planning_owner_id LEFT JOIN users t ON t.id=r.technical_owner_id JOIN users k ON k.id=r.coordinator_id WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND (a.records->'localPreviewDocumentIds' ? r.id::text)) AND r.legacy_type IS DISTINCT FROM 'ubl' AND r.data->>'bulkHistoricalImport' IS DISTINCT FROM 'true' AND (r.data->>'localPreviewArchived') IS DISTINCT FROM 'true' AND ($3<>'design' OR r.stage<>'request_review') AND ($2 OR CASE WHEN $3='design' THEN $4 OR r.planning_owner_id=$1 OR r.technical_owner_id=$1 OR r.data->'surveyTeam' ? $1::text ELSE r.coordinator_id=$1 END) ORDER BY r.updated_at DESC`,
+        `SELECT r.*,c.name AS customer,c.short_code,s.code AS canonical_site_code,p.display_name AS planner,t.display_name AS technical_owner,k.display_name AS coordinator FROM project_workflow_records r JOIN customers c ON c.id=r.customer_id LEFT JOIN sites s ON s.id=r.site_id LEFT JOIN users p ON p.id=r.planning_owner_id LEFT JOIN users t ON t.id=r.technical_owner_id JOIN users k ON k.id=r.coordinator_id WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND (a.records->'localPreviewDocumentIds' ? r.id::text)) AND r.legacy_type IS DISTINCT FROM 'ubl' AND r.data->>'bulkHistoricalImport' IS DISTINCT FROM 'true' AND (r.data->>'localPreviewArchived') IS DISTINCT FROM 'true' AND ($3<>'design' OR r.stage<>'request_review') AND (r.data->>'cniProposalId' IS NULL OR r.stage IN('issued','order_exception')) AND ($2 OR CASE WHEN $3='design' THEN $4 OR r.planning_owner_id=$1 OR r.technical_owner_id=$1 OR r.data->'surveyTeam' ? $1::text ELSE r.coordinator_id=$1 END) ORDER BY r.updated_at DESC`,
         [
           actor,
           scope === "team" && management(u.role),
@@ -2823,7 +2825,11 @@ export class ProjectWorkflowRepository {
         if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);}
         await this.requireFile(c, r, received.evidenceId, "PO / confirmation");
         let basis: any;
-        if (received.basisType === "quotation") {
+        if (Boolean(data.cniProposalId) !== (received.basisType === "cni"))
+          throw new HttpError(422, "Confirm sale against the quotation linked to this project.");
+        if (received.basisType === "cni") {
+          basis = await cabinetBasis(c, r, uuid(received.cniVersionId), true);
+        } else if (received.basisType === "quotation") {
           const quote = uuid(received.quotationId);
           const own = (
             await c.query(
@@ -3316,9 +3322,9 @@ export class ProjectWorkflowRepository {
           r.coordinator_id,
           basis.boq.survey,
           existing?.revision_id ?? null,
-          existing
-            ? "Approved framework issuance"
-            : "Initial approved framework",
+          basis.source.type === "cni"
+            ? "Approved cabinet quotation issuance"
+            : existing ? "Approved framework issuance" : "Initial approved framework",
         ],
       );
       const family = existing?.id ?? randomUUID(),
@@ -3341,7 +3347,7 @@ export class ProjectWorkflowRepository {
           boqNumber,
           basis.boq,
           r.coordinator_id,
-          "Approved framework version " + basis.source.version,
+          (basis.source.type === "cni" ? "Approved cabinet quotation " + basis.source.key : "Approved framework version " + basis.source.version),
         ],
       );
       await c.query(
@@ -3633,8 +3639,12 @@ export class ProjectWorkflowRepository {
         409,
         "Only customer follow-up projects can be confirmed.",
       );
+    if (Boolean(r.data.cniProposalId) !== (received.basisType === "cni"))
+      throw new HttpError(422, "Confirm sale against the quotation linked to this project.");
     const basis =
-      received.basisType === "quotation"
+      received.basisType === "cni"
+        ? await cabinetBasis(this.pool, r, uuid(received.cniVersionId))
+        : received.basisType === "quotation"
         ? await quotationBasis(
             this.pool,
             this.pool,
@@ -3872,7 +3882,9 @@ export class ProjectWorkflowRepository {
       };
     }
     const basis =
-      input.kind !== "quotation" &&
+      input.kind === "cni"
+        ? await cabinetBasis(this.pool, r)
+        : input.kind !== "quotation" &&
       savedFrameworkSelected(r, input.frameworkId ?? r.framework_id)
         ? r.data.basis
         : input.kind === "quotation"
@@ -3970,6 +3982,58 @@ export class ProjectWorkflowRepository {
         )
       ).rows[0];
       return row;
+    });
+  }
+  async adoptCabinet(actor: string, input: unknown) {
+    const { proposalId } = z.object({ proposalId: z.uuid() }).strict().parse(input);
+    return transaction(this.pool, async (c) => {
+      const user = await this.user(actor, c);
+      this.requireRole(user, ["Coordinator"]);
+      await c.query("SELECT pg_advisory_xact_lock(742019066)");
+      const approved = await approvedCabinet(c, proposalId);
+      if (!management(user.role) && approved.owner !== actor)
+        throw new HttpError(404, "Cabinet quotation not available to your account.");
+      const existing = (await c.query(
+        "SELECT id, stage FROM project_workflow_records WHERE data->>'cniProposalId'=$1",
+        [proposalId],
+      )).rows[0];
+      if (existing) {
+        if (existing.stage === "issued") throw new HttpError(409, "This cabinet quotation already has an IPO.");
+        return { id: existing.id };
+      }
+      const { siteCode, siteName } = approved.snapshot;
+      if (!siteCode?.trim() || !siteName?.trim())
+        throw new HttpError(422, "The approved cabinet quotation needs a site name and code.");
+      const customerId = approved.customer_id;
+      await c.query("LOCK TABLE sites IN SHARE ROW EXCLUSIVE MODE");
+      const sites = (await c.query(
+        "SELECT id,code,status FROM sites WHERE customer_id=$1 AND lower(code)=lower($2)",
+        [customerId, siteCode],
+      )).rows;
+      if (sites.length > 1 || (sites[0] && sites[0].status !== "Active"))
+        throw new HttpError(409, "Review the cabinet quotation’s site code against the customer register.");
+      const active = (await c.query(
+        "SELECT 1 FROM project_workflow_records WHERE customer_id=$1 AND lower(site_code)=lower($2) AND stage NOT IN('issued','declined')",
+        [customerId, siteCode],
+      )).rowCount;
+      if (active) throw new HttpError(409, "This site already has another active project workflow.");
+      const siteId = sites[0]?.id ?? (await c.query(
+        `INSERT INTO sites(id,customer_id,name,code,status)
+         SELECT COALESCE(max(id),0)+1,$1,$2,$3,'Active' FROM sites RETURNING id`,
+        [customerId, siteName, siteCode],
+      )).rows[0].id;
+      const id = randomUUID();
+      const data = { cniProposalId: proposalId };
+      await c.query(
+        `INSERT INTO project_workflow_records(id,customer_id,site_id,site_name,site_code,region,route,stage,coordinator_id,data,request_key,created_by)
+         VALUES($1,$2,$3,$4,$5,'','quick-quote','customer_tracking',$6,$7,$8,$9)`,
+        [id, customerId, siteId, siteName, siteCode, approved.owner, data, randomUUID(), actor],
+      );
+      await c.query(
+        "INSERT INTO project_workflow_events(id,record_id,version,action,snapshot,request_key,input_fingerprint,created_by) VALUES($1,$2,1,$3,$4,$5,$6,$7)",
+        [randomUUID(), id, "Opened cabinet sale confirmation", { stage: "customer_tracking", data }, randomUUID(), fingerprint(data), actor],
+      );
+      return { id };
     });
   }
   async adopt(actor: string, input: any) {
