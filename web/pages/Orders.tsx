@@ -1,3 +1,5 @@
+import { IpoInvoiceTermsField } from "../components/IpoInvoiceTermsField.js";
+import { ipoInvoiceTermsLabels } from "../../shared/ipo-invoice-terms.js";
 import {recentFirst} from '../../shared/recent-records.js';
 import {departmentFetch} from '../department-view.js';
 import {FileUpload} from '../ui/FileUpload.js';
@@ -121,7 +123,7 @@ export function Orders({
     }
   }
   function change(field: keyof OrderInput, value: string) {
-    setInput((v) => ({ ...v, [field]: value }));
+    setInput((v) => ({ ...v, [field]: field === "invoiceTerms" && !value ? undefined : value }));
     setPreview(undefined);
     setSaved(undefined);
     setReview(undefined);
@@ -438,6 +440,7 @@ export function Orders({
                 {extraction && <small role="status">{extraction}</small>}
               </label>
             </fieldset>
+            {session.user.role === "Coordinator" && <div className="pz-form-grid"><IpoInvoiceTermsField id="quotation-order-invoice-terms" value={input.invoiceTerms ?? ""} onChange={value => change("invoiceTerms", value || "")} disabled={busy}/></div>}
             <label className="checkbox-label">
               <input
                 type="checkbox"
@@ -479,6 +482,7 @@ export function Orders({
             <strong>Quotation type:</strong>{" "}
             {quotationTypeLabel(saved?.quotationType ?? snapshot)}
           </p>
+          {snapshot.input.invoiceTerms && <p>Invoice terms · {ipoInvoiceTermsLabels[snapshot.input.invoiceTerms as keyof typeof ipoInvoiceTermsLabels]}</p>}
           <p>Evidence: {snapshot.input.evidenceNotes}</p>
           <p>
             Final payable:{" "}

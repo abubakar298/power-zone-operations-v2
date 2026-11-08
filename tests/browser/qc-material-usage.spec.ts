@@ -23,7 +23,7 @@ for(const parent of [false,true])test(`QC usage ${parent?'Parent pool':'individu
  await module.getByRole('button',{name:'Add local purchase item',exact:true}).click();
  await module.getByLabel('Local purchase item ID 1',{exact:true}).fill('CH-PVC-TAPE');await module.getByLabel('Local purchase description 1',{exact:true}).fill('Locally purchased insulation tape');await module.getByLabel('Local purchase quantity 1',{exact:true}).fill('3');
  await module.getByRole('button',{name:'Add local purchase item',exact:true}).click();await module.getByRole('button',{name:'Remove local purchase item 2',exact:true}).click();await expect(module.getByLabel('Local purchase item ID 2',{exact:true})).toHaveCount(0);
- await module.getByRole('button',{name:'Save Local Purchases for Accounts',exact:true}).click();await expect(module.getByText('Local purchases saved for Accounts. No stock or PT amounts were posted.',{exact:true})).toBeVisible();
+ await module.getByRole('button',{name:'Submit Local Purchases for Accounts',exact:true}).click();await expect(module.getByText('Local purchases saved for Accounts. No stock or PT amounts were posted.',{exact:true})).toBeVisible();
  await page.screenshot({path:`test-results/qc-usage-${parent?'parent':'individual'}.png`,fullPage:true});
  await module.getByRole('button',{name:'Verify & Save Material Usage',exact:true}).click();await expect(module.getByText('Material usage saved for Inventory reconciliation. Warehouse stock is unchanged.',{exact:true})).toBeVisible();
  await expect(module.getByLabel('Local purchase item ID 1',{exact:true})).toHaveValue('CH-PVC-TAPE');await expect(module.getByLabel('Local purchase quantity 1',{exact:true})).toHaveValue('3');

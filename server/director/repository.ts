@@ -30,7 +30,7 @@ export function phaseBudgets(
         ? 0
         : line.phase === "Structure"
           ? 1
-          : line.key === snapshot.inverterConfig.sku
+          : line.key === snapshot.inverterConfig?.sku || /^(HYB-|CH-PCS-HYB-)/.test(line.key)
             ? 2
             : line.key === "CH-BMS-HV"
               ? 4

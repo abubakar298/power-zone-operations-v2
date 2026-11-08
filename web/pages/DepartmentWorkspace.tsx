@@ -1,3 +1,5 @@
+import { defaultIpoInvoiceTerms, type IpoInvoiceTerms } from "../../shared/ipo-invoice-terms.js";
+import { IpoInvoiceTermsField } from "../components/IpoInvoiceTermsField.js";
 import {ApprovedConfigurationBatch} from '../components/ApprovedConfigurationBatch.js';
 import {useBackStep} from '../navigation/useBackStep.js';
 import {recentFirst} from '../../shared/recent-records.js';
@@ -19,8 +21,7 @@ import {CustomerSearchSelect} from '../components/CustomerSearchSelect.js';
 import {CoordinatorQuotationReview} from "../components/CoordinatorQuotationReview.js";
 import { CustomerFollowupList } from "../components/CustomerFollowupList.js";
 import { ConfirmSaleForm } from "../components/ConfirmSaleForm.js";
-import { PoReceiptSearch } from "../components/PoReceiptSearch.js";
-import { followupGroups } from "../workspaces/followup-groups.js";
+import { followupGroups, isCustomerFollowup } from "../workspaces/followup-groups.js";
 import {
   RecordHeadsup,
   SavedHeadsupReports,
@@ -218,6 +219,13 @@ function People({
     </label>
   );
 }
+const followupPage = coordinationBuckets[5];
+const oldPoReceiptPage = coordinationBuckets[6];
+const directPoPage = "Direct PO";
+const currentCoordinationPage = (page: string) => page === oldPoReceiptPage ? followupPage : page;
+const isDirectPoDraft = (record: any) =>
+  record.route === "direct-framework" && record.stage === "po_receipt" && !record.data.originalOrderPreserved;
+
 export function DepartmentWorkspace({
   session,
   department,
@@ -231,8 +239,12 @@ export function DepartmentWorkspace({
     [rows, setRows] = useState<any[]>([]),
     [legacy, setLegacy] = useState<any[]>([]),
     [error, setError] = useState(""),
-    [page, setPage] = useState("Workspace"),
+    [page, setPage] = useState(() => {
+      const requested = new URLSearchParams(location.hash.slice(1)).get("page") || "Workspace";
+      return department === "coordination" ? currentCoordinationPage(requested) : "Workspace";
+    }),
     [detail, setDetail] = useState<any>(),
+    [saleReview, setSaleReview] = useState(false),
     [directPoDraft,setDirectPoDraft]=useState<any>(),
     [filters, setFilters] = useState({ ...emptyWorkspaceFilters }),
     [creating, setCreating] = useState<string>(),
@@ -348,23 +360,50 @@ export function DepartmentWorkspace({
       setGroupActionError({ id: record.id, message: (e as Error).message });
     }
   }
-  async function open(id: string, checkChanges = true) {
+  async function open(id: string, checkChanges = true, confirmSale = false, quotationId?: string) {
     if (checkChanges && !confirmLeaveWorkspace()) return;
     setError("");
     setCreating(undefined);
     const loaded = await api<any>(`/project-workflow/${id}`);
-    if (department === "coordination" && [coordinationBuckets[2],coordinationBuckets[5]].includes(page) && loaded.record.quotation?.id) {
-      setQuotationReview({...loaded.record,followupPreview:page===coordinationBuckets[5]});
+    const record = loaded.record;
+    if (quotationId && record.quotation?.id !== quotationId)
+      throw new Error("The active site workflow is linked to a different quotation. Open that site's current record to confirm the sale.");
+    const directDraft = isDirectPoDraft(record);
+    if (!confirmSale && !directDraft && department === "coordination" &&
+        [coordinationBuckets[2], followupPage].includes(page) && record.quotation?.id) {
+      setQuotationReview({...record, followupPreview:page===followupPage});
       return;
     }
+    setSaleReview(confirmSale || directDraft);
     setDetail(loaded);
     setPage(
-      department === "coordination" && page === coordinationBuckets[6]
-        ? coordinationBuckets[6]
-        : department === "design"
-          ? loaded.record.designBucket
-          : loaded.record.coordinationBucket,
+      department === "design"
+        ? record.designBucket
+        : directDraft
+          ? directPoPage
+          : confirmSale
+            ? followupPage
+            : currentCoordinationPage(record.coordinationBucket),
     );
+  }
+  async function confirmFollowupSale(record: any) {
+    if (!confirmLeaveWorkspace()) return;
+    try {
+      if (!record.legacyTask) {
+        await open(record.id, false, true);
+        return;
+      }
+      const task = record.legacyTask;
+      const cabinet = task.kind === "C&I proposal";
+      const adopted = await api<any>(cabinet ? "/project-workflow/adopt-cabinet" : "/project-workflow/adopt", {
+        csrf: session.csrfToken,
+        body: cabinet ? {proposalId: task.id} : {boqRevisionId: task.boq_revision_id},
+      });
+      await load();
+      await open(adopted.id, false, true, cabinet ? undefined : task.id);
+    } catch (e) {
+      setError((e as Error).message);
+    }
   }
   useEffect(() => {
     void Promise.all([api("/project-workflow/references"), load()])
@@ -379,7 +418,7 @@ export function DepartmentWorkspace({
       .catch((e) => setError(e.message));
     const pendingPage = sessionStorage.getItem("pz:department-page");
     if (pendingPage) {
-      if(pendingPage==='Direct PO'){setPage(coordinationBuckets[6]);setCreating('Direct PO');}else setPage(pendingPage);
+      setPage(currentCoordinationPage(pendingPage));
       sessionStorage.removeItem("pz:department-page");
     }
     const reload = () => {
@@ -398,7 +437,7 @@ export function DepartmentWorkspace({
       setCreating(undefined);
       setSelectedDispatch(undefined);
       setDispatchPlanning(false);
-      if(e.detail==='Direct PO'){setPage(coordinationBuckets[6]);setCreating('Direct PO');}else setPage(e.detail ?? 'Workspace');
+      setPage(currentCoordinationPage(e.detail ?? 'Workspace'));
     };
     window.addEventListener("pz:department-page", handle);
     return () => {
@@ -519,7 +558,9 @@ export function DepartmentWorkspace({
         ? r.stage === "issued" && r.data.ipoShared
         : department === "coordination" && page === coordinationBuckets[0]
           ? surveyRequestInCoordination(r)
-          : page === "Workspace" ||
+          : department === "coordination" && page === followupPage
+            ? isCustomerFollowup(r)
+            : page === "Workspace" ||
             (page === "Survey History" && r.route.startsWith("survey")) ||
             page === "Customer & Site Search" ||
             r[
@@ -554,38 +595,31 @@ export function DepartmentWorkspace({
     setNotice("Dispatch approved. This bucket is refreshed.");
     setRefs(await api("/project-workflow/references"));
   }
-  if (
-    department === "coordination" &&
-    page === coordinationBuckets[6] &&
-    !creating &&
-    !detail
-  )
-    return (
-      <div className="pz-stack">
-        <section className="pz-panel">
-          <h2>PO Receipt / Heads-up</h2>
-          <div className="pz-action-row">
-            {(refs?.features?.directPoUps||refs?.features?.directPoAgreements)&&<Button variant="secondary" onClick={()=>setCreating("Direct PO")}>Direct PO</Button>}
-            <Button
-              variant="secondary"
-              onClick={() => setCreating("Record Customer Heads-up")}
-            >
-              Record Heads-up
-            </Button>
-          </div>
-        </section>
-        <PoReceiptSearch
-          records={rows}
-          legacy={legacy.filter(t=>legacyBucket(t)===coordinationBuckets[5])}
-          onLegacy={async(t:any)=>{try{if(t.boq_revision_id){const r=await api<any>("/project-workflow/adopt",{csrf:session.csrfToken,body:{boqRevisionId:t.boq_revision_id}});await load();await open(r.id);}else onOpen?.(t);}catch(e){setError((e as Error).message);}}}
-          onConfirm={(id: string) => void open(id).catch(e=>setError(e.message))}
-        />
-        <ErrorText error={error}/>
-        <SavedHeadsupReports session={session} refresh={headsupRefresh} />
-      </div>
-    );
-  if(creating==='Approved survey batch')return <ApprovedConfigurationBatch refs={refs} session={session} route='survey-framework' onCancel={()=>setCreating(undefined)} onOpen={async(id:string)=>{await load();await open(id,false);}}/>;
-  if(creating==='Direct PO')return <DirectPo {...{refs,session}} records={rows} onCancel={()=>setCreating(undefined)} onPrepared={async(id:string,draft:any)=>{setDirectPoDraft(draft);await load();await open(id,false);}}/>;
+  if (creating === 'Approved survey batch') return <ApprovedConfigurationBatch refs={refs} session={session} route="survey-framework" onCancel={()=>setCreating(undefined)} onOpen={async(id:string)=>{await load();await open(id,false);}}/>;
+  if (department === "coordination" && page === directPoPage && !detail)
+    return <div className="pz-stack">
+      <DirectPo {...{refs, session}} records={rows}
+        onCancel={() => { if (confirmLeaveWorkspace()) setPage("Workspace"); }}
+        onPrepared={async (id: string, draft: any) => {
+          setDirectPoDraft(draft);
+          await load();
+          await open(id, false);
+        }}/>
+      {rows.some(isDirectPoDraft) && <section className="pz-panel pz-stack">
+        <h3>Saved Direct PO drafts</h3>
+        <div className="pz-table-scroll"><table className="pz-table">
+          <thead><tr><th>Customer</th><th>Site / Branch code</th><th>Action</th></tr></thead>
+          <PagedTableBody label="drafts">
+            {recentFirst(rows.filter(isDirectPoDraft)).map(record => <tr key={record.id}>
+              <td>{record.customer}</td>
+              <td>{record.site} · {record.siteCode}</td>
+              <td><Button variant="secondary" onClick={() => void open(record.id).catch(e=>setError(e.message))}>Review IPO</Button></td>
+            </tr>)}
+          </PagedTableBody>
+        </table></div>
+      </section>}
+      <ErrorText error={error}/>
+    </div>;
   if(approvalTarget) return <div className="pz-stack"><Button variant="neutral" onClick={()=>setApprovalTarget(undefined)}>Back to Management Review</Button><h2>Record Quotation Approval</h2><p>{approvalTarget.number}</p><QuotationApproval session={session} quotationId={approvalTarget.quotationId} cniId={approvalTarget.cniId} onApproved={approvalRecorded}/></div>;
   if (quotationReview) return <CoordinatorQuotationReview session={session} record={quotationReview} onApproved={approvalRecorded} onBack={()=>setQuotationReview(undefined)} onOpen={onOpen}/>;
   if (revisionRecord)
@@ -627,7 +661,7 @@ export function DepartmentWorkspace({
     return (
       <RecordEditor
         key={detail.record.id}
-        {...{ session, department, refs, detail, onOpen, action, page }}
+        {...{ session, department, refs, detail, onOpen, action, page, saleReview }}
         initialDirectPo={directPoDraft?.recordId===detail.record.id?directPoDraft:undefined}
         records={rows}
         onRequestOpen={(id: string) => open(id)}
@@ -650,7 +684,7 @@ export function DepartmentWorkspace({
           setDetail(saved);
           setRefs(updatedRefs);
         }}
-        refresh={() => open(detail.record.id, false)}
+        refresh={() => open(detail.record.id, false, saleReview)}
         onBack={() => {
           if (!confirmLeaveWorkspace()) return;
           setDetail(undefined);
@@ -658,6 +692,18 @@ export function DepartmentWorkspace({
         }}
       />
     );
+  if (creating === "Record Customer Heads-up")
+    return <RecordHeadsup
+      session={session}
+      customers={refs.customers}
+      onBack={() => {
+        if (confirmLeaveWorkspace()) setCreating(undefined);
+      }}
+      onSaved={() => {
+        setHeadsupRefresh((value) => value + 1);
+        void load();
+      }}
+    />;
   return (
     <div className="pz-stack department-workspace">
       <ErrorText error={error} />
@@ -699,33 +745,7 @@ export function DepartmentWorkspace({
           </div>
         </>
       )}
-      {creating === "Record Customer Heads-up" && (
-        <RecordHeadsup
-          session={session}
-          customers={refs.customers}
-          onBack={() => {
-            if (confirmLeaveWorkspace()) setCreating(undefined);
-          }}
-          onSaved={() => {
-            setHeadsupRefresh((value) => value + 1);
-            void load();
-          }}
-        />
-      )}
-      {creating === "Record PO / Customer Confirmation" && (
-        <PoRecordSelect
-          session={session}
-          customers={refs.customers}
-          onCancel={() => setCreating(undefined)}
-          onOpen={(id: string) => void open(id, false)}
-        />
-      )}
-      {creating &&
-        ![
-          "Direct PO",
-          "Record Customer Heads-up",
-          "Record PO / Customer Confirmation",
-        ].includes(creating) && (
+      {creating && (
           <CreateRecord onBatch={()=>setCreating("Approved survey batch")}
             {...{ refs, session, creating, manager, onOpen, selectedSite }}
             onCreated={async (id: string) => {
@@ -735,36 +755,6 @@ export function DepartmentWorkspace({
             onCancel={() => setCreating(undefined)}
             onOpen={onOpen}
           />
-        )}
-      {department === "coordination" &&
-        page === coordinationBuckets[6] &&
-        !creating && (
-          <section className="pz-panel">
-            <h2>PO Receipt / Heads-up</h2>
-            <div className="pz-action-row">
-              {[
-                "Direct PO",
-                "Record PO / Customer Confirmation",
-                "Record Customer Heads-up",
-              ].map((task) => (
-                <Button
-                  key={task}
-                  variant="secondary"
-                  onClick={() => {
-                    setSelectedSite(undefined);
-                    setCreating(task);
-                  }}
-                >
-                  {task}
-                </Button>
-              ))}
-            </div>
-          </section>
-        )}
-      {department === "coordination" &&
-        page === coordinationBuckets[6] &&
-        !creating && (
-          <SavedHeadsupReports session={session} refresh={headsupRefresh} />
         )}
       {department === "coordination" &&
         page === coordinationBuckets[0] &&
@@ -849,13 +839,20 @@ export function DepartmentWorkspace({
         </section>
       ) : (
         <>
-          <h2>
-            {page === "Workspace"
-              ? "Current sites"
-              : department === "coordination" && page === coordinationBuckets[0]
-                ? "Survey requests"
-                : bucketLabel(page)}
-          </h2>
+          <div className="pz-followup-heading">
+            <h2>
+              {page === "Workspace"
+                ? "Current sites"
+                : department === "coordination" && page === coordinationBuckets[0]
+                  ? "Survey requests"
+                  : bucketLabel(page)}
+            </h2>
+            {department === "coordination" && page === followupPage && (
+              <Button variant="secondary" onClick={() => setCreating("Record Customer Heads-up")}>
+                Record Heads-up
+              </Button>
+            )}
+          </div>
           {department === "design" && page === designBuckets[3] && (
             <p>
               Total handed off:{" "}
@@ -901,14 +898,24 @@ export function DepartmentWorkspace({
 
           {department === "coordination" && page === coordinationBuckets[5] && (
             <CustomerFollowupList
-              records={[...visible,...visibleLegacy.map(t=>({...t,id:`legacy:${t.id}`,data:{},siteCode:t.site_code??"",sourceQuotationId:t.kind==="Sale confirmation"?t.id:undefined,route:"quotation",routeLabel:t.number??t.reference??""}))]}
+              records={[...visible,...visibleLegacy.map(t=>({...t,id:`legacy:${t.id}`,data:{},siteCode:t.site_code??"",sourceQuotationId:t.kind==="Sale confirmation"?t.id:undefined,route:"quotation",routeLabel:t.kind==="C&I proposal"?"C&I cabinet":"Quick BOQ → quotation",legacyTask:t}))]}
               groups={combinedFollowups}
-              onRevise={(record:any)=>void openRevision(record)}
-              onOpen={(id: string) => {
-                if(id.startsWith("legacy:")){const task=visibleLegacy.find(t=>t.id===id.slice(7));if(task){if(task.kind==="Sale confirmation")setQuotationReview({...task,sourceQuotationId:task.id,followupPreview:true});else onOpen?.({...task,followupPreview:true});}}
-                else void open(id).catch((e) => setError(e.message));
+              onConfirmSale={(record) => void confirmFollowupSale(record)}
+              onRevise={(record) => {
+                if (record.legacyTask?.kind === "C&I proposal") {
+                  onOpen?.({...record.legacyTask, followupPreview: true, startCniRevision: true});
+                } else void openRevision(record);
+              }}
+              onOpen={(record) => {
+                const task = record.legacyTask;
+                if (!task) void open(record.id).catch((e) => setError(e.message));
+                else if (task.kind === "Sale confirmation") setQuotationReview({...task, sourceQuotationId:task.id, followupPreview:true});
+                else onOpen?.({...task, followupPreview:true});
               }}
             />
+          )}
+          {department === "coordination" && page === followupPage && (
+            <SavedHeadsupReports session={session} refresh={headsupRefresh} />
           )}
           {department === "coordination" && page === iposSharedBucket && <IposSharedList records={visible} onPreview={(id) => void open(id).catch((e) => setError(e.message))} />}
           {page !== "Customer & Site Search" && page !== iposSharedBucket && !readyToSend && !(
@@ -2682,6 +2689,7 @@ function CoordinationCommercialSummary({ session, detail }: any) {
 }
 function RecordEditor({
   page,
+  saleReview,
   initialDirectPo,
   session,
   department,
@@ -2755,10 +2763,10 @@ function RecordEditor({
     return <IpoSharedPreview record={r} onBack={onBack} />;
   if (
     !design &&
-    page === coordinationBuckets[6] &&
+    saleReview &&
     (r.stage === "customer_tracking" || r.coordinationBucket === coordinationBuckets[5] || (r.stage === "po_receipt" && r.route === "direct-framework" && !r.data.originalOrderPreserved))
   )
-    return <ConfirmSaleForm {...{ session, detail, action, onBack, initialDirectPo }} />;
+    return <ConfirmSaleForm {...{ session, detail, action, onBack, initialDirectPo }} backLabel={r.route === "direct-framework" ? "Direct PO" : "Customer Follow-up"} />;
   if (!design && r.coordinationBucket === coordinationBuckets[4])
     return (
       <ReadySendReview session={session} record={r} onBack={onBack}>
@@ -3305,7 +3313,7 @@ function RecordEditor({
           </>
         )}
       {!design &&
-        page === coordinationBuckets[6] &&
+        saleReview &&
         ![
           "request_review",
           "survey_requested",
@@ -5377,10 +5385,12 @@ function PoEntry({ session, refs, detail, action }: any) {
   const r = detail.record,
     [basis, setBasis] = useState<any>(detail.basis),
     [actual, setActual] = useState<any>(detail.receipt?.input.actual),
+    [chosenTerms, setChosenTerms] = useState<IpoInvoiceTerms | "">(detail.receipt?.input?.invoiceTerms ?? ""),
     [differences, setDifferences] = useState<any[]>(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const framework = r.route.endsWith("framework");
+  const invoiceTerms = chosenTerms || (framework ? defaultIpoInvoiceTerms(basis?.source?.key) : "");
   return (
     <Action
       title="Complete & Send — compare PO and issue"
@@ -5389,6 +5399,7 @@ function PoEntry({ session, refs, detail, action }: any) {
           throw new Error(
             "Load the approved basis and enter the received PO comparison.",
           );
+        if (!invoiceTerms) throw new Error("Select invoice terms.");
         if (!f.has("reviewed"))
           throw new Error(
             "Confirm that all quantities, brands, values, tax and terms were checked against the attachment.",
@@ -5404,6 +5415,7 @@ function PoEntry({ session, refs, detail, action }: any) {
           reference: f.get("reference"),
           date: f.get("date"),
           evidenceId: f.get("evidenceId"),
+          invoiceTerms,
           basisType: framework ? "framework" : "quotation",
           frameworkId: framework ? basis?.source.id : undefined,
           quotationId: !framework ? basis?.source.id : undefined,
@@ -5514,6 +5526,7 @@ function PoEntry({ session, refs, detail, action }: any) {
             Show differences before saving
           </Button>
           {differences && <DifferenceTable differences={differences} />}
+          <div className="pz-form-grid"><IpoInvoiceTermsField id="po-comparison-invoice-terms" value={invoiceTerms} onChange={setChosenTerms} disabled={busy}/></div>
           <label>
             <input type="checkbox" name="reviewed" required /> I checked the
             entered scope, quantities, prices, taxes and terms against the
@@ -5765,111 +5778,6 @@ function FrameworkEditor({ session, refs, onSaved }: any) {
         </div>
       </Action>
     </details>
-  );
-}
-
-function PoRecordSelect({ session, customers, onOpen, onCancel }: any) {
-  const [customer, setCustomer] = useState(""),
-    [sources, setSources] = useState<any[]>([]),
-    [siteId, setSiteId] = useState(""),
-    [headsupOnly, setHeadsupOnly] = useState(false),
-    [error, setError] = useState("");
-  useEffect(() => {
-    let active = true;
-    setSources([]);
-    setSiteId("");
-    if (customer)
-      void api<any>(
-        `/project-workflow/po-followup-sources?customerId=${customer}`,
-      )
-        .then((r) => {
-          if (active) setSources(r.sources);
-        })
-        .catch((e) => {
-          if (active) setError(e.message);
-        });
-    return () => {
-      active = false;
-    };
-  }, [customer]);
-  const sites = sources
-    .flatMap((source) => source.sites)
-    .filter((site) => !headsupOnly || site.hasHeadsup);
-  return (
-    <section className="pz-panel pz-stack">
-      <h2>Record PO</h2>
-      <div className="pz-form-grid">
-        <Field id="po-customer" label="Select Customer">
-          <select
-            id="po-customer"
-            value={customer}
-            onChange={(e) => {
-              setCustomer(e.target.value);
-              setError("");
-            }}
-          >
-            <option value="">Select customer</option>
-            {customers.map((c: any) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field
-          id="po-followup-site"
-          label="Select Site"
-          hint="Only sites currently in Customer Follow-up."
-        >
-          <select
-            id="po-followup-site"
-            value={siteId}
-            disabled={!customer}
-            onChange={(e) => setSiteId(e.target.value)}
-          >
-            <option value="">Select site</option>
-            {sites.map((site) => (
-              <option key={site.id} value={site.id}>
-                {site.siteCode} · {site.siteName}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-      <label className="pz-review-check">
-        <input
-          type="checkbox"
-          checked={headsupOnly}
-          onChange={(e) => {
-            setHeadsupOnly(e.target.checked);
-            setSiteId("");
-          }}
-        />
-        Heads-up only
-      </label>
-      {customer && !sites.length && (
-        <p>
-          No {headsupOnly ? "heads-up " : ""}sites awaiting customer follow-up.
-        </p>
-      )}
-      <div className="pz-action-row">
-        <Button variant="neutral" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button
-          variant="primary"
-          disabled={!siteId}
-          onClick={() => onOpen(siteId)}
-        >
-          Enter PO Details
-        </Button>
-      </div>
-      {error && (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-      )}
-    </section>
   );
 }
 

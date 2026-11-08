@@ -1,0 +1,14 @@
+
+/* Keep the waiting list independent of the closure table's 55% first column. */
+.accounts-ui .accounts-closure-waiting{display:grid;gap:12px;margin-top:24px;border-top:1px solid var(--pz-border);padding-top:20px}
+.accounts-ui .accounts-closure-waiting .accounts-panel-heading{margin:0}
+.accounts-ui .accounts-closure-waiting>.pz-field{max-width:520px}
+.accounts-ui .accounts-closure-waiting-table{table-layout:fixed;min-width:680px;width:100%}
+.accounts-ui .accounts-closure-waiting-table th:first-child{width:56px}
+.accounts-ui .accounts-closure-waiting-table th:nth-child(2){width:36%}
+.accounts-ui .accounts-closure-waiting-table th:nth-child(3){width:auto}
+.accounts-ui .accounts-closure-waiting-table th:last-child{width:26%}
+.accounts-ui .accounts-closure-waiting-table th,.accounts-ui .accounts-closure-waiting-table td{vertical-align:top;text-align:left;padding:10px 12px;overflow-wrap:anywhere}
+.accounts-ui .accounts-closure-waiting-table td strong{display:block;line-height:20px;min-height:20px}
+.accounts-ui .accounts-closure-waiting-table td small{display:block;margin-top:4px;line-height:18px}
+.accounts-ui .accounts-closure-waiting-table td:last-child{white-space:normal}

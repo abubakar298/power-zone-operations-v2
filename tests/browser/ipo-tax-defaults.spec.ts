@@ -167,10 +167,10 @@ test("UBL customer PO selects a different approved configuration, previews its p
     await page.goto("/dashboard");
     await page
       .getByRole("navigation", { name: "Main navigation" })
-      .getByRole("button", { name: /^PO Receipt/ })
+      .getByRole("button", { name: /^Customer Follow-up/ })
       .click();
     await page
-      .getByRole("searchbox", { name: "Search quotations, surveys or sites" })
+      .getByRole("searchbox", { name: "Search customer follow-up" })
       .fill(name);
     await page
       .getByRole("row")
@@ -211,6 +211,7 @@ test("UBL customer PO selects a different approved configuration, previews its p
         exact: true,
       })
       .fill("Customer PO confirms the selected approved agreement");
+    await page.getByLabel("Invoice terms", { exact: true }).selectOption("completion");
     const preview = page.waitForResponse((res) =>
       res.url().endsWith("/sale-preview"),
     );
@@ -249,6 +250,8 @@ test("UBL customer PO selects a different approved configuration, previews its p
     expect((await issued).ok()).toBe(true);
     const final = (await repo.record(actor, record.id)).r;
     expect(final.stage).toBe("issued");
+    await expect(page.getByRole("heading", { name: "Customer Follow-up", exact: true, level: 2 })).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: name })).toHaveCount(0);
     expect(final.data.basis.order.allocation.total).toBe("6150000.00");
     expect(final.data.originalRecommendedConfiguration.source.id).toBe(
       source.id,

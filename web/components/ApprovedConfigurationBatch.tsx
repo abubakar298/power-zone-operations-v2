@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { defaultIpoInvoiceTerms, ipoInvoiceTermsLabels, type IpoInvoiceTerms } from "../../shared/ipo-invoice-terms.js";
+import { IpoInvoiceTermsField } from "./IpoInvoiceTermsField.js";
 import { Decimal } from "decimal.js";
 import { api } from "../api.js";
 import { Button } from "../ui/Button.js";
@@ -47,6 +49,8 @@ export function ApprovedConfigurationBatch({
     [error, setError] = useState(""),
     [saved, setSaved] = useState<any>(),
     [reviewed, setReviewed] = useState(false),
+    [batchTerms, setBatchTerms] = useState<IpoInvoiceTerms | "">(""),
+    [siteTerms, setSiteTerms] = useState<Record<string, IpoInvoiceTerms | "">>({}),
     [document, setDocument] = useState<{ title: string; data: Blob }>();
   const cacheKey =
     "pz:approved-configuration-batch:" + session.user.id + ":" + route;
@@ -68,6 +72,9 @@ export function ApprovedConfigurationBatch({
       ),
     new Decimal(0),
   );
+  function termsFor(site: { id: string; framework?: { key?: string } }) {
+    return siteTerms[site.id] || batchTerms || defaultIpoInvoiceTerms(site.framework?.key);
+  }
   function change(key: string, field: string, value: string) {
     setRows((old) =>
       old.map((r) => (r.key === key ? { ...r, [field]: value } : r)),
@@ -157,6 +164,11 @@ export function ApprovedConfigurationBatch({
   }
   async function confirm() {
     if (!reviewed) return;
+    const invoiceTermsBySite = Object.fromEntries(saved.records.map((site: { id: string; framework?: { key?: string } }) => [site.id, termsFor(site)]));
+    if (Object.values(invoiceTermsBySite).some(value => !value)) {
+      setError("Select invoice terms for every site before issuing the batch.");
+      return;
+    }
     if (
       !confirmTransition(
         "Issue batch IPOs and PT",
@@ -175,6 +187,7 @@ export function ApprovedConfigurationBatch({
             requestKey: confirmKey.current,
             fingerprint: saved.fingerprint,
             reviewed: true,
+            invoiceTermsBySite,
           },
         },
       );
@@ -444,6 +457,11 @@ export function ApprovedConfigurationBatch({
               ? ` · Total including GST: ${money(saved.snapshot.total)} · PO ${saved.snapshot.po.reference}`
               : " · Configuration selected per site during technical review"}
           </p>
+          {direct && !saved.confirmed && <div className="pz-form-grid">
+            <IpoInvoiceTermsField id="batch-invoice-terms" label="Batch invoice terms" value={batchTerms} required={false}
+              placeholder="Use programme defaults by site" disabled={busy}
+              onChange={value => {setBatchTerms(value); setReviewed(false); setError("");}}/>
+          </div>}
           <div className="pz-table-scroll">
             <table>
               <thead>
@@ -454,6 +472,7 @@ export function ApprovedConfigurationBatch({
                     <>
                       <th>Configuration</th>
                       <th>Selling incl. GST</th>
+                      {!saved.confirmed && <th>Invoice terms</th>}
                     </>
                   )}
                   <th>Actions</th>
@@ -482,6 +501,12 @@ export function ApprovedConfigurationBatch({
                           <td className="numeric">
                             {money(r.comparison.total)}
                           </td>
+                          {!saved.confirmed && <td>
+                            <IpoInvoiceTermsField id={"batch-site-terms-" + r.id} label={"Invoice terms for " + r.siteName}
+                              value={siteTerms[r.id] ?? ""} required={false} disabled={busy}
+                              placeholder={termsFor(r) ? "Use " + ipoInvoiceTermsLabels[termsFor(r) as IpoInvoiceTerms] : "Select when to invoice"}
+                              onChange={value => {setSiteTerms(previous => ({...previous, [r.id]: value})); setReviewed(false); setError("");}}/>
+                          </td>}
                         </>
                       )}
                       <td>

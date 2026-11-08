@@ -1,3 +1,4 @@
+import {resolvedHistoricalOrderRows} from './historical-approved-order.js';
 import type {Pool,PoolClient} from 'pg';
 /** Programme identity is resolved from saved foreign keys and issued IPOs. No PO/name joins,
  * copied financial rows, synthetic IPOs or updates to frozen legacy approvals. */
@@ -27,12 +28,13 @@ export async function ublProgrammeLinks(pool:Pool|PoolClient){
   pool.query(`SELECT DISTINCT ON(site_id) site_id,version,jsonb_build_object('origin',snapshot->'origin','sourceKey',snapshot->'sourceKey','stage',snapshot->'stage','partial',snapshot->'partial','completed',snapshot->'completed','deliveryDate',snapshot->'deliveryDate','qc',jsonb_build_object('civil',snapshot#>'{qc,civil}','handover',snapshot#>'{qc,handover}','signoff',snapshot#>'{qc,signoff}'),'qcJob',snapshot->'qcJob','superseded',snapshot->'superseded') snapshot FROM operations_board_versions ORDER BY site_id,version DESC`),
   pool.query('SELECT DISTINCT ON(job_key) job_key,stage,created_at FROM accounts_active_job_closures ORDER BY job_key,version DESC')
  ]);
+ legacy.rows=await resolvedHistoricalOrderRows(pool,legacy.rows);
  const links=new Map<string,any>();
- for(const l of legacy.rows){const number='CHP-'+String(l.legacy_ipo_number).replace(/^CHP-/i,'');links.set('ubl:'+l.site_id,{jobKey:'ubl:'+l.site_id,siteId:l.site_id,siteName:l.site_name,ipo:number,configuration:l.configuration_id,programme:SOLAR_PROGRAMME,status:l.status,workflowIds:[],boardIds:[]});}
+ for(const l of legacy.rows){const number='CHP-'+String(l.legacy_ipo_number).replace(/^CHP-/i,'');links.set('ubl:'+l.site_id,{jobKey:'ubl:'+l.site_id,siteId:l.site_id,siteName:l.site_name,ipo:number,configuration:l.configuration_id,programme:SOLAR_PROGRAMME,status:l.status,poNumber:l.po_number??null,poDate:l.po_issued_date??null,agreedTotal:l.baseline?.sellingIncludingGst??null,historicalOrder:l.historicalOrder??false,workflowStage:l.historicalOrder?'Existing order—Revised PO recorded':undefined,workflowIds:[],boardIds:[]});}
  for(const r of workflow.rows.filter(solarWorkflow)){
   const number=r.ipo_number,original=number?legacy.rows.find(l=>String(l.legacy_ipo_number).replace(/^CHP-/i,'')===number.replace(/^CHP-/i,'')):r.legacy_type==='ubl'?legacy.rows.find(l=>l.site_id===r.site_id):undefined;
   const jobKey=original?'ubl:'+original.site_id:r.ipo_id?'ipo:'+r.ipo_id:'workflow:'+r.id;
-  const previous=links.get(jobKey);const link={...previous,jobKey,siteId:r.site_id,siteName:r.site_name,siteCode:r.site_code,region:r.region,ipo:number??previous?.ipo??null,ipoId:r.ipo_id??previous?.ipoId??null,configuration:solarConfiguration(r.configuration_key)??previous?.configuration??null,programme:SOLAR_PROGRAMME,status:previous?.status??(r.stage==='declined'?'Cancelled':r.ipo_id?'Active':'Pre-IPO'),workflowId:r.id,workflowIds:[...(previous?.workflowIds??[]),r.id],workflowStage:r.stage,agreedTotal:r.agreed_total??null,poNumber:r.po_number??null,poDate:r.po_date??null,createdAt:r.created_at,boardIds:previous?.boardIds??[]};links.set(jobKey,link);
+  const previous=links.get(jobKey);const link={...previous,jobKey,siteId:r.site_id,siteName:r.site_name,siteCode:r.site_code,region:r.region,ipo:number??previous?.ipo??null,ipoId:r.ipo_id??previous?.ipoId??null,configuration:solarConfiguration(r.configuration_key)??previous?.configuration??null,programme:SOLAR_PROGRAMME,status:previous?.status??(r.stage==='declined'?'Cancelled':r.ipo_id?'Active':'Pre-IPO'),workflowId:r.id,workflowIds:[...(previous?.workflowIds??[]),r.id],workflowStage:previous?.historicalOrder?previous.workflowStage:r.stage,agreedTotal:r.agreed_total??previous?.agreedTotal??null,poNumber:r.po_number??previous?.poNumber??null,poDate:r.po_date??previous?.poDate??null,createdAt:r.created_at,boardIds:previous?.boardIds??[]};links.set(jobKey,link);
  }
  for(const l of links.values()){
   const matches=boards.rows.filter(b=>!b.snapshot.superseded&&(l.ipoId&&b.snapshot.origin?.ipoId===l.ipoId||l.ipo&&b.site_id==='registered-UBL:SOLAR:'+String(l.ipo).replace(/^CHP-/i,'')));

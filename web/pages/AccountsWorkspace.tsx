@@ -1,3 +1,5 @@
+import {historicalClosureException} from '../../shared/historical-closure-exceptions.js';
+import {HistoricalClosureDocuments} from '../components/HistoricalClosureDocuments.js';
 import {useBackStep} from '../navigation/useBackStep.js';
 import {confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 import {recentFirst,recordedTimestamp} from '../../shared/recent-records.js';
@@ -310,6 +312,8 @@ export function AccountsWorkspace({
       // budget changed afterward. Drafts continue using their current basis.
       setJob(submitted && ["Awaiting Management", "Closed"].includes(submitted.stage)
         ? { ...j, ...submitted.snapshot, history: j.history,
+            historicalEvidenceException:j.historicalEvidenceException,
+            evidence:j.evidence,
             phaseCostComparison: j.phaseCostComparison,
             configurationComparison: j.configurationComparison }
         : j);
@@ -457,6 +461,7 @@ export function AccountsWorkspace({
           photos,
           ptReference: pt,
           ptAttachmentId,
+          qcMaterialSignature:job.qcMaterialSignature??null,
           operationsEvidenceSignature: job.operationsEvidenceSignature??null,
           requestKey: crypto.randomUUID(),
           ...(editingSubmitted?{amendmentReason}:{}),
@@ -520,6 +525,11 @@ export function AccountsWorkspace({
   // Match the latest authoritative closure by exact job key, never by site name or shared IPO.
   const closedJobKeys = new Set(data.closures.filter((c:any)=>c.stage==='Closed').map((c:any)=>c.job_key));
   const reports = inventoryReports.filter(r=>!closedJobKeys.has(r.job_key));
+  const qcJobs = data.qcMaterialJobs ?? [];
+  const closureReports = [
+    ...reports.filter(r => historicalClosureException(r.job_key) || !qcJobs.some((q:any)=>(q.job_key===r.job_key||q.qcMaterialSource.aliases.includes(r.job_key))&&!q.qcMaterialSource.ready)),
+    ...qcJobs.filter((r:any)=>r.qcMaterialSource.ready&&!inventoryReports.some(v=>v.job_key===r.job_key)&&!closedJobKeys.has(r.job_key)),
+  ];
   const ptRecorded=(kind:string,r:any)=>(data.ptEntries??[]).find((p:any)=>p.source_kind===kind&&p.source_id===r.id&&p.source_version===(kind==='IPO'?1:r.version));
   const filtered = data.ipos.filter((i: any) =>
     `${i.number} ${i.snapshot.siteName} ${i.snapshot.customer?.name ?? ""}`
@@ -530,9 +540,8 @@ export function AccountsWorkspace({
     (r) => !data.closures.some((c: any) => c.job_key === r.job_key),
   );
   // A job marked recorded in PT before Inventory sent its reconciliation is also ready.
-  const jobPtRecorded=(jobKey:string)=>(data.jobPtEntries??[]).some((p:any)=>p.job_key===jobKey&&!p.report_version_id);
-  const preparationReports=reports.filter(r=>isClosurePreparationJob({latestClosure:data.closures.find((c:any)=>c.job_key===r.job_key),ptRecorded:!!ptRecorded('Inventory',r)||jobPtRecorded(r.job_key)}));
-  const awaitingReconciliation=(data.jobPtEntries??[]).filter((p:any)=>!p.report_version_id&&!reports.some(r=>r.job_key===p.job_key)&&!data.closures.some((c:any)=>c.job_key===p.job_key));
+  const jobPtRecorded=(jobKey:string)=>(data.jobPtEntries??[]).some((p:any)=>(p.job_key===jobKey||(data.qcMaterialJobs??[]).find((r:any)=>r.job_key===jobKey)?.qcMaterialSource.aliases.includes(p.job_key)));
+  const preparationReports=closureReports.filter(r=>isClosurePreparationJob({latestClosure:data.closures.find((c:any)=>c.job_key===r.job_key),ptRecorded:!!ptRecorded('Inventory',r)||jobPtRecorded(r.job_key)}));
   const total = (v: Record<string, string>, keys: string[]) =>
     keys.reduce((n, k) => n.add(v[k] || "0"), new Decimal(0));
   let actualTotal: Decimal | null = null,
@@ -1075,7 +1084,7 @@ export function AccountsWorkspace({
                     <td>{jobLabel(r)}</td>
                     <td>
                       {data.closures.find((c: any) => c.job_key === r.job_key)
-                        ?.stage ?? "IRR received"}
+                        ?.stage ?? (r.qcMaterialSource?.deliveryOnly?"Signed DO verified":r.qcMaterialSource?"QC usage verified":"Ready for costing")}
                     </td>
                     <td>
                       <Button onClick={() => void openJob(r.job_key)}>
@@ -1087,8 +1096,7 @@ export function AccountsWorkspace({
               </PagedTableBody>
             </table>
           </div>
-          {!preparationReports.length&&!awaitingReconciliation.length&&<div className="accounts-empty"><h3>No jobs ready for closure</h3><p>Jobs appear here after they are marked as recorded in PT.</p></div>}
-          {awaitingReconciliation.length>0&&<div className="table-scroll"><h3>Recorded in PT · awaiting Inventory reconciliation</h3><table><thead><tr><th>SR#</th><th>Job / site</th><th>PT reference</th><th>Status</th></tr></thead><tbody>{awaitingReconciliation.map((p:any,n:number)=><tr key={p.id}><td>{n+1}</td><td><strong>{p.snapshot.siteName}</strong><small>{p.snapshot.ipo}</small></td><td>{p.pt_reference}<small>{p.entry_date}</small></td><td>Closure costing opens when Inventory sends its reconciliation; it will not ask for PT entry again.</td></tr>)}</tbody></table></div>}
+          {!preparationReports.length&&<div className="accounts-empty"><h3>No jobs ready for closure</h3><p>Jobs appear here after they are marked as recorded in PT.</p></div>}
         </section>
       )}
       {tab === "Job Closure" && job && (
@@ -1098,6 +1106,7 @@ export function AccountsWorkspace({
             {latest?.stage ?? "New closure"} · {job.basis}
             {latest && <> · Recorded by {latest.recorded_by}</>}
           </p>
+          {job.historicalEvidenceException&&<p role="status">Historical exception: supporting documents and PT report may be added later. Review the outstanding files below. Photographs do not block closure.</p>}
           {revisionReason && (
             <div className="accounts-verification-note" role="status">
               <strong>Management requested revision</strong>
@@ -1260,6 +1269,7 @@ export function AccountsWorkspace({
             Per-watt and other non-cable quantity differences remain cost/usage
             variances. Good-faith supply does not adjust the invoice.
           </p>
+          {job.qcMaterialSource&&<section className="detail-panel"><h3>Verified QC material usage</h3><p>Fixed and variable usage and local purchases received from QC. Warehouse returns remain separate.</p><div className="pz-table-scroll"><table><thead><tr><th>SR#</th><th>Item</th><th>Unit</th><th>Used</th></tr></thead><tbody>{job.qcMaterialSource.usage.map((l:any,i:number)=><tr key={l.key}><td>{i+1}</td><td>{l.itemId}<small>{l.description}</small></td><td>{l.unit}</td><td>{l.used}</td></tr>)}</tbody></table></div></section>}
           <h3>Cable invoice reconciliation</h3>
           <p>
             Potential adjustment without GST:{" "}
@@ -1271,18 +1281,17 @@ export function AccountsWorkspace({
             authorized adjustment posting are deferred.
           </p>
           <section className="detail-panel">
-            <h3>QC supporting documents</h3>
+            <h3>Supporting documents</h3>
             <p>
-              Uploaded by QC. Accounts reviews receipt status and does not enter
-              these references.
+              Photographs support invoicing and do not block Job Closure.
             </p>
-            {["Client acknowledgment", "Site photographs", ...(job.evidence?.some((e:any)=>e.source?.kind==='Operations')?["IRR", "Variable items sign-off"]:[])].map((kind) => {
+            {["Client acknowledgment", "Site photographs", ...((job.qcMaterialSource||job.evidence?.some((e:any)=>e.source?.kind==='Operations'))?["Signed DO", "Variable items sign-off", ...(job.evidence?.some((e:any)=>e.kind==='IRR')?["IRR"]:[])]:[])].map((kind) => {
               const files =
-                job.evidence?.filter((e: any) => e.kind === kind) ?? [];
+                (job.evidence?.filter((e: any) => e.kind === kind) ?? []).concat(kind==='Signed DO'&&job.qcMaterialSource?(job.qcMaterialSource.sources.signedDos??[]).filter((f:any)=>!job.evidence?.some((e:any)=>e.kind===kind&&e.id===f.id)).map((f:any)=>({id:f.id,filename:'Signed DO',downloadUrl:'/api/accounts-workspace/sites/'+encodeURIComponent(job.qcMaterialSource.siteId)+'/evidence/'+f.id})):[]);
               return (
                 <div key={kind}>
                   <strong>{kind}:</strong>{" "}
-                  {files.length ? "Received" : "Not received"}{" "}
+                  {files.length ? "Received" : kind==='Variable items sign-off'&&job.qcMaterialSource?.ready?"Verified / not applicable in QC usage":"Not received"}{" "}
                   {files.map((e: any) => (
                     <EvidencePreview key={e.id}
                       url={e.downloadUrl??`/api/accounts-workspace/evidence/${e.id}`} title={e.filename} filename={e.filename}/>
@@ -1291,6 +1300,7 @@ export function AccountsWorkspace({
               );
             })}
           </section>
+          {job.historicalEvidenceException&&<HistoricalClosureDocuments session={session} job={job} onUploaded={async()=>{const updated=await api<any>('/accounts-workspace/job?key='+encodeURIComponent(job.jobKey));setJob({...job,evidence:updated.evidence});}}/>}
           <section className="detail-panel">
             <h3>Final PT report · actual costs by PT phase</h3>
             {job.evidence
@@ -1329,7 +1339,7 @@ export function AccountsWorkspace({
                 )}
               </Field>
             )}
-            {readonly && !ptAttachmentId && (
+            {readonly && !ptAttachmentId && !job.evidence?.some((e:any)=>e.kind==="PT costing screenshot") && (
               <p>Not attached{pt ? " · Historical reference: " + pt : ""}</p>
             )}
           </section>

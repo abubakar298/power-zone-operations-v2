@@ -10,6 +10,8 @@ import {OperationsRepository} from '../server/operations/repository.js';
 import {ProjectWorkflowRepository} from '../server/project-workflow/repository.js';
 import {upsPortfolio} from '../server/director/ups-portfolio.js';
 import {receiptSchema} from '../server/project-workflow/schema.js';
+import {qcMaterialHandoff} from '../server/accounts/qc-material-handoff.js';
+import {resourceOwnership} from '../server/http/permissions.js';
 test('authorised historical pending orders use real approved issuance calculations, share UPS numbers safely and never replay stock, invoices, receipts or IPO Shared handoffs',async()=>{
  const previous=process.env.ENABLE_DEFERRED_UPS_WORKFLOW;process.env.ENABLE_DEFERRED_UPS_WORKFLOW='true';
  const db=await testDatabase();try{
@@ -20,7 +22,8 @@ test('authorised historical pending orders use real approved issuance calculatio
   const rows=setups.map(([bank,total,n,cfg,gross,number],index)=>({key:bank+':UPS:'+n+'/'+total,customer:bank,kind:'UPS',program:total,ipo:'CHP-'+number,orderNumber:n+'/'+total,site:'Isolated historical branch '+index,siteCode:bank==='UBL'?'9999':'H-'+index,po:'LOCAL-HIST-PO-'+(index===5?2:index),poDate:'2026-10-25',configuration:bank==='UBL'?'0-'+cfg:cfg,grossContract:gross,cancelled:false,delivered:false,installed:false,invoiceReferences:[]}));
   rows[5].delivered=true; // Historical dispatch was fully returned; current owner correction is authoritative.
   const bad={...rows[2],key:'MBL:UPS:3/60',orderNumber:'3/60',site:'Rejected import branch',siteCode:'REJECTED-HIST',po:'REJECTED-PO',grossContract:'1'};
-  const source:AccountsSource={sourceDate:'2026-10-26',manifest:[{name:'isolated-authorised-register',sha256:'a'.repeat(64)}],registers:[{rows:[...rows,bad]}],cables:{rows:[]},internet:{rows:[]},sites:{rows:[]},evidence:{rows:[],cableStageAdjustments:[]}};
+  const delivered={...rows[2],key:'MBL:UPS:4/60',orderNumber:'4/60',site:'Delivered historical branch',siteCode:'DELIVERED-HIST',po:'DELIVERED-PO',delivered:true};
+  const source:AccountsSource={sourceDate:'2026-10-26',manifest:[{name:'isolated-authorised-register',sha256:'a'.repeat(64)}],registers:[{rows:[...rows,bad,delivered]}],cables:{rows:[]},internet:{rows:[]},sites:{rows:[]},evidence:{rows:[],cableStageAdjustments:[]}};
   const saved=await new AccountsSourceRegisters(db.pool).import(users.owner,source,0);
   for(const r of [...rows,bad]){const id='registered-'+r.key,b={id,ipo:r.ipo+' · '+r.orderNumber,name:r.site,customer:r.customer,customerPo:r.po,sourceKey:r.key,stage:'received',installation:true,sample:false,...(r===rows[5]?{deliveryReturns:[{scope:'full',date:null,dateUnknown:true,warehouse:'',reference:'',reason:'Owner confirms all returned',recordedAt:'2026-10-29T00:00:00Z'}]}:{})};await db.pool.query('INSERT INTO operations_board_sites(id,created_by) VALUES($1,$2)',[id,users.owner]);await db.pool.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,1,$2,$3,$4,$5,$6)',[id,b,'Source imported','isolated authorised register',randomUUID(),users.owner]);}
   const framework=async(bank:string,cfg:string)=>(await db.pool.query('SELECT id FROM project_framework_current WHERE configuration_key=$1',[bank+'-UPS-'+cfg])).rows[0].id;
@@ -40,6 +43,31 @@ test('authorised historical pending orders use real approved issuance calculatio
   const before=(await db.pool.query('SELECT count(*)::int n FROM sites')).rows[0].n;
   await assert.rejects(importPendingIpo(db.pool,users.owner,{...first,boardSiteId:'registered-'+bad.key,frameworkId:await framework('MBL','6-5'),requestKey:randomUUID()}),/contract value differs/);
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM sites')).rows[0].n,before,'Failed import rolls back a newly prepared site too.');assert.equal((await db.pool.query('SELECT count(*)::int n FROM internal_purchase_orders')).rows[0].n,6);
+  const boardId='registered-'+delivered.key, signedId=randomUUID(), ptId=randomUUID();
+  const signed={id:signedId,name:'Signed historical DO.pdf',mediaType:'application/pdf'};
+  const historicalBoard={id:boardId,name:delivered.site,ipo:delivered.ipo+' · '+delivered.orderNumber,customer:'MBL',customerPo:delivered.po,sourceKey:delivered.key,stage:'delivered',installation:true,completed:true,projectType:'ups',operationsTeam:'south',documents:[{id:boardId+':historical-delivery-documents',evidence:[signed]}]};
+  await db.pool.query('INSERT INTO operations_board_sites(id,created_by) VALUES($1,$2)',[boardId,users.owner]);
+  await db.pool.query("INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,1,$2,'Source imported','Fixture',$3,$4)",[boardId,historicalBoard,randomUUID(),users.owner]);
+  await db.pool.query("INSERT INTO operations_board_files(id,site_id,filename,media_type,sha256,content,created_by) VALUES($1,$2,$3,'application/pdf',$4,$5,$6)",[signedId,boardId,signed.name,'d'.repeat(64),Buffer.from('%PDF-1.7\nSigned DO'),users.owner]);
+  await db.pool.query("INSERT INTO accounts_job_pt_entries(id,job_key,site_id,pt_reference,entry_date,snapshot,request,request_key,created_by) VALUES($1,$2,$3,'PT-UNCHANGED','2026-10-27','{}','{}',$4,$5)",[ptId,'site:'+boardId,boardId,randomUUID(),users.owner]);
+  const backfill={...first,boardSiteId:boardId,frameworkId:await framework('MBL','6-5'),requestKey:randomUUID(),alreadyDelivered:true as const};
+  await assert.rejects(importPendingIpo(db.pool,users.owner,{...backfill,alreadyDelivered:undefined}),/pending delivery/);
+  const restored=await importPendingIpo(db.pool,users.owner,backfill);
+  assert.equal((await importPendingIpo(db.pool,users.owner,backfill)).ipoId,restored.ipoId);
+  const ipo=(await db.pool.query('SELECT created_by,snapshot FROM internal_purchase_orders WHERE id=$1',[restored.ipoId])).rows[0];
+  assert.equal(ipo.created_by,users.owner);
+  assert.equal(ipo.snapshot.preparedBy,'M. Rafiq');
+  assert.equal(ipo.snapshot.input.invoiceTerms,'completion');
+  assert.ok((await db.pool.query(resourceOwnership.ipo,[restored.ipoId,users.coordinator])).rowCount);
+  const sharedRecord=(await new ProjectWorkflowRepository(db.pool).list(users.coordinator,'coordination','mine')).records.find(r=>r.id===restored.recordId);
+  assert.equal(sharedRecord?.data.ipoShared,true);
+  assert.equal(sharedRecord?.data.historicalDelivered,true);
+  assert.deepEqual((await db.pool.query('SELECT snapshot FROM operations_board_versions WHERE site_id=$1',[boardId])).rows,[{snapshot:historicalBoard}]);
+  const qc=await qcMaterialHandoff(db.pool,'ipo:'+restored.ipoId);
+  assert.ok(qc?.aliases.includes('site:'+boardId),'Accounts retains the exact existing PT entry alias');
+  assert.equal((await db.pool.query('SELECT pt_reference FROM accounts_job_pt_entries WHERE id=$1',[ptId])).rows[0].pt_reference,'PT-UNCHANGED');
+  assert.ok(!(await new MaterialDraftRepository(db.pool).intake(users.inventory)).sources.some(s=>s.siteId===restored.ipoId),'Delivered site does not become a new dispatch');
+  for(const table of ['ipo_accounts_handoffs','accounts_job_closures','stock_on_hand_entries','inventory_material_dispatches'])assert.equal((await db.pool.query('SELECT count(*)::int n FROM '+table)).rows[0].n,0);
   await assert.rejects(db.pool.query('DELETE FROM historical_pending_ipo_imports'));
   assert.equal(receiptSchema.safeParse({historicalImport:true}).success,false,'Normal employee PO receipt schema cannot enable operator-only historical import.');
  }finally{await db.close();if(previous===undefined)delete process.env.ENABLE_DEFERRED_UPS_WORKFLOW;else process.env.ENABLE_DEFERRED_UPS_WORKFLOW=previous;}

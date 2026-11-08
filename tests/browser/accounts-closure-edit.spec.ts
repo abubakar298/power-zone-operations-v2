@@ -19,3 +19,22 @@ test('Accounts edits a submitted closure into a new Management review version',a
  await expect(page.getByText('Latest correction: Correct PT inverter cost',{exact:true})).toBeVisible();expect(posted.version).toBe(2);expect(posted.stage).toBe('Awaiting Management');expect(posted.amendmentReason).toBe('Correct PT inverter cost');expect(posted.actual.Inverter).toBe('80100');expect(history).toHaveLength(2);expect(history[1].snapshot.input.actual.Inverter).toBe('80000.00');
  await expect(page.getByRole('button',{name:'Edit submitted closure',exact:true})).toBeVisible();await page.screenshot({path:'test-results/accounts-submitted-closure-edit.png',fullPage:true});
 });
+test('Accounts closure editor displays EPC and phase peer markup without placeholder gaps',async({page})=>{
+ await actors(page.request);await login(page.request,'accounts-release@example.test');
+ const names=['Solar Panels','Structure','Inverter','Batteries','BMS','EPC'],categories=['Electrical Labour','Earthing Cost','Deliveries','Installation Cost'];
+ const peer={jobs:2,markupJobs:2,averageActualCost:'80000',averageActualMarkup:'14000',averageActualMarkupPercent:'17.5'};
+ const snapshot:any={jobKey:'ubl:1',jobId:'SIM-MARKUP',title:'Markup regression fixture',entry:{start:'2026-10-01',end:'2026-10-02'},identity:{job_id:'SIM-MARKUP',customer_code:'UBL',site_name:'Markup regression fixture'},selling:'1200000',phaseSelling:Object.fromEntries(names.map(p=>[p,'200000'])),budget:Object.fromEntries(names.map(p=>[p,'100000'])),epcBudget:Object.fromEntries(categories.map(p=>[p,'25000'])),input:{actual:Object.fromEntries(names.slice(0,5).map(p=>[p,'80000'])),epc:Object.fromEntries(categories.map(p=>[p,'20000'])),epcAggregate:'80000',epcDetails:true,remarks:'Reviewed PT costs',ptReference:'PT-1'},actualEpc:'80000',summary:{selling:'1200000',actual:'480000'},phaseCostComparison:{phases:Object.fromEntries([...names,'BESS'].map(p=>[p,peer])),epc:Object.fromEntries(categories.map(p=>[p,{...peer,averageActualMarkupPercent:'22.5'}])),total:peer},reconciliation:{},evidence:[]};
+ const closure={id:'closure-markup',job_key:'ubl:1',stage:'Awaiting Management',version:2,created_at:'2026-10-25T09:00:00Z',snapshot,recorded_by:'Accounts'};
+ await page.route('**/api/accounts-workspace',r=>r.fulfill({json:{ipos:[],closures:[closure]}}));
+ await page.route('**/api/inventory-reconciliation/reports',r=>r.fulfill({json:{reports:[]}}));
+ await page.route('**/api/accounts-workspace/job?*',r=>r.fulfill({json:{...snapshot,history:[closure]}}));
+ await page.goto('/dashboard#workspace=finance&accountsTab=Awaiting+Management');
+ await page.getByRole('button',{name:'Edit',exact:true}).click();
+ const tables=page.locator('table.closure-performance-table');
+ for(const category of categories){const row=tables.getByRole('row').filter({has:page.getByRole('rowheader',{name:category,exact:true})});await expect(row.getByRole('cell').nth(3)).toHaveText('100%');await expect(row.getByRole('cell').nth(4)).toHaveText('150%');await expect(row.getByRole('cell').last()).toHaveText('22.50%');}
+ for(const name of [...names,'BESS subtotal'])await expect(tables.getByRole('row').filter({has:page.getByRole('rowheader',{name,exact:true})}).getByRole('cell').last()).toHaveText('17.50%');
+ await page.getByLabel('Electrical Labour actual cost',{exact:true}).fill('');
+ await expect(tables.getByRole('row').filter({has:page.getByRole('rowheader',{name:'Electrical Labour',exact:true})}).getByRole('cell').nth(4)).toHaveText('Not available');
+ await expect(page.getByLabel('Inverter actual cost',{exact:true})).toBeEnabled();
+ await page.screenshot({path:'test-results/accounts-closure-markup.png',fullPage:true});
+});

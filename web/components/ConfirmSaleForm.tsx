@@ -1,3 +1,5 @@
+import { defaultIpoInvoiceTerms, type IpoInvoiceTerms } from "../../shared/ipo-invoice-terms.js";
+import { IpoInvoiceTermsField } from "./IpoInvoiceTermsField.js";
 import {FileUpload} from '../ui/FileUpload.js';
 import {DirectPoDetailsFields} from './DirectPoDetailsFields.js';
 import {directPoCapacityIssues,directPoSuggestions,directPoFields} from '../../shared/direct-po-reading.js';
@@ -35,14 +37,16 @@ const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(
     new Date(),
   );
-export function ConfirmSaleForm({ session, detail, action, onBack, initialDirectPo }: any) {
+export function ConfirmSaleForm({ session, detail, action, onBack, initialDirectPo, backLabel }: any) {
   const r = detail.record,
     c = detail.masterReview.customer,
     framework = r.route.endsWith("framework");
+  const cabinet = Boolean(r.data?.cniProposalId);
   const directUps = r.route==='direct-framework' && ['MBL-UPS-6-5','MBL-UPS-6-10','UBL-UPS-6-10'].includes(detail.basis?.source?.key);
   const savedDirectPo=r.data?.directPoDetails;
   const reviewingDirectPo = r.route==='direct-framework' && !!(initialDirectPo?.reviewIpo || savedDirectPo);
   const draftValues=savedDirectPo?.values??initialDirectPo?.values??{};
+  const [chosenTerms, setChosenTerms] = useState<IpoInvoiceTerms | "">(savedDirectPo?.invoiceTerms ?? initialDirectPo?.invoiceTerms ?? detail.receipt?.input?.invoiceTerms ?? "");
   const [editingRecord,setEditingRecord]=useState(false),[recordValues,setRecordValues]=useState<Record<string,string>>({});
   const attachedDirectPo=initialDirectPo?.document??detail.files?.find((f:any)=>f.id===savedDirectPo?.evidenceId);
   const preAgreedBank = framework && (String(r.customerCode??c.short_code).toUpperCase()==='UBL'||directUps);
@@ -98,7 +102,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
     setBasisError("");
     void api<any>(`/project-workflow/${r.id}/preview`, {
       csrf: session.csrfToken,
-      body: framework
+      body: cabinet ? { kind: "cni" } : framework
         ? { kind: "framework", frameworkId: orderedFramework }
         : { kind: "quotation", quotationId: r.quotation?.id },
     })
@@ -300,8 +304,9 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
       setProgress("");
     }
   }
+  const invoiceTerms = chosenTerms || (framework ? defaultIpoInvoiceTerms(basis?.source?.key) : "");
   const previewKey = JSON.stringify({
-    input,
+    input, invoiceTerms,
     documentId: document?.id,
     basis: basis?.fingerprint,
     scope,
@@ -311,34 +316,39 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
   });
   const currentPreview =
     salePreview?.key === previewKey ? salePreview : undefined;
+  const evidenceNotes = input.evidenceNotes.trim() ||
+    (reviewingDirectPo && po && document && input.poNumber.trim() ? `Customer PO ${input.poNumber.trim()}` : "");
   function receiptPayload() {
     return {
       ...(input.ipoNumber?.trim()?{ipoNumber:input.ipoNumber.trim()}:{}),
       reference: po && input.poNumber.trim() && !/^n\/?a$/i.test(input.poNumber.trim()) ? input.poNumber.trim() : `${input.evidenceType==="Email approval"?"EMAIL":"WA"}-${r.siteCode}-${input.orderDate}-${r.id.slice(0,8)}`,
       date: input.orderDate,
       evidenceId: document.id,
-      basisType: framework ? "framework" : "quotation",
+      invoiceTerms: invoiceTerms || undefined,
+      basisType: cabinet ? "cni" : framework ? "framework" : "quotation",
+      cniVersionId: cabinet ? basis.source.id : undefined,
       frameworkId: framework ? basis.source.id : undefined,
-      quotationId: !framework ? basis.source.id : undefined,
+      quotationId: !framework && !cabinet ? basis.source.id : undefined,
       confirmationType: input.evidenceType,
-      saleDetails: {...input,...(preAgreedBank?{poRecordedTotal:poTotal,poRecordedTax:poTax,poAmountSource:poTotal?"Customer PO reading; compared against accepted agreement":"Accepted agreement; PO amount unreadable or redacted",poPrintedTax,poTaxTreatment:poInclusive?"Tax-inclusive payable; approved GST allocation retained":"As printed"}:{})},
+      saleDetails: {...input, evidenceNotes, ...(reviewingDirectPo ? { deliveryAddress: draftValues.siteAddress || r.data.siteAddress || "" } : {}), ...(preAgreedBank?{poRecordedTotal:poTotal,poRecordedTax:poTax,poAmountSource:poTotal?"Customer PO reading; compared against accepted agreement":"Accepted agreement; PO amount unreadable or redacted",poPrintedTax,poTaxTreatment:poInclusive?"Tax-inclusive payable; approved GST allocation retained":"As printed"}:{})},
       actual: po ? structuredClone(basis.comparison) : undefined,
       reviewed: true,
       configurationChangeReason:configurationChanged?configurationChangeReason:'',
       customerNtn: input.customerNtn ?? "",
       customerStrn: input.customerStrn ?? "",
-      notes: input.evidenceNotes,
+      notes: evidenceNotes,
     };
   }
   function validation(forPreview = false) {
     return [
       ...confirmationRequirements,
+      ...(!forPreview && !invoiceTerms ? ["Select invoice terms."] : []),
       ...(!forPreview && !accepted ? ["Confirm the customer approved the selected document."] : []),
       ...(editingRecord?["Save or cancel the record corrections before previewing or confirming sale."]:[]),
       ...(ipoError?[ipoError]:[]),
       ...(!input.invoiceCompany.trim() ? ["Enter the invoice company."] : []),
       ...(!input.salesPerson.trim() ? ["Enter the sales person."] : []),
-      ...(!input.evidenceNotes.trim()
+      ...(!evidenceNotes
         ? ["Enter the approval evidence details."]
         : []),
     ];
@@ -421,7 +431,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
     <div className="pz-stack orders-module">
       <div>
         <Button variant="neutral" onClick={onBack}>
-          Back to PO Receipt
+          Back to {backLabel}
         </Button>
       </div>
       <section className="pz-panel">
@@ -488,6 +498,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
           {allowPoConfiguration&&po&&<section className="pz-panel pz-stack" aria-label="Customer ordered configuration"><Field id="customer-po-configuration" label="Configuration requested in customer PO"><select id="customer-po-configuration" aria-label="Configuration requested in customer PO" value={orderedFramework} onChange={e=>{setOrderedFramework(e.target.value);setSalePreview(undefined);setPreviewReviewed(false);setAccepted(false);setError('');}}><option value={r.frameworkId}>Recommended: {detail.basis?.source?.key}</option>{poConfigurationChoices.filter(f=>f.id!==r.frameworkId).map(f=><option key={f.id} value={f.id}>{f.label} · v{f.version} · {money(f.total)}</option>)}</select></Field>{configurationChanged&&<><p>Recommended: {detail.basis?.source?.key} → Customer ordered: {basis?.source?.key??'Loading selected configuration…'}. Existing approved BOQ and rates apply. Management is notified; no new approval blocks issuance.</p><Field id="customer-po-configuration-reason" label="Customer configuration change reason" hint="Explain the configuration requested in the attached customer PO."><textarea id="customer-po-configuration-reason" rows={3} aria-label="Customer configuration change reason" value={configurationChangeReason} onChange={e=>setConfigurationChangeReason(e.target.value)}/></Field></>}</section>}
           <h3>PO details, please verify</h3>
           <fieldset disabled={busy} className="order-fields">
+            {cabinet && <label>Order number (optional)<input value={input.orderNumber??''} onChange={e=>change('orderNumber',e.target.value)}/></label>}
             {directUps&&<label>Order number (unit / total)<input value={input.orderNumber??''} placeholder="For example 20/60" onChange={e=>change('orderNumber',e.target.value)}/><small>Unit sequence within the customer's order; separate from its PO reference.</small></label>}
             {<label>IPO Number (optional)
               <input value={input.ipoNumber??''} maxLength={100} placeholder="Automatic numbering if blank" onChange={e=>{change('ipoNumber',e.target.value);setIpoError('');setIpoCheck('');}} onBlur={async()=>{const number=input.ipoNumber?.trim();if(!number)return;setIpoCheck('Checking IPO number…');try{const result=await api<{available:boolean}>(`/project-workflow/ipo-number-availability?number=${encodeURIComponent(number)}&recordId=${encodeURIComponent(r.id)}&orderNumber=${encodeURIComponent(input.orderNumber??'')}`);setIpoCheck(result.available?'IPO number is available.':'');setIpoError(result.available?'':'This IPO number is in use. For the same UPS batch, enter a different order unit with the same total.');}catch(e){setIpoCheck('');setIpoError(e instanceof Error?e.message:'Unable to check IPO number.');}}}/>
@@ -584,6 +595,9 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
               </label>}
             </>
           )}
+          <div className="pz-form-grid">
+            <IpoInvoiceTermsField id="sale-invoice-terms" value={invoiceTerms} onChange={value => {setChosenTerms(value); setPreviewReviewed(false);}} disabled={busy}/>
+          </div>
           <label className="pz-review-check">
             <input
               type="checkbox"

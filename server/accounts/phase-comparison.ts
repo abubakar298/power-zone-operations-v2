@@ -17,7 +17,11 @@ export function phaseCostComparison(snapshots:any[]){
  };
  const epcSelling=eligible.map(s=>closureEpcSelling(s.phaseSelling?.EPC,s.epcBudget,s.budget?.EPC,s.epcSelling));
  return {closedJobs:eligible.length,
-  phases:Object.fromEntries(closurePhases.map(p=>[p,average(eligible.map(s=>({selling:s.phaseSelling?.[p],cost:p==='EPC'?s.actualEpc??s.input?.epcAggregate:s.input?.actual?.[p]})))])),
+  phases:Object.fromEntries([...closurePhases,'BESS'].map(p=>[p,average(eligible.map(s=>{
+   if(p!=='BESS')return {selling:s.phaseSelling?.[p],cost:p==='EPC'?s.actualEpc??s.input?.epcAggregate:s.input?.actual?.[p]};
+   const sum=(map:Record<string,unknown>={})=>{const amounts=['Inverter','Batteries','BMS'].map(n=>value(map[n]));return amounts.every((n):n is Decimal=>n!==null)?amounts.reduce((a,n)=>a.add(n),new Decimal(0)).toString():undefined;};
+   return {selling:sum(s.phaseSelling),cost:sum(s.input?.actual)};
+  }))])),
   epc:Object.fromEntries(closureEpcItems.map(p=>[p,average(eligible.map((s,i)=>({selling:epcSelling[i]?.[p],cost:s.input?.epcDetails===false?undefined:s.input?.epc?.[p]})))])),
   total:average(eligible.map(s=>({selling:s.selling??s.summary?.selling,cost:s.summary.actual,recordedMarkup:s.summary.actualMarkup})))
  };

@@ -50,7 +50,11 @@ export function workflowBoundary(pool: Pool): RequestHandler {
       );
       if (match) {
         const handed = await pool.query(
-          "SELECT 1 FROM ipo_accounts_handoffs WHERE ipo_id=$1",
+          `SELECT 1 FROM ipo_accounts_handoffs WHERE ipo_id=$1
+           UNION ALL SELECT 1 FROM internal_purchase_orders i
+           JOIN inventory_material_source_links l ON l.ipo_id=i.id
+           JOIN accounts_job_pt_entries p ON p.job_key='site:'||l.board_site_id AND p.site_id=l.board_site_id
+           WHERE i.id=$1 AND i.snapshot#>>'{historicalImport,deliveredBoardSiteId}'=l.board_site_id`,
           [match[1]],
         );
         if (handed.rowCount) return next();
@@ -72,7 +76,7 @@ export const resourceOwnership = {
     "SELECT 1 FROM commercial_pricing_versions p JOIN boq_revisions r ON r.id=p.boq_revision_id JOIN boqs b ON b.id=r.boq_id JOIN survey_drafts d ON d.id=b.draft_id WHERE p.id=$1 AND (p.created_by=$2 OR b.created_by=$2 OR d.owner_id=$2)",
   quotation:
     "SELECT 1 FROM quotation_versions q JOIN boq_revisions r ON r.id=q.boq_revision_id JOIN boqs b ON b.id=r.boq_id JOIN survey_drafts d ON d.id=b.draft_id WHERE q.id=$1 AND (q.created_by=$2 OR b.created_by=$2 OR d.owner_id=$2)",
-  ipo: "SELECT 1 FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE i.id=$1 AND (i.created_by=$2 OR s.created_by=$2)",
+  ipo: "SELECT 1 FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE i.id=$1 AND (i.created_by=$2 OR s.created_by=$2 OR (i.snapshot#>>'{historicalImport,deliveredBoardSiteId}' IS NOT NULL AND EXISTS(SELECT 1 FROM project_workflow_issuances w JOIN project_workflow_records j ON j.id=w.record_id WHERE w.ipo_id=i.id AND j.coordinator_id=$2)))",
   revisionRequest:
     "SELECT 1 FROM quotation_revision_requests req JOIN quotation_versions quote ON quote.id=req.source_quotation_id JOIN boq_revisions rev ON rev.id=quote.boq_revision_id JOIN boqs boq ON boq.id=rev.boq_id JOIN survey_drafts draft ON draft.id=boq.draft_id WHERE req.id=$1 AND (req.created_by=$2 OR quote.created_by=$2 OR boq.created_by=$2 OR draft.owner_id=$2)",
   draft: `SELECT 1 FROM survey_drafts d WHERE id=$1 AND ${editableDraftCondition('d','$2')}`,

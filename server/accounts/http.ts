@@ -13,7 +13,7 @@ import {customerDocuments,customerDocumentFile} from './customer-documents.js';
 import{correctInvoice,invoiceCorrectionSchema}from'./invoice-corrections.js';
 import{recordInvoiceReceipt,invoiceReceiptSchema}from'./invoice-receipts.js';
 import {managementProgrammes} from '../director/management-programmes.js';
-import { Router, type RequestHandler } from "express";
+import { json, Router, type RequestHandler } from "express";
 import {invoiceRegister,recordInvoiceEntry,invoiceEntrySchema,recordInvoiceSubmission,invoiceSubmissionSchema} from './invoice-entries.js';
 import {ptEntrySchema} from './pt-entries.js';
 import {paymentRegister,recordPayment,paymentRecordSchema} from './payment-records.js';
@@ -139,7 +139,7 @@ export function accountsHttp(
   });
   r.get('/jobs/:key/operations-evidence/:version/:fileId',async(req,res)=>{
     const file=await repo.operationsEvidenceFile(req.authSession!.user.id,
-      parse(z.string().regex(/^ipo:[0-9a-f-]{36}$/),req.params.key),
+      parse(z.string().regex(/^(?:ipo:[0-9a-f-]{36}|ubl:\d+)$/),req.params.key),
       parse(z.coerce.number().int().positive(),req.params.version),parse(z.uuid(),req.params.fileId));
     res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
       'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);
@@ -194,6 +194,10 @@ export function accountsHttp(
       ),
     ),
   );
+  r.post('/jobs/:key/supplementary-evidence',json({limit:'12mb'}),async(req,res)=>{
+    const input=parse(z.object({filename:z.string().min(1).max(300),mediaType:z.enum(['application/pdf','image/png','image/jpeg']),base64:z.string().min(1),kind:z.enum(['PT costing screenshot','Signed DO','Variable items sign-off','Client acknowledgment','Site photographs'])}).strict(),req.body);
+    res.status(201).json(await repo.uploadEvidence(req.authSession!.user.id,String(req.params.key),input.filename,input.mediaType,input.base64,input.kind));
+  });
   r.post("/closures", async (req, res) =>
     res.json(
       await repo.saveClosure(

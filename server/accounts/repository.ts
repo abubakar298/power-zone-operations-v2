@@ -1,3 +1,5 @@
+import {historicalClosureException} from '../../shared/historical-closure-exceptions.js';
+import {qcMaterialHandoff,qcMaterialHandoffs} from './qc-material-handoff.js';
 import {withAccountsIpo} from '../../shared/accounts-site-reference.js';
 import {ublProgrammeLinks} from '../ubl/programme-links.js';
 import {historicalApprovedOrder} from '../ubl/historical-approved-order.js';
@@ -47,6 +49,7 @@ export const closureSchema = z
     photos: z.string().trim().max(1000),
     ptReference: z.string().trim().max(1000),
     ptAttachmentId: z.uuid().nullable().optional(),
+    qcMaterialSignature: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(),
     operationsEvidenceSignature: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(),
     requestKey: z.uuid(),
     amendmentReason: z.string().trim().min(3).max(2000).optional(),
@@ -115,6 +118,7 @@ export class AccountsRepository {
     ).rows;
     const identities = await new InventoryRepository(this.pool).jobs(actor);
     return {
+      qcMaterialJobs: (await qcMaterialHandoffs(this.pool)).map(r=>({id:'qc:'+r.siteId,job_key:r.jobKey,job_id:r.ipo,site_name:r.siteName,created_at:r.receivedAt,qcMaterialSource:r,ptRecorded:false})),
       reviewSamples: (
         await this.pool.query(
           "SELECT DISTINCT ON(r.id) d.id,d.version,d.created_at,r.id AS request_id,r.version AS request_version,r.stage,r.site_name,r.branch_code,r.data->>'configuration' AS configuration,r.data->>'sampleReviewDecision' AS review_decision,d.kind FROM ubl_workflow_documents d JOIN ubl_workflow_requests r ON r.id=d.request_id WHERE (d.kind='IPO / PT review sample' AND r.data->>'accountsReviewSample'='true') OR (d.kind='IPO / PT' AND r.stage IN('IPO Submitted—Awaiting Accounts','Accounts Accepted—BOQ Issuance Pending')) ORDER BY r.id,CASE WHEN d.kind='IPO / PT' THEN 0 ELSE 1 END,d.created_at DESC",
@@ -313,17 +317,19 @@ export class AccountsRepository {
   }
   async job(actor: string, key: string) {
     await this.access(actor);
-    const irr = (
+    let irr = (
       await this.pool.query(
         "SELECT v.* FROM inventory_reports r JOIN LATERAL(SELECT * FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true WHERE r.job_key=$1 AND v.stage='Sent to Accounts'",
         [key],
       )
     ).rows[0];
-    if (!irr)
-      throw new HttpError(
-        409,
-        "Inventory reconciliation has not been received by Accounts.",
-      );
+    let qcSource=await qcMaterialHandoff(this.pool,key);
+    if(!irr){
+      if(!qcSource?.ready)throw new HttpError(409,qcSource?.holds.join('; ')||'Verified QC material usage has not been received by Accounts.');
+      key=qcSource.jobKey;
+      const source=await new InventoryRepository(this.pool).job(actor,key);
+      irr={id:null,snapshot:{jobId:source.jobId,title:source.title,entry:{start:'',end:qcSource.completedDate,panelCount:'',panelWattage:'',usage:{},extra:[],remarks:'QC verified material usage',expectedReturns:'',receivedReturns:''},reconciliation:{sections:[],net:'0',gst:'0',gross:'0'}}};
+    }else qcSource=null;
     let lines: any[], selling: string, basis: string;
     let phaseSelling: Record<string, string> = {};
     let agreedPv: ReturnType<typeof agreedBoqPvWatts> = null;
@@ -385,7 +391,7 @@ export class AccountsRepository {
         )
       ).rows[0];
       if (!b) throw new HttpError(409, "Saved BOQ budget unavailable.");
-      agreedPv = agreedBoqPvWatts({survey:b.snapshot.survey});
+      agreedPv = agreedBoqPvWatts({agreedWatts:b.snapshot.engineering?.pvWatts,survey:b.snapshot.survey});
       selling = i.snapshot.quotationType?.saleType === "Cash Deal" ? i.snapshot.allocation.total : i.snapshot.allocation.subtotal;
       if (i.snapshot.peachtree?.taxMode !== "Tax Included" || i.snapshot.quotationType?.saleType === "Cash Deal")
         phaseSelling = Object.fromEntries(
@@ -468,6 +474,9 @@ export class AccountsRepository {
     const frozenEvidence=history[0]&&['Awaiting Management','Closed'].includes(history[0].stage)
       &&Array.isArray(history[0].snapshot.evidence)?history[0].snapshot:undefined;
     return {
+      historicalEvidenceException: historicalClosureException(key),
+      qcMaterialSignature:qcSource?.signature??null,
+      qcMaterialSource:qcSource,
       agreedPv,
       configurationComparison,
       phaseCostComparison: phaseCostComparison(phasePeers.map(r=>r.snapshot)),
@@ -479,7 +488,7 @@ export class AccountsRepository {
       entry: irr.snapshot.entry,
       reconciliation: irr.snapshot.reconciliation,
       invoiceAdjustment: cableInvoiceAdjustment(irr.snapshot.reconciliation),
-      evidence: frozenEvidence?.evidence??currentEvidence.evidence,
+      evidence: frozenEvidence?[...frozenEvidence.evidence,...currentEvidence.evidence.filter((e:any)=>!frozenEvidence.evidence.some((v:any)=>v.id===e.id))]:currentEvidence.evidence,
       operationsEvidenceSignature: frozenEvidence?frozenEvidence.operationsEvidenceSignature??null:currentEvidence.operationsEvidenceSignature,
       operationsEvidenceSource: frozenEvidence?frozenEvidence.operationsEvidenceSource??null:currentEvidence.operationsEvidenceSource,
       operationsEvidenceHold: currentEvidence.operationsEvidenceHold,
@@ -508,9 +517,9 @@ export class AccountsRepository {
   }
   async operationsEvidenceFile(actor:string,key:string,version:number,id:string){
     await this.access(actor);
-    if(!/^ipo:[0-9a-f-]{36}$/.test(key))throw new HttpError(404,'Evidence not found.');
+    if(!/^(?:ipo:[0-9a-f-]{36}|ubl:\d+)$/.test(key))throw new HttpError(404,'Evidence not found.');
     // Receiving this exact job's approved Inventory report establishes Accounts scope.
-    if(!(await this.pool.query("SELECT 1 FROM inventory_reports r JOIN LATERAL(SELECT stage FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true WHERE r.job_key=$1 AND v.stage='Sent to Accounts'",[key])).rowCount)throw new HttpError(404,'Evidence not found.');
+    if(!(await this.pool.query("SELECT 1 FROM inventory_reports r JOIN LATERAL(SELECT stage FROM inventory_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)v ON true WHERE r.job_key=$1 AND v.stage='Sent to Accounts'",[key])).rowCount&&!(await qcMaterialHandoff(this.pool,key))?.ready)throw new HttpError(404,'Evidence not found.');
     const projection=await projectOperationsClosureEvidence(this.pool,key);
     let reference=projection.evidence.find(file=>file.source.version===version&&file.id===id)?.source;
     if(!reference){
@@ -530,6 +539,7 @@ export class AccountsRepository {
     filename: string,
     mime: string,
     base64: string,
+    kind: string = "PT costing screenshot",
   ) {
     await this.access(actor);
     const jobs = await new InventoryRepository(this.pool).jobs(actor);
@@ -541,8 +551,10 @@ export class AccountsRepository {
         [key],
       )
     ).rows[0];
-    if (["Awaiting Management", "Closed"].includes(latest?.stage))
+    if (["Awaiting Management", "Closed"].includes(latest?.stage)&&!historicalClosureException(key))
       throw new HttpError(409, "Submitted closure evidence is read-only.");
+    if(kind!=='PT costing screenshot'&&(!historicalClosureException(key)||!['Signed DO','Variable items sign-off','Client acknowledgment','Site photographs'].includes(kind)))throw new HttpError(403,'Supplementary supporting documents are allowed only for the reviewed historical jobs.');
+    if(kind==='Site photographs'&&!['image/png','image/jpeg'].includes(mime))throw new HttpError(400,'Site photographs must be PNG or JPEG images.');
     const bytes = Buffer.from(base64, "base64");
     const signature =
       mime === "image/png"
@@ -557,10 +569,10 @@ export class AccountsRepository {
       await this.access(actor,c);
       await c.query("SELECT pg_advisory_xact_lock(hashtext($1))",['closure:'+key]);
       const current=(await c.query('SELECT stage FROM accounts_active_job_closures WHERE job_key=$1 ORDER BY version DESC LIMIT 1',[key])).rows[0];
-      if(['Awaiting Management','Closed'].includes(current?.stage))throw new HttpError(409,'Submitted closure evidence is read-only.');
+      if(['Awaiting Management','Closed'].includes(current?.stage)&&!historicalClosureException(key))throw new HttpError(409,'Submitted closure evidence is read-only.');
       const id = randomUUID();
     await c.query(
-      "INSERT INTO job_closure_evidence(id,job_key,kind,filename,media_type,content,sha256,created_by) VALUES($1,$2,'PT costing screenshot',$3,$4,$5,$6,$7)",
+      "INSERT INTO job_closure_evidence(id,job_key,kind,filename,media_type,content,sha256,created_by) VALUES($1,$2,$8,$3,$4,$5,$6,$7)",
       [
         id,
         key,
@@ -568,7 +580,7 @@ export class AccountsRepository {
         mime,
         bytes,
         createHash("sha256").update(bytes).digest("hex"),
-        actor,
+        actor,kind,
       ],
     );
     await c.query(
@@ -592,10 +604,8 @@ export class AccountsRepository {
     await this.access(actor);
     if(input.amendmentReason!==undefined)return this.amendSubmittedClosure(actor,input);
     const job = await this.job(actor, input.jobKey);
-    if(input.stage==='Awaiting Management'&&job.operationsEvidenceSource&&!job.operationsEvidenceSignature)
-      throw new HttpError(409,'The linked Operations QC handover is incomplete. Complete the customer sign-offs and site photograph evidence before submitting closure.');
-    if(input.stage==='Awaiting Management'&&(input.operationsEvidenceSignature??null)!==(job.operationsEvidenceSignature??null))
-      throw new HttpError(409,'QC handover evidence changed. Reload and review it before submitting closure.');
+    const historical=historicalClosureException(input.jobKey);
+    if(job.qcMaterialSignature&&(input.qcMaterialSignature??null)!==job.qcMaterialSignature)throw new HttpError(409,'QC material usage changed. Reopen and review the current material usage.');
     const keys = [...phases.slice(0, 5), ...epcNames];
     if (
       Object.keys(input.actual).some((k) => !phases.slice(0, 5).includes(k)) ||
@@ -638,16 +648,14 @@ export class AccountsRepository {
       input.stage === "Awaiting Management" &&
       (!financialComplete ||
         !input.remarks ||
-        !job.evidence.some((e: any) => e.kind === "Client acknowledgment") ||
-        !job.evidence.some((e: any) => e.kind === "Site photographs") ||
-        !job.evidence.some(
+        !historical&&!job.evidence.some(
           (e: any) =>
             e.kind === "PT costing screenshot" && e.id === input.ptAttachmentId,
         ))
     )
       throw new HttpError(
         400,
-        "Complete actual costs and remarks, attach the PT costing screenshot, and await client acknowledgment and site photographs from QC before submission.",
+        "Complete actual costs and remarks, and attach the final PT costing report before submission.",
       );
     const financialEpc = complete ? epcTotal : D(input.epcAggregate || "0");
     const actualTotal = phases
@@ -689,13 +697,14 @@ export class AccountsRepository {
           throw new HttpError(409, "Request key already used.");
         return old;
       }
-      await this.currentReport(c, input.jobKey, job.reportVersionId);
+      await this.currentReport(c, input.jobKey, job.reportVersionId,job.qcMaterialSignature);
       if(input.stage==='Awaiting Management'){
-        const currentEvidence=await this.evidenceBundle(actor,input.jobKey,c,true);
-        if(currentEvidence.operationsEvidenceSource&&!currentEvidence.operationsEvidenceSignature||currentEvidence.operationsEvidenceSignature!==job.operationsEvidenceSignature)
-          throw new HttpError(409,'QC handover evidence changed. Reload and review it before submitting closure.');
+        if (job.reportVersionId && !historical) {
+          const qc = await qcMaterialHandoff(c, input.jobKey);
+          if (qc && !qc.ready) throw new HttpError(409, qc.holds.join('; '));
+        }
         // A job marked recorded in PT before Inventory sent its reconciliation also counts.
-        const entered=(await c.query("SELECT p.id FROM accounts_pt_entries p JOIN inventory_report_versions v ON v.report_id=p.source_id AND v.version=p.source_version WHERE p.source_kind='Inventory' AND v.id=$1 UNION ALL SELECT id FROM accounts_job_pt_entries WHERE job_key=$2 AND report_version_id IS NULL",[job.reportVersionId,input.jobKey])).rows[0];
+        const entered=(await c.query("SELECT p.id FROM accounts_pt_entries p JOIN inventory_report_versions v ON v.report_id=p.source_id AND v.version=p.source_version WHERE p.source_kind='Inventory' AND v.id=$1 UNION ALL SELECT id FROM accounts_job_pt_entries WHERE job_key=$2 AND report_version_id IS NULL",[job.reportVersionId,input.jobKey])).rows[0]??(job.qcMaterialSource?(await c.query('SELECT id FROM accounts_job_pt_entries WHERE job_key=ANY($1::text[])',[[input.jobKey,...job.qcMaterialSource.aliases]])).rows[0]:null);
         if(!entered)throw new HttpError(409,'Record the current approved IRR and variable items in PT before submitting job closure.');
       }
       const latest = (
@@ -744,7 +753,7 @@ export class AccountsRepository {
       if(replay){if(replay.created_by!==actor||fingerprint(replay.snapshot.input)!==fingerprint(input))throw new HttpError(409,'Request key already used.');return replay;}
       const previous=(await c.query('SELECT * FROM accounts_active_job_closures WHERE job_key=$1 ORDER BY version DESC LIMIT 1',[input.jobKey])).rows[0];
       if(!previous||previous.stage!=='Awaiting Management'||previous.version!==input.version)throw new HttpError(409,'This closure changed or is already closed. Reload before editing.');
-      await this.currentReport(c,input.jobKey,previous.report_version_id);
+      await this.currentReport(c,input.jobKey,previous.report_version_id,previous.snapshot.qcMaterialSignature);
       const original=previous.snapshot.input??{};
       if(input.acknowledgment!==(original.acknowledgment??'')||input.photos!==(original.photos??'')||(input.ptAttachmentId??null)!==(original.ptAttachmentId??null)||(input.operationsEvidenceSignature??null)!==(previous.snapshot.operationsEvidenceSignature??null))throw new HttpError(409,'Submitted evidence must remain attached. Request a revision to replace signed evidence.');
       if(Object.keys(input.actual).some(k=>!phases.slice(0,5).includes(k))||Object.keys(input.epc).some(k=>!epcNames.includes(k)))throw new HttpError(400,'Choose the standard PT and EPC categories.');
@@ -835,7 +844,8 @@ export class AccountsRepository {
       return row;
     });
   }
-  private async currentReport(c: PoolClient, key: string, versionId: string) {
+  private async currentReport(c: PoolClient, key: string, versionId: string|null, materialSignature?:string|null) {
+    if(!versionId){const source=await qcMaterialHandoff(c,key);if(!source?.ready||source.signature!==materialSignature)throw new HttpError(409,'QC material usage changed or is incomplete. Reopen the job before continuing.');return;}
     await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["irr:" + key]);
     const row = (
       await c.query(
@@ -901,12 +911,7 @@ export class AccountsRepository {
           409,
           "Only the current submitted closure can be decided.",
         );
-      await this.currentReport(c, source.job_key, source.report_version_id);
-      if(input.decision==='Closed'&&source.snapshot.operationsEvidenceSignature){
-        const evidence=await this.evidenceBundle(actor,source.job_key,c,true);
-        if(evidence.operationsEvidenceSignature!==source.snapshot.operationsEvidenceSignature)
-          throw new HttpError(409,'QC handover evidence changed after submission. Return this closure for review before approval.');
-      }
+      await this.currentReport(c, source.job_key, source.report_version_id,source.snapshot.qcMaterialSignature);
       if (input.decision === "Closed" && !source.snapshot.complete)
         throw new HttpError(409, "Actual costs are incomplete.");
       const row = (

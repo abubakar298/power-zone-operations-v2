@@ -1,3 +1,4 @@
+import {requireUnarchivedQuotation} from '../commercial/archives.js';
 import {loadDocumentListMetadata} from '../documents/list-metadata.js';
 import {finalizeCustomerBoq} from '../boq/lifecycle.js';
 import {archivedDocumentIds} from '../maintenance/archived-documents.js';
@@ -101,7 +102,7 @@ export class CoordinatorRepository {
  SELECT i.id,'Operations issuance',i.number,i.snapshot->>'siteName','Complete Accounts and Operations handoff',i.created_at,'orders',NULL,NULL,i.id,NULL,i.snapshot->'customer'->>'name' FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE ($2 OR i.created_by=$1 OR s.created_by=$1) AND (NOT EXISTS(SELECT 1 FROM operations_boq_issuances o WHERE o.ipo_id=i.id) OR NOT EXISTS(SELECT 1 FROM ipo_accounts_handoffs h WHERE h.ipo_id=i.id))
  UNION ALL
  SELECT p.id,'C&I proposal',v.number,v.snapshot->>'siteName',CASE WHEN a.action='Revision requested' THEN 'Quotation changes requested' WHEN a.action='Approved' AND NOT EXISTS(SELECT 1 FROM quotation_dispatch_records d WHERE d.cni_version_id=v.id) THEN 'Approved quotation awaiting send' WHEN a.action='Approved' THEN 'Awaiting PO / sale confirmation' ELSE 'Awaiting quotation approval' END,COALESCE(a.created_at,v.created_at),'quotes',NULL,NULL,NULL,NULL,v.snapshot->'customer'->>'name'
- FROM cni_proposals p JOIN LATERAL(SELECT id,number,snapshot,created_at FROM cni_proposal_versions WHERE proposal_id=p.id ORDER BY version DESC LIMIT 1)v ON true LEFT JOIN LATERAL(SELECT action,created_at FROM cni_proposal_actions WHERE version_id=v.id ORDER BY created_at DESC,id DESC LIMIT 1)a ON true WHERE ($2 OR p.created_by=$1)
+ FROM cni_proposals p JOIN LATERAL(SELECT id,number,snapshot,created_at FROM cni_proposal_versions WHERE proposal_id=p.id ORDER BY version DESC LIMIT 1)v ON true LEFT JOIN LATERAL(SELECT action,created_at FROM cni_proposal_actions WHERE version_id=v.id ORDER BY created_at DESC,id DESC LIMIT 1)a ON true WHERE ($2 OR p.created_by=$1) AND NOT EXISTS(SELECT 1 FROM project_workflow_records w WHERE w.data->>'cniProposalId'=p.id::text AND w.stage IN('issued','order_exception'))
  )`;
     const result = (
       await this.pool.query(
@@ -361,6 +362,7 @@ export class CoordinatorRepository {
           throw new HttpError(409, "Choose the latest quotation.");
       }
       if (!q) throw new HttpError(404, "Quotation not found.");
+      await requireUnarchivedQuotation(c,input.quotationId??input.cniVersionId!);
       if (
         u.role === "Coordinator" &&
         (input.quotationId
@@ -438,6 +440,7 @@ export class CoordinatorRepository {
         ])
       ).rows[0];
       if (!q) throw new HttpError(404, "Quotation not found.");
+      await requireUnarchivedQuotation(c,quotationId);
       const management = ["Admin", "Management"].includes(u.role);
       // Authority derives only from the immutable saved pricing and quotation, never a client flag.
       const pricing=(await c.query('SELECT snapshot FROM commercial_pricing_versions WHERE id=$1',[q.pricing_id])).rows[0]?.snapshot;

@@ -549,7 +549,7 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
     await repo.recordPtEntry(users.Accounts,{...ptEntry,sourceId:linkedDraft.reportId,ptReference:'SIMULATION-linked-IRR'});
     const boardId='closure-bridge-'+randomUUID(),stamp='2026-10-27';
     await db.pool.query('INSERT INTO operations_board_sites(id,created_by) VALUES($1,$2)',[boardId,users.Admin]);
-    const files=await Promise.all(['acknowledgment','irr','variable','site-photo','corrected-photo'].map(async(name)=>{
+    const files=await Promise.all(['acknowledgment','irr','variable','site-photo','corrected-photo','signed-do'].map(async(name)=>{
       const id=randomUUID(),content=Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'),Buffer.from(name)]),sha=createHash('sha256').update(content).digest('hex');
       await db.pool.query('INSERT INTO operations_board_files(id,site_id,filename,media_type,sha256,content,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[id,boardId,name+'.png','image/png',sha,content,users.Admin]);
       return {id,name:name+'.png',mediaType:'image/png'};
@@ -563,12 +563,15 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
     const linkedPt=await repo.uploadEvidence(users.Accounts,linkedKey,'simulation-pt.png','image/png',Buffer.from('89504e470d0a1a0a','hex').toString('base64'));
     const pendingJob=await repo.job(users.Accounts,linkedKey);
     const linkedInput={jobKey:linkedKey,version:0,stage:'Awaiting Management' as const,actual:Object.fromEntries(phases.slice(0,5).map(p=>[p,pendingJob.budget[p]])),epc:{},epcAggregate:pendingJob.budget.EPC,remarks:'SIMULATION exact saved budget actuals',acknowledgment:'',photos:'',ptReference:'SIMULATION PT',ptAttachmentId:linkedPt.id,requestKey:randomUUID()};
-    await assert.rejects(repo.saveClosure(users.Accounts,linkedInput),/linked Operations QC handover is incomplete/);
+    assert.ok(pendingJob.operationsEvidenceHold,'Incomplete photographic handover remains visible but is not a closure gate.');
     const final={date:stamp,acknowledgement:files[0],irr:files[1],variableSignoff:files[2]},qc={civil:{date:stamp,evidence:files[3]},electrical:{date:stamp,evidence:files[3]},testing:{date:stamp,evidence:files[3]},signoff:final};
-    await board({...base,completed:true,qc});
+    await assert.rejects(repo.saveClosure(users.Accounts,linkedInput),/Signed DO pending/);
+    await db.pool.query('INSERT INTO operations_site_local_purchase_versions(site_id,version,snapshot,request_key,request_fingerprint,created_by) VALUES($1,1,$2,$3,$4,$5)',[boardId,{items:[],noWarehouseMaterials:true,destination:'Accounts',stockPosting:false},randomUUID(),'b'.repeat(64),users.Admin]);
+    const delivered={...base,completed:true,deliveries:[{deliveryDate:stamp,signedDo:files[5],materialPhoto:files[3],partial:false}]};
+    await board({...delivered,qc});
     const readyJob=await repo.job(users.Accounts,linkedKey);
     assert.ok(readyJob.operationsEvidenceSignature);
-    await assert.rejects(repo.saveClosure(users.Accounts,linkedInput),/QC handover evidence changed/,'A linked source signature cannot be omitted to bypass review.');
+    assert.ok(readyJob.evidence.length,'QC uploads remain available for invoicing and review.');
     const submittedLinked=await repo.saveClosure(users.Accounts,{...linkedInput,operationsEvidenceSignature:readyJob.operationsEvidenceSignature});
     const frozenPhoto=submittedLinked.snapshot.evidence.find((e:any)=>e.source?.purpose==='qc-photo');
     assert.equal(frozenPhoto.source.version,2);
@@ -602,18 +605,15 @@ test("Accounts closure freezes budgets and evidence, enforces Management approva
       if(role!=='Accounts')assert.equal((await request(mounted).get('/api/accounts-workspace/closure-queue').set('Cookie',cookies[role]).expect(200)).body.closures.find((row:any)=>row.job_key===linkedKey).snapshot.summary.actual,submittedLinked.snapshot.summary.actual);
     }
     assert.equal(JSON.stringify((await db.pool.query('SELECT snapshot FROM accounts_job_closures WHERE id=$1',[submittedLinked.id])).rows[0].snapshot),storedClosure,'Permission projections never mutate saved costs.');
-    await board({...base,completed:true,qc,documents:[{id:'tracking-only',label:'Originals',location:'Submitted to Accounts',date:stamp,evidence:[]}]});
+    await board({...delivered,qc,documents:[{id:'tracking-only',label:'Originals',location:'Submitted to Accounts',date:stamp,evidence:[]}]});
     const returnedLinked=await repo.decision(users.Management,{id:submittedLinked.id,version:1,decision:'Returned for Revision',notes:'SIMULATION review',requestKey:randomUUID()});
     const locationJob=await repo.job(users.Accounts,linkedKey);
     assert.equal(locationJob.operationsEvidenceSignature,readyJob.operationsEvidenceSignature,'Location-only source versions retain the reviewed signature.');
     const resubmittedLinked=await repo.saveClosure(users.Accounts,{...linkedInput,version:returnedLinked.version,operationsEvidenceSignature:locationJob.operationsEvidenceSignature,requestKey:randomUUID()});
-    await board({...base,completed:true,qc:{...qc,civil:{date:stamp,evidence:files[4]}}});
+    await board({...delivered,qc:{...qc,civil:{date:stamp,evidence:files[4]}}});
     assert.equal((await repo.job(users.Management,linkedKey)).evidence.find((e:any)=>e.source?.purpose==='qc-photo').id,files[3].id,'Submitted display retains frozen files even after correction.');
-    await assert.rejects(repo.decision(users.Management,{id:resubmittedLinked.id,version:resubmittedLinked.version,decision:'Closed',notes:'Stale review',requestKey:randomUUID()}),/QC handover evidence changed after submission/);
+    const linkedClosed=await repo.decision(users.Management,{id:resubmittedLinked.id,version:resubmittedLinked.version,decision:'Closed',notes:'Costs reviewed; photographs are separate invoicing evidence',requestKey:randomUUID()});
     assert.ok((await repo.operationsEvidenceFile(users.Accounts,linkedKey,3,files[3].id)).content.length,'Frozen old evidence remains scoped and readable.');
-    const correctedReturn=await repo.decision(users.Management,{id:resubmittedLinked.id,version:resubmittedLinked.version,decision:'Returned for Revision',notes:'Review corrected photograph',requestKey:randomUUID()});
-    const correctedJob=await repo.job(users.Accounts,linkedKey),correctedClosure=await repo.saveClosure(users.Accounts,{...linkedInput,version:correctedReturn.version,operationsEvidenceSignature:correctedJob.operationsEvidenceSignature,requestKey:randomUUID()});
-    const linkedClosed=await repo.decision(users.Management,{id:correctedClosure.id,version:correctedClosure.version,decision:'Closed',notes:'Corrected source reviewed',requestKey:randomUUID()});
     assert.equal(linkedClosed.stage,'Closed');
     // Sample archival is reversible and new real versions remain monotonic.
     await db.pool.query(

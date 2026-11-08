@@ -1,3 +1,5 @@
+import {historicalClosureException} from '../../shared/historical-closure-exceptions.js';
+import {qcMaterialHandoff,qcMaterialHandoffs} from './qc-material-handoff.js';
 import {accountsIpoLabel} from '../../shared/accounts-site-reference.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
@@ -12,14 +14,81 @@ import {HttpError} from '../http/errors.js';
 /** One pending task per exact job, never a join by a shared PO or site name. */
 export async function materialCostingQueue(pool:Pool,actor:string){
  await new AccountsRepository(pool).access(actor);
- const [documents,reports,closures,entries,jobEntries]=await Promise.all([
-  customerDocuments(pool),new InventoryRepository(pool).list(actor),
+ const [documents, reports, closures, entries, jobEntries, ipoEntries, handoffs] = await Promise.all([
+  customerDocuments(pool), new InventoryRepository(pool).list(actor),
   pool.query('SELECT DISTINCT ON(job_key) job_key,stage FROM accounts_active_job_closures ORDER BY job_key,version DESC'),
-  pool.query("SELECT source_id,source_version,pt_reference FROM accounts_pt_entries WHERE source_kind='Inventory'"),
-  pool.query('SELECT job_key FROM accounts_job_pt_entries')
+  pool.query("SELECT source_id,source_version,pt_reference,entry_date::text AS entry_date,created_at FROM accounts_pt_entries WHERE source_kind='Inventory'"),
+  pool.query('SELECT job_key,site_id,report_version_id,pt_reference,entry_date::text AS entry_date,created_at,snapshot FROM accounts_job_pt_entries'),
+  pool.query("SELECT i.id,i.number,i.snapshot,p.created_at FROM accounts_pt_entries p JOIN internal_purchase_orders i ON i.id=p.source_id WHERE p.source_kind='IPO' AND p.source_version=1"),
+  qcMaterialHandoffs(pool),
  ]);
- return {rows:projectMaterialCostingQueue(documents.rows,reports,closures.rows,entries.rows,jobEntries.rows),stockPosting:false};
+ const rows = projectMaterialCostingQueue(documents.rows,reports,closures.rows,entries.rows,jobEntries.rows);
+ const recordedReports = reports.flatMap(report => {
+  const entry=entries.rows.find(p=>p.source_id===report.id&&p.source_version===report.version);
+  return entry&&!jobEntries.rows.some(p=>p.job_key===report.job_key)
+   ? [{...entry,job_key:report.job_key,report_version_id:report.id,snapshot:{siteName:report.site_name,ipo:report.job_id,customer:report.customer_code}}]
+   : [];
+ });
+ return {rows: routeMaterialCosting(rows, handoffs, closures.rows, [...jobEntries.rows,...recordedReports], ipoEntries.rows), stockPosting:false};
 }
+
+export function routeMaterialCosting(initial: any[], handoffs: Awaited<ReturnType<typeof qcMaterialHandoffs>>, closures: any[], jobEntries: any[], ipoEntries: any[]) {
+ const rows = new Map(initial.map(row => [row.key, row]));
+ const finalKeys = new Set(closures.filter(c => ['Closed','Awaiting Management'].includes(c.stage)).map(c => c.job_key));
+ const receivedIpos = new Map(ipoEntries.map(ipo => ['ipo:'+ipo.id, ipo]));
+ const recorded = new Map(jobEntries.map(pt => [pt.job_key, pt]));
+ const associated = new Set<string>();
+ const sourceCounts = new Map<string, number>();
+ for (const source of handoffs) sourceCounts.set(source.jobKey, (sourceCounts.get(source.jobKey) ?? 0) + 1);
+ for (const source of handoffs) {
+  const keys = [source.jobKey, ...source.aliases];
+  const entry = keys.map(key => recorded.get(key)).find(Boolean);
+  const existing = keys.map(key => rows.get(key)).find(Boolean);
+  keys.forEach(key => { rows.delete(key); associated.add(key); });
+  if (keys.some(key => finalKeys.has(key)) || (entry && (source.ready || entry.report_version_id && historicalClosureException(source.jobKey)))) continue;
+  const ipo = receivedIpos.get(source.jobKey);
+  if (!entry && !ipo && !existing?.report && source.jobKey.startsWith('ipo:')) continue;
+  if (!entry && !ipo && !existing && !source.ready) continue;
+  if (sourceCounts.get(source.jobKey)! > 1) {
+   rows.set(source.jobKey, {
+    key:source.jobKey,jobKey:source.jobKey,siteName:ipo?.snapshot.siteName??entry?.snapshot?.siteName??source.ipo,
+    ipo:ipo?.number??source.ipo,customer:source.customer,receivedAt:source.receivedAt,documents:[],report:null,
+    ptRecorded:!!entry,ptReference:entry?.pt_reference,ptDate:entry?.entry_date,canRecord:false,status:'Multiple Operations site links need review',
+   });
+   continue;
+  }
+  const currentReport = existing?.report;
+  const report = currentReport && (historicalClosureException(source.jobKey) ||
+   source.ready && currentReport.id===source.historicalReportId && currentReport.version===source.historicalReportVersion)
+   ? currentReport : null;
+  const canRecord = !entry && (source.ready || Boolean(report));
+  rows.set(source.jobKey, {
+   ...existing, key:source.jobKey,jobKey:source.jobKey,siteId:source.siteId,siteName:source.siteName,
+   ipo:source.ipo,customer:source.customer,receivedAt:source.receivedAt,documents:existing?.documents??[],
+   qcMaterialSource:source,report,canRecord,ptRecorded:!!entry,ptReference:entry?.pt_reference,ptDate:entry?.entry_date,
+   status:canRecord?'Ready for PT entry':source.holds.join('; ')||'QC material usage pending',
+  });
+ }
+ for (const [key, ipo] of receivedIpos) {
+  if (associated.has(key) || finalKeys.has(key) || recorded.has(key) || rows.has(key)) continue;
+  rows.set(key, {
+   key,jobKey:key,siteName:ipo.snapshot.siteName,ipo:ipo.number,customer:ipo.snapshot.customer?.name??'',
+   receivedAt:ipo.created_at,documents:[],report:null,canRecord:false,ptRecorded:false,status:'Awaiting QC delivery or material usage',
+  });
+ }
+ for (const pt of jobEntries) {
+  const key = pt.job_key;
+  if (associated.has(key) || finalKeys.has(key)) continue;
+  if (pt.report_version_id) continue;
+  rows.set(key, {
+   key,jobKey:key,siteId:pt.site_id??pt.snapshot?.siteId,siteName:pt.snapshot?.siteName??key,
+   ipo:pt.snapshot?.ipo??'',customer:pt.snapshot?.customer??'',receivedAt:pt.created_at,
+   documents:[],report:null,canRecord:false,ptRecorded:true,ptReference:pt.pt_reference,ptDate:pt.entry_date,status:'Approved site / material linkage needs review',
+  });
+ }
+ return [...rows.values()].sort((a,b)=>String(b.receivedAt).localeCompare(String(a.receivedAt))||a.key.localeCompare(b.key));
+}
+
 export function projectMaterialCostingQueue(documents:any[],reports:any[],closures:any[],entries:any[],jobEntries:any[]=[]){
  // A job marked as recorded in PT leaves this queue even before Inventory reconciles.
  const finished=new Set([...closures.filter(r=>['Closed','Awaiting Management'].includes(r.stage)).map(r=>r.job_key),...jobEntries.map(r=>r.job_key)]);
@@ -56,6 +125,9 @@ export async function markJobRecordedInPt(pool:Pool,actor:string,raw:unknown,now
   if((await c.query('SELECT 1 FROM accounts_job_pt_entries WHERE job_key=$1',[input.jobKey])).rowCount)throw new HttpError(409,'This job is already marked as recorded in PT.');
   const row=queue.rows.find(r=>r.key===input.jobKey);
   if(!row)throw new HttpError(409,'This job is no longer pending Material Costing & PT Entry. Refresh the queue.');
+  if(row.ptRecorded)throw new HttpError(409,'This job is already marked as recorded in PT.');
+  if(row.canRecord===false)throw new HttpError(409,row.status);
+  if(!row.report||row.qcMaterialSource?.historicalReportId===row.report.id&&!historicalClosureException(row.jobKey)){const qc=await qcMaterialHandoff(c,row.jobKey??input.jobKey);if(!qc?.ready)throw new HttpError(409,qc?.holds.join('; ')||'Complete the applicable QC material usage before recording PT.');if(row.qcMaterialSource&&qc.signature!==row.qcMaterialSource.signature)throw new HttpError(409,'QC material usage changed. Reopen the material usage before recording PT.');}
   // Use the reconciliation current at save time; a changed version needs a fresh review.
   const report=row.report?(await c.query("SELECT v.id,v.version,v.stage FROM inventory_report_versions v WHERE v.report_id=$1 ORDER BY v.version DESC LIMIT 1",[row.report.id])).rows[0]:undefined;
   if(row.report&&(report?.version!==row.report.version||report.stage!=='Sent to Accounts'))throw new HttpError(409,'Inventory changed this reconciliation. Reopen the material usage before marking PT.');

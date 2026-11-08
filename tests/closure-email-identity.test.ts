@@ -18,6 +18,9 @@ test('Closure notification emails show exact submitted IPO, site, customer and c
   await db.pool.query("INSERT INTO accounts_job_closures(id,job_key,report_version_id,version,stage,snapshot,request_key,created_by) VALUES($1,$2,$3,1,'Awaiting Management',$4,$5,$6)",[closure,'ubl:50',version,snapshot,randomUUID(),actor]);
   const repo=new NotificationsRepository(db.pool);await repo.sync();
   const n=(await db.pool.query("SELECT id,reference FROM notifications WHERE kind=$1 AND user_id=$2",['Closure approval required',manager])).rows[0];assert.ok(n);assert.equal(n.reference,'ubl:50');
+  const inbox=(await repo.list({id:manager,role:'Management',email:manager+'@example.test',display_name:'Management'},n.id))[0];
+  assert.match(inbox.reference,/CHP-320.*Adda Jahan Khan.*United Bank Limited.*35-30-40/);
+  assert.equal(inbox.source_key,undefined);
   await db.pool.query("UPDATE notification_email_queue SET next_attempt_at=now()+interval '1 day' WHERE id<>$1",[n.id]);
   let message:Message|undefined;
   await repo.deliverOne({configured:true,send:async m=>{message=m;return 'captured-only';}},'https://example.test');

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {projectMaterialCostingQueue} from '../server/accounts/material-costing.js';
+import {projectMaterialCostingQueue,routeMaterialCosting} from '../server/accounts/material-costing.js';
 import {historicalIssuedMaterials,additionalParentCables} from '../server/inventory/historical-qc-usage.js';
 test('documents and material statements form one task, completed PT and Management jobs leave the queue',()=>{
  const report={id:'r',job_key:'ubl:68',version:2,stage:'Sent to Accounts',site_name:'Jhudo',job_id:'CHP-294',customer_code:'UBL',created_at:'2026-11-01'};
@@ -30,4 +30,24 @@ test('historical linkage exposes issued quantities without seeding old usage, re
  for(const line of lines){assert.equal('used' in line,false);assert.equal('returned' in line,false);assert.equal('effectiveReturn' in line,false);}
  assert.equal(lines.some(l=>l.description==='Screw washer'),false,'Local purchase lines stay outside warehouse references');
  assert.deepEqual(historicalIssuedMaterials('CHP-345'),[],'Missing historical issues must not become invented BOQ issues');
+});
+
+test('routing retains existing PT, waits for QC, and never offers a second PT entry',()=>{
+ const base={siteId:'board',siteName:'Existing site',ipo:'CHP-5',customer:'UBL',ready:false,holds:['Parent DO variable usage pending'],signature:'sig',usage:[],localPurchases:[],completedDate:'',receivedAt:'2026-11-08',deliveryOnly:false,sources:{}};
+ const handoffs=[
+  {...base,jobKey:'ipo:one',aliases:['site:board']},
+  {...base,jobKey:'ipo:two',aliases:[],ready:true,holds:[]},
+  {...base,jobKey:'ipo:three',aliases:[],ready:true,holds:[]},
+ ];
+ const pt=[{job_key:'site:board'},{job_key:'ipo:two'},{job_key:'site:missing',snapshot:{siteName:'Unlinked site'}}];
+ const ipos=[{id:'four',number:'CHP-6',snapshot:{siteName:'IPO recorded in PT'},created_at:'2026-11-07'}];
+ const rows=routeMaterialCosting([],handoffs,[],pt,ipos);
+ assert.equal(rows.find(r=>r.key==='ipo:one')?.status,'Parent DO variable usage pending');
+ assert.equal(rows.find(r=>r.key==='ipo:one')?.ptRecorded,true);
+ assert.equal(rows.find(r=>r.key==='ipo:one')?.canRecord,false);
+ assert.ok(!rows.some(r=>r.key==='ipo:two'),'Ready with material PT belongs in closure');
+ assert.ok(!rows.some(r=>r.key==='ipo:three'),'IPO still unrecorded belongs in IPOs Received');
+ assert.equal(rows.find(r=>r.key==='ipo:four')?.status,'Awaiting QC delivery or material usage');
+ assert.equal(rows.find(r=>r.key==='site:missing')?.status,'Approved site / material linkage needs review');
+ assert.ok(!routeMaterialCosting([],handoffs,[{job_key:'ipo:one',stage:'Closed'}],pt,ipos).some(r=>r.key==='ipo:one'));
 });

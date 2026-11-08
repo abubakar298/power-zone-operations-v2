@@ -4,39 +4,18 @@ import {Decimal} from 'decimal.js';
 import {DocumentListDetails} from './DocumentListDetails.js';
 import { Button } from "../ui/Button.js";
 
-function HeadsupStatus({ record }: { record: any }) {
-  const data = record.data;
-  if (!data.headsupReceived)
-    return <span className="pz-caption">Awaiting customer response</span>;
-  return (
-    <div className="pz-followup-status">
-      <span className="pz-headsup-tag">Heads-up Received</span>
-      {data.headsupSolution && (
-        <span className="pz-caption">{data.headsupSolution}</span>
-      )}
-      {data.headsupDate && (
-        <span className="pz-caption">
-          {new Date(data.headsupDate).toLocaleDateString("en-PK", {
-            timeZone: "Asia/Karachi",
-          })}
-        </span>
-      )}
-      {data.advanceBoqSent && (
-        <span className="pz-caption">Advance BOQ Sent</span>
-      )}
-    </div>
-  );
-}
+type FollowupActions = {
+  onOpen: (record: any) => void;
+  onRevise: (record: any) => void;
+  onConfirmSale: (record: any) => void;
+};
 
 function SitesTable({
   records,
   onOpen,
   onRevise,
-}: {
-  records: any[];
-  onOpen: (id: string) => void;
-  onRevise?: (record: any) => void;
-}) {
+  onConfirmSale,
+}: { records: any[] } & FollowupActions) {
   return (
     <div className="pz-table-scroll">
       <table className="pz-table pz-followup-table">
@@ -45,44 +24,41 @@ function SitesTable({
             <th>Customer</th>
             <th>Site / Branch code</th>
             <th>Document</th>
-            <th>Customer response</th>
             <th>Action</th>
           </tr>
         </thead>
         <PagedTableBody label="records">
-          {recentFirst(records).map((record) => (
-            <tr key={record.id}>
-              <td>
-                {record.customer}
-                <span className="pz-followup-secondary">
-                  {record.customerCode}
-                </span>
-              </td>
-              <td>
-                {record.site}
-                <span className="pz-followup-secondary">
-                  {record.siteCode || "Branch code not entered"}
-                </span>
-              </td>
-              <td>
-                {record.route === "survey-framework"
-                  ? "Pre-agreed Survey"
-                  : "Quotation"}
-                <span className="pz-followup-secondary">
-                  {record.routeLabel}
-                </span><DocumentListDetails record={record}/>
-              </td>
-              <td>
-                <HeadsupStatus record={record} />
-              </td>
-              <td style={{verticalAlign:"top"}}>
-                <div className="pz-action-row pz-quotation-revision-actions"><Button variant="secondary" onClick={() => onOpen(record.id)}>
-                  Review
-                </Button>
-                {onRevise&&(record.quotation?.id||record.sourceQuotationId||record.route==="survey-framework")&&<Button variant="secondary" onClick={()=>onRevise(record)}>Create Revision</Button>}</div>
-              </td>
-            </tr>
-          ))}
+          {recentFirst(records).map((record) => {
+            const cni = record.legacyTask?.kind === "C&I proposal";
+            const canRevise = cni || record.quotation?.id || record.sourceQuotationId || record.route === "survey-framework";
+            const canConfirm = record.legacyTask
+              ? cni || (record.legacyTask.kind === "Sale confirmation" && Boolean(record.legacyTask.boq_revision_id))
+              : record.route === "survey-framework" || Boolean(record.quotation?.id);
+            return (
+              <tr key={record.id}>
+                <td>{record.customer}<span className="pz-followup-secondary">{record.customerCode}</span></td>
+                <td>{record.site}<span className="pz-followup-secondary">{record.siteCode || "Branch code not entered"}</span></td>
+                <td>
+                  {record.route === "survey-framework" ? "Pre-agreed Survey" : record.quotation?.number || record.legacyTask?.number || "Quotation"}
+                  <span className="pz-followup-secondary">{record.routeLabel}</span>
+                  <DocumentListDetails record={record}/>
+                  {record.data.headsupReceived && <span className="pz-headsup-tag">Heads-up Received</span>}
+                </td>
+                <td>
+                  <div className="pz-action-row pz-quotation-revision-actions">
+                    <Button variant="secondary" onClick={() => onOpen(record)}>Review</Button>
+                    <Button variant="secondary" disabled={!canRevise} onClick={() => onRevise(record)}>Revise</Button>
+                    <Button variant="secondary" disabled={!canConfirm} onClick={() => onConfirmSale(record)}>Confirm Sale</Button>
+                  </div>
+                  {!canConfirm && (
+                    <span className="pz-followup-secondary">
+                      No approved quotation or configuration is linked.
+                    </span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </PagedTableBody>
       </table>
     </div>
@@ -92,14 +68,8 @@ function SitesTable({
 export function CustomerFollowupList({
   records,
   groups,
-  onOpen,
-  onRevise,
-}: {
-  records: any[];
-  groups: any[];
-  onOpen: (id: string) => void;
-  onRevise?: (record: any) => void;
-}) {
+  ...actions
+}: { records: any[]; groups: any[] } & FollowupActions) {
   const count =
     records.length +
     groups.reduce((total, group) => total + group.sites.length, 0);
@@ -116,7 +86,7 @@ export function CustomerFollowupList({
           </span>
         </div>
         {records.length ? (
-          <SitesTable records={records} onOpen={onOpen} onRevise={onRevise} />
+          <SitesTable records={records} {...actions} />
         ) : (
           <p className="pz-caption">No individual sites match these filters.</p>
         )}
@@ -142,7 +112,7 @@ export function CustomerFollowupList({
                 {group.sites.length} site{group.sites.length === 1 ? "" : "s"}
               </span>
             </summary>
-            <SitesTable records={group.sites} onOpen={onOpen} onRevise={onRevise} />
+            <SitesTable records={group.sites} {...actions} />
           </details>
         ))}
         {!groups.length && (

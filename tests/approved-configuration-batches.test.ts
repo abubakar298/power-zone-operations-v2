@@ -105,7 +105,14 @@ test("mixed approved Direct PO batch retains four distinct scopes under one cust
       requestKey: randomUUID(),
       fingerprint: preview.fingerprint,
       reviewed: true,
+      invoiceTermsBySite: Object.fromEntries(preview.records.map(row => [
+        row.id, row.framework.key === "20-20-30:Revised" ? "partial-delivery-and-completion" : "completion",
+      ])),
     };
+    await assert.rejects(
+      confirmConfigurationBatch(db.pool, actor, created.id, { ...command, invoiceTermsBySite: {} }),
+      /Confirm invoice terms for every site/,
+    );
     await confirmConfigurationBatch(db.pool, actor, created.id, command);
     await confirmConfigurationBatch(db.pool, actor, created.id, command);
     for (const [table, count] of [
@@ -131,6 +138,8 @@ test("mixed approved Direct PO batch retains four distinct scopes under one cust
       )
     ).rows;
     assert.equal(new Set(ipos.map((r) => r.customer_po_id)).size, 1);
+    for (const {snapshot} of ipos)
+      assert.equal(snapshot.input.invoiceTerms, command.invoiceTermsBySite[snapshot.workflowRecordId]);
     assert.equal(
       new Set(ipos.map((r) => r.snapshot.approvedCommercialSource.id)).size,
       4,

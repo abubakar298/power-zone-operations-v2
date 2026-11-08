@@ -1,3 +1,5 @@
+import {qcMaterialHandoff} from './qc-material-handoff.js';
+import {historicalClosureException} from '../../shared/historical-closure-exceptions.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
@@ -17,10 +19,15 @@ export async function recordPtEntry(pool:Pool,actor:string,input:z.infer<typeof 
    // Issued IPOs are immutable documents; each ID identifies version one.
    if(input.sourceVersion!==1)throw new HttpError(409,'Refresh the issued IPO before recording its PT entry.');
   }else{
-   const report=(await c.query('SELECT id FROM inventory_reports WHERE id=$1 FOR UPDATE',[input.sourceId])).rows[0];
+   const report=(await c.query('SELECT id,job_key FROM inventory_reports WHERE id=$1 FOR UPDATE',[input.sourceId])).rows[0];
    if(!report)throw new HttpError(404,'Inventory report not found.');
    const version=(await c.query('SELECT version,stage FROM inventory_report_versions WHERE report_id=$1 ORDER BY version DESC LIMIT 1',[input.sourceId])).rows[0];
    if(version?.stage!=='Sent to Accounts'||version.version!==input.sourceVersion)throw new HttpError(409,'Only the current Inventory-approved document sent to Accounts can be recorded in PT.');
+   const alreadyRecorded = (await c.query("SELECT 1 FROM accounts_pt_entries WHERE source_kind='Inventory' AND source_id=$1 AND source_version=$2",[input.sourceId,input.sourceVersion])).rowCount;
+   if(!alreadyRecorded&&!historicalClosureException(report.job_key)){
+    const qc=await qcMaterialHandoff(c,report.job_key);
+    if(qc&&!qc.ready)throw new HttpError(409,qc.holds.join('; '));
+   }
   }
   const old=(await c.query('SELECT *,entry_date::text AS entry_date FROM accounts_pt_entries WHERE source_kind=$1 AND source_id=$2 AND source_version=$3',[input.sourceKind,input.sourceId,input.sourceVersion])).rows[0];
   if(old){if(old.pt_reference===input.ptReference&&String(old.entry_date).slice(0,10)===input.entryDate&&old.notes===input.notes)return old;throw new HttpError(409,'This document version already has a PT entry.');}

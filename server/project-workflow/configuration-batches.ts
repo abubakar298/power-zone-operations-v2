@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
+import { ipoInvoiceTerms } from "../../shared/ipo-invoice-terms.js";
 import { Decimal } from "decimal.js";
 import type { Pool, PoolClient } from "pg";
 import { transaction } from "../db/transaction.js";
@@ -323,11 +324,12 @@ export async function configurationBatchPreview(
       : [];
   return { ...value, confirmed: !!confirmed, previews };
 }
-function receiptInput(b: any, r: any) {
+function receiptInput(b: any, r: any, invoiceTerms?: string) {
   return {
     reference: b.snapshot.po.reference,
     date: b.snapshot.po.date,
     evidenceId: b.evidence_id,
+    ...(invoiceTerms ? { invoiceTerms } : {}),
     basisType: "framework",
     frameworkId: r.framework.id,
     confirmationType: "Customer PO",
@@ -347,6 +349,7 @@ export async function confirmConfigurationBatch(
       requestKey: z.uuid(),
       fingerprint: z.string().length(64),
       reviewed: z.literal(true),
+      invoiceTermsBySite: z.record(z.uuid(), z.enum(ipoInvoiceTerms)).optional(),
     })
     .strict()
     .parse(raw);
@@ -382,6 +385,13 @@ export async function confirmConfigurationBatch(
         409,
         "A batch site changed. Preview and review the latest batch before issuing.",
       );
+    const invoiceTerms = input.invoiceTermsBySite;
+    if (invoiceTerms && (
+      Object.keys(invoiceTerms).length !== view.records.length ||
+      view.records.some(row => !Object.hasOwn(invoiceTerms, row.id))
+    )) {
+      throw new HttpError(422, "Confirm invoice terms for every site in this batch.");
+    }
     for (const row of view.records) {
       if (row.stage !== "po_receipt")
         throw new HttpError(
@@ -395,7 +405,7 @@ export async function confirmConfigurationBatch(
           version: row.version,
           requestKey: childKey(input.requestKey, view.records.indexOf(row)),
           action: "receipt",
-          input: receiptInput(b, row),
+          input: receiptInput(b, row, invoiceTerms?.[row.id]),
         },
         c,
       );
@@ -409,6 +419,7 @@ export async function confirmConfigurationBatch(
         {
           records: view.records.map((r) => r.id),
           reviewedFingerprint: view.fingerprint,
+          ...(invoiceTerms ? { invoiceTermsBySite: invoiceTerms } : {}),
         },
         actor,
       ],

@@ -17,7 +17,7 @@ import {transaction} from '../db/transaction.js';
 import {installationDocumentsAtKarachi} from './batch-documents.js';
 import {projectOriginals} from '../accounts/site-evidence.js';
 import {fileSchema,importSchema,movementSchema,commandSchema,vendorSchema,targetsSchema,batchSchema,batchDeleteSchema,type BatchInput,type BoardCommand,type BoardSite} from './schema.js';
-import {workflowSiteSchema,saveDispatchPlan,confirmDelivery,completeQcStage,completeUpsJob,currentStage,siteBucket as siteBucketForBatch,qcType as qcTypeForBatch,type WorkflowSite,type FileReference,type Entry} from './workflow.js';
+import {workflowSiteSchema,saveDispatchPlan,confirmDelivery,validCompletionDate,completeQcStage,completeUpsJob,currentStage,siteBucket as siteBucketForBatch,qcType as qcTypeForBatch,type WorkflowSite,type FileReference,type Entry} from './workflow.js';
 import type {z} from 'zod';
 
 type Access={qcDelegated?:boolean;name:string;kind:'owner'|'head'|'lead'|'qc'|'accounts';team:'central'|'south'|null};
@@ -370,7 +370,7 @@ export class OperationsBoardRepository{
      if(v.partial!==old.partial)throw new HttpError(422,'Record remaining material as a new delivery instead of changing a saved partial delivery.');
      const qcDates=[...Object.values(site.qc??{}),...(site.qcJob?[site.qcJob]:[])].map(q=>q.date).sort();
      if(qcDates[0]&&v.deliveryDate>qcDates[0])throw new HttpError(422,'Delivery cannot be moved after a recorded QC stage.');
-     confirmDelivery({...site,stage:'awaiting',deliveries:site.deliveries?.slice(0,-1)},value,now);
+     validCompletionDate(value.deliveryDate,site.deliveries?.at(-2)?.deliveryDate,now);
      snapshot={...site,...value,deliveries:[...site.deliveries!.slice(0,-1),{...value,documentId:old.documentId}],documents:(site.documents??[]).map(d=>d.id===(old.documentId??old.signedDo.id)?{...d,evidence:[value.signedDo]}:d),accounts:site.accounts.map(e=>(old.documentId?e.documentId===old.documentId:Array.isArray(e.evidence)&&e.evidence.includes(old.signedDo.id))?{...e,deliveryDate:value.deliveryDate,evidence:[value.signedDo.id,value.materialPhoto.id],correctedAt:now}:e),history:[...site.history,{date:now,description:`${a.name} corrected the delivery. Reason: ${v.reason}`}]};
     }else snapshot=confirmDelivery(site,value,now);
     kind=v.partial?'Partial delivery update':site.invoiceOnDelivery?'Delivery invoice due':'Delivery update';audiences=['accounts'];
@@ -384,11 +384,13 @@ export class OperationsBoardRepository{
    }else if(v.action==='historical-evidence'){
     if(v.category==='handover'&&(!v.variableSignoffId&&!v.noVariableItemsUsed||!v.variableSignoffId&&!v.acknowledgementId))throw new HttpError(422,'Upload the available historical sign-off, or an acknowledgement confirming no variable items were used.');
     if(v.category==='handover'&&v.noVariableItemsUsed&&v.variableSignoffId)throw new HttpError(422,'Choose no variable items used or a sign-off, not both.');
-    const ids=v.category==='delivery'?[v.signedDoId,...(v.materialPhotoId?[v.materialPhotoId]:[])]:[...(v.acknowledgementId?[v.acknowledgementId]:[]),...(v.irrId?[v.irrId]:[]),...(v.variableSignoffId?[v.variableSignoffId]:[])];
+    const ids=v.category==='delivery'?[v.signedDoId,...(v.materialPhotoId?[v.materialPhotoId]:[])]:[...(v.acknowledgementId?[v.acknowledgementId]:[]),...(v.irrId?[v.irrId]:[]),...(v.variableSignoffId?[v.variableSignoffId]:[]),...(v.photographIds??[])];
     if(ids.some(id=>!id))throw new HttpError(422,v.category==='delivery'?'Upload the signed DO.':'Upload the acknowledgement and variable-items sign-off.');
     const files=await this.references(c,id,ids as string[]),references=(ids as string[]).map(file=>files.get(file)!);
     if(v.category==='delivery'&&references[1]&&!references[1].mediaType.startsWith('image/'))throw new HttpError(422,'Upload a photo of the delivered material.');
-    snapshot=attachHistoricalEvidence(site,{category:v.category,date:v.date,files:references,...v.category==='handover'?{completionEvidenceVersion:2,acknowledgement:files.get(v.acknowledgementId!),irr:v.irrId?files.get(v.irrId):undefined,variableSignoff:v.variableSignoffId?files.get(v.variableSignoffId):undefined,noVariableItemsUsed:v.noVariableItemsUsed}:{}},now,v.edit);kind='Existing site evidence recorded';audiences=['accounts'];
+    if(v.category==='delivery'&&v.photographIds?.length)throw new HttpError(422,'Attach site photographs to installation handover.');
+    if((v.photographIds??[]).some(photo=>!files.get(photo)?.mediaType.startsWith('image/')||[v.acknowledgementId,v.irrId,v.variableSignoffId].includes(photo)))throw new HttpError(422,'Choose distinct site photographs, separate from signed documents.');
+    snapshot=attachHistoricalEvidence(site,{category:v.category,date:v.date,files:references,...v.category==='handover'?{completionEvidenceVersion:2,acknowledgement:files.get(v.acknowledgementId!),irr:v.irrId?files.get(v.irrId):undefined,variableSignoff:v.variableSignoffId?files.get(v.variableSignoffId):undefined,noVariableItemsUsed:v.noVariableItemsUsed,photographs:(v.photographIds??[]).map(photo=>files.get(photo)!)}:{}},now,v.edit);kind='Existing site evidence recorded';audiences=['accounts'];
    }else if(v.action==='blocker'){
     if(v.edit)throw new HttpError(422,'Resolve the saved blocker or add a new reason.');
     const stage=currentStage(site);if(site.blockers.some(b=>b.status==='open'&&b.stage===stage&&b.reason===v.text))throw new HttpError(409,'This blocker reason is already recorded.');

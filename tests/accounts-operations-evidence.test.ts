@@ -61,3 +61,37 @@ test('Accounts reuses only exact linked completed Operations QC evidence, freeze
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM accounts_job_closures')).rows[0].n,0,'Projection never submits costing or invoices');
  }finally{await db.close();}
 });
+
+test('historical Solar closure shows exact-site typed DO, acknowledgement and photos without replaying milestones',async()=>{
+ const db=await testDatabase();try{
+  const {OperationsBoardRepository}=await import('../server/operations-board/repository.js');
+  const actor=randomUUID();await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[actor,actor+'@example.test','Rafiq fixture','Admin','isolated']);
+  const order=(await db.pool.query("SELECT site_id FROM ubl_site_orders WHERE legacy_ipo_number='288'")).rows[0];assert.ok(order);
+  const id='registered-UBL:SOLAR:288',key='ubl:'+order.site_id,repo=new OperationsBoardRepository(db.pool);
+  const original={id,ipo:'Wrong display label ignored',name:'Fictional exact legacy fixture',stage:'delivered' as const,installation:true,completed:true,projectType:'solar-bess' as const,operationsTeam:'central' as const,deliveryDate:'2026-01-01',accounts:[{id:'existing-handoff'}]};
+  await repo.importSource(actor,{sourceSha256:'c'.repeat(64),rows:[original]});
+  const file=async(name:string,type:'application/pdf'|'image/jpeg',bytes:Buffer)=>repo.upload(actor,id,{filename:name,mediaType:type,base64:bytes.toString('base64')});
+  const ack=await file('ack.pdf','application/pdf',Buffer.from('%PDF-1.7 acknowledgement')),vso=await file('vso.pdf','application/pdf',Buffer.from('%PDF-1.7 signoff')),signedDo=await file('do.pdf','application/pdf',Buffer.from('%PDF-1.7 signed DO')),photo=await file('installed.jpg','image/jpeg',Buffer.from([255,216,255,224,1,2,3]));
+  const base={action:'historical-evidence' as const,reason:'Entered by Rafiq from exact original site thread',requestKey:randomUUID(),edit:false,date:'2026-01-02'};
+  await repo.command(actor,id,{...base,version:1,category:'handover',acknowledgementId:ack.id,variableSignoffId:vso.id});
+  await repo.command(actor,id,{...base,requestKey:randomUUID(),version:2,category:'delivery',signedDoId:signedDo.id});
+  const partial=await projectOperationsClosureEvidence(db.pool,key);assert.equal(partial.evidence.length,3);assert.equal(partial.signature,null);assert.match(partial.hold!,/site photographs/);
+  assert.equal(partial.evidence.find(e=>e.kind==='Client acknowledgment')?.id,ack.id);
+  const saved=await repo.command(actor,id,{...base,requestKey:randomUUID(),version:3,edit:true,category:'handover',acknowledgementId:ack.id,variableSignoffId:vso.id,photographIds:[photo.id]});
+  assert.equal(saved.completed,true);assert.equal(saved.deliveryDate,original.deliveryDate);assert.deepEqual(saved.accounts,original.accounts);assert.equal(saved.qc,undefined);
+  const complete=await projectOperationsClosureEvidence(db.pool,key);assert.ok(complete.signature);assert.equal(complete.hold,undefined);assert.equal(complete.evidence.length,4);
+  const coordinator=randomUUID();await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[coordinator,coordinator+'@example.test','Coordinator fixture','Coordinator','isolated']);
+  const sample=(await createDashboardSamples(db.pool,coordinator,actor)).find((r:any)=>r.ipoId)!;
+  const nativeKey='ipo:'+sample.ipoId,reportId=randomUUID();
+  await db.pool.query('INSERT INTO inventory_reports(id,job_key,created_by) VALUES($1,$2,$3)',[reportId,nativeKey,actor]);
+  await db.pool.query('INSERT INTO inventory_report_versions(id,report_id,version,stage,snapshot,request_key,created_by) VALUES($1,$2,1,$3,$4,$5,$6)',[randomUUID(),reportId,'Sent to Accounts',{qcUsage:{boardId:id,source:'QC historical usage'}},randomUUID(),actor]);
+  const native=await projectOperationsClosureEvidence(db.pool,nativeKey);assert.ok(native.signature,'The exact approved historical QC report supplies the native IPO link without a display-name match');assert.equal(native.evidence.length,4);
+  assert.equal((await projectOperationsClosureEvidence(db.pool,'ipo:'+randomUUID())).source,null,'A different native job cannot borrow the historical report linkage');
+  const picture=complete.evidence.find(e=>e.kind==='Site photographs')!;assert.equal(picture.id,photo.id);assert.ok((await operationsClosureEvidenceFile(db.pool,key,picture.source)).content.length);
+  await assert.rejects(operationsClosureEvidenceFile(db.pool,'ubl:999999999',picture.source),/not found/);
+  await assert.rejects(repo.command(actor,id,{...base,requestKey:randomUUID(),version:4,edit:true,category:'handover',acknowledgementId:ack.id,variableSignoffId:vso.id,photographIds:[ack.id]}),/distinct site photographs/);
+  await assert.rejects(repo.command(actor,id,{...base,requestKey:randomUUID(),version:4,edit:true,category:'handover',acknowledgementId:ack.id,variableSignoffId:vso.id,photographIds:[signedDo.id]}),/distinct site photographs/);
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM accounts_job_closures')).rows[0].n,0);
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM job_closure_evidence')).rows[0].n,0);
+ }finally{await db.close();}
+});

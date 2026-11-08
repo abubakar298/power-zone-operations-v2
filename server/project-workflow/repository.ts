@@ -1,3 +1,4 @@
+import { ipoInvoiceTerms } from "../../shared/ipo-invoice-terms.js";
 import {ublPoConfigurations,ublPoConfigurationChange} from './ubl-po-configuration.js';
 import {queueIssuedPo,queueSharedIpo} from '../ipo-email/queue.js';
 import {sentSurveyAwaitingDesign} from '../../shared/sent-survey-requests.js';
@@ -74,6 +75,7 @@ import {
   receiptSchema,
 } from "./schema.js";
 import { designCalculation, frameworkBasis, quotationBasis } from "./basis.js";
+import { approvedCabinet, cabinetBasis } from "./cni-basis.js";
 const management = (role: string) => ["Admin", "Management"].includes(role);
 const uuid = (v: any) => z.uuid().parse(v);
 const saleFields = [
@@ -84,6 +86,7 @@ const saleFields = [
   "phone",
   "email",
   "billingAddress",
+  "deliveryAddress",
   "paymentContact",
   "paymentPhone",
   "paymentMode",
@@ -97,7 +100,7 @@ function saleInput(basis: any, received: any) {
   if(received.confirmationType==='Email approval'&&!/^MBL-UPS-6-(5|10)$/.test(basis.source?.key??''))
     throw new HttpError(422,'Email approval is available for Meezan Direct PO agreements only.');
   const sale = received.saleDetails ?? {};
-  if(sale.orderNumber&&!validOrderPosition(sale.orderNumber))throw new HttpError(422,'Enter the order unit and total, for example 20/60.');
+  if(sale.orderNumber&&basis.source.type!=="cni"&&!validOrderPosition(sale.orderNumber))throw new HttpError(422,'Enter the order unit and total, for example 20/60.');
   if (received.saleDetails) {
     if (
       !["PZES", "PZES (PVT Ltd)", "Energy Solutions"].includes(
@@ -121,6 +124,7 @@ function saleInput(basis: any, received: any) {
     ...Object.fromEntries(
       Object.entries(sale).filter(([key]) => saleFields.includes(key)),
     ),
+    ...(received.invoiceTerms ? { invoiceTerms: received.invoiceTerms } : {}),
     orderNumber: sale.orderNumber??basis.order.input.orderNumber??"",
     poNumber: received.saleDetails?.poNumber ?? (received.confirmationType === "Customer PO" ? received.reference : ""),
     ...(basis.order.allocation?.policy==="fixed-bank-ups"?{salesPerson:"Waqas ul Haq"}:{}),
@@ -405,7 +409,7 @@ export class ProjectWorkflowRepository {
       r.stage === "issued"
         ? (
             await c.query(
-              "SELECT q.number AS ipo_number,p.reference,p.input->>'date' AS po_date,i.created_at,h.ipo_id,i.operations_id FROM project_workflow_issuances i JOIN internal_purchase_orders q ON q.id=i.ipo_id JOIN project_po_receipts p ON p.id=i.receipt_id JOIN ipo_accounts_handoffs h ON h.ipo_id=i.ipo_id JOIN operations_boq_issuances o ON o.id=i.operations_id WHERE i.record_id=$1",
+              "SELECT q.number AS ipo_number,p.reference,p.input->>'date' AS po_date,i.created_at,i.ipo_id,i.operations_id FROM project_workflow_issuances i JOIN internal_purchase_orders q ON q.id=i.ipo_id JOIN project_po_receipts p ON p.id=i.receipt_id LEFT JOIN ipo_accounts_handoffs h ON h.ipo_id=i.ipo_id JOIN operations_boq_issuances o ON o.id=i.operations_id WHERE i.record_id=$1 AND (h.ipo_id IS NOT NULL OR q.snapshot#>>'{historicalImport,hideFromIpoShared}'='false')",
               [r.id],
             )
           ).rows[0]
@@ -530,6 +534,7 @@ export class ProjectWorkflowRepository {
             ?.receivedSolutionId ?? null,
         advanceBoqSent: headsup?.sent ?? false,
         ipoShared: !!shared,
+        historicalDelivered: Boolean(data.historicalImport?.deliveredBoardSiteId),
         ipoNumber: shared?.ipo_number ?? data.ipoNumber ?? null,
         sharedPoReference: shared?.reference ?? null,
         sharedPoDate: shared?.po_date ?? null,
@@ -580,6 +585,7 @@ export class ProjectWorkflowRepository {
         amendmentId: data.amendmentId ?? null,
         originalIpoReference: data.originalIpoReference ?? null,
         draftId: data.draftId ?? null,
+        cniProposalId: data.cniProposalId ?? null,
         originalOrderPreserved: data.originalOrderPreserved ?? false,
         legacyType: r.legacy_type,
         legacyId: r.legacy_id,
@@ -605,7 +611,7 @@ export class ProjectWorkflowRepository {
       throw new HttpError(403, "Team Tasks require Management permission.");
     const rows = (
       await this.pool.query(
-        `SELECT r.*,c.name AS customer,c.short_code,s.code AS canonical_site_code,p.display_name AS planner,t.display_name AS technical_owner,k.display_name AS coordinator FROM project_workflow_records r JOIN customers c ON c.id=r.customer_id LEFT JOIN sites s ON s.id=r.site_id LEFT JOIN users p ON p.id=r.planning_owner_id LEFT JOIN users t ON t.id=r.technical_owner_id JOIN users k ON k.id=r.coordinator_id WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND (a.records->'localPreviewDocumentIds' ? r.id::text)) AND r.legacy_type IS DISTINCT FROM 'ubl' AND r.data->>'bulkHistoricalImport' IS DISTINCT FROM 'true' AND (r.data->>'localPreviewArchived') IS DISTINCT FROM 'true' AND ($3<>'design' OR r.stage<>'request_review') AND ($2 OR CASE WHEN $3='design' THEN $4 OR r.planning_owner_id=$1 OR r.technical_owner_id=$1 OR r.data->'surveyTeam' ? $1::text ELSE r.coordinator_id=$1 END) ORDER BY r.updated_at DESC`,
+        `SELECT r.*,c.name AS customer,c.short_code,s.code AS canonical_site_code,p.display_name AS planner,t.display_name AS technical_owner,k.display_name AS coordinator FROM project_workflow_records r JOIN customers c ON c.id=r.customer_id LEFT JOIN sites s ON s.id=r.site_id LEFT JOIN users p ON p.id=r.planning_owner_id LEFT JOIN users t ON t.id=r.technical_owner_id JOIN users k ON k.id=r.coordinator_id WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND (a.records->'localPreviewDocumentIds' ? r.id::text)) AND r.legacy_type IS DISTINCT FROM 'ubl' AND (r.data->>'bulkHistoricalImport' IS DISTINCT FROM 'true' OR ($3='coordination' AND r.data#>>'{historicalImport,deliveredBoardSiteId}' IS NOT NULL)) AND (r.data->>'localPreviewArchived') IS DISTINCT FROM 'true' AND ($3<>'design' OR r.stage<>'request_review') AND (r.data->>'cniProposalId' IS NULL OR r.stage IN('issued','order_exception')) AND ($2 OR CASE WHEN $3='design' THEN $4 OR r.planning_owner_id=$1 OR r.technical_owner_id=$1 OR r.data->'surveyTeam' ? $1::text ELSE r.coordinator_id=$1 END) ORDER BY r.updated_at DESC`,
         [
           actor,
           scope === "team" && management(u.role),
@@ -1243,7 +1249,8 @@ export class ProjectWorkflowRepository {
       if (site.status !== "Active")
         throw new HttpError(409, "This site is inactive.");
       let siteChange: any;
-      if (input.siteId) {
+      // Direct PO evidence can describe this delivery without editing the branch register.
+      if (input.siteId && (input.route !== "direct-framework" || input.confirmSiteChange)) {
         const before = {
           name: site.name,
           code: site.code,
@@ -1533,7 +1540,7 @@ export class ProjectWorkflowRepository {
       if(v.action==='save-direct-po-details'){
         this.requireRole(u,['Coordinator']);requireStage(['po_receipt']);if(r.route!=='direct-framework'||r.data.basis?.source?.type!=='framework')throw new HttpError(422,'Use an approved Direct PO configuration.');
         const fields=z.object(Object.fromEntries(directPoFields.map(([key])=>[key,key==='poNumber'?z.string().trim().max(100).default(''):z.string().trim().max(key==='siteAddress'||key==='billingAddress'?1000:200)]))).strict();
-        const saved=z.object({evidenceId:z.uuid(),evidenceType:z.enum(['Customer PO','Email approval','WhatsApp approval']),extracted:fields,sourceText:z.string().max(150000).default('').transform(value=>value.replace(/\u0000/g,'').replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,'\uFFFD')),values:fields,notes:z.string().max(2000)}).strict().parse(input);
+        const saved=z.object({evidenceId:z.uuid(),evidenceType:z.enum(['Customer PO','Email approval','WhatsApp approval']),invoiceTerms:z.enum(ipoInvoiceTerms).optional(),extracted:fields,sourceText:z.string().max(150000).default('').transform(value=>value.replace(/\u0000/g,'').replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,'\uFFFD')),values:fields,notes:z.string().max(2000)}).strict().parse(input);
         await this.requireFile(c,r,saved.evidenceId,'PO / confirmation');
         if(saved.evidenceType==='Email approval'&&!/^MBL-UPS-/.test(data.basis?.source?.key??''))throw new HttpError(422,'Email approval is available for Meezan Direct PO agreements only.');
         if(saved.values.siteCode!==r.site_code)throw new HttpError(422,'The edited branch code must match this order site. Open a Direct PO for the correct branch.');
@@ -1544,7 +1551,7 @@ export class ProjectWorkflowRepository {
         const capacityIssues=directPoCapacityIssues(saved.sourceText,data.basis?.source?.key??'');if(capacityIssues.length)throw new HttpError(422,capacityIssues.join(' '));
         const previous=data.directPoDetails;
         const changes=directPoChanges(previous?.values??saved.extracted,saved.values);
-        data.directPoDetails={...saved,savedAt:new Date().toISOString(),savedBy:actor,history:[...(previous?.history??[]),{actor,actorName:u.display_name,at:new Date().toISOString(),evidenceId:saved.evidenceId,extracted:saved.extracted,changes}]};
+        data.directPoDetails={...saved,invoiceTerms:saved.invoiceTerms??previous?.invoiceTerms,savedAt:new Date().toISOString(),savedBy:actor,history:[...(previous?.history??[]),{actor,actorName:u.display_name,at:new Date().toISOString(),evidenceId:saved.evidenceId,extracted:saved.extracted,changes}]};
         reason='Direct PO evidence details saved'+(changes.length?': '+changes.map(x=>x.label).join(', '):' without corrections');
       } else if (v.action === "review-survey-handoff") {
         this.requireRole(u, ["Coordinator"]);
@@ -2819,7 +2826,11 @@ export class ProjectWorkflowRepository {
         if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);}
         await this.requireFile(c, r, received.evidenceId, "PO / confirmation");
         let basis: any;
-        if (received.basisType === "quotation") {
+        if (Boolean(data.cniProposalId) !== (received.basisType === "cni"))
+          throw new HttpError(422, "Confirm sale against the quotation linked to this project.");
+        if (received.basisType === "cni") {
+          basis = await cabinetBasis(c, r, uuid(received.cniVersionId), true);
+        } else if (received.basisType === "quotation") {
           const quote = uuid(received.quotationId);
           const own = (
             await c.query(
@@ -3196,8 +3207,9 @@ export class ProjectWorkflowRepository {
     basis: any,
     receipt: any,
     decisionId: string,
-    historical?:{kind:'verified-register-import';sourceId:string;sourceVersion:number;sourceSha256:string;sourceKey:string;importedBy:string;reason:string;hideFromIpoShared:true;sharedPoOrder?:string},
+    historical?:{kind:'verified-register-import';sourceId:string;sourceVersion:number;sourceSha256:string;sourceKey:string;importedBy:string;reason:string;hideFromIpoShared:boolean;sharedPoOrder?:string;deliveredBoardSiteId?:string;preparedBy?:string},
   ) {
+    const issuer = historical?.importedBy ?? r.coordinator_id;
     if(historical){const importer=(await c.query('SELECT active,role FROM users WHERE id=$1',[historical.importedBy])).rows[0];if(!importer?.active||!['Admin','Management'].includes(importer.role))throw new HttpError(403,'Historical IPO import requires active Management authorisation.');}
     const prior = (
       await c.query(
@@ -3248,6 +3260,7 @@ export class ProjectWorkflowRepository {
         originalHistoricalVersion: historical?.version ?? null,
         poReference: receipt.input.reference,
         poDate: receipt.input.date,
+        ...(receipt.input.invoiceTerms ? { invoiceTerms: receipt.input.invoiceTerms } : {}),
         evidenceId: receipt.input.evidenceId,
         approvedSource: basis.source,
         comparison: basis.comparison,
@@ -3308,12 +3321,12 @@ export class ProjectWorkflowRepository {
         "INSERT INTO survey_drafts(id,owner_id,inputs,base_revision_id,revision_reason,revision_origin) VALUES($1,$2,$3,$4,$5,'Internal management')",
         [
           draft,
-          r.coordinator_id,
+          issuer,
           basis.boq.survey,
           existing?.revision_id ?? null,
-          existing
-            ? "Approved framework issuance"
-            : "Initial approved framework",
+          basis.source.type === "cni"
+            ? "Approved cabinet quotation issuance"
+            : existing ? "Approved framework issuance" : "Initial approved framework",
         ],
       );
       const family = existing?.id ?? randomUUID(),
@@ -3335,8 +3348,8 @@ export class ProjectWorkflowRepository {
           revision,
           boqNumber,
           basis.boq,
-          r.coordinator_id,
-          "Approved framework version " + basis.source.version,
+          issuer,
+          (basis.source.type === "cni" ? "Approved cabinet quotation " + basis.source.key : "Approved framework version " + basis.source.version),
         ],
       );
       await c.query(
@@ -3357,6 +3370,7 @@ export class ProjectWorkflowRepository {
       );
     const input = {
       ...basis.order.input,
+      ...(receipt.input.invoiceTerms ? { invoiceTerms: receipt.input.invoiceTerms } : {}),
       poNumber:
         !historical && receipt.input.confirmationType && receipt.input.confirmationType !== "Customer PO"
           ? ""
@@ -3375,7 +3389,7 @@ export class ProjectWorkflowRepository {
       input,
       boqRevisionId: revisionId,
       boqNumber,
-      preparedBy: r.coordinator,
+      preparedBy: historical?.preparedBy ?? r.coordinator,
       checkedBy: r.coordinator,
       workflowRecordId: r.id,
       approvedCommercialSource: basis.source,
@@ -3396,7 +3410,7 @@ export class ProjectWorkflowRepository {
         r.customer_id,
         receipt.input.reference,
         configurationBatch?{...input,approvedConfigurationBatch:{id:configurationBatch.id,total:configurationBatch.snapshot.total,siteCount:configurationBatch.snapshot.sites.length}}:input,
-        r.coordinator_id,
+        issuer,
         historical?.sharedPoOrder??null,
       ],
     );
@@ -3410,7 +3424,7 @@ export class ProjectWorkflowRepository {
         snapshot,
         fingerprint(snapshot),
         randomUUID(),
-        r.coordinator_id,
+        issuer,
       ],
     );
     if(!historical)await c.query(
@@ -3450,7 +3464,7 @@ export class ProjectWorkflowRepository {
       deliveryAddress: input.deliveryAddress,
       items: this.materials(basis.boq),
       notes: receipt.input.notes,
-      issuedBy: r.coordinator,
+      issuedBy: historical?.preparedBy ?? r.coordinator,
       workflowRecordId: r.id,
       orderDecisionId: decisionId,
     };
@@ -3463,7 +3477,7 @@ export class ProjectWorkflowRepository {
         opsNumber,
         operations,
         randomUUID(),
-        r.coordinator_id,
+        issuer,
       ],
     );
     for (const [i, l] of operations.items.entries())
@@ -3627,8 +3641,12 @@ export class ProjectWorkflowRepository {
         409,
         "Only customer follow-up projects can be confirmed.",
       );
+    if (Boolean(r.data.cniProposalId) !== (received.basisType === "cni"))
+      throw new HttpError(422, "Confirm sale against the quotation linked to this project.");
     const basis =
-      received.basisType === "quotation"
+      received.basisType === "cni"
+        ? await cabinetBasis(this.pool, r, uuid(received.cniVersionId))
+        : received.basisType === "quotation"
         ? await quotationBasis(
             this.pool,
             this.pool,
@@ -3866,7 +3884,9 @@ export class ProjectWorkflowRepository {
       };
     }
     const basis =
-      input.kind !== "quotation" &&
+      input.kind === "cni"
+        ? await cabinetBasis(this.pool, r)
+        : input.kind !== "quotation" &&
       savedFrameworkSelected(r, input.frameworkId ?? r.framework_id)
         ? r.data.basis
         : input.kind === "quotation"
@@ -3964,6 +3984,58 @@ export class ProjectWorkflowRepository {
         )
       ).rows[0];
       return row;
+    });
+  }
+  async adoptCabinet(actor: string, input: unknown) {
+    const { proposalId } = z.object({ proposalId: z.uuid() }).strict().parse(input);
+    return transaction(this.pool, async (c) => {
+      const user = await this.user(actor, c);
+      this.requireRole(user, ["Coordinator"]);
+      await c.query("SELECT pg_advisory_xact_lock(742019066)");
+      const approved = await approvedCabinet(c, proposalId);
+      if (!management(user.role) && approved.owner !== actor)
+        throw new HttpError(404, "Cabinet quotation not available to your account.");
+      const existing = (await c.query(
+        "SELECT id, stage FROM project_workflow_records WHERE data->>'cniProposalId'=$1",
+        [proposalId],
+      )).rows[0];
+      if (existing) {
+        if (existing.stage === "issued") throw new HttpError(409, "This cabinet quotation already has an IPO.");
+        return { id: existing.id };
+      }
+      const { siteCode, siteName } = approved.snapshot;
+      if (!siteCode?.trim() || !siteName?.trim())
+        throw new HttpError(422, "The approved cabinet quotation needs a site name and code.");
+      const customerId = approved.customer_id;
+      await c.query("LOCK TABLE sites IN SHARE ROW EXCLUSIVE MODE");
+      const sites = (await c.query(
+        "SELECT id,code,status FROM sites WHERE customer_id=$1 AND lower(code)=lower($2)",
+        [customerId, siteCode],
+      )).rows;
+      if (sites.length > 1 || (sites[0] && sites[0].status !== "Active"))
+        throw new HttpError(409, "Review the cabinet quotation’s site code against the customer register.");
+      const active = (await c.query(
+        "SELECT 1 FROM project_workflow_records WHERE customer_id=$1 AND lower(site_code)=lower($2) AND stage NOT IN('issued','declined')",
+        [customerId, siteCode],
+      )).rowCount;
+      if (active) throw new HttpError(409, "This site already has another active project workflow.");
+      const siteId = sites[0]?.id ?? (await c.query(
+        `INSERT INTO sites(id,customer_id,name,code,status)
+         SELECT COALESCE(max(id),0)+1,$1,$2,$3,'Active' FROM sites RETURNING id`,
+        [customerId, siteName, siteCode],
+      )).rows[0].id;
+      const id = randomUUID();
+      const data = { cniProposalId: proposalId };
+      await c.query(
+        `INSERT INTO project_workflow_records(id,customer_id,site_id,site_name,site_code,region,route,stage,coordinator_id,data,request_key,created_by)
+         VALUES($1,$2,$3,$4,$5,'','quick-quote','customer_tracking',$6,$7,$8,$9)`,
+        [id, customerId, siteId, siteName, siteCode, approved.owner, data, randomUUID(), actor],
+      );
+      await c.query(
+        "INSERT INTO project_workflow_events(id,record_id,version,action,snapshot,request_key,input_fingerprint,created_by) VALUES($1,$2,1,$3,$4,$5,$6,$7)",
+        [randomUUID(), id, "Opened cabinet sale confirmation", { stage: "customer_tracking", data }, randomUUID(), fingerprint(data), actor],
+      );
+      return { id };
     });
   }
   async adopt(actor: string, input: any) {

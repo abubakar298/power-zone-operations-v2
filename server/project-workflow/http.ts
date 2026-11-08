@@ -104,6 +104,9 @@ export function projectWorkflowHttp(
   r.post("/frameworks", async (req, res) =>
     res.status(201).json(await repo.framework(actor(req), req.body)),
   );
+  r.post("/adopt-cabinet", async (req, res) =>
+    res.json(await repo.adoptCabinet(actor(req), req.body)),
+  );
   r.post("/adopt", async (req, res) =>
     res.json(await repo.adopt(actor(req), req.body)),
   );

@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
+import pg from 'pg';
 import {actors,login,seedQuote} from './release-fixtures.js';
 
 // WebKit honours upgrade-insecure-requests on loopback; this disposable HTTP fixture has no TLS.
@@ -25,6 +26,60 @@ test('approved CNI review exposes saved-version dispatch evidence and records se
  await form.getByRole('button',{name:'Dispatch Approved Quotation',exact:true}).click();await expect(form.getByRole('status')).toContainText('Marked sent to Salesperson');
  const record=(await(await page.request.get(`/api/coordinator/dispatch?cniVersionId=${saved.versionId}`)).json()).record;expect(record.cni_version_id).toBe(saved.versionId);
  const detail=await(await page.request.get(`/api/cni/${saved.id}`)).json();expect(detail.versions).toHaveLength(1);expect(detail.versions[0].snapshot).toEqual(saved.snapshot);
+ await page.goto('/dashboard#workspace=dashboard&page=PO+%2F+Confirmation+Receipt');
+ await expect(page.getByRole('heading',{name:'Customer Follow-up',exact:true,level:2})).toBeVisible();
+ const row=page.getByRole('row').filter({hasText:'CNI dispatch regression'});
+ await expect(row.getByRole('button',{name:'Confirm Sale',exact:true})).toBeEnabled();
+ await row.getByRole('button',{name:'Review',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Quotation Summary',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Back to Customer Follow-up',exact:true}).click();
+ await row.getByRole('button',{name:'Revise',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Revision Settings',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Save & send for approval',exact:true})).toBeEnabled();
+ await expect(page.getByLabel('Site / Project name',{exact:true})).toHaveValue('CNI dispatch regression');
+ await page.goto('/dashboard#workspace=dashboard&page=Customer+Decision+%26+Order+Tracking');
+ await row.getByRole('button',{name:'Confirm Sale',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Confirm Sale',exact:true})).toBeVisible();
+ await expect(page.getByLabel('Order number (optional)',{exact:true})).toHaveValue('');
+ await page.getByRole('combobox',{name:'Sale confirmation type',exact:true}).selectOption('WhatsApp approval');
+ await page.locator('input[type=file]').setInputFiles({name:'Customer approval.pdf',mimeType:'application/pdf',buffer:await pdf.body()});
+ await page.getByLabel('Approval evidence / verbal confirmation details',{exact:true}).fill('Customer approved the saved cabinet quotation.');
+ await page.getByLabel('Invoice terms',{exact:true}).selectOption('delivery');
+ const preview=page.waitForResponse(res=>res.url().endsWith('/sale-preview'));
+ await page.getByRole('button',{name:'Preview IPO & PT',exact:true}).click();
+ const previewResponse=await preview;expect(previewResponse.ok(),await previewResponse.text()).toBe(true);
+ await expect(page.getByRole('img',{name:'Draft IPO · page 1',exact:true})).toBeVisible();
+ await page.getByLabel('I reviewed the IPO and PT breakup for Accounts.',{exact:true}).check();
+ await page.getByLabel('Customer approved this exact quotation or pre-agreed configuration.',{exact:true}).check();
+ page.once('dialog',dialog=>dialog.accept());
+ const issued=page.waitForResponse(res=>res.url().endsWith('/actions')&&res.request().postDataJSON()?.action==='receipt');
+ await page.getByRole('button',{name:'Confirm Sale & Issue',exact:true}).click();
+ const issuedResponse=await issued;expect(issuedResponse.ok(),await issuedResponse.text()).toBe(true);
+ await expect(page.getByRole('heading',{name:'Customer Follow-up',exact:true,level:2})).toBeVisible();
+ await expect(row).toHaveCount(0);
+ const current=(await(await page.request.get(`/api/cni/${saved.id}`)).json()).versions;
+ expect(current[0].snapshot).toEqual(saved.snapshot);
+ const fixture=JSON.parse(await readFile(`.local/e2e-fixture-${process.env.PZ_E2E_PORT??'3180'}.json`,'utf8'));
+ expect(fixture.marker).toBe('power-zone-disposable-browser-fixture-v1');
+ expect(new URL(fixture.databaseUrl).hostname).toBe('127.0.0.1');
+ const db=new pg.Pool({connectionString:fixture.databaseUrl,max:1});
+ try{
+   const handoffs=(await db.query(`
+    SELECT i.snapshot, a.ipo_id AS accounts, o.snapshot AS operations, b.snapshot AS board
+      FROM internal_purchase_orders i JOIN ipo_accounts_handoffs a ON a.ipo_id=i.id
+      JOIN operations_boq_issuances o ON o.ipo_id=i.id
+      JOIN operations_board_versions b ON b.site_id='live-ipo:'||i.id::text
+     WHERE i.snapshot->>'cniVersionId'=$1`,[saved.versionId])).rows;
+   expect(handoffs).toHaveLength(1);
+   const handoff=handoffs[0];
+   expect(handoff.snapshot.input).toMatchObject({invoiceTerms:'delivery',orderNumber:''});
+   expect(handoff.snapshot.allocation.total).toBe(saved.snapshot.pricing.payable);
+   expect(handoff.snapshot.peachtree.phases).toEqual([expect.objectContaining({itemId:'CH-CNI-125-261'})]);
+   expect(handoff.operations.items).toEqual([expect.objectContaining({itemId:'CH-CNI-125-261',qty:'1'})]);
+   expect(handoff.board.installation).toBe(false);
+ }finally{await db.end();}
+
+
 });
 
 test('quotation PDF renders when newer JavaScript Promise helpers are unavailable and still downloads unchanged',async({page})=>{

@@ -6,6 +6,7 @@ import {awaitingClosures,pendingTechnicalPackages,pendingBoqReviews} from '../we
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {ClosureComparison} from '../web/components/ClosureComparison.js';
+import {ClosureCostTables} from '../web/components/ClosurePerformance.js';
 test('Empty Accounts draft costs remain visibly missing without a financial render error',()=>{
  const names=['Solar Panels','Structure','Inverter','Batteries','BMS','EPC'];
  const html=renderToStaticMarkup(createElement(ClosureComparison,{job:{selling:'1200',budget:Object.fromEntries(names.map(p=>[p,'100'])),phaseSelling:Object.fromEntries(names.map(p=>[p,'200']))},actual:{},epcAggregate:''}));
@@ -82,4 +83,28 @@ test('Closure per-watt figures use saved PV quantities, preserve totals and leav
  const total=html.split('<tfoot>')[1];assert.ok(total.includes('24,000.00'));assert.ok(total.includes('4.80 / W'));
  assert.equal(JSON.stringify(job),before);
  const absent=renderToStaticMarkup(createElement(ClosureComparison,{job:{...job,agreedPv:null},actual,epcAggregate:'4000'}));assert.ok(absent.includes('per-watt figures unavailable'));assert.ok(!absent.includes('/ W</small>'));
+});
+
+
+test('editable Accounts tables use the same EPC allocations and phase peer markup as the Management comparison',()=>{
+ const names=['Solar Panels','Structure','Inverter','Batteries','BMS','EPC'];
+ const epcBudget={'Electrical Labour':'10','Earthing Cost':'20',Deliveries:'30','Installation Cost':'40'};
+ const actual=Object.fromEntries(names.slice(0,5).map(p=>[p,'80'])),epc={'Electrical Labour':'8','Earthing Cost':'16',Deliveries:'24','Installation Cost':'32'};
+ const peers=phaseCostComparison([{summary:{actual:'480'},selling:'1200',phaseSelling:Object.fromEntries(names.map(p=>[p,'200'])),budget:{EPC:'100'},epcBudget,input:{actual,epc,epcAggregate:'80',epcDetails:true}}]);
+ const job={selling:'1200',budget:Object.fromEntries(names.map(p=>[p,'100'])),phaseSelling:Object.fromEntries(names.map(p=>[p,'200'])),epcBudget,phaseCostComparison:peers};
+ const props={job,actual,epc,epcAggregate:'80',details:true,readonly:false,onActual:()=>{},onEpc:()=>{},onAggregate:()=>{},onDetails:()=>{}};
+ const before=JSON.stringify(job),html=renderToStaticMarkup(createElement(ClosureCostTables,props));
+ assert.ok(!html.includes('Not available'));
+ for(const row of html.split('<tr').filter(r=>names.some(n=>r.includes('<th>'+n+'</th>'))||r.includes('<th>BESS subtotal</th>')))assert.ok(row.includes('150%'),row);
+ const electrical=html.split('<tr').find(r=>r.includes('<th>Electrical Labour</th>'))!;assert.ok(electrical.includes('100%'));assert.ok(electrical.includes('150%'));
+ assert.equal(JSON.stringify(job),before);
+ const missing=renderToStaticMarkup(createElement(ClosureCostTables,{...props,epc:{...epc,'Electrical Labour':''}}));assert.ok(missing.split('<tr').find(r=>r.includes('<th>Electrical Labour</th>'))!.includes('Not available'));
+ const noPeers=renderToStaticMarkup(createElement(ClosureCostTables,{...props,job:{...job,phaseCostComparison:phaseCostComparison([])}}));assert.ok(noPeers.includes('Not available'));
+ const zero=renderToStaticMarkup(createElement(ClosureCostTables,{...props,epc:{...epc,'Electrical Labour':'0'}}));const zeroRow=zero.split('<tr').find(r=>r.includes('<th>Electrical Labour</th>'))!;assert.ok(zeroRow.includes('value="0"'));assert.ok(!zeroRow.includes('NaN')&&!zeroRow.includes('Infinity'));
+});
+test('BESS comparison averages require complete per-job BESS costs and selling and preserve restricted-cost projection',async()=>{
+ const peer=(selling:string,cost:string)=>({summary:{actual:'100'},phaseSelling:{Inverter:selling,Batteries:selling,BMS:selling},input:{actual:{Inverter:cost,Batteries:cost,BMS:cost}}});
+ const peers=[peer('150','100'),peer('400','200'),{summary:{actual:'100'},phaseSelling:{Inverter:'500'},input:{actual:{Inverter:'10'}}}];
+ const r=phaseCostComparison(peers);assert.equal(r.phases.BESS.markupJobs,2);assert.equal(r.phases.BESS.averageActualMarkupPercent,'83.33');assert.equal(r.phases.BESS.averageActualCost,'450.00');
+ const {restrictedCostView}=await import('../server/http/cost-visibility.js');const hidden=restrictedCostView(r);assert.equal(hidden.phases.BESS.averageActualCost,null);assert.equal(hidden.phases.BESS.averageActualMarkupPercent,null);
 });
