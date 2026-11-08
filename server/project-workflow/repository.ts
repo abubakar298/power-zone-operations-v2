@@ -409,7 +409,7 @@ export class ProjectWorkflowRepository {
       r.stage === "issued"
         ? (
             await c.query(
-              "SELECT q.number AS ipo_number,p.reference,p.input->>'date' AS po_date,i.created_at,h.ipo_id,i.operations_id FROM project_workflow_issuances i JOIN internal_purchase_orders q ON q.id=i.ipo_id JOIN project_po_receipts p ON p.id=i.receipt_id JOIN ipo_accounts_handoffs h ON h.ipo_id=i.ipo_id JOIN operations_boq_issuances o ON o.id=i.operations_id WHERE i.record_id=$1",
+              "SELECT q.number AS ipo_number,p.reference,p.input->>'date' AS po_date,i.created_at,i.ipo_id,i.operations_id FROM project_workflow_issuances i JOIN internal_purchase_orders q ON q.id=i.ipo_id JOIN project_po_receipts p ON p.id=i.receipt_id LEFT JOIN ipo_accounts_handoffs h ON h.ipo_id=i.ipo_id JOIN operations_boq_issuances o ON o.id=i.operations_id WHERE i.record_id=$1 AND (h.ipo_id IS NOT NULL OR q.snapshot#>>'{historicalImport,hideFromIpoShared}'='false')",
               [r.id],
             )
           ).rows[0]
@@ -534,6 +534,7 @@ export class ProjectWorkflowRepository {
             ?.receivedSolutionId ?? null,
         advanceBoqSent: headsup?.sent ?? false,
         ipoShared: !!shared,
+        historicalDelivered: Boolean(data.historicalImport?.deliveredBoardSiteId),
         ipoNumber: shared?.ipo_number ?? data.ipoNumber ?? null,
         sharedPoReference: shared?.reference ?? null,
         sharedPoDate: shared?.po_date ?? null,
@@ -610,7 +611,7 @@ export class ProjectWorkflowRepository {
       throw new HttpError(403, "Team Tasks require Management permission.");
     const rows = (
       await this.pool.query(
-        `SELECT r.*,c.name AS customer,c.short_code,s.code AS canonical_site_code,p.display_name AS planner,t.display_name AS technical_owner,k.display_name AS coordinator FROM project_workflow_records r JOIN customers c ON c.id=r.customer_id LEFT JOIN sites s ON s.id=r.site_id LEFT JOIN users p ON p.id=r.planning_owner_id LEFT JOIN users t ON t.id=r.technical_owner_id JOIN users k ON k.id=r.coordinator_id WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND (a.records->'localPreviewDocumentIds' ? r.id::text)) AND r.legacy_type IS DISTINCT FROM 'ubl' AND r.data->>'bulkHistoricalImport' IS DISTINCT FROM 'true' AND (r.data->>'localPreviewArchived') IS DISTINCT FROM 'true' AND ($3<>'design' OR r.stage<>'request_review') AND (r.data->>'cniProposalId' IS NULL OR r.stage IN('issued','order_exception')) AND ($2 OR CASE WHEN $3='design' THEN $4 OR r.planning_owner_id=$1 OR r.technical_owner_id=$1 OR r.data->'surveyTeam' ? $1::text ELSE r.coordinator_id=$1 END) ORDER BY r.updated_at DESC`,
+        `SELECT r.*,c.name AS customer,c.short_code,s.code AS canonical_site_code,p.display_name AS planner,t.display_name AS technical_owner,k.display_name AS coordinator FROM project_workflow_records r JOIN customers c ON c.id=r.customer_id LEFT JOIN sites s ON s.id=r.site_id LEFT JOIN users p ON p.id=r.planning_owner_id LEFT JOIN users t ON t.id=r.technical_owner_id JOIN users k ON k.id=r.coordinator_id WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND (a.records->'localPreviewDocumentIds' ? r.id::text)) AND r.legacy_type IS DISTINCT FROM 'ubl' AND (r.data->>'bulkHistoricalImport' IS DISTINCT FROM 'true' OR ($3='coordination' AND r.data#>>'{historicalImport,deliveredBoardSiteId}' IS NOT NULL)) AND (r.data->>'localPreviewArchived') IS DISTINCT FROM 'true' AND ($3<>'design' OR r.stage<>'request_review') AND (r.data->>'cniProposalId' IS NULL OR r.stage IN('issued','order_exception')) AND ($2 OR CASE WHEN $3='design' THEN $4 OR r.planning_owner_id=$1 OR r.technical_owner_id=$1 OR r.data->'surveyTeam' ? $1::text ELSE r.coordinator_id=$1 END) ORDER BY r.updated_at DESC`,
         [
           actor,
           scope === "team" && management(u.role),
@@ -3206,8 +3207,9 @@ export class ProjectWorkflowRepository {
     basis: any,
     receipt: any,
     decisionId: string,
-    historical?:{kind:'verified-register-import';sourceId:string;sourceVersion:number;sourceSha256:string;sourceKey:string;importedBy:string;reason:string;hideFromIpoShared:true;sharedPoOrder?:string},
+    historical?:{kind:'verified-register-import';sourceId:string;sourceVersion:number;sourceSha256:string;sourceKey:string;importedBy:string;reason:string;hideFromIpoShared:boolean;sharedPoOrder?:string;deliveredBoardSiteId?:string;preparedBy?:string},
   ) {
+    const issuer = historical?.importedBy ?? r.coordinator_id;
     if(historical){const importer=(await c.query('SELECT active,role FROM users WHERE id=$1',[historical.importedBy])).rows[0];if(!importer?.active||!['Admin','Management'].includes(importer.role))throw new HttpError(403,'Historical IPO import requires active Management authorisation.');}
     const prior = (
       await c.query(
@@ -3319,7 +3321,7 @@ export class ProjectWorkflowRepository {
         "INSERT INTO survey_drafts(id,owner_id,inputs,base_revision_id,revision_reason,revision_origin) VALUES($1,$2,$3,$4,$5,'Internal management')",
         [
           draft,
-          r.coordinator_id,
+          issuer,
           basis.boq.survey,
           existing?.revision_id ?? null,
           basis.source.type === "cni"
@@ -3346,7 +3348,7 @@ export class ProjectWorkflowRepository {
           revision,
           boqNumber,
           basis.boq,
-          r.coordinator_id,
+          issuer,
           (basis.source.type === "cni" ? "Approved cabinet quotation " + basis.source.key : "Approved framework version " + basis.source.version),
         ],
       );
@@ -3387,7 +3389,7 @@ export class ProjectWorkflowRepository {
       input,
       boqRevisionId: revisionId,
       boqNumber,
-      preparedBy: r.coordinator,
+      preparedBy: historical?.preparedBy ?? r.coordinator,
       checkedBy: r.coordinator,
       workflowRecordId: r.id,
       approvedCommercialSource: basis.source,
@@ -3408,7 +3410,7 @@ export class ProjectWorkflowRepository {
         r.customer_id,
         receipt.input.reference,
         configurationBatch?{...input,approvedConfigurationBatch:{id:configurationBatch.id,total:configurationBatch.snapshot.total,siteCount:configurationBatch.snapshot.sites.length}}:input,
-        r.coordinator_id,
+        issuer,
         historical?.sharedPoOrder??null,
       ],
     );
@@ -3422,7 +3424,7 @@ export class ProjectWorkflowRepository {
         snapshot,
         fingerprint(snapshot),
         randomUUID(),
-        r.coordinator_id,
+        issuer,
       ],
     );
     if(!historical)await c.query(
@@ -3462,7 +3464,7 @@ export class ProjectWorkflowRepository {
       deliveryAddress: input.deliveryAddress,
       items: this.materials(basis.boq),
       notes: receipt.input.notes,
-      issuedBy: r.coordinator,
+      issuedBy: historical?.preparedBy ?? r.coordinator,
       workflowRecordId: r.id,
       orderDecisionId: decisionId,
     };
@@ -3475,7 +3477,7 @@ export class ProjectWorkflowRepository {
         opsNumber,
         operations,
         randomUUID(),
-        r.coordinator_id,
+        issuer,
       ],
     );
     for (const [i, l] of operations.items.entries())

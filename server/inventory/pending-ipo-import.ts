@@ -10,7 +10,7 @@ import {ProjectWorkflowRepository} from '../project-workflow/repository.js';
 import {frameworkBasis} from '../project-workflow/basis.js';
 import {linkMaterialSource} from './source-links.js';
 import {validOrderPosition} from '../../shared/direct-po-reading.js';
-const schema=z.object({boardSiteId:z.string().min(1).max(160),boardVersion:z.number().int().positive(),sourceVersion:z.number().int().positive(),frameworkId:z.uuid(),requestKey:z.uuid(),reason:z.string().trim().min(1).max(2000)}).strict();
+const schema=z.object({boardSiteId:z.string().min(1).max(160),boardVersion:z.number().int().positive(),sourceVersion:z.number().int().positive(),frameworkId:z.uuid(),requestKey:z.uuid(),reason:z.string().trim().min(1).max(2000),alreadyDelivered:z.literal(true).optional()}).strict();
 const sha=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const normalized=(v:unknown)=>String(v??'').trim().replace(/\s+/g,' ').toLowerCase();
 const date=z.iso.date();
@@ -27,6 +27,7 @@ export function historicalPoDate(value:unknown){
  */
 export async function importPendingIpo(pool:Pool,actor:string,raw:z.infer<typeof schema>,client?:PoolClient){
  const input=schema.parse(raw),repo=new ProjectWorkflowRepository(pool);
+ const delivered=input.alreadyDelivered===true;
  const execute=async(c:PoolClient)=>{
   await lockActiveActor(c,actor);
   const user=await repo.user(actor,c);if(!['Admin','Management'].includes(user.role))throw new HttpError(403,'Management authorisation is required for historical IPO imports.');
@@ -36,17 +37,29 @@ export async function importPendingIpo(pool:Pool,actor:string,raw:z.infer<typeof
   if(replay){if(replay.created_by!==actor||replay.request_sha256!==sha(input))throw new HttpError(409,'This request key belongs to another historical import.');return {ipoId:replay.ipo_id,recordId:replay.record_id,unchanged:true};}
   const source=(await c.query('SELECT id,version,source_sha256,snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0];
   if(!source||source.version!==input.sourceVersion)throw new HttpError(409,'The reviewed source register changed. Recheck the latest version.');
+  if(delivered)await c.query('SELECT id FROM operations_board_sites WHERE id=$1 FOR SHARE',[input.boardSiteId]);
   const board=(await c.query('SELECT version,snapshot FROM operations_board_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1',[input.boardSiteId])).rows[0];
   if(!board||board.version!==input.boardVersion)throw new HttpError(409,'The site positioning changed. Recheck the latest version.');
   const b=board.snapshot;
-  if(b.sample||b.completed||!['received','awaiting'].includes(b.stage))throw new HttpError(409,'Only original sites still pending delivery can be imported here.');
+  if(delivered){
+   if(b.sample||b.archived||b.superseded||b.cancelled||b.transferred||b.partial||!['delivered','completed'].includes(b.stage)||b.projectType!=='ups')
+    throw new HttpError(409,'Only active imported UPS sites with a recorded full delivery can use this backfill.');
+   const evidence=[...(b.deliveries??[]).map((d:any)=>d.signedDo?.id),b.documents?.find((d:any)=>d.id===input.boardSiteId+':historical-delivery-documents')?.evidence?.[0]?.id].filter(id=>z.uuid().safeParse(id).success);
+   if(!(await c.query('SELECT 1 FROM operations_board_files WHERE site_id=$1 AND id=ANY($2::uuid[])',[input.boardSiteId,evidence])).rowCount)
+    throw new HttpError(409,'Link the signed delivery DO for this exact site before importing its historical IPO.');
+   if(!(await c.query('SELECT 1 FROM accounts_job_pt_entries WHERE job_key=$1 AND site_id=$2',['site:'+input.boardSiteId,input.boardSiteId])).rowCount)
+    throw new HttpError(409,'This backfill requires an existing material PT entry for the exact site.');
+  }else if(b.sample||b.completed||!['received','awaiting'].includes(b.stage)){
+   throw new HttpError(409,'Only original sites still pending delivery can be imported here.');
+  }
   const candidates=source.snapshot.registers.flatMap((r:any)=>r.rows).filter((r:any)=>r.key===b.sourceKey);
   if(candidates.length!==1)throw new HttpError(409,'The source site identity is missing or ambiguous.');
   if(isArchivedLegacySolar(candidates[0]))throw new HttpError(409,'Archived legacy Solar sites cannot be imported as active IPOs.');
   const row=candidates[0],fullReturn=b.deliveryReturns?.at(-1)?.scope==='full'&&b.stage==='received'&&!b.deliveryDate&&!b.completed,bank=String(row.key).split(':')[0].toUpperCase();
   for(const field of ['cancelled','transferred','delivered','installed','canIssue'])if(row[field]!==undefined&&typeof row[field]!=='boolean')throw new HttpError(422,'Review the source status field '+field+' before importing.');
-  if(!['UBL','MBL'].includes(bank)||row.cancelled===true||row.transferred===true||row.delivered===true&&!fullReturn||row.installed===true||row.canIssue===false)throw new HttpError(409,'This source position is not an active pending-delivery order.');
+  if(!['UBL','MBL'].includes(bank)||row.cancelled===true||row.transferred===true||(!delivered&&(row.delivered===true&&!fullReturn||row.installed===true||row.canIssue===false)))throw new HttpError(409,'This source position is not an active pending-delivery order.');
   const po=z.string().trim().min(1).max(200).parse(row.po),poDate=historicalPoDate(row.poDate),number=z.string().trim().regex(/^CHP-\d+$/).parse(row.ipo),order=String(row.orderNumber??'').trim(),isUps=row.kind==='UPS';
+  if(delivered&&(!isUps||!(bank==='UBL'&&order.endsWith('/250')||bank==='MBL'&&order.endsWith('/60'))))throw new HttpError(409,'The site is outside the confirmed UPS backfill programmes.');
   if(poDate>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()))throw new HttpError(409,'The source PO date is in the future.');
   if(isUps&&!validOrderPosition(order))throw new HttpError(409,'A shared UPS IPO requires a valid distinct order number.');
   if(normalized(b.ipo)!==normalized(number+(order?' · '+order:''))||normalized(b.customerPo)!==normalized(po)||normalized(b.name)!==normalized(row.site))throw new HttpError(409,'The source IPO, order, PO and site must agree before import.');
@@ -67,16 +80,16 @@ export async function importPendingIpo(pool:Pool,actor:string,raw:z.infer<typeof
   const {r}=await repo.record(actor,created.id,c,true),basis=await frameworkBasis(pool,c,r,framework.id,{reference:po,date:poDate});
   if(row.grossContract==null||!new Decimal(row.grossContract).isFinite()||!new Decimal(row.grossContract).toDecimalPlaces(2).equals(new Decimal(basis.order.allocation.total).toDecimalPlaces(2)))throw new HttpError(409,'The source contract value differs from the approved framework. No IPO was imported.');
   basis.order.input.orderNumber=order;
-  const historical={kind:'verified-register-import' as const,sourceId:source.id,sourceVersion:source.version,sourceSha256:source.source_sha256,sourceKey:row.key,importedBy:actor,reason:input.reason,hideFromIpoShared:true as const,...(isUps?{sharedPoOrder:order}:{})};
+  const historical={kind:'verified-register-import' as const,sourceId:source.id,sourceVersion:source.version,sourceSha256:source.source_sha256,sourceKey:row.key,importedBy:actor,reason:input.reason,hideFromIpoShared:!delivered,...(delivered?{deliveredBoardSiteId:input.boardSiteId,preparedBy:'M. Rafiq'}:{}),...(isUps?{sharedPoOrder:order}:{})};
   const data={...r.data,basis,bulkHistoricalImport:true,historicalImport:historical,directPoDetails:{values:{orderNumber:order,siteName:r.site_name},source:'Historical source register',originalCustomerEvidenceUploaded:false}};
   const receiptId=randomUUID(),decisionId=randomUUID();
-  const receiptInput={reference:po,date:poDate,basisType:'framework',frameworkId:framework.id,ipoNumber:number,confirmationType:'Historical source register',evidenceId:null,reviewed:true,notes:input.reason+' Original customer PO scan not uploaded; source register provenance retained.',historicalImport:historical};
+  const receiptInput={reference:po,date:poDate,...(delivered?{invoiceTerms:bank==='UBL'?'advance-received-balance-at-completion':'completion'}:{}),basisType:'framework',frameworkId:framework.id,ipoNumber:number,confirmationType:'Historical source register',evidenceId:null,reviewed:true,notes:input.reason+' Original customer PO scan not uploaded; source register provenance retained.',historicalImport:historical};
   await c.query('INSERT INTO project_po_receipts(id,record_id,customer_id,reference,version,input,basis,differences,created_by) VALUES($1,$2,$3,$4,1,$5,$6,$7,$8)',[receiptId,r.id,r.customer_id,po,receiptInput,basis,[],actor]);
   await c.query("INSERT INTO project_order_decisions(id,receipt_id,record_id,outcome,reason,authorised_basis,created_by) VALUES($1,$2,$3,'Matched',$4,$5,$6)",[decisionId,receiptId,r.id,'Management-authorised register import; source contract equals approved configuration. Original PO upload remains absent.',basis,actor]);
   const issued=await repo.issue(c,user,r,data,basis,{id:receiptId,input:receiptInput},decisionId,historical);
   const savedData={...data,receiptId,ipoId:issued.ipo_id,operationsId:issued.operations_id};
   await c.query("UPDATE project_workflow_records SET stage='issued',version=version+1,data=$2,updated_at=now() WHERE id=$1",[r.id,savedData]);
-  await c.query('INSERT INTO project_workflow_events(id,record_id,version,action,snapshot,request_key,input_fingerprint,created_by) VALUES($1,$2,2,$3,$4,$5,$6,$7)',[randomUUID(),r.id,'Historical pending IPO imported',{stage:'issued',data:savedData},randomUUID(),sha(input),actor]);
+  await c.query('INSERT INTO project_workflow_events(id,record_id,version,action,snapshot,request_key,input_fingerprint,created_by) VALUES($1,$2,2,$3,$4,$5,$6,$7)',[randomUUID(),r.id,delivered?'Historical delivered UPS IPO imported':'Historical pending IPO imported',{stage:'issued',data:savedData},randomUUID(),sha(input),actor]);
   await c.query('INSERT INTO historical_pending_ipo_imports(id,board_site_id,board_version,accounts_source_id,source_key,source_sha256,source_row,framework_id,record_id,ipo_id,request_key,request_sha256,reason,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',[randomUUID(),input.boardSiteId,board.version,source.id,row.key,source.source_sha256,row,framework.id,r.id,issued.ipo_id,input.requestKey,sha(input),input.reason,actor]);
   await linkMaterialSource(pool,actor,{boardSiteId:input.boardSiteId,boardVersion:board.version,ipoId:issued.ipo_id,reason:'Historical import with exact register/IPO/order/PO/site identity. '+input.reason,requestKey:randomUUID()},c);
   await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'historical.pending-ipo.import:'+input.boardSiteId+':'+issued.ipo_id]);
