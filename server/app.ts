@@ -304,6 +304,9 @@ export function createApp(
     res.status(404).json({ message: "Endpoint not found." });
   });
   if (webDirectory) {
+    // Vite names every file in /assets after its content (e.g. App-DRZ4ujdI.js), so a new
+    // release always uses new names: browsers can keep these for a year without going stale.
+    app.use("/assets", express.static(resolve(webDirectory, "assets"), { index: false, maxAge: "1y", immutable: true }));
     app.use(express.static(webDirectory, { index: false, maxAge: "1h" }));
     app.get("/{*path}", (_req, res) => {
       res
