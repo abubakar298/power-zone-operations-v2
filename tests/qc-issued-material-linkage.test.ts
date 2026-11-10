@@ -124,3 +124,14 @@ test('New Fruit Market links only its five signed equipment lines and holds the 
  assert.match(issue.review!,/channel duct and 10 ft of flexible pipe/);
  assert.equal(historicalQcIssues(site,'CHP-338 · 23/60'),null);
 });
+
+test('later reviewed stock log issues stay exact to their IPO/order and preserve partial delivery holds',()=>{
+ const jaranwala=historicalQcIssues('registered-UBL:UPS:183/250','CHP-163 · 183/250')!;
+ assert.equal(jaranwala.lines.length,5);
+ assert.equal(jaranwala.lines.find(line=>line.itemId==='CH-BAT-LV-05 KW')?.issued,'2');
+ assert.equal(jaranwala.review,undefined);
+ assert.equal(historicalQcIssues('registered-UBL:UPS:183/250','CHP-163 · 185/250'),null);
+ const gojra=historicalQcIssues('registered-UBL:SOLAR:347','CHP-347')!;
+ assert.deepEqual(gojra.lines.map(line=>[line.reference,line.issued]),[['CPZ-DO-833','33']]);
+ assert.match(gojra.review!,/partial/);
+});

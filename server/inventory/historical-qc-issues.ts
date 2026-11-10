@@ -1,4 +1,5 @@
 import ledger from './approved-site-ledger.json' with {type:'json'};
+import {reviewedStockLogQcIssue} from './reviewed-stock-log-qc-issues.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 
 // The reviewed delivery orders refer to existing ledger events. An exact board
@@ -30,11 +31,20 @@ const links: Record<string, {ipo: string; orders: string[]; ledgerIdentity?: {ip
 const ipoKey = (label: string) => label.toUpperCase().replace(/[\s·()]/g,'');
 
 export function hasReviewedHistoricalIssues(boardId: string): boolean {
-  return Object.hasOwn(links,boardId);
+  return Object.hasOwn(links,boardId)||!!reviewedStockLogQcIssue(boardId);
 }
 
 export function historicalQcIssues(boardId: string, ipo: string) {
-  if(!hasReviewedHistoricalIssues(boardId))return null;
+  const later=reviewedStockLogQcIssue(boardId);
+  if(later){
+    if(ipoKey(ipo)!==ipoKey(later.ipo))return null;
+    const lines=later.items.map(([itemId,description,issued,unit='piece'],index)=>({
+      key:'chint-stock:'+later.document+':'+(later.firstRow+index),itemId,description,unit,issued,
+      reference:later.document,variable:materialDocumentPolicy({itemId,description}).variableDispatch,
+    }));
+    return {lines,signature:JSON.stringify(lines.map(line=>[line.key,line.issued])),review:later.review};
+  }
+  if(!Object.hasOwn(links,boardId))return null;
   const link=links[boardId];
   if(!link||ipoKey(ipo)!==ipoKey(link.ipo))return null;
   const events=ledger.events.filter(event=>event.kind==='issue'&&event.ipo===(link.ledgerIdentity?.ipo??link.ipo)&&(!link.ledgerIdentity||event.site===link.ledgerIdentity.site)&&link.orders.includes(event.document));
