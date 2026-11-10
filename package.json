@@ -27,7 +27,7 @@
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "jspdf": "^4.2.1",
-    "jspdf-autotable": "^5.0.8",
+    "jspdf-autotable": "^5.0.9",
     "pdfjs-dist": "^6.2.108",
     "pg": "^8.16.3",
     "react": "^19.1.1",
