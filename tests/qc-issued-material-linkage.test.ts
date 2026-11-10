@@ -115,3 +115,12 @@ test('reviewed pre-gate DO lines are available to QC only; warehouse gate state 
   for(const table of ['inventory_signed_dispatch_postings','inventory_warehouse_operational_movements'])assert.equal((await db.pool.query('SELECT 1 FROM '+table)).rowCount,0);
  }finally{await db.close();}
 });
+
+test('New Fruit Market links only its five signed equipment lines and holds the untraced handwritten items',()=>{
+ const site='registered-MBL:CHP-338:60-site order:22/60';
+ const issue=historicalQcIssues(site,'CHP-338 · 22/60')!;
+ assert.equal(issue.lines.length,5);
+ assert.ok(issue.lines.every(line=>line.reference==='DO808-KHI-BASELINE'&&line.issued==='1'));
+ assert.match(issue.review!,/channel duct and 10 ft of flexible pipe/);
+ assert.equal(historicalQcIssues(site,'CHP-338 · 23/60'),null);
+});

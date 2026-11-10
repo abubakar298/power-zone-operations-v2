@@ -3,8 +3,14 @@ import {materialDocumentPolicy} from '../../shared/material-documents.js';
 
 // The reviewed delivery orders refer to existing ledger events. An exact board
 // ID and IPO/order protect sites that share an IPO number.
-const links: Record<string, {ipo: string; orders: string[]; review?: string}> = {
+const links: Record<string, {ipo: string; orders: string[]; ledgerIdentity?: {ipo: string; site: string}; review?: string}> = {
   'live-ipo:ddb6711e-97b3-41a2-9994-22c768cf590c': {ipo:'CHP-338(20/60)',orders:['DO778-01','DO785-01']},
+  // CPZ-DO-808 names the exact IPO/order and confirms all five baseline rows.
+  'registered-MBL:CHP-338:60-site order:22/60': {
+    ipo:'CHP-338(22/60)',orders:['DO808-KHI-BASELINE'],
+    ledgerIdentity:{ipo:'',site:'MBL New Fruit Market Hyderabad'},
+    review:'CPZ-DO-808 includes two handwritten items absent from the warehouse issue record: 1 × 60×60 channel duct and 10 ft of flexible pipe. Confirm their source before verifying usage.',
+  },
   'registered-UBL:SOLAR:349': {ipo:'CHP-349',orders:['DO810'],review:'Confirm the remaining delivered materials against the signed DO. DO810 records the 49 panels only.'},
   'registered-UBL:UPS:117/250': {ipo:'CHP-163(117/250)',orders:['DO748-01']},
   'registered-UBL:UPS:143/250': {ipo:'CHP-163(143/250)',orders:['DO777-01']},
@@ -31,7 +37,7 @@ export function historicalQcIssues(boardId: string, ipo: string) {
   if(!hasReviewedHistoricalIssues(boardId))return null;
   const link=links[boardId];
   if(!link||ipoKey(ipo)!==ipoKey(link.ipo))return null;
-  const events=ledger.events.filter(event=>event.kind==='issue'&&event.ipo===link.ipo&&link.orders.includes(event.document));
+  const events=ledger.events.filter(event=>event.kind==='issue'&&event.ipo===(link.ledgerIdentity?.ipo??link.ipo)&&(!link.ledgerIdentity||event.site===link.ledgerIdentity.site)&&link.orders.includes(event.document));
   if(!link.orders.every(order=>events.some(event=>event.document===order)))return null;
   const lines=events.map(event=>({
     key:event.id,itemId:event.itemId,description:event.description,unit:event.unit,
