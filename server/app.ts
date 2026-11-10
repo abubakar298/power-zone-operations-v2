@@ -1,4 +1,5 @@
 import {equalSecrets} from './auth/crypto.js';
+import {slowRequestLog} from './http/slow-request-log.js';
 import {materialReplacementHttp} from './inventory/material-replacement-http.js';
 import {warehouseTransferHttp} from './inventory/warehouse-transfer-http.js';
 import {GatePassRepository} from './inventory/gate-passes.js';
@@ -107,6 +108,8 @@ export function createApp(
     res.set("Cache-Control", "no-store");
     next();
   });
+  // Log API requests slower than 2 seconds (route pattern only) to find slow pages.
+  app.use("/api", slowRequestLog());
   // Security log: price and cost views and exports, approvals and backup downloads (Moaz, 24 Oct 2026).
   app.use("/api", securityAudit(pool));
   app.use(
