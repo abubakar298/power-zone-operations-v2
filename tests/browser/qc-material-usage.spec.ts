@@ -30,3 +30,43 @@ for(const parent of [false,true])test(`QC usage ${parent?'Parent pool':'individu
  expect(body.localPurchases).toBeUndefined();expect(purchaseBody.items).toHaveLength(1);expect(purchaseBody.items[0]).toMatchObject({itemId:'CH-PVC-TAPE',description:'Locally purchased insulation tape',quantity:'3'});
  expect(body.workflowVersion).toBe(2);expect(body.lines.find((l:any)=>l.lineKey==='cable')).toMatchObject({issued:parent?null:'10.5',used:'7.25',returned:null});expect(body.lines.every((l:any)=>l.returned===null)).toBe(true);expect(body.customerEvidenceId).toBe('vso');expect(body.internalEvidenceId).toBe(parent?null:'do');
 });
+
+test('QC can draft and verify historical DO quantities from the site material form',async({page})=>{
+ await actors(page.request);await login(page.request);
+ const boardId='historical-usage-fixture',signedDo={id:'do',name:'Signed DO',mediaType:'image/png'};
+ const site={id:boardId,ipo:'CHP-USAGE',name:'Historical material usage fixture',customer:'UBL',operationsTeam:'central',installation:true,projectType:'ups',stage:'delivered',version:1,accounts:[],history:[],blockers:[],deliveries:[],documents:[]};
+ await page.route('**/api/operations-board/sites',r=>r.fulfill({json:{sites:[site],access:{kind:'qc',team:'central',name:'QC'}}}));
+ await page.route('**/api/operations-board/sites/'+boardId,r=>r.fulfill({json:site}));
+ await page.route('**/api/operations-board/sites/'+boardId+'/local-purchases',r=>r.fulfill({json:{version:0,items:[]}}));
+ await page.route('**/api/material-dispatches/qc/sites/'+boardId+'/material-usage',r=>r.fulfill({json:{records:[],evidence:{signedDos:[signedDo],variableSignoff:null,noVariableItemsUsed:true}}}));
+ const issued=[
+  {key:'long',itemId:'CH-BMS-HV',description:'Historical evidence with a long description that wraps onto another line without moving the item ID, DO reference, or used quantity field.',unit:'pcs',issued:'2',reference:'DO-0001'},
+  {key:'short',itemId:'CH-VPD-2P',description:'',unit:'pcs',issued:'1',reference:'DO-0001'},
+ ];
+ let body:any,version=0;
+ await page.route('**/api/material-dispatches/qc/sites/'+boardId+'/historical-usage',async r=>{
+  if(r.request().method()==='POST'){body=r.request().postDataJSON();version++;return r.fulfill({json:{version,stockPosting:false}});}
+  return r.fulfill({json:{linkedIssues:true,issued,version,entry:body?.entry??null,needsSignedDo:false,needsVso:false}});
+ });
+ await page.goto('/operations/sites/'+boardId);
+ const module=page.locator('section').filter({has:page.getByRole('heading',{name:'Material Usage',exact:true})});
+ await module.getByRole('button',{name:'Open material usage',exact:true}).click();
+ await expect(module.getByRole('columnheader',{name:'DO reference'})).toBeVisible();
+ const rows=module.locator('.qc-history-usage-table tbody tr');
+ for(const row of await rows.all()){
+  const label=await row.locator('td strong').boundingBox(),reference=await row.locator('td:nth-child(3) span').boundingBox(),input=await row.getByRole('textbox').boundingBox();
+  expect(Math.abs(label!.y-reference!.y)).toBeLessThan(2);
+  expect(Math.abs(label!.y-input!.y)).toBeLessThan(2);
+ }
+ await module.getByLabel('Actual used CH-BMS-HV DO-0001 row 1').fill('1');
+ await module.getByLabel('Verification note',{exact:true}).fill('Read original DO and confirmed fixed item usage');
+ await module.getByRole('button',{name:'Save usage draft',exact:true}).click();
+ await expect(module.getByRole('status').filter({hasText:'Usage saved.'})).toBeVisible();
+ expect(body.verify).toBe(false);
+ await expect(module.getByLabel('Verification note',{exact:true})).toHaveValue('');
+ await module.getByLabel('Actual used CH-VPD-2P DO-0001 row 2').fill('0');
+ await module.getByLabel('Verification note',{exact:true}).fill('Confirmed both lines against the signed delivery record');
+ await module.getByRole('button',{name:'Verify Usage',exact:true}).click();
+ await expect.poll(()=>body.verify).toBe(true);
+ expect(body.entry.usage).toEqual({long:'1',short:'0'});
+});
