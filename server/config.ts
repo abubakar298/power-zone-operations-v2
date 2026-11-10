@@ -11,6 +11,11 @@ const schema = z.object({
   DATABASE_SSL: z.enum(["true", "false"]).default("false"),
   DATABASE_CA_FILE: z.string().optional(),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(0),
+  // Database pool tuning. Values are passed to PostgreSQL as connection
+  // startup options, so work_mem only accepts a plain size such as 8MB.
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+  DATABASE_WORK_MEM: z.string().regex(/^[1-9][0-9]{0,6}(kB|MB|GB)$/).default("4MB"),
+  DATABASE_MAX_PARALLEL_WORKERS_PER_GATHER: z.coerce.number().int().min(0).max(8).default(0),
   EMAIL_DELIVERY_ENABLED: z.enum(["true", "false"]).default("true"),
   RESEND_WEBHOOK_SECRET: z.string().regex(/^whsec_[A-Za-z0-9+/=]+$/).optional(),
   RESEND_API_KEY: z.string().min(10).optional(),
@@ -38,6 +43,9 @@ export interface Config {
   databaseSsl: boolean;
   databaseCaFile?: string;
   trustProxyHops: number;
+  databasePoolMax: number;
+  databaseWorkMem: string;
+  databaseParallelWorkersPerGather: number;
   sessionHours: number;
   emailDeliveryEnabled?: boolean;
   emailWebhookSecret?: string;
@@ -75,6 +83,9 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseSsl: e.DATABASE_SSL === "true",
     databaseCaFile: e.DATABASE_CA_FILE,
     trustProxyHops: e.TRUST_PROXY_HOPS,
+    databasePoolMax: e.DATABASE_POOL_MAX,
+    databaseWorkMem: e.DATABASE_WORK_MEM,
+    databaseParallelWorkersPerGather: e.DATABASE_MAX_PARALLEL_WORKERS_PER_GATHER,
     sessionHours: 12,
     emailDeliveryEnabled: e.EMAIL_DELIVERY_ENABLED === "true",
     emailWebhookSecret: e.RESEND_WEBHOOK_SECRET,
