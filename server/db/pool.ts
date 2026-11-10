@@ -2,6 +2,10 @@ import pg from 'pg';
 import { readFileSync } from 'node:fs';
 import type { Config } from '../config.js';
 
+export function databaseStartupOptions(config: Pick<Config,'databaseWorkMem'|'databaseParallelWorkersPerGather'>) {
+  return `-c jit=off -c work_mem=${config.databaseWorkMem} -c max_parallel_workers_per_gather=${config.databaseParallelWorkersPerGather}`;
+}
+
 export function createPool(config: Config) {
   const pool = new pg.Pool({
     connectionString: config.databaseUrl,
@@ -9,10 +13,11 @@ export function createPool(config: Config) {
       rejectUnauthorized: true,
       ...(config.databaseCaFile ? { ca: readFileSync(config.databaseCaFile, 'utf8') } : {}),
     } : false,
-    // Bound avoidable per-query memory on the small production database.
-    // Startup options apply to every newly opened pooled connection.
-    options: '-c jit=off -c work_mem=1MB -c max_parallel_workers_per_gather=0',
-    max: 4, connectionTimeoutMillis: 10000, idleTimeoutMillis: 30000,
+    // Per-query memory, parallel workers and pool size come from the
+    // environment (DATABASE_WORK_MEM, DATABASE_MAX_PARALLEL_WORKERS_PER_GATHER,
+    // DATABASE_POOL_MAX). Startup options apply to every newly opened pooled connection.
+    options: databaseStartupOptions(config),
+    max: config.databasePoolMax, connectionTimeoutMillis: 10000, idleTimeoutMillis: 30000,
     statement_timeout: 10000, application_name: 'power-zone-v2',
   });
   // pg-pool handles idle-client errors, but checked-out clients can also lose
