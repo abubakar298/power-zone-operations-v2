@@ -18,3 +18,8 @@
 .qc-purchase-table th:last-child{width:110px}
 .qc-purchase-table input{width:100%;min-height:44px}
 .qc-purchase-table td:nth-child(4) input{text-align:right;font-variant-numeric:tabular-nums}
+
+.qc-history-usage-table{min-width:780px}
+.qc-history-usage-table th:nth-child(3){width:115px}
+.qc-history-usage-table th:nth-child(4){width:78px}
+.qc-history-usage-table th:nth-child(5){width:100px}
