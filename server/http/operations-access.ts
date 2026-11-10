@@ -10,7 +10,8 @@ type Rule = { method?: "GET" | "POST"; pattern: RegExp; purpose: string };
  * in the app grants Operations access on its own.
  */
 const OPERATIONS_ALLOWED: Rule[] = [
-  { method: "GET", pattern: /^\/api\/material-dispatches\/qc\/sites\/[^/]+\/(?:material-usage|evidence\/[0-9a-f-]{36})$/, purpose: "assigned-site material evidence; no warehouse access" },
+  { method: "GET", pattern: /^\/api\/material-dispatches\/qc\/sites\/[^/]+\/(?:material-usage|historical-usage|evidence\/[0-9a-f-]{36})$/, purpose: "assigned-site material evidence; no warehouse access" },
+  { method: "POST", pattern: /^\/api\/material-dispatches\/qc\/sites\/[^/]+\/historical-usage$/, purpose: "assigned QC historical usage; repository checks team and exact source" },
   { method: "POST", pattern: /^\/api\/material-dispatches\/site-usage$/, purpose: "assigned QC site measurements; repository checks team and exact source" },
   { method: "GET", pattern: /^\/api\/material-dispatches\/drafts\/[0-9a-f-]{36}\/sites\/[0-9a-f-]{36}\/documents\/(?:customer-signoff|irr)\.pdf$/, purpose: "assigned-site printable sign-off only" },
 

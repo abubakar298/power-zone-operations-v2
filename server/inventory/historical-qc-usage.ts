@@ -14,7 +14,7 @@ import {transaction} from '../db/transaction.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 
 const allowed=new Set([304,346,345,308,288,313,314,294,291,305,297,289,285,315,302,319,316,292,295,332].map(String));
-const inputSchema=z.object({version:z.number().int().nonnegative(),requestKey:z.uuid(),reason:z.string().trim().min(3).max(2000),verify:z.boolean(),entry:entrySchema}).strict();
+export const historicalQcUsageInputSchema=z.object({version:z.number().int().nonnegative(),requestKey:z.uuid(),reason:z.string().trim().min(3).max(2000),verify:z.boolean(),entry:entrySchema}).strict();
 /** Historical references supply issued quantities only. Never project their used,
  * returned, adjustment or local-purchase values into a fresh QC usage entry. */
 export function historicalIssuedMaterials(ipo:string){
@@ -60,7 +60,7 @@ export class HistoricalQcUsageRepository{
   return {boardId,jobKey:identity.key,ipo:identity.ipo,version:previous?.version??0,locked,additionalCables:additionalParentCables(identity.ipo),issued:historicalIssuedMaterials(identity.ipo),lines:job.lines.map(l=>({key:l.key,description:l.description,unit:l.unit,approved:l.approved,group:l.group})),entry:own?previous.snapshot.entry:null,stage:own?previous.stage:null,stockPosting:false};
  }
  async save(actor:string,boardId:string,raw:unknown){
-  const parsed=inputSchema.safeParse(raw);if(!parsed.success)throw new HttpError(422,'Check usage quantities and enter the source reference.');const input=parsed.data;
+  const parsed=historicalQcUsageInputSchema.safeParse(raw);if(!parsed.success)throw new HttpError(422,'Check usage quantities and enter the source reference.');const input=parsed.data;
   const identity=await this.identity(actor,boardId,this.pool,true),job=await new InventoryRepository(this.pool).job(actor,identity.key);
   const cables=additionalParentCables(identity.ipo);
   if(new Set(input.entry.extra.map(e=>e.description+'|'+e.unit)).size!==input.entry.extra.length||input.entry.extra.some(e=>!cables.some(c=>c.description===e.description&&c.unit===e.unit&&c.used!==''&&e.used===c.used)))throw new HttpError(422,'Additional rows must be the recorded Parent reconciliation cables and quantities. Other extra items are left for later.');
