@@ -9,7 +9,8 @@ import {confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 const kept=['workspace','viewAs'];
 // These name the page itself; every other #key is a card or tab chosen on that page.
 const pageKeys=['workspace','viewAs','page','accountsTab','operationsArea'];
-const params=()=>new URLSearchParams(location.hash.replace(/^#/,''));
+// Outside a browser (screens drawn on the server or in tests) there is no address: every card starts at its first choice.
+const params=()=>new URLSearchParams(typeof location==='undefined'?'':location.hash.replace(/^#/,''));
 const address=(values:URLSearchParams)=>{const hash=values.toString();return location.pathname+location.search+(hash?'#'+hash:'');};
 
 export function addressValue(key:string){return params().get(key);}
