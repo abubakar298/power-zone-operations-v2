@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {previousAddress,recentPush,stepDepth} from './back-steps.js';
+import {previousAddress,stepDepth} from './back-steps.js';
 import {confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 
 /**
@@ -39,11 +39,14 @@ export function choiceIn<T extends string>(value:string|null,allowed:readonly T[
  if(value==null)return fallback;
  return !allowed||(allowed as readonly string[]).includes(value)?value as T:fallback;
 }
+// Set while one click's handler is still running, so its choices share one step.
+let choiceInThisClick=false;
 /** Records a card choice as a Back step; several choices from one click make one step. */
 export function pushChoice(key:string,value:string){
  const next=choiceAddress(key,value);
- if(recentPush(150))history.replaceState(history.state,'',next);
- else history.pushState({...(history.state??{})},'',next);
+ if(choiceInThisClick){history.replaceState(history.state,'',next);return;}
+ history.pushState({...(history.state??{})},'',next);
+ choiceInThisClick=true;queueMicrotask(()=>{choiceInThisClick=false;});
 }
 
 type ChoiceOptions<T>={
