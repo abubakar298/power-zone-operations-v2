@@ -68,30 +68,48 @@ export function directDecorateLookups(c:Db):DecorateLookups{
 // Lookups requested while records are being decorated together are collected
 // and sent as one query per kind of lookup. Each record still receives its own
 // copy of the same rows the direct query returns.
+//
+// Queries run in waves: every record waits until the whole wave has finished,
+// so records move together and the number of queries does not depend on how
+// fast the database answers.
 export function batchedDecorateLookups(c:Db):DecorateLookups{
   const direct=directDecorateLookups(c);
+  type Job=()=>Promise<()=>void>;
+  const queued=new Map<string,Job>();
+  let scheduled=false;
+  const flush=async()=>{
+    scheduled=false;
+    const jobs=[...queued.values()];queued.clear();
+    for(const settle of await Promise.all(jobs.map(job=>job())))settle();
+  };
+  const enqueue=(id:string,job:Job)=>{
+    queued.set(id,job);
+    if(!scheduled){scheduled=true;setImmediate(()=>void flush());}
+  };
   const loaders=new Map<Name,(key:unknown)=>Promise<any[]>>();
   const loader=(name:Name)=>{
     let found=loaders.get(name);
     if(found)return found;
     const cache=new Map<string,Promise<any[]>>();
     let pending:Map<string,{resolve:(rows:any[])=>void;reject:(error:unknown)=>void}>|null=null;
-    const flush=async()=>{
+    const run:Job=async()=>{
       const batch=pending!;pending=null;
       try{
         const grouped=new Map<string,any[]>();
         for(const {pz_lookup_key,...row} of (await c.query(batchSql(name),[[...batch.keys()]])).rows){
           const rows=grouped.get(pz_lookup_key)??[];rows.push(row);grouped.set(pz_lookup_key,rows);
         }
-        for(const [key,waiter] of batch)waiter.resolve(grouped.get(key)??[]);
-      }catch(error){for(const waiter of batch.values())waiter.reject(error);}
+        return()=>{for(const [key,waiter] of batch)waiter.resolve(grouped.get(key)??[]);};
+      }catch(error){return()=>{for(const waiter of batch.values())waiter.reject(error);};}
     };
     found=(key:unknown)=>{
+      // Comparing with a missing value matches no rows, so no query is needed; a count is simply zero.
+      if(key===null||key===undefined)return Promise.resolve(name==='readyGroupCount'?[{n:'0'}]:[]);
       const raw=String(key);
       let rows=cache.get(raw);
       if(!rows){
         rows=new Promise<any[]>((resolve,reject)=>{
-          if(!pending){pending=new Map();setImmediate(()=>void flush());}
+          if(!pending){pending=new Map();enqueue(name,run);}
           pending.set(raw,{resolve,reject});
         });
         cache.set(raw,rows);
@@ -102,11 +120,9 @@ export function batchedDecorateLookups(c:Db):DecorateLookups{
     return found;
   };
   let today:Promise<string>|undefined;
-  const lookups=fromRows((name,key)=>loader(name)(key),()=>today??=direct.today());
-  // A missing value is rare (for example a record without a draft); run the original query for it.
-  for(const name of Object.keys(decorateLookupSql) as Name[]){
-    const batched=lookups[name] as (key:unknown)=>Promise<any>,single=direct[name] as (key:unknown)=>Promise<any>;
-    (lookups as any)[name]=(key:unknown)=>key===null||key===undefined?single(key):batched(key);
-  }
-  return lookups;
+  const loadToday=()=>today??=new Promise<string>((resolve,reject)=>enqueue('today',async()=>{
+    try{const value=await direct.today();return()=>resolve(value);}
+    catch(error){return()=>reject(error);}
+  }));
+  return fromRows((name,key)=>loader(name)(key),loadToday);
 }

@@ -74,7 +74,13 @@ test('batched lookups return each record its own copy of exactly the direct rows
   for(const [index,key] of keys.entries())assert.deepEqual(together[index],await direct.quotationStatus(key),key);
   assert.notEqual(together[0],together[quoted.length],'Repeated keys get separate copies');
   assert.equal(together.at(-1),undefined,'Unknown key has no row, as before');
-  assert.equal(await batched.finalization(undefined),await direct.finalization(undefined));
+  // A missing value matches nothing, exactly as the original query, without a database trip.
+  const counter=counting(db.pool),noTrips=batchedDecorateLookups(counter.pool);
+  assert.equal(await noTrips.finalization(undefined),await direct.finalization(undefined));
+  assert.equal(await noTrips.quotationStatus(null),await direct.quotationStatus(null));
+  assert.deepEqual(await noTrips.references(null),await direct.references(null));
+  assert.deepEqual(await noTrips.readyGroupCount(null),await direct.readyGroupCount(null));
+  assert.equal(counter.count(),0,'Missing values need no database trip');
   assert.equal(await batched.today(),await direct.today());
   await assert.rejects(Promise.all([batched.quotationRevision('not-a-uuid'),batched.quotationRevision(randomUUID())]),'An invalid value still fails, as the original query did');
  }finally{await db.close();}
