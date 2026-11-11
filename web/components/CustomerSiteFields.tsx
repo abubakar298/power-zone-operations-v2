@@ -4,17 +4,36 @@ import { useEffect, useState } from "react";
 import {Button} from "../ui/Button.js";
 import { recommendSiteCode } from "../../server/boq/schema.js";
 
+/** On a new BOQ a typed name selects a known site or clears the code to be suggested again; a revision keeps its linked code. */
+export function siteAfterNameChange(
+  site: { name: string; code: string; location: string },
+  name: string,
+  sites: any[],
+  keepCode: boolean,
+) {
+  if (keepCode) return { siteId: "", site: { ...site, name } };
+  const existing = sites.find((s: any) => s.name === name);
+  return {
+    siteId: existing ? String(existing.id) : "",
+    site: existing
+      ? { name: existing.name, code: existing.code, location: existing.location ?? "" }
+      : { ...site, name, code: "" },
+  };
+}
+
 /** A customer ID is submitted only after an explicit selection from the search results. */
 export function CustomerSiteFields({
   masters,
   initial,
   revision,
+  siteDetailsEditable = false,
   preferredCustomer,
   onAdd,
 }: {
   masters: any;
   initial: any;
   revision: boolean;
+  siteDetailsEditable?: boolean;
   preferredCustomer?: string;
   onAdd?: () => void;
 }) {
@@ -96,14 +115,14 @@ export function CustomerSiteFields({
           name="siteName"
           aria-label="New site name"
           value={site.name}
-          readOnly={revision}
+          readOnly={revision && !siteDetailsEditable}
           required
           maxLength={200}
           list={revision ? undefined : "boq-site-options"}
           onChange={(e) => {
-            const existing = sites.find((s: any) => s.name === e.target.value);
-            setSiteId(existing ? String(existing.id) : "");
-            setSite(existing ? {name: existing.name, code: existing.code, location: existing.location ?? ""} : {...site, name: e.target.value, code: ""});
+            const next = siteAfterNameChange(site, e.target.value, sites, revision);
+            setSiteId(next.siteId);
+            setSite(next.site);
           }}
           onBlur={() => {
             if (!site.code)
@@ -135,7 +154,7 @@ export function CustomerSiteFields({
           name="location"
           aria-label="Location"
           value={site.location}
-          readOnly={revision}
+          readOnly={revision && !siteDetailsEditable}
           maxLength={1000}
           onChange={(e) => setSite({ ...site, location: e.target.value })}
         />

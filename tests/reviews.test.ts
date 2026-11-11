@@ -378,6 +378,59 @@ test("revision reasons, identities and latest-base checks preserve immutable R0/
   );
 });
 
+test("a revision can correct its site name and location but keeps its customer and site code", async () => {
+  const first = await submit({
+    ...survey,
+    siteName: "Original site name",
+    siteCode: "REVDETAIL",
+    location: "Original location",
+  });
+  const original = (
+    await post(manager, `/reviews/${first.s.id}/decision`, {
+      outcome: "Approved",
+      comments: "",
+    }).expect(200)
+  ).body.saved;
+  const base = original.snapshot.survey;
+  for (const changed of [{ customerId: base.customerId + 1 }, { siteCode: "OTHERCODE" }])
+    await post(employee, "/drafts", {
+      version: 0,
+      baseRevisionId: original.id,
+      revisionReason: "Identity change",
+      inputs: { ...base, ...changed },
+    }).expect(400);
+  const corrected = {
+    ...base,
+    siteName: "Corrected site name",
+    location: "Corrected location",
+  };
+  const revision = await submit(corrected, original.id, "Correct site details");
+  const saved = (
+    await post(manager, `/reviews/${revision.s.id}/decision`, {
+      outcome: "Approved",
+      comments: "",
+    }).expect(200)
+  ).body.saved;
+  assert.equal(saved.boq_id, original.boq_id);
+  assert.equal(saved.revision, 1);
+  assert.equal(saved.snapshot.survey.siteName, "Corrected site name");
+  assert.equal(saved.snapshot.survey.location, "Corrected location");
+  assert.equal(saved.snapshot.survey.siteCode, "REVDETAIL");
+  assert.equal(saved.snapshot.survey.customerId, base.customerId);
+  const stored = (await get(manager, `/${original.id}`).expect(200)).body.snapshot.survey;
+  assert.equal(stored.siteName, "Original site name");
+  assert.equal(stored.location, "Original location");
+  assert.deepEqual(
+    (
+      await db.pool.query(
+        "SELECT name,location FROM sites WHERE customer_id=$1 AND code='REVDETAIL'",
+        [base.customerId],
+      )
+    ).rows,
+    [{ name: "Original site name", location: "Original location" }],
+  );
+});
+
 test("external approval preserves evidence, recorder identity and instructions; Director reporting excludes quotation versions", async () => {
   await db.pool.query("UPDATE users SET role='Coordinator' WHERE id=$1", [
     employee.id,
