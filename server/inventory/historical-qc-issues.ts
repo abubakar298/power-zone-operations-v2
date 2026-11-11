@@ -32,7 +32,7 @@ const ipoKey = (label: string) => label.toUpperCase().replace(/[\s·()]/g,'');
 
 // Signed delivery copies provide item quantities for QC, independently of the
 // warehouse ledger. Use the canonical order confirmed by Management.
-type SignedDoItem = readonly [itemId: string, description: string, issued: string, unit?: string];
+type SignedDoItem = readonly [itemId: string, description: string, issued: string];
 const signedDeliveryIssues = new Map<string, {
   ipo: string;
   reference: string;
@@ -49,7 +49,7 @@ const signedDeliveryIssues = new Map<string, {
       ['CH-VPD-63A/2P', 'Voltage protection device', '1'],
       ['CH-5WAY-DB', '5-way distribution box', '1'],
       ['CH-Duct Slot 60x60', 'Slotted duct 60 × 60', '1'],
-      ['Flexible pipe', 'Flexible pipe (size unspecified on signed DO)', '10', 'ft'],
+      // The installation material sheet classifies flexible pipe as a local purchase.
     ],
   }],
   ['registered-UBL:UPS:20/250', {
@@ -73,9 +73,9 @@ export function historicalQcIssues(boardId: string, ipo: string) {
   if (signed) {
     const canonicalIpo = ipoKey(ipo.replace(/([·(\s])0+(?=\d+\/)/g, '$1'));
     if (canonicalIpo !== ipoKey(signed.ipo)) return null;
-    const lines = signed.items.map(([itemId, description, issued, unit = 'piece'], index) => ({
+    const lines = signed.items.map(([itemId, description, issued], index) => ({
       key: 'signed-do:' + boardId + ':' + signed.reference + ':' + (index + 1),
-      itemId, description, issued, unit, reference: signed.reference,
+      itemId, description, issued, unit: 'piece', reference: signed.reference,
       variable: materialDocumentPolicy({itemId, description}).variableDispatch,
     }));
     return {lines, signature: JSON.stringify(lines.map(line => [line.key, line.issued])), review: undefined};
