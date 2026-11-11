@@ -11,7 +11,8 @@ import {fixedPreparationRows} from '../../shared/material-preparation.js';
 import type {SiteMaterialPlanRepository} from './site-material-plans.js';
 import type {MaterialStockRepository} from './material-stock.js';
 
-export const savedSiteIssueSchema=z.object({version:z.number().int().positive(),requestKey:z.uuid(),partialDelivery:z.boolean(),note:z.string().trim().min(3).max(2000)}).strict();
+// additional: extra material sent beyond the planned deliveries (for example 100 m more cable); it is its own DO with the project's other DOs.
+export const savedSiteIssueSchema=z.object({version:z.number().int().positive(),requestKey:z.uuid(),partialDelivery:z.boolean(),additional:z.boolean().optional(),note:z.string().trim().min(3).max(2000)}).strict();
 const digest=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 function combinedId(planId:string){const hex=createHash('sha256').update('inventory.site.combined:'+planId).digest('hex');return `${hex.slice(0,8)}-${hex.slice(8,12)}-5${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`;}
 
@@ -35,7 +36,10 @@ export async function issueSavedSite(pool:Pool,plans:SiteMaterialPlanRepository,
   const source=fixed.sites[0];
   const catalogue=(await plans.materialCatalogue(actor)).catalogue;
   const approved=fixedPreparationRows(source,catalogue,()=>'',{}).filter(r=>r.out!==''&&!materialDocumentPolicy(r).approvedQuantityLocked);
-  if(!input.partialDelivery)for(const basis of approved){const entered=fixed.lines.filter((r:any)=>basis.basisLine!==undefined?r.basisLine===basis.basisLine:r.itemId===basis.itemId).reduce((sum:Decimal,r:any)=>sum.plus(r.out||0),new Decimal(0));if(entered.lt(basis.out))throw new HttpError(422,'Fixed items are below the approved BOQ. Select Partial delivery to save a reduced fixed-item issuance.');}
+  const belowBoq=approved.some(basis=>fixed.lines.filter((r:any)=>basis.basisLine!==undefined?r.basisLine===basis.basisLine:r.itemId===basis.itemId).reduce((sum:Decimal,r:any)=>sum.plus(r.out||0),new Decimal(0)).lt(basis.out));
+  if(!input.partialDelivery&&!input.additional&&belowBoq)throw new HttpError(422,'Fixed items are below the approved BOQ. Select Partial delivery to save a reduced fixed-item issuance.');
+  // An Additional DO is partial only while approved fixed items are still to be sent, so it never marks the site fully delivered early.
+  const partialDelivery=input.additional?belowBoq:input.partialDelivery;
   const moduleIds=[plan.fixed.id,...(variable?[plan.variable!.id]:[])];
   const prior=(await c.query('SELECT l.line_key,sum(l.quantity)::text quantity FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE d.draft_id=ANY($1::uuid[]) GROUP BY l.line_key',[moduleIds])).rows;
   const rows=[...fixed.lines,...(variable?.lines??[])].filter((r:any)=>r.itemId&&r.out!==''&&new Decimal(r.out).gt(0)&&!materialDocumentPolicy(r).approvedQuantityLocked&&materialDocumentPolicy(r).group!=='non-stock').map((r:any)=>({...r,out:new Decimal(r.out).minus(prior.find(p=>p.line_key===r.key)?.quantity??0).toString()}));
@@ -48,7 +52,7 @@ export async function issueSavedSite(pool:Pool,plans:SiteMaterialPlanRepository,
   const retry=(await c.query('SELECT version,snapshot FROM inventory_material_draft_versions WHERE draft_id=$1 AND request_key=$2',[draftId,input.requestKey])).rows[0];
   if(retry){if(retry.snapshot.combinedPlan?.requestFingerprint!==requestFingerprint)throw new HttpError(409,'This request belongs to another issuance.');return {version:retry.version,lines,warehouse:fixed.warehouse,transport:fixed.transport};}
   const version=(previous?.version??0)+1;
-  const snapshot={...fixed,lines:rows,kind:'fixed',parent:false,combinedPlan:{id:planId,version:input.version,fixedDraftId:plan.fixed.id,variableDraftId:variable?plan.variable!.id:null,requestFingerprint},partialDelivery:input.partialDelivery};
+  const snapshot={...fixed,lines:rows,kind:'fixed',parent:false,combinedPlan:{id:planId,version:input.version,fixedDraftId:plan.fixed.id,variableDraftId:variable?plan.variable!.id:null,requestFingerprint},partialDelivery,...(input.additional?{additional:true}:{})};
   if(!previous)await c.query('INSERT INTO inventory_material_drafts(id,created_by) VALUES($1,$2)',[draftId,actor]);
   await c.query('INSERT INTO inventory_material_draft_versions(draft_id,version,snapshot,request_key,request_fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6)',[draftId,version,snapshot,input.requestKey,digest(snapshot),actor]);
   return {version,lines,warehouse:fixed.warehouse,transport:fixed.transport};
