@@ -27,7 +27,7 @@ import { NotificationAdmin } from "../components/NotificationAdmin.js";
 import { NotificationCenter } from "../components/NotificationCenter.js";
 import { GlobalSearch } from "../components/GlobalSearch.js";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { recentPush } from "../navigation/back-steps.js";
+import { previousAddress, previousDepth, recentPush, stepDepth } from "../navigation/back-steps.js";
 import { pageOnlyAddress } from "../navigation/page-steps.js";
 import { WorkspaceBoundary } from "../components/WorkspaceBoundary.js";
 import { api, ApiError, type Session, type User } from "../api.js";
@@ -148,7 +148,10 @@ export function Dashboard({
   const departmentPageRef=useRef(departmentPage);departmentPageRef.current=departmentPage;
   // Back to an earlier department page (Coordinator, Design and other department workspaces) reopens it.
   useEffect(()=>{
-    const follow=()=>{const params=new URLSearchParams(location.hash.slice(1));if((params.get("workspace")??"dashboard")!=="dashboard")return;const page=params.get("page")||"Workspace";if(page!==departmentPageRef.current)window.dispatchEvent(new CustomEvent("pz:department-page",{detail:page}));};
+    const follow=()=>{const params=new URLSearchParams(location.hash.slice(1));if((params.get("workspace")??"dashboard")!=="dashboard")return;const page=params.get("page")||"Workspace";if(page===departmentPageRef.current)return;
+      // Coming back from another workspace (for example Create Quotation): the department pages are not open yet, so leave the page where they read it when they open.
+      if(viewRef.current!=="dashboard"){sessionStorage.setItem("pz:department-page",page);setDepartmentPage(page);return;}
+      window.dispatchEvent(new CustomEvent("pz:department-page",{detail:page}));};
     window.addEventListener("popstate",follow);return()=>window.removeEventListener("popstate",follow);
   },[]);
   useLayoutEffect(() => {
@@ -408,8 +411,26 @@ export function Dashboard({
   const canUseLibrary = ["Coordinator", "Admin", "Management"].includes(
     session.user.role,
   );
+  // Back/Forward to another workspace asks about unsaved changes before anything reacts. Choosing to stay
+  // keeps the page, its typing and its address. Registered as a layout effect so it runs before other Back handlers.
+  const viewRef=useRef(view);viewRef.current=view;
+  const skipHashFollow=useRef(false);
+  useLayoutEffect(()=>{
+    const guard=(event:PopStateEvent)=>{
+      const destination=new URLSearchParams(location.hash.slice(1)).get("workspace")??"dashboard";
+      if(destination===viewRef.current||confirmLeaveWorkspace())return;
+      event.stopImmediatePropagation();
+      const left=previousAddress();
+      if(left&&new URL(left).hash!==location.hash)skipHashFollow.current=true;
+      history.go(stepDepth()<previousDepth()?1:-1);
+    };
+    window.addEventListener("popstate",guard);
+    return()=>window.removeEventListener("popstate",guard);
+  },[]);
   useEffect(() => {
     function followHash() {
+      // The page stayed (see the guard above): this address change is undone right away.
+      if(skipHashFollow.current){skipHashFollow.current=false;return;}
       const params = new URLSearchParams(window.location.hash.slice(1)),
         destination = params.get("workspace");
       if(canViewDepartments(session.user.role)&&managementDepartment(destination)){

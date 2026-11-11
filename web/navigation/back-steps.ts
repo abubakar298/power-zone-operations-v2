@@ -15,10 +15,12 @@ export const stepDepth=depth;
 const notify=()=>window.dispatchEvent(new Event(EVENT));
 export const recentPush=(ms=600)=>Date.now()-lastPush<ms;
 // The address shown before the latest Back/Forward, so a page can tell whether Back left it.
-let shownHref='',leftHref='';
-const shown=()=>{shownHref=location.href;};
+let shownHref='',leftHref='',shownDepth=0,leftDepth=0;
+const shown=()=>{shownHref=location.href;shownDepth=depth();};
 /** During a Back/Forward: the address that was showing just before it. */
 export const previousAddress=()=>leftHref;
+/** During a Back/Forward: its step number, so a page that stays can return to it (history.go). */
+export const previousDepth=()=>leftDepth;
 const IN_PORTAL='pz-in-portal';
 const outside=()=>location.pathname==='/'||/^\/(login|setup|account-link|forgot-password)(\/|$)/.test(location.pathname);
 // Signed-in pages mark this tab as inside the portal; the sign-in pages clear it.
@@ -36,7 +38,7 @@ export function installBackSteps(){
   replace({...(history.state??{}),...(data as object??{}),pzDepth:depth()},unused,url);shown();rememberPortal();notify();
  }) as History['replaceState'];
  // Registered first, so pages listening to popstate already see the address that was left.
- window.addEventListener('popstate',()=>{leftHref=shownHref;shown();notify();});
+ window.addEventListener('popstate',()=>{leftHref=shownHref;leftDepth=shownDepth;shown();notify();});
  shown();
  // Arriving from another portal page by a full page change (for example Dashboard → Inventory)
  // still has a page to go back to. The browser hides the previous address, so this tab

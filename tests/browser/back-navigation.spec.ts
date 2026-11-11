@@ -126,3 +126,28 @@ test('Coordinator: sidebar pages, Master data tabs and UBL workflow filters are 
  await back(page);await pressed(page,/^All \d/);
  await notReloaded(page);
 });
+
+test('unsaved BOQ: Back asks once; Stay keeps the form and its typing, Leave goes back',async({page})=>{
+ await actors(page.request);await login(page.request,'coordinator-release@example.test');
+ await page.goto('/dashboard');await page.locator('.account-trigger').last().waitFor();await page.waitForLoadState('networkidle');await mark(page);
+ const shortcuts=page.getByRole('navigation',{name:'Atif shortcuts'});
+ await shortcuts.getByRole('button',{name:'Customer & Site Search',exact:true}).click();
+ await expect(shortcuts.getByRole('button',{name:'Customer & Site Search',exact:true})).toHaveAttribute('aria-current','page');
+ await shortcuts.getByRole('button',{name:'Create Quotation',exact:true}).click();
+ const site=page.locator('input[name="siteName"]').first();await site.fill('Unsaved site typed by test');
+ const createdAt=page.url();
+ // Stay: the form, the typing and the address are kept.
+ const asked:string[]=[];
+ page.on('dialog',d=>{asked.push(d.message());void(asked.length===1?d.dismiss():d.accept());});
+ await back(page);
+ await expect.poll(()=>asked.length).toBe(1);
+ await expect(site).toHaveValue('Unsaved site typed by test');
+ await expect.poll(()=>page.url()).toBe(createdAt);
+ await expect(shortcuts.getByRole('button',{name:'Create Quotation',exact:true})).toHaveAttribute('aria-current','page');
+ // Leave: one question, then the previous page.
+ await back(page);
+ await expect(shortcuts.getByRole('button',{name:'Customer & Site Search',exact:true})).toHaveAttribute('aria-current','page');
+ await expect(page.locator('input[name="siteName"]')).toHaveCount(0);
+ expect(asked).toHaveLength(2);
+ await notReloaded(page);
+});
