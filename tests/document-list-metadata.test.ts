@@ -1,4 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';
+import {assertBatchedListMatchesDirect} from './project-list-equivalence.js';
 import {createElement} from 'react';import {renderToStaticMarkup} from 'react-dom/server';
 import {loadDocumentListMetadata,snapshotListMetadata} from '../server/documents/list-metadata.js';
 import {DocumentListDetails} from '../web/components/DocumentListDetails.js';
@@ -42,7 +43,7 @@ test('authorized Coordinator lists project saved quote, revision, pricing and IP
  const linked=randomUUID(),fixed=randomUUID();
  for(const[id,data,route,stage]of [[linked,{quotationId:source.id},'quick-quote','commercial_revision'],[fixed,{basis:{boq:{survey:{family:'solar-hybrid'}},order:{allocation:{total:'7800000.00'}}}},'survey-framework','customer_tracking']] as const)
  await db.pool.query("INSERT INTO project_workflow_records(id,customer_id,site_name,site_code,route,stage,coordinator_id,data,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$7)",[id,source.snapshot.customer.id,'Isolated '+id,id.slice(0,8),route,stage,owner,data,randomUUID()]);
- const list:any=await new ProjectWorkflowRepository(db.pool).list(owner,'coordination','mine');
+ const list:any=await assertBatchedListMatchesDirect(new ProjectWorkflowRepository(db.pool),owner,'coordination','mine');
  assert.equal(list.records.find((r:any)=>r.id===linked)?.documentAmount,payable);
  assert.equal(list.records.find((r:any)=>r.id===fixed)?.documentAmount,'7800000.00');
  assert.equal(list.records.find((r:any)=>r.id===fixed)?.solutionType,'Solar Hybrid');
