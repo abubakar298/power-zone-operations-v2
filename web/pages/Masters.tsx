@@ -5,6 +5,7 @@ import { compareRateItems } from "../ui/rateOrder.js";
 import {Button} from "../ui/Button.js";
 import { CustomerImport } from "../components/CustomerImport.js";
 import { useEffect, useState, type FormEvent } from "react";
+import {usePageChoice} from '../navigation/page-steps.js';
 import { api, ApiError, type Session } from "../api.js";
 import { canWriteMaster } from "../../server/masters/permissions.js";
 type Kind = "customers" | "sites" | "brands" | "rates" | "rules" | "items";
@@ -124,8 +125,9 @@ export function Masters({
   onLogout: () => void;
 }) {
   const [data, setData] = useState<Data | null>(null),
-    [catalogueOpen,setCatalogueOpen]=useState(false),
-    [kind, setKind] = useState<Kind>(initialKind),
+    [catalogueChoice,chooseCatalogue]=usePageChoice('mastersCatalogue',['open','closed'] as const,'closed'),catalogueOpen=catalogueChoice==='open',setCatalogueOpen=(open:boolean)=>chooseCatalogue(open?'open':'closed'),
+    // Each section tab is a Back step; Back clears the search as clicking the tab does.
+    [kind, setKind] = usePageChoice<Kind>("mastersTab", Object.keys(titles) as Kind[], initialKind as Kind, {onBack:()=>{setQuery("");setFilter("All");setMessage("");}}),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState("All");
   const [error, setError] = useState(""),

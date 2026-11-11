@@ -1,6 +1,7 @@
 import {recentFirst} from '../../../shared/recent-records.js';
 import {PagedTableBody} from '../../ui/PagedTableBody.js';
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {usePageChoice} from '../../navigation/page-steps.js';
 import { api, ApiError, type Session } from "../../api.js";
 import { Field } from "../../ui/Field.js";
 import { SiteDetail, type Reference } from "./SiteDetail.js";
@@ -25,7 +26,7 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialSiteNon
   const [openedNonce, setOpenedNonce] = useState<number | undefined>();
   const [applied, setApplied] = useState<string | undefined>();
   const [region, setRegion] = useState("");
-  const [stage, setStage] = useState("");
+  const [stage, setStage] = usePageChoice("siteStage", null, "");
 
   const load = useCallback(async () => {
     try { setData(await api<Overview>("/site-workflow")); setError(""); }
@@ -34,7 +35,7 @@ export function SiteBoard({ session, mode = "all", initialSiteId, initialSiteNon
   useEffect(() => { void load(); }, [load]);
   // A site or stage handed over from the dashboard applies once; afterwards the page behaves normally.
   useEffect(() => { if (initialSiteId && initialSiteNonce !== openedNonce) { setOpenedNonce(initialSiteNonce); setSelected(initialSiteId); } }, [initialSiteId, initialSiteNonce, openedNonce]);
-  useEffect(() => { if (initialStage && initialStage !== applied) { setApplied(initialStage); setStage(initialStage); } }, [initialStage, applied]);
+  useEffect(() => { if (initialStage && initialStage !== applied) { setApplied(initialStage); setStage(initialStage, true); } }, [initialStage, applied]);
 
   const scoped = useMemo(() => (data ? data.sites.filter((s) => inMode(s, mode) && (!regionScope || s.region === regionScope)) : []), [data, mode, regionScope]);
   const byStage = useMemo(() => { const m = new Map<string, number>(); for (const s of scoped) m.set(s.stage, (m.get(s.stage) ?? 0) + 1); return m; }, [scoped]);

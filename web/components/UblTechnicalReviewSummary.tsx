@@ -1,5 +1,6 @@
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {useEffect,useMemo,useState} from 'react';
+import {usePageChoice} from '../navigation/page-steps.js';
 import {api,type Session} from '../api.js';
 import {Button} from '../ui/Button.js';
 import {Field} from '../ui/Field.js';
@@ -8,7 +9,7 @@ import {useUnsavedChanges,confirmLeaveWorkspace} from '../hooks/useUnsavedChange
 export const readyUblReview=(r:any)=>r.customerCode?.toUpperCase()==='UBL'&&r.route==='survey-framework'&&['report_received','technical_review','technical_revision'].includes(r.stage)&&!!r.data?.surveyInputs;
 export function submittedUblReviews(records:any[]) {return records.filter(r=>r.customerCode?.toUpperCase()==='UBL'&&r.route==='survey-framework'&&r.data?.designHandoffAt&&r.data?.reviewDocumentId).sort((a,b)=>Number(!!b.data.ublStandardsReview?.needsReview)-Number(!!a.data.ublStandardsReview?.needsReview)||String(a.siteCode).localeCompare(String(b.siteCode),undefined,{numeric:true})||a.id.localeCompare(b.id));}
 export function UblTechnicalReviewSummary({session,records,onBack,onOpen,onBatchSaved}:{session:Session;records:any[];onBack:()=>void;onOpen:(id:string)=>void;onBatchSaved?:()=>Promise<void>}) {
- const [history,setHistory]=useState(false),[search,setSearch]=useState(''),[results,setResults]=useState<Record<string,any>>({}),[attempt,setAttempt]=useState(0),[notes,setNotes]=useState<Record<string,string>>({}),[selected,setSelected]=useState<Set<string>>(()=>new Set(records.filter(readyUblReview).map(r=>r.id))),[confirm,setConfirm]=useState(false),[busy,setBusy]=useState(false),[outcomes,setOutcomes]=useState<Record<string,string>>({});
+ const [historyView,setHistoryView]=usePageChoice('ublReviewList',['awaiting','history'] as const,'awaiting',{guard:true,onBack:()=>{setNotes({});setConfirm(false);}}),history=historyView==='history',[search,setSearch]=useState(''),[results,setResults]=useState<Record<string,any>>({}),[attempt,setAttempt]=useState(0),[notes,setNotes]=useState<Record<string,string>>({}),[selected,setSelected]=useState<Set<string>>(()=>new Set(records.filter(readyUblReview).map(r=>r.id))),[confirm,setConfirm]=useState(false),[busy,setBusy]=useState(false),[outcomes,setOutcomes]=useState<Record<string,string>>({});
  const ready=useMemo(()=>records.filter(readyUblReview).sort((a,b)=>String(a.siteCode).localeCompare(String(b.siteCode),undefined,{numeric:true})||a.id.localeCompare(b.id)),[records]);
  const submitted=useMemo(()=>submittedUblReviews(records),[records]);const source=history?submitted:ready;
  useUnsavedChanges(Object.keys(notes).length>0||busy);
@@ -27,7 +28,7 @@ export function UblTechnicalReviewSummary({session,records,onBack,onOpen,onBatch
   setNotes(old=>Object.fromEntries(Object.entries(old).filter(([id])=>!succeeded.has(id))));if(sent)await onBatchSaved?.();
  }catch(e){setOutcomes(old=>({...old,batch:e instanceof Error?e.message:'Batch was not sent.'}));}finally{setBusy(false);}}
  const rows=source.map((r,i)=>({r,sr:i+1,s:results[r.id]})).filter(({r,s})=>[r.siteCode,r.site,s?.reviewNumber,s?.survey?.bessId,s?.remarks].join(' ').toLowerCase().includes(search.toLowerCase()));
- const switchHistory=(value:boolean)=>{if(!busy&&confirmLeaveWorkspace()){setNotes({});setConfirm(false);setHistory(value);}};
+ const switchHistory=(value:boolean)=>{if(!busy&&confirmLeaveWorkspace()){setNotes({});setConfirm(false);setHistoryView(value?'history':'awaiting');}};
  return <section className="pz-stack" aria-label="UBL Technical Review Summary">
  <div className="pz-action-row"><Button disabled={busy} onClick={()=>{if(confirmLeaveWorkspace())onBack();}}>Back to surveys</Button><Button disabled={busy} aria-pressed={!history} onClick={()=>switchHistory(false)}>Awaiting submission ({ready.length})</Button><Button disabled={busy} aria-pressed={history} onClick={()=>switchHistory(true)}>Sent to Atif ({submitted.length})</Button><Button disabled={busy} variant="secondary" onClick={async()=>{if(confirmLeaveWorkspace()){setNotes({});await onBatchSaved?.();setAttempt(a=>a+1);}}}>Refresh summary</Button></div>
  <h2>UBL Technical Review Summary</h2><p>{history?'Saved submitted technical reviews.':'Review all ready UBL surveys, their current saved inputs and technical remarks, then send the selected batch to Atif.'}</p>

@@ -1,5 +1,6 @@
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {useState} from 'react';
+import {usePageChoice} from '../navigation/page-steps.js';
 import {Decimal} from 'decimal.js';
 import {Button} from '../ui/Button.js';
 import './standalone-closing-reviews.css';
@@ -9,7 +10,7 @@ const quantity=(value:string|null)=>{if(value===null||value==='')return 'Not sup
 export function StandaloneClosingReviews({reviewRows,busy=false,onReview}:{reviewRows:ReviewRecord[];busy?:boolean;onReview:(id:string)=>void}){
  const records=reviewRows.filter(r=>r.source_row.sourceRow.reviewKind==='standalone-closing');
  const source={sourceUrl:String(records[0]?.source_row.sourceRow.sourceUrl??''),categories:groups.map(([id,title])=>({id,title,rows:records.filter(r=>r.source_row.sourceRow.category===id&&!['source-verified','posted'].includes(r.state)).map(record=>{const raw=record.source_row.sourceRow;return {id:record.id,sourceId:String(raw.sourceReviewId??''),ipo:String(raw.ipo??''),order:String(raw.order??''),site:String(raw.site??''),item:String((raw.itemMapping as {suppliedItemId?:string}|undefined)?.suppliedItemId??''),sourceItem:String(raw.item??''),quantity:raw.sourceQuantity==null?null:String(raw.sourceQuantity),unit:String(raw.sourceUnit??''),reason:String(raw.reason??''),reference:String(raw.reference??''),sheetUrl:String(raw.sheetUrl??''),sheetRow:String(raw.sheetRow??''),evidence:String(raw.evidence??''),posted:raw.sourceAlreadyAllocated==null?null:String(raw.sourceAlreadyAllocated),unmatched:raw.sourceUnmatched==null?null:String(raw.sourceUnmatched),state:record.state};})}))};
- const [selected,setSelected]=useState(source.categories[0].id),[search,setSearch]=useState(''),[detail,setDetail]=useState<string>();
+ const [selected,setSelected]=usePageChoice('closingCategory',null,source.categories[0].id,{onBack:()=>{setDetail(undefined);setSearch('');}}),[search,setSearch]=useState(''),[detail,setDetail]=useState<string>();
  const group=source.categories.find(g=>g.id===selected)!;
  const rows=group.rows.filter(r=>`${r.site} ${r.ipo} ${r.order} ${r.item} ${r.sourceItem} ${r.reference}`.toLowerCase().includes(search.toLowerCase()));
  return <section className="purchase-card standalone-closing-review"><div className="standalone-review-heading"><div><h2>Other pending closing reviews</h2><p>{source.categories.reduce((sum,g)=>sum+g.rows.length,0)} saved checks outside the Parent DO work queue · final Google Sheet source</p></div><a href={source.sourceUrl} target="_blank" rel="noreferrer">View source sheet</a></div>

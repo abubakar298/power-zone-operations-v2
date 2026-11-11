@@ -1,6 +1,7 @@
 import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {useEffect,useState} from 'react';
+import {usePageChoice} from '../navigation/page-steps.js';
 import {api} from '../api.js';
 import {Button} from '../ui/Button.js';
 import {Field} from '../ui/Field.js';
@@ -10,7 +11,7 @@ const readableDate=(value:string)=>/^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value??'')
 const positions=[['all','All Sites','All active project records'],['awaiting','Awaiting Delivery','Delivery not yet confirmed'],['delivered','Delivered','Installation pending'],['completed','Installation Complete','Confirmed completed installations']];
 const label=(position:string)=>position==='completed'?'Installation complete':position==='delivered'?'Delivered':position==='history'?'History':position==='partial'?'Part delivered':'Awaiting delivery';
 export function AccountsImportedSites({onOpenIpo,initialSiteKey}:{initialSiteKey?:string;onOpenIpo:(id:string)=>void}){
- const[data,setData]=useState<any>(),[error,setError]=useState(''),[position,setPosition]=useState('all'),[customer,setCustomer]=useState('All customers'),[type,setType]=useState<string|null>(null),[search,setSearch]=useState(''),[selected,setSelected]=useState<any>();
+ const[data,setData]=useState<any>(),[error,setError]=useState(''),[position,setPosition]=usePageChoice('sitePosition',null,'all'),[customer,setCustomer]=useState('All customers'),[type,setType]=useState<string|null>(null),[search,setSearch]=useState(''),[selected,setSelected]=useState<any>();
  useEffect(()=>{let active=true;api<any>('/accounts-workspace/sites').then(d=>{if(active)setData(d);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[]);
  useEffect(()=>{if(data&&initialSiteKey){const row=data.rows.find((r:any)=>r.key===initialSiteKey);if(row)setSelected(row);}},[data,initialSiteKey]);
  if(error)return <p role="alert" className="form-error">{error}</p>;if(!data)return <p role="status">Loading confirmed project sites…</p>;

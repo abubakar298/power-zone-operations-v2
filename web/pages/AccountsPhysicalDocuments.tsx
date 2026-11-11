@@ -1,5 +1,6 @@
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {useEffect,useRef,useState} from 'react';
+import {usePageChoice} from '../navigation/page-steps.js';
 import {Button} from '../ui/Button.js';
 import {StatusBadge} from '../ui/StatusBadge.js';
 import {Field} from '../ui/Field.js';
@@ -9,7 +10,7 @@ import {EvidenceLinks} from './operations-board/forms.js';
 import {OverdueOriginals,ConfirmReceiptDialog} from '../components/AccountsOriginals.js';
 type OperationsDocumentView={sites:any[];loading:boolean;onRefresh:()=>void;onUpdate:(row:any)=>void};
 export function AccountsPhysicalDocuments({operations}:{operations?:OperationsDocumentView}={}){
- const [bucket,setBucket]=useState<string|null>(null),[type,setType]=useState<string|null>(null),[selected,setSelected]=useState<any>(null);
+ const [bucketChoice,chooseBucket]=usePageChoice('physicalBucket',null,'',{onBack:()=>setLocation('All locations')}),bucket=bucketChoice||null,setBucket=(next:string|null)=>chooseBucket(next??''),[type,setType]=useState<string|null>(null),[selected,setSelected]=useState<any>(null);
  const [storedSites,setSites]=useState<any[]>([]),[error,setError]=useState(''),[storedLoading,setLoading]=useState(true),[search,setSearch]=useState(''),[location,setLocation]=useState('All locations');
  const [originals,setOriginals]=useState<any[]>([]),[confirmFor,setConfirmFor]=useState<any>(),[message,setMessage]=useState('');
  const sites=operations?.sites??storedSites,loading=operations?.loading??storedLoading;

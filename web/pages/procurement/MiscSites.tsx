@@ -1,6 +1,7 @@
 import {recentFirst} from '../../../shared/recent-records.js';
 import {PagedTableBody,PagedResults} from '../../ui/PagedTableBody.js';
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {usePageChoice} from '../../navigation/page-steps.js';
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
 import "./procurement.css";
@@ -28,7 +29,7 @@ const PO_CHIP: Record<MiscSite["po"], { cls: string; text: string }> = {
 export function MiscSites({ session, mode }: { session: Session; mode: "buyer" | "store" }) {
   const [data, setData] = useState<{ sites: MiscSite[]; can: { send: boolean } } | null>(null);
   const [cat, setCat] = useState<MiscCatalogue | null>(null);
-  const [tab, setTab] = useState<"open" | "sent" | "all">("open");
+  const [tab, setTab] = usePageChoice<"open" | "sent" | "all">("miscTab", ["open", "sent", "all"], "open");
   const [filter, setFilter] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);

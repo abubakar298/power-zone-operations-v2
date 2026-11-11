@@ -1,6 +1,7 @@
 import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import { useEffect, useMemo, useState } from "react";
+import {usePageChoice} from '../navigation/page-steps.js';
 import { api, ApiError } from "../api.js";
 import { StatusBadge } from "../ui/StatusBadge.js";
 import "./advance-boq-search.css";
@@ -34,7 +35,7 @@ export function AdvanceBoqSearch({ onOpen, regionScope = "" }: { onOpen: (refere
   const [customer, setCustomer] = useState("");
   const [site, setSite] = useState("");
   const [region, setRegion] = useState("");
-  const [stage, setStage] = useState("");
+  const [stage, setStage] = usePageChoice("headsupStage", null, "");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 

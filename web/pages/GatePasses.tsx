@@ -8,6 +8,7 @@ import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
 import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
 import {navigateInventory} from '../inventory-approved/navigation.js';
 import {useEffect,useRef,useState} from 'react';
+import {usePageChoice} from '../navigation/page-steps.js';
 import {api,type Session} from '../api.js';
 import {Brand} from '../components/Brand.js';
 import {InventoryNavigation} from '../components/InventoryNavigation.js';
@@ -31,7 +32,7 @@ const buckets:{id:Bucket;title:string;description:string;kinds:Kind[]}[]=[
 const labels:{[K in Kind]:string}={dispatch:'Delivery order',return:'Site return IGP',purchase:'Purchase IGP','transfer-out':'Transfer DO','transfer-in':'Receiving warehouse IGP','replacement-out':'Replacement DO','replacement-in':'Faulty return IGP'};
 const copyLabel=(kind:string)=>kind==='customer-signoff'?'Signed customer sign-off':kind==='signed-customer'?'Customer receiving copy':kind==='signed-gate'?'Signed gate copy':'Signed store copy';
 export function GatePasses({session,onLogout,limitedAccess=false}:{session:Session;onLogout:()=>void;limitedAccess?:boolean}){
- const [data,setData]=useState<Queue>(),[selected,setSelected]=useState<Record>(),[copies,setCopies]=useState<Copy[]>([]),[bucket,setBucket]=useState<Bucket>(()=>{const value=new URLSearchParams(location.search).get('bucket');return buckets.some(b=>b.id===value)?value as Bucket:'dos';});
+ const [data,setData]=useState<Queue>(),[selected,setSelected]=useState<Record>(),[copies,setCopies]=useState<Copy[]>([]),[bucket,setBucket]=usePageChoice<Bucket>('documentBucket',['dos','purchases','transfers','replacements'],(()=>{const value=new URLSearchParams(location.search).get('bucket');return buckets.some(b=>b.id===value)?value as Bucket:'dos';})(),{guard:true,onBack:()=>{clear();setSearch('');}});
  const [search,setSearch]=useState(''),[warehouse,setWarehouse]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[file,setFile]=useState<File>(),[note,setNote]=useState(''),[copyKind,setCopyKind]=useState('signed-gate'),[temporary,setTemporary]=useState(false);
  const upload=useRef<HTMLInputElement>(null),retry=useRef<{signature:string;key:string}|null>(null),dirty=!!file||!!note;
  const limited=limitedAccess||data?.kind==='storekeeper';
@@ -41,7 +42,7 @@ export function GatePasses({session,onLogout,limitedAccess=false}:{session:Sessi
  useEffect(()=>{const handler=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',handler);return()=>window.removeEventListener('beforeunload',handler);},[dirty]);
  function leave(){return !busy&&confirmLeaveWorkspace();}
  function clear(){setSelected(undefined);setFile(undefined);setNote('');setError('');setNotice('');if(upload.current)upload.current.value='';}
- function choose(next:Bucket){if(!leave())return;clear();setBucket(next);setSearch('');history.replaceState(null,'','/inventory/gate-passes?bucket='+next);}
+ function choose(next:Bucket){if(!leave())return;clear();setBucket(next);setSearch('');}
  const records=(id:Bucket)=>data?.records.filter(r=>buckets.find(b=>b.id===id)!.kinds.includes(r.kind))??[];
  const visible=recentFirst(records(bucket)).filter(r=>(!warehouse||r.warehouse===warehouse)&&`${r.number} ${r.siteName??''} ${r.ipo??''} ${r.warehouse}`.toLowerCase().includes(search.toLowerCase()));
  const relevant=(all:Copy[],r:Record)=>all.filter(c=>r.signoff?c.copy_kind==='customer-signoff'&&c.source_site_id===r.siteId:c.copy_kind!=='customer-signoff');

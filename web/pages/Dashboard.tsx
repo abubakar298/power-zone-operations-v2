@@ -28,6 +28,7 @@ import { NotificationCenter } from "../components/NotificationCenter.js";
 import { GlobalSearch } from "../components/GlobalSearch.js";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { recentPush } from "../navigation/back-steps.js";
+import { pageOnlyAddress } from "../navigation/page-steps.js";
 import { WorkspaceBoundary } from "../components/WorkspaceBoundary.js";
 import { api, ApiError, type Session, type User } from "../api.js";
 import { Brand } from "../components/Brand.js";
@@ -398,7 +399,8 @@ export function Dashboard({
     const params=new URLSearchParams(location.hash.slice(1));
     if((params.get("workspace")??"dashboard")!=="dashboard"||(params.get("page")||"Workspace")===departmentPage)return;
     if(departmentPage==="Workspace")params.delete("page");else params.set("page",departmentPage);
-    const next=location.pathname+location.search+"#"+params.toString();
+    // Cards chosen on the previous page stay with that page's step.
+    const next=pageOnlyAddress(params);
     // A page chosen from the sidebar already made its step; a page opened inside the workspace makes one.
     if(recentPush())history.replaceState(null,"",next);else history.pushState(null,"",next);
   },[departmentPage,view]);

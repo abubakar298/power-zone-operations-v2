@@ -8,6 +8,7 @@ import { displayUnit } from "../../server/boq/unit.js";
 import { confirmTransition } from "../confirm.js";
 import { quotationTypeLabel } from "../../server/orders/sale-type.js";
 import { useEffect, useState, useRef } from "react";
+import {usePageChoice} from '../navigation/page-steps.js';
 import { api, type Session } from "../api.js";
 type DeliveryDetails = {
   deliveryAddress: string;
@@ -55,14 +56,15 @@ export function Operations({
     [selected, setSelected] = useState<any>(),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const [workspace, setWorkspace] = useState<"handoff" | "received">(
+  const [workspace, setWorkspace] = usePageChoice<"handoff" | "received">("opsView", ["handoff", "received"],
     portal || session.user.role === "Operations" ? "received" : "handoff",
+    {onBack:()=>setSelected(undefined)},
   );
   const [portalData, setPortalData] = useState<any>();
   const [headsupCount,setHeadsupCount]=useState<number>();
   const [headsupError,setHeadsupError]=useState('');
   useEffect(()=>{let active=true;if(session.user.role!=='Operations')return;void api<any>('/project-workflow/advance-inbox').then(r=>{if(active)setHeadsupCount(r.requests.length);}).catch(e=>{if(active)setHeadsupError(e.message);});return()=>{active=false;};},[session.user.id]);
-  const [bucket, setBucket] = useState("Received Projects");
+  const [bucket, setBucket] = usePageChoice("opsBucket", null, "Received Projects");
   const storeKey = useRef<string | undefined>(undefined);
   const [plan, setPlan] = useState<any>();
   const [details, setDetails] = useState<DeliveryDetails>({

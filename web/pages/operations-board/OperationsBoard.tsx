@@ -9,6 +9,7 @@ import {ManagementHeaderSwitcher} from '../../components/ManagementHeaderSwitche
 import {RegionalDirectory} from './RegionalDirectory.js';
 import {showOperationsSite} from '../../../shared/operations-site-visibility.js';
 import {useCallback,useEffect,useRef,useState} from 'react';
+import {usePageChoice} from '../../navigation/page-steps.js';
 import {api,type Session} from '../../api.js';
 import {Brand} from '../../components/Brand.js';
 import {NotificationCenter} from '../../components/OperationsNotificationCenter.js';
@@ -25,13 +26,13 @@ import './operations-board.css';
 const links=[['sites','site','Site updates'],['physical-documents','file','Physical Documents'],['vendors','users','Vendors'],['members','users','Team members'],['vehicles','route','Vehicles'],['alerts','bell','Alerts'],['targets','target','Stage targets'],['batches','route','Batch planning']] as const;
 function route(){const parts=location.pathname.split('/').filter(Boolean);let id:string|undefined;try{id=parts[1]==='sites'&&parts[2]?decodeURIComponent(parts[2]):undefined;}catch{}return {page:parts[1]??'sites',id};}
 export function OperationsBoard({session,onLogout}:{session:Session;onLogout:()=>void}){
- const [data,setData]=useState<Board>(),[error,setError]=useState(''),[loading,setLoading]=useState(true),[where,setWhere]=useState(route),[search,setSearch]=useState(''),[type,setType]=useState(''),[team,setTeam]=useState(''),[stage,setStage]=useState(''),[mobile,setMobile]=useState(false),[notice,setNotice]=useState('');
+ const [data,setData]=useState<Board>(),[error,setError]=useState(''),[loading,setLoading]=useState(true),[where,setWhere]=useState(route),[search,setSearch]=useState(''),[type,setType]=usePageChoice('boardType',null,''),[team,setTeam]=useState(''),[stage,setStage]=usePageChoice('boardStage',null,''),[mobile,setMobile]=useState(false),[notice,setNotice]=useState('');
  const [canOpenProcurement,setCanOpenProcurement]=useState(false);
  useEffect(()=>{let active=true;setCanOpenProcurement(false);if(session.user.role==='Operations')void api<{buyer:boolean}>('/procurement/me').then(me=>{if(active)setCanOpenProcurement(me.buyer===true);}).catch(()=>{});return()=>{active=false;};},[session.user.id,session.user.role]);
  const currentPath=useRef(location.pathname+location.search);
  const load=useCallback(async()=>{setLoading(true);setError('');try{const result=await api<Board>('/operations-board/sites');setData({...result,sites:result.sites.map(normalise)});}catch(e){setError((e as Error).message);}finally{setLoading(false);}},[]);
  useEffect(()=>{void load();},[load]);
- useEffect(()=>{const change=()=>{if(!confirmLeaveWorkspace()){history.pushState(null,'',currentPath.current);return;}currentPath.current=location.pathname+location.search;setWhere(route());};window.addEventListener('popstate',change);return()=>window.removeEventListener('popstate',change);},[]);
+ useEffect(()=>{const change=()=>{if(location.pathname+location.search===currentPath.current)return;if(!confirmLeaveWorkspace()){history.pushState(null,'',currentPath.current);return;}currentPath.current=location.pathname+location.search;setWhere(route());};window.addEventListener('popstate',change);return()=>window.removeEventListener('popstate',change);},[]);
  function go(path:string){if(!confirmLeaveWorkspace())return false;history.pushState(null,'',path);currentPath.current=path;setWhere(route());setMobile(false);setNotice('');window.scrollTo(0,0);return true;}
  function saved(value:Site){setData(old=>old?{...old,sites:old.sites.map(s=>s.id===value.id?normalise(value):s)}:old);setNotice(`Saved ${value.ipo} · version ${value.version}`);}
  async function logout(){if(!confirmLeaveWorkspace())return;try{await api('/auth/logout',{csrf:session.csrfToken,body:{}});onLogout();}catch(e){setError((e as Error).message);}}

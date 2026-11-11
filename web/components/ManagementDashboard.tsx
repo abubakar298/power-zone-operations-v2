@@ -4,6 +4,7 @@ import {lazy,Suspense} from 'react';
 import {useManagementReviews,ManagementReviewBuckets,ManagementClosureQueue,ManagementTechnicalQueue} from './ManagementReviewQueues.js';
 const ClosureReview=lazy(()=>import('../pages/AccountsWorkspace.js').then(m=>({default:m.AccountsWorkspace})));
 import {useEffect,useState} from 'react';
+import {usePageChoice} from '../navigation/page-steps.js';
 import {api,type Session} from '../api.js';
 import {Button} from '../ui/Button.js';
 import {StatusBadge} from '../ui/StatusBadge.js';
@@ -14,8 +15,8 @@ type Row={key:string;customer:string;program:string;variant:string;section:strin
 type Received={rows:Row[];sourceDate:string;unallocatedAccounts:{customer:string;program:string;order:string;site:string;invoice:string;row:number}[]};
 const groups=[{key:'UBL-6-10',customer:'UBL',variant:'6-10',label:'UBL UPS'},{key:'MBL-6-5',customer:'MBL',variant:'6-5',label:'Meezan UPS · 6 + 5'},{key:'MBL-6-10',customer:'MBL',variant:'6-10',label:'Meezan UPS · 6 + 10'}];
 export function ManagementDashboard({session,onOpen,onOpenUps,onOpenSolar}:{session:Session;onOpen:(task:any)=>void;onOpenUps:()=>void;onOpenSolar:()=>void}){
- const [data,setData]=useState<Received>(),[error,setError]=useState(''),[selected,setSelected]=useState(''),[filter,setFilter]=useState('active'),[search,setSearch]=useState('');
- useEffect(()=>{let active=true,generation=0,inFlight=false;const load=async()=>{if(inFlight||document.visibilityState==='hidden')return;inFlight=true;const n=++generation;try{const next=await api<Received>('/director/received-pos');if(active&&n===generation){setData(next);setError('');}}catch(e){if(active&&n===generation)setError((e as Error).message);}finally{inFlight=false;}};const reset=()=>{setSelected('');setFilter('active');setSearch('');void load();};void load();window.addEventListener('focus',load);document.addEventListener('visibilitychange',load);window.addEventListener('pz:workspace-open',reset);const timer=setInterval(load,30000);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);document.removeEventListener('visibilitychange',load);window.removeEventListener('pz:workspace-open',reset);};},[session.user.id]);
+ const [data,setData]=useState<Received>(),[error,setError]=useState(''),[selected,setSelected]=useState(''),[filter,setFilter]=usePageChoice('poFilter',null,'active'),[search,setSearch]=useState('');
+ useEffect(()=>{let active=true,generation=0,inFlight=false;const load=async()=>{if(inFlight||document.visibilityState==='hidden')return;inFlight=true;const n=++generation;try{const next=await api<Received>('/director/received-pos');if(active&&n===generation){setData(next);setError('');}}catch(e){if(active&&n===generation)setError((e as Error).message);}finally{inFlight=false;}};const reset=()=>{setSelected('');setFilter('active',true);setSearch('');void load();};void load();window.addEventListener('focus',load);document.addEventListener('visibilitychange',load);window.addEventListener('pz:workspace-open',reset);const timer=setInterval(load,30000);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);document.removeEventListener('visibilitychange',load);window.removeEventListener('pz:workspace-open',reset);};},[session.user.id]);
  const solar=useManagementSolar(session.user.id);
  const reviews=useManagementReviews(session.user.id);
  const [closureJob,setClosureJob]=useState<string>();

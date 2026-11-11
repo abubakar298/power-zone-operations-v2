@@ -1,6 +1,7 @@
 import {ProjectDocumentActions} from '../components/ProjectDocumentActions.js';
 import type {Session} from '../api.js';
 import {useEffect,useState} from 'react';
+import {usePageChoice} from '../navigation/page-steps.js';
 import {api} from '../api.js';
 import {Button} from '../ui/Button.js';
 import {StatusBadge} from '../ui/StatusBadge.js';
@@ -8,7 +9,7 @@ import {LibraryDocumentPreview} from '../components/LibraryDocumentPreview.js';
 import {displayDateTime} from '../../server/display/dates.js';
 export const familyLabel=(value:string)=>({'solar-hybrid':'Solar Hybrid','bess-only':'BESS Only / UPS with Installation','direct-product':'Direct Product Sale','ci-bess':'C&I BESS'} as Record<string,string>)[value]??value;
 export function ProjectWorkspace({projectKey,onBack,onOpen,session}:{projectKey:string;onBack:()=>void;onOpen:(task:any)=>void;session:Session}) {
- const [data,setData]=useState<any>(),[error,setError]=useState(''),[tab,setTab]=useState('Overview'),[preview,setPreview]=useState<any>();
+ const [data,setData]=useState<any>(),[error,setError]=useState(''),[tab,setTab]=usePageChoice('projectTab',null,'Overview'),[preview,setPreview]=useState<any>();
  useEffect(()=>{let alive=true;setData(undefined);setError('');setPreview(undefined);api(`/coordinator/project?key=${encodeURIComponent(projectKey)}`).then(r=>{if(alive)setData(r)}).catch(e=>{if(alive)setError(e.message)});return()=>{alive=false}},[projectKey]);
  if(preview)return <LibraryDocumentPreview document={{...preview,pdfUrl:preview.pdf_url}} stage={preview.stage??'Saved version'} onBack={()=>setPreview(undefined)}/>;
  return <section className="pz-panel pz-stack" aria-busy={!data&&!error}>
