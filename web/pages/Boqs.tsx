@@ -1439,6 +1439,7 @@ export function Boqs({
                     masters={masters}
                     initial={initial}
                     revision={!!baseRevisionId}
+                    siteDetailsEditable={!!baseRevisionId&&!preparationEdit}
                     preferredCustomer={createdCustomerId}
                     onAdd={
                       canWriteMaster(session.user.role, "customers", "new")
