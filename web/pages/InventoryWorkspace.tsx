@@ -2,6 +2,7 @@ import {FileUpload} from '../ui/FileUpload.js';
 import { jobLabel } from "../components/job-label.js";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges.js";
 import { useEffect, useRef, useState } from "react";
+import {usePageChoice} from '../navigation/page-steps.js';
 import { api, type Session } from "../api.js";
 import { Button } from "../ui/Button.js";
 import { Field } from "../ui/Field.js";
@@ -44,10 +45,11 @@ export function InventoryWorkspace({
   initialJobKey?: string;
 }) {
   const savePending=useRef(false);
-  const [tab, setTab] = useState(
+  const [tab, setTab] = usePageChoice("inventoryTab", null,
       accounts ? "Receipts & Reconciliation" : "My Workspace",
+      {guard:true,onBack:()=>{setJob(undefined);setLegacy(false);setError("");}},
     ),
-    [bucket, setBucket] = useState(""),
+    [bucket, setBucket] = usePageChoice("inventoryListBucket", null, ""),
     [search, setSearch] = useState(""),
     [overdue, setOverdue] = useState(false),
     [jobs, setJobs] = useState<any[]>([]),

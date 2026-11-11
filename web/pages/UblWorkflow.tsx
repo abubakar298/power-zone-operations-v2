@@ -1,6 +1,7 @@
 import {FileUpload} from '../ui/FileUpload.js';
 import { DocumentPreview } from "../components/DocumentPreview.js";
 import { useEffect, useState } from "react";
+import {usePageChoice} from '../navigation/page-steps.js';
 import { api, type Session } from "../api.js";
 import { Button } from "../ui/Button.js";
 import { Field } from "../ui/Field.js";
@@ -35,7 +36,7 @@ export function UblWorkflow({
     [form, setForm] = useState<any>({}),
     [dirty, setDirty] = useState(false),
     [search, setSearch] = useState(""),
-    [filter, setFilter] = useState("All"),
+    [filter, setFilter] = usePageChoice("ublFilter", null, "All"),
     [error, setError] = useState(""),
     [actionError, setActionError] = useState<{
       action: string;

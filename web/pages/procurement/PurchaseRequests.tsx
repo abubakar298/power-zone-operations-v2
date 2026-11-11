@@ -1,6 +1,7 @@
 import {recentFirst} from '../../../shared/recent-records.js';
 import {PagedTableBody,PagedResults} from '../../ui/PagedTableBody.js';
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {usePageChoice} from '../../navigation/page-steps.js';
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
 import { Field } from "../../ui/Field.js";
@@ -34,7 +35,7 @@ export function PurchaseRequests({ session, mode, openId, onOpened, onChanged }:
   session: Session; mode: "buyer" | "approver" | "reader"; openId?: string; onOpened?: () => void; onChanged?: () => void;
 }) {
   const [rows, setRows] = useState<RequestRow[] | null>(null);
-  const [tab, setTab] = useState(mode === "approver" ? "pending" : "all");
+  const [tab, setTab] = usePageChoice("requestTab", null, mode === "approver" ? "pending" : "all");
   const [selected, setSelected] = useState<string | undefined>(openId);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);

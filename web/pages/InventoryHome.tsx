@@ -10,6 +10,7 @@ import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.j
 import {navigateInventory} from '../inventory-approved/navigation.js';
 import {decimalDisplay} from '../numbers.js';
 import {useEffect,useRef,useState} from 'react';
+import {usePageChoice} from '../navigation/page-steps.js';
 import {Decimal} from 'decimal.js';
 import {api,type Session} from '../api.js';
 import {Brand} from '../components/Brand.js';
@@ -36,7 +37,7 @@ const buckets=[['ipos','Upcoming Projects'],['irr-pending','Dispatched — Await
 /** Approved Inventory composition backed only by authenticated production APIs. */
 export function InventoryHome({session,onLogout,assignedKind}:{session:Session;onLogout:()=>void;assignedKind?:string}){
  const path=location.pathname,view=path==='/inventory'?'dashboard':path.split('/')[2]||'dashboard';
- const [mobile,setMobile]=useState(false),[intake,setIntake]=useState<Intake>(),[purchases,setPurchases]=useState<Purchase[]>(),[drafts,setDrafts]=useState<Draft[]>(),[documents,setDocuments]=useState<DispatchDocumentRow[]>(),[errors,setErrors]=useState<Record<string,string>>({}),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[bucket,setBucket]=useState<string>('ipos'),[search,setSearch]=useState(''),[schedule,setSchedule]=useState('all');
+ const [mobile,setMobile]=useState(false),[intake,setIntake]=useState<Intake>(),[purchases,setPurchases]=useState<Purchase[]>(),[drafts,setDrafts]=useState<Draft[]>(),[documents,setDocuments]=useState<DispatchDocumentRow[]>(),[errors,setErrors]=useState<Record<string,string>>({}),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[bucket,setBucket]=usePageChoice('inventoryBucket',null,'ipos',{guard:true,onBack:()=>{setSearch('');setSchedule('all');}}),[search,setSearch]=useState(''),[schedule,setSchedule]=useState('all');
  const loadEpoch=useRef(0);
  async function load(){const epoch=++loadEpoch.current;const active=()=>epoch===loadEpoch.current;setLoading(true);setErrors({});try{
   const access=assignedKind?{kind:assignedKind}:await api<{kind:string}>('/material-dispatches/access');if(!active())return;if(access.kind==='storekeeper'){location.replace('/inventory/gate-passes');return;}if(!['dispatcher','management'].includes(access.kind))throw Error('Inventory access is not assigned.');

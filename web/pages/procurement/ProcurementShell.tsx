@@ -3,6 +3,7 @@ import {recentFirst} from '../../../shared/recent-records.js';
 import {ListPagination,paginateRows,useListPage} from '../../ui/ListPagination.js';
 import {PagedTableBody} from '../../ui/PagedTableBody.js';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import {usePageChoice} from '../../navigation/page-steps.js';
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
 import {ManagementHeaderSwitcher} from "../../components/ManagementHeaderSwitcher.js";
@@ -360,7 +361,7 @@ function ReceivedTable({ rows }: { rows: Overview["receivedPOs"] }) {
 }
 
 function ReceivedPage({ data }: { data: Overview }) {
-  const [tab, setTab] = useState("all");
+  const [tab, setTab] = usePageChoice("receivedTab", null, "all");
   const tabs = [
     { key: "all", label: "All", f: () => true },
     { key: "short", label: "Material short", f: (p: Overview["receivedPOs"][number]) => p.material === "short" },
@@ -377,7 +378,7 @@ function ReceivedPage({ data }: { data: Overview }) {
 }
 
 function UpcomingPage({ data }: { data: Overview }) {
-  const [stage, setStage] = useState("");
+  const [stage, setStage] = usePageChoice("upcomingStage", null, "");
   const stages = [...new Set(data.upcoming.map((u) => u.workflowStage ?? ""))].filter(Boolean);
   const rows = data.upcoming.filter((u) => !stage || u.workflowStage === stage);
   return (
@@ -405,7 +406,7 @@ function UpcomingPage({ data }: { data: Overview }) {
 }
 
 function StockPage({ data, busy, onFromToBuy }: { data: Overview; busy: boolean; onFromToBuy: () => void }) {
-  const [tab, setTab] = useState("all");
+  const [tab, setTab] = usePageChoice("stockTab", null, "all");
   const tabs = [
     { key: "all", label: "All items", f: () => true },
     { key: "buy", label: "To buy", f: (i: InventoryRow) => i.boughtByBuyer && Number(i.toBuy) > 0 },

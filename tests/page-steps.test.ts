@@ -21,8 +21,8 @@ Object.assign(globalThis,{
  document:{referrer:'',documentElement:{},querySelectorAll:()=>[]},
  MutationObserver:class{observe(){}},
 });
-const {installBackSteps,canGoBack,goBack,stepDepth}=await import('../web/navigation/back-steps.js');
-const {addressValue,choiceAddress,choiceIn,pageAddress}=await import('../web/navigation/page-steps.js');
+const {installBackSteps,canGoBack,goBack,stepDepth,previousAddress}=await import('../web/navigation/back-steps.js');
+const {addressValue,choiceAddress,choiceIn,pageAddress,pageOf,pageOnlyAddress,pushChoice}=await import('../web/navigation/page-steps.js');
 const tick=()=>new Promise(r=>setTimeout(r,0));
 const queues=['awaiting','confirmed','all'] as const;
 const queue=()=>choiceIn(addressValue('paymentsQueue'),queues,'awaiting');
@@ -49,6 +49,30 @@ test('opening another page keeps the workspace and View as but leaves the previo
  history.replaceState(null,'','/dashboard#workspace=finance&viewAs=Accounts&accountsTab=Payments+to+Record&paymentsQueue=all&notification=x');
  assert.equal(pageAddress('accountsTab','Invoices to Submit'),'/dashboard#workspace=finance&viewAs=Accounts&accountsTab=Invoices+to+Submit');
  assert.equal(choiceAddress('paymentsQueue','confirmed'),'/dashboard#workspace=finance&viewAs=Accounts&accountsTab=Payments+to+Record&paymentsQueue=confirmed&notification=x');
+});
+
+test('one click that changes two cards is one Back step; Back restores both',async()=>{
+ history.replaceState(null,'','/dashboard#workspace=dashboard&page=Workspace');
+ await new Promise(r=>setTimeout(r,200));
+ const before=stepDepth();
+ pushChoice('taskStage','Quotation');pushChoice('taskGroup','all');
+ assert.equal(stepDepth(),before+1,'both choices share one step');
+ assert.equal(addressValue('taskStage'),'Quotation');assert.equal(addressValue('taskGroup'),'all');
+ goBack();await tick();
+ assert.equal(addressValue('taskStage'),null);assert.equal(addressValue('taskGroup'),null);
+});
+
+test('during Back a page can tell whether it was left (another page) or only its cards changed',async()=>{
+ const seen:string[]=[];const listen=()=>seen.push(pageOf(previousAddress())===pageOf(location.href)?'same page':'other page');
+ window.addEventListener('popstate',listen);
+ history.pushState(null,'','/dashboard#workspace=finance&accountsTab=Payments+to+Record');
+ await new Promise(r=>setTimeout(r,200));
+ pushChoice('paymentsQueue','all');
+ history.pushState(null,'','/dashboard#workspace=finance&accountsTab=Invoices+to+Submit');
+ goBack();await tick();goBack();await tick();
+ window.removeEventListener('popstate',listen);
+ assert.deepEqual(seen,['other page','same page']);
+ assert.equal(pageOnlyAddress(new URLSearchParams('workspace=finance&boq=7')),'/dashboard#workspace=finance&boq=7','links that are not cards stay');
 });
 
 test('an unknown card in the address falls back to the first card',()=>{

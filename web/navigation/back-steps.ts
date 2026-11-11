@@ -14,6 +14,11 @@ const depth=()=>Number((history.state as {pzDepth?:number}|null)?.pzDepth??0);
 export const stepDepth=depth;
 const notify=()=>window.dispatchEvent(new Event(EVENT));
 export const recentPush=(ms=600)=>Date.now()-lastPush<ms;
+// The address shown before the latest Back/Forward, so a page can tell whether Back left it.
+let shownHref='',leftHref='';
+const shown=()=>{shownHref=location.href;};
+/** During a Back/Forward: the address that was showing just before it. */
+export const previousAddress=()=>leftHref;
 const IN_PORTAL='pz-in-portal';
 const outside=()=>location.pathname==='/'||/^\/(login|setup|account-link|forgot-password)(\/|$)/.test(location.pathname);
 // Signed-in pages mark this tab as inside the portal; the sign-in pages clear it.
@@ -24,13 +29,15 @@ export function installBackSteps(){
  history.pushState=((data:unknown,unused:string,url?:string|URL|null)=>{
   const target=url==null?location.href:new URL(String(url),location.href).href;
   // Re-opening the page already shown is not a new step.
-  if(target===location.href){replace({...(history.state??{}),...(data as object??{})},unused,url);notify();return;}
-  push({...(data as object??{}),pzDepth:depth()+1},unused,url);lastPush=Date.now();rememberPortal();notify();
+  if(target===location.href){replace({...(history.state??{}),...(data as object??{})},unused,url);shown();notify();return;}
+  push({...(data as object??{}),pzDepth:depth()+1},unused,url);lastPush=Date.now();shown();rememberPortal();notify();
  }) as History['pushState'];
  history.replaceState=((data:unknown,unused:string,url?:string|URL|null)=>{
-  replace({...(history.state??{}),...(data as object??{}),pzDepth:depth()},unused,url);rememberPortal();notify();
+  replace({...(history.state??{}),...(data as object??{}),pzDepth:depth()},unused,url);shown();rememberPortal();notify();
  }) as History['replaceState'];
- window.addEventListener('popstate',notify);
+ // Registered first, so pages listening to popstate already see the address that was left.
+ window.addEventListener('popstate',()=>{leftHref=shownHref;shown();notify();});
+ shown();
  // Arriving from another portal page by a full page change (for example Dashboard → Inventory)
  // still has a page to go back to. The browser hides the previous address, so this tab
  // remembers that it is already inside the portal.

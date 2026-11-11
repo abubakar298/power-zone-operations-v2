@@ -29,7 +29,7 @@ export function InventoryReviews({session,onLogout,reviewScope,mode="closing"}:{
  const currentPath=useRef(location.pathname+location.search);
  const routeItem=()=>location.pathname.slice(reviewBase.length).match(/^\/([a-f0-9]{64})\/?$/)?.[1];
  useEffect(()=>{void load();const id=routeItem();if(id)void open(id,false);
-  const pop=()=>{if(!confirmLeaveWorkspace()){history.pushState(null,'',currentPath.current);return;}currentPath.current=location.pathname+location.search;const next=routeItem();if(next)void open(next,false,false);else setDetail(undefined);};
+  const pop=()=>{if(location.pathname+location.search===currentPath.current)return;if(!confirmLeaveWorkspace()){history.pushState(null,'',currentPath.current);return;}currentPath.current=location.pathname+location.search;const next=routeItem();if(next)void open(next,false,false);else setDetail(undefined);};
   window.addEventListener('popstate',pop);return()=>window.removeEventListener('popstate',pop);
  },[]);
  useEffect(()=>{setPage(0);},[filter,warehouse,search]);
