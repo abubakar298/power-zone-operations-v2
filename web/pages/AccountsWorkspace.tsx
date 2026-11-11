@@ -1,6 +1,8 @@
 import {historicalClosureException} from '../../shared/historical-closure-exceptions.js';
 import {HistoricalClosureDocuments} from '../components/HistoricalClosureDocuments.js';
 import {useBackStep} from '../navigation/useBackStep.js';
+import {stepDepth} from '../navigation/back-steps.js';
+import {addressValue,choiceAddress,pageAddress} from '../navigation/page-steps.js';
 import {confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 import {recentFirst,recordedTimestamp} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
@@ -127,6 +129,32 @@ export function AccountsWorkspace({
     [legacy, setLegacy] = useState(false);
   // An opened IPO record is a Back step: Back returns to the list.
   useBackStep(!!selected,()=>{if(confirmLeaveWorkspace())setSelected(undefined);});
+  // An opened closure job too: Back returns to the jobs list, like "Back to jobs".
+  useBackStep(!!job&&!managementReview,()=>{if(confirmLeaveWorkspace()){setJob(undefined);setError("");setMessage("");}});
+  // Each Accounts page is a Back step (#accountsTab=…): Back reopens the page it came from, without reloading.
+  // The step remembers the exact page; an address typed or linked from elsewhere keeps its usual meaning (accountsPageName).
+  const pageSteps=!managementReview,tabRef=useRef(tab),tabShown=useRef(false),tabFollowed=useRef(false),tabDepth=useRef(0);tabRef.current=tab;
+  useEffect(()=>{
+    if(!pageSteps)return;
+    if(addressValue("accountsTab")!==tab||(history.state as {accountsPage?:string}|null)?.accountsPage!==tab){
+      if(tabShown.current&&!tabFollowed.current)history.pushState({accountsPage:tab},"",pageAddress("accountsTab",tab));
+      else history.replaceState({accountsPage:tab},"",choiceAddress("accountsTab",tab));
+    }
+    tabShown.current=true;tabFollowed.current=false;tabDepth.current=stepDepth();
+  },[tab]);
+  useEffect(()=>{
+    if(!pageSteps)return;
+    const follow=()=>{
+      const workspace=addressValue("workspace")??"dashboard",named=addressValue("accountsTab");
+      if(workspace!=="finance"&&!(workspace==="dashboard"&&session.user.role==="Accounts"))return;
+      const target=(history.state as {accountsPage?:string}|null)?.accountsPage??accountsPageName(named);
+      if(target===tabRef.current)return;
+      // Unsaved changes: stay on this page and put its address back.
+      if(!confirmLeaveWorkspace()){history.go(stepDepth()<tabDepth.current?1:-1);return;}
+      tabFollowed.current=true;clearPage();setTab(target);window.scrollTo(0,0);
+    };
+    window.addEventListener("popstate",follow);return()=>window.removeEventListener("popstate",follow);
+  },[]);
   useEffect(()=>{onContextChange?.(job?'Job Closure':tab==='IPO Review'&&selected?'IPO Review':null);return()=>onContextChange?.(null);},[job,tab,selected,onContextChange]);
   const selectedIpoSource=selected?data.ipos?.find((r:any)=>r.id===selected.ipo.id):null;
   const ipoReceivedDate=selectedIpoSource?.received_at??selectedIpoSource?.created_at??selected?.ipo?.created_at;
@@ -198,9 +226,12 @@ export function AccountsWorkspace({
       ))
     )
       return;
-    setPtDocument(undefined);setPtEntryReference("");setPtEntryNotes("");
     setTab(t);
     window.scrollTo(0,0);
+    clearPage();
+  }
+  function clearPage(){
+    setPtDocument(undefined);setPtEntryReference("");setPtEntryNotes("");
     setJob(undefined);
     setSelected(undefined);
     setSamplePreview(undefined);

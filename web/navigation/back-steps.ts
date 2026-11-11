@@ -10,6 +10,8 @@ type Layer={onBack:()=>void};
 let installed=false,lastPush=0;
 const layers:Layer[]=[];
 const depth=()=>Number((history.state as {pzDepth?:number}|null)?.pzDepth??0);
+/** How many Back steps the current page is from the first page of this tab. */
+export const stepDepth=depth;
 const notify=()=>window.dispatchEvent(new Event(EVENT));
 export const recentPush=(ms=600)=>Date.now()-lastPush<ms;
 const IN_PORTAL='pz-in-portal';
