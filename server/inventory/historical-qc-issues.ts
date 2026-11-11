@@ -30,11 +30,56 @@ const links: Record<string, {ipo: string; orders: string[]; ledgerIdentity?: {ip
 
 const ipoKey = (label: string) => label.toUpperCase().replace(/[\s·()]/g,'');
 
+// Signed delivery copies provide item quantities for QC, independently of the
+// warehouse ledger. Use the canonical order confirmed by Management.
+type SignedDoItem = readonly [itemId: string, description: string, issued: string];
+const signedDeliveryIssues = new Map<string, {
+  ipo: string;
+  reference: string;
+  items: readonly SignedDoItem[];
+}>([
+  ['registered-MBL:CHP-233:20-site order:3/20', {
+    ipo: 'CHP-233(3/20)',
+    // The signed copy prints CHP-338(15/60) but names New Chaali branch 0126.
+    reference: 'CPZ-DO-818',
+    items: [
+      ['CH-PCS-HYB-1P-006', '6 kW hybrid inverter', '1'],
+      ['CH-BMS-LV', 'Low-voltage BMS', '1'],
+      ['CH-BAT-LV-05 KW', '5 kWh low-voltage battery', '2'],
+      ['CH-VPD-63A/2P', 'Voltage protection device', '1'],
+      ['CH-5WAY-DB', '5-way distribution box', '1'],
+      ['CH-Duct Slot 60x60', 'Slotted duct 60 × 60', '1'],
+      // The installation material sheet classifies flexible pipe as a local purchase.
+    ],
+  }],
+  ['registered-UBL:UPS:20/250', {
+    ipo: 'CHP-163(20/250)',
+    reference: 'CPZ-DO-0176',
+    items: [
+      ['CH-BMS-LV', 'Low-voltage BMS', '1'],
+      ['CH-BAT-LV-05 KW', '5 kWh low-voltage battery', '2'],
+      ['CH-PCS-HYB-1P-006', '6 kW hybrid inverter', '1'],
+      ['CH-VPD-63A/2P', 'Voltage protection device', '1'],
+    ],
+  }],
+]);
+
 export function hasReviewedHistoricalIssues(boardId: string): boolean {
-  return Object.hasOwn(links,boardId)||!!reviewedStockLogQcIssue(boardId);
+  return signedDeliveryIssues.has(boardId)||Object.hasOwn(links,boardId)||!!reviewedStockLogQcIssue(boardId);
 }
 
 export function historicalQcIssues(boardId: string, ipo: string) {
+  const signed = signedDeliveryIssues.get(boardId);
+  if (signed) {
+    const canonicalIpo = ipoKey(ipo.replace(/([·(\s])0+(?=\d+\/)/g, '$1'));
+    if (canonicalIpo !== ipoKey(signed.ipo)) return null;
+    const lines = signed.items.map(([itemId, description, issued], index) => ({
+      key: 'signed-do:' + boardId + ':' + signed.reference + ':' + (index + 1),
+      itemId, description, issued, unit: 'piece', reference: signed.reference,
+      variable: materialDocumentPolicy({itemId, description}).variableDispatch,
+    }));
+    return {lines, signature: JSON.stringify(lines.map(line => [line.key, line.issued])), review: undefined};
+  }
   const later=reviewedStockLogQcIssue(boardId);
   if(later){
     if(ipoKey(ipo)!==ipoKey(later.ipo))return null;
