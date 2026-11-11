@@ -1,3 +1,4 @@
+import {batchedDecorateLookups,directDecorateLookups,type DecorateLookups} from './decorate-lookups.js';
 import { ipoInvoiceTerms } from "../../shared/ipo-invoice-terms.js";
 import {ublPoConfigurations,ublPoConfigurationChange} from './ubl-po-configuration.js';
 import {queueIssuedPo,queueSharedIpo} from '../ipo-email/queue.js';
@@ -320,7 +321,12 @@ export class ProjectWorkflowRepository {
     if(createHash('sha256').update(file.content).digest('hex')!==file.sha256)throw new HttpError(409,'Reference attachment verification failed.');
     return file;
   }
-  async decorate(r: any, u: any, c: Pool | PoolClient = this.pool) {
+  async decorate(
+    r: any,
+    u: any,
+    c: Pool | PoolClient = this.pool,
+    lookups: DecorateLookups = directDecorateLookups(c),
+  ) {
     const data = r.data ?? {};
     let task: any;
     if (
@@ -333,28 +339,13 @@ export class ProjectWorkflowRepository {
         "issued",
       ].includes(r.stage)
     ) {
-      const f = (
-        await c.query(
-          "SELECT f.revision_id FROM boq_draft_finalizations f WHERE draft_id=$1",
-          [data.draftId],
-        )
-      ).rows[0];
+      const f = (await lookups.finalization(data.draftId));
       const quotationRevision = data.latestQuotationId
-        ? (
-            await c.query(
-              "SELECT boq_revision_id AS revision_id FROM quotation_versions WHERE id=$1",
-              [data.latestQuotationId],
-            )
-          ).rows[0]
+        ? (await lookups.quotationRevision(data.latestQuotationId))
         : null;
       const currentRevision = quotationRevision ?? f;
       if (currentRevision) {
-        const q = (
-          await c.query(
-            "SELECT q.id,q.number,q.version,COALESCE(e.kind,'Draft') AS status,EXISTS(SELECT 1 FROM quotation_dispatch_records d WHERE d.quotation_id=q.id) AS dispatched,EXISTS(SELECT 1 FROM quotation_revision_requests rr WHERE rr.source_quotation_id=q.id) AS revision FROM quotation_versions q LEFT JOIN LATERAL(SELECT kind FROM coordination_events WHERE quotation_id=q.id ORDER BY created_at DESC,id DESC LIMIT 1)e ON true WHERE q.boq_revision_id IN(SELECT id FROM boq_revisions WHERE boq_id=(SELECT boq_id FROM boq_revisions WHERE id=$1)) ORDER BY q.created_at DESC,q.version DESC LIMIT 1",
-            [currentRevision.revision_id],
-          )
-        ).rows[0];
+        const q = (await lookups.latestQuotation(currentRevision.revision_id));
         if (q) {
           task = {
             id: q.id,
@@ -374,12 +365,7 @@ export class ProjectWorkflowRepository {
                   : "Design Outputs—Awaiting Action";
           r.quotation = q;
         } else {
-          const p = (
-            await c.query(
-              "SELECT id FROM commercial_pricing_versions WHERE boq_revision_id=$1 ORDER BY version DESC LIMIT 1",
-              [currentRevision.revision_id],
-            )
-          ).rows[0];
+          const p = (await lookups.latestPricing(currentRevision.revision_id));
           task = {
             id: p?.id ?? currentRevision.revision_id,
             target: p ? "quotes" : "pricing",
@@ -392,45 +378,21 @@ export class ProjectWorkflowRepository {
     }
     const day = (v: any) => (v ? String(v).slice(0, 10) : null),
       scheduled = day(data.scheduledSurveyDate),
-      today = (
-        await c.query(
-          "SELECT to_char(now() AT TIME ZONE 'Asia/Karachi','YYYY-MM-DD') AS today",
-        )
-      ).rows[0].today;
+      today = (await lookups.today());
     if (data.latestQuotationId && !r.quotation) {
-      r.quotation = (
-        await c.query(
-          "SELECT q.id,q.number,q.boq_revision_id,COALESCE(e.kind,'Draft') AS status FROM quotation_versions q LEFT JOIN LATERAL(SELECT kind FROM coordination_events WHERE quotation_id=q.id ORDER BY created_at DESC LIMIT 1)e ON true WHERE q.id=$1",
-          [data.latestQuotationId],
-        )
-      ).rows[0];
+      r.quotation = (await lookups.quotationStatus(data.latestQuotationId));
     }
     const shared =
       r.stage === "issued"
-        ? (
-            await c.query(
-              "SELECT q.number AS ipo_number,p.reference,p.input->>'date' AS po_date,i.created_at,i.ipo_id,i.operations_id FROM project_workflow_issuances i JOIN internal_purchase_orders q ON q.id=i.ipo_id JOIN project_po_receipts p ON p.id=i.receipt_id LEFT JOIN ipo_accounts_handoffs h ON h.ipo_id=i.ipo_id JOIN operations_boq_issuances o ON o.id=i.operations_id WHERE i.record_id=$1 AND (h.ipo_id IS NOT NULL OR q.snapshot#>>'{historicalImport,hideFromIpoShared}'='false')",
-              [r.id],
-            )
-          ).rows[0]
+        ? (await lookups.shared(r.id))
         : null;
-    const headsup = (
-      await c.query(
-        "SELECT h.id,h.created_at,h.snapshot,EXISTS(SELECT 1 FROM headsup_department_handoffs d WHERE d.receipt_id=h.id) AS sent FROM customer_headsup_receipts h WHERE EXISTS(SELECT 1 FROM active_headsup_received_sites binding WHERE binding.record_id::text=$1) AND NOT EXISTS(SELECT 1 FROM audit_log archived WHERE archived.action='customer.headsup.unsaved:'||h.id::text) AND NOT EXISTS(SELECT 1 FROM customer_headsup_receipts newer WHERE newer.supersedes_id=h.id) AND EXISTS(SELECT 1 FROM jsonb_array_elements(h.snapshot->'matches') m WHERE m->>'recordId'=$1) ORDER BY h.created_at DESC LIMIT 1",
-        [r.id],
-      )
-    ).rows[0];
+    const headsup = (await lookups.headsup(r.id));
     const readyGroupSize =
       r.stage === "approved_dispatch" &&
       data.ublSurveyPackageId &&
       !data.readySendUnbound
         ? Number(
-            (
-              await c.query(
-                "SELECT count(*) AS n FROM project_workflow_records WHERE stage='approved_dispatch' AND data->>'ublSurveyPackageId'=$1 AND COALESCE(data->>'readySendUnbound','false')<>'true'",
-                [data.ublSurveyPackageId],
-              )
-            ).rows[0].n,
+            (await lookups.readyGroupCount(data.ublSurveyPackageId)).n,
           )
         : 0;
     return {
@@ -518,12 +480,7 @@ export class ProjectWorkflowRepository {
       data: {
         surveyPackageSiteCount: data.ublSurveyPackageId
           ? Number(
-              (
-                await c.query(
-                  "SELECT jsonb_array_length(snapshot->'sites') AS n FROM ubl_survey_review_packages WHERE id=$1",
-                  [data.ublSurveyPackageId],
-                )
-              ).rows[0]?.n ?? 1,
+              (await lookups.surveyPackage(data.ublSurveyPackageId))?.n ?? 1,
             )
           : 1,
         headsupReceived: !!headsup,
@@ -591,12 +548,7 @@ export class ProjectWorkflowRepository {
         legacyId: r.legacy_id,
       },
       quotation: r.quotation ?? null,
-      references: (
-        await c.query(
-          "SELECT number FROM project_workflow_documents WHERE record_id=$1",
-          [r.id],
-        )
-      ).rows.map((d) => d.number),
+      references: (await lookups.references(r.id)).map((d) => d.number),
       location:
         data.location ??
         data.legacySurvey?.location ??
@@ -604,7 +556,12 @@ export class ProjectWorkflowRepository {
         r.region,
     };
   }
-  async list(actor: string, department: string, scope: string) {
+  async list(
+    actor: string,
+    department: string,
+    scope: string,
+    lookupMode: "batched" | "direct" = "batched",
+  ) {
     const u = await this.user(actor);
     this.requireRole(u, ["Design", "Coordinator"]);
     if (scope === "team" && !management(u.role))
@@ -621,7 +578,17 @@ export class ProjectWorkflowRepository {
       )
     ).rows;
     const records = [];
-    for (const r of rows) records.push(await this.decorate(r, u));
+    if (lookupMode === "direct")
+      for (const r of rows) records.push(await this.decorate(r, u));
+    else {
+      // Decorate every record together so each lookup runs once for the whole list.
+      const lookups = batchedDecorateLookups(this.pool);
+      records.push(
+        ...(await Promise.all(
+          rows.map((r) => this.decorate(r, u, this.pool, lookups)),
+        )),
+      );
+    }
     const surveyPackageIds=[...new Set(records.map((r:any)=>r.data.ublSurveyPackageId).filter((id:any)=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
     const surveyBatches=surveyPackageIds.length?(await this.pool.query('SELECT package_id,sequence FROM survey_submission_groups WHERE package_id=ANY($1::uuid[])',[surveyPackageIds])).rows:[];
     const surveyBatchNumbers=new Map(surveyBatches.map((g:any)=>[g.package_id,'SSG-'+String(g.sequence).padStart(5,'0')]));

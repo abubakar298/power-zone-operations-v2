@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import {assertBatchedListMatchesDirect} from './project-list-equivalence.js';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {testDatabase} from './database.js';
@@ -59,7 +60,7 @@ test('authorised historical pending orders use real approved issuance calculatio
   assert.equal(ipo.snapshot.preparedBy,'M. Rafiq');
   assert.equal(ipo.snapshot.input.invoiceTerms,'completion');
   assert.ok((await db.pool.query(resourceOwnership.ipo,[restored.ipoId,users.coordinator])).rowCount);
-  const sharedRecord=(await new ProjectWorkflowRepository(db.pool).list(users.coordinator,'coordination','mine')).records.find(r=>r.id===restored.recordId);
+  const sharedRecord=(await assertBatchedListMatchesDirect(new ProjectWorkflowRepository(db.pool),users.coordinator,'coordination','mine')).records.find(r=>r.id===restored.recordId);
   assert.equal(sharedRecord?.data.ipoShared,true);
   assert.equal(sharedRecord?.data.historicalDelivered,true);
   assert.deepEqual((await db.pool.query('SELECT snapshot FROM operations_board_versions WHERE site_id=$1',[boardId])).rows,[{snapshot:historicalBoard}]);
