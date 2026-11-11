@@ -9,6 +9,7 @@ import {unallocatedInvoiceValue} from '../../server/accounts/billing-model.js';
 import {invoiceCategories,invoiceType,isSubmittedInvoicePending,matchesInvoiceFilters} from '../../shared/accounts-invoice-display.js';
 import {useUnsavedChanges,confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 import {AccountsRecordDialog} from '../components/AccountsRecordDialog.js';
+import {usePageChoice} from '../navigation/page-steps.js';
 import {useEffect,useState} from 'react';
 import {Decimal} from 'decimal.js';
 import {api} from '../api.js';
@@ -18,12 +19,15 @@ import {FinancialValue} from '../ui/FinancialValue.js';
 const colors=['var(--pz-age-recent)','var(--pz-age-attention)','var(--pz-danger)','var(--pz-age-unknown)'];
 const displayDate=(value:string)=>/^\d{4}-\d{2}-\d{2}$/.test(value??'')?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(value+'T00:00:00Z')):value||'Not recorded';
 const bands=[['0-7','0–7 days'],['8-15','8–15 days'],['15+','Over 15 days'],['unknown','Date not recorded']];
+// Each invoice queue card is a Back step.
+const invoiceQueues=['deliveryOnly','delivery','completion','extraCable'] as const;
 export function AccountsBilling({mode}:{mode:'receivables'|'invoicing'}){
+ const[queue,setQueue]=usePageChoice<string>('invoiceQueue',invoiceQueues,'delivery');
  const[recordSuccess,setRecordSuccess]=useState(''),[invoiceDirty,setInvoiceDirty]=useState(false),[documentsFor,setDocumentsFor]=useState<any>();
  useUnsavedChanges(invoiceDirty);
  async function loadBilling(){const billing=await api<any>('/accounts-workspace/billing');if(mode==='invoicing')billing.invoiceRegister=await api('/accounts-workspace/invoice-entries');return billing;}
  async function invoiceSaved(message:string){setRecordSuccess(message);setInvoiceDirty(false);try{const next=await loadBilling();setData(next);setSelected((next.invoiceRegister?.submissionQueues[queue]??[]).find((r:any)=>r.sourceKind===selected?.sourceKind&&r.key===selected?.key&&r.milestone===selected?.milestone));}catch{setRecordSuccess(message+' Refresh the page to update the worklist.');}}
- const[data,setData]=useState<any>(),[error,setError]=useState(''),[customer,setCustomer]=useState('All customers'),[band,setBand]=useState<string|null>(null),[queue,setQueue]=useState('delivery'),[selected,setSelected]=useState<any>(),[search,setSearch]=useState(''),[balance,setBalance]=useState('submitted'),[invoice,setInvoice]=useState<any>(),[coverage,setCoverage]=useState(false),[category,setCategory]=useState(''),[invoiceStage,setInvoiceStage]=useState('');
+ const[data,setData]=useState<any>(),[error,setError]=useState(''),[customer,setCustomer]=useState('All customers'),[band,setBand]=useState<string|null>(null),[selected,setSelected]=useState<any>(),[search,setSearch]=useState(''),[balance,setBalance]=useState('submitted'),[invoice,setInvoice]=useState<any>(),[coverage,setCoverage]=useState(false),[category,setCategory]=useState(''),[invoiceStage,setInvoiceStage]=useState('');
  useEffect(()=>{let active=true;setData(undefined);setError('');loadBilling().then(d=>{if(active)setData(d);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[mode]);
  if(error)return <p role="alert" className="form-error">{error}</p>;
  if(!data)return <p role="status">Loading {mode==='receivables'?'customer receivables':'Operations and Inventory handoffs'}…</p>;

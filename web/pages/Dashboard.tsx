@@ -131,8 +131,8 @@ export function Dashboard({
   useEffect(()=>{
     const sync=()=>setOperationsArea(currentOperationsArea(session.user));
     sync();window.addEventListener('hashchange',sync);
-    // Back to an earlier Accounts tab reopens that tab.
-    const accountsTab=()=>{const params=new URLSearchParams(location.hash.slice(1));if(params.get('workspace')!=='finance')return;const page=accountsPageName(params.get('accountsTab')||'My Workspace');if(page!==accountsPageRef.current){setAccountsPage(page);setWorkspaceVisit(n=>n+1);}};
+    // Back to an earlier Accounts tab: the open Accounts workspace switches to it itself (see AccountsWorkspace); this keeps the sidebar and the next opening in step.
+    const accountsTab=()=>{const params=new URLSearchParams(location.hash.slice(1));if(params.get('workspace')!=='finance')return;const page=accountsPageName(params.get('accountsTab')||'My Workspace');if(page!==accountsPageRef.current)setAccountsPage(page);};
     window.addEventListener('popstate',accountsTab);
     return()=>{window.removeEventListener('hashchange',sync);window.removeEventListener('popstate',accountsTab);};
   },[session.user.id]);

@@ -14,9 +14,13 @@ import{Field}from'../ui/Field.js';
 import{FinancialValue}from'../ui/FinancialValue.js';
 import{AccountsRecordDialog}from'../components/AccountsRecordDialog.js';
 import{useUnsavedChanges,confirmLeaveWorkspace}from'../hooks/useUnsavedChanges.js';
+import{usePageChoice}from'../navigation/page-steps.js';
+// Each card (Awaiting payment, Receipt details to confirm, All invoices) is a Back step.
+const paymentQueues=['awaiting','confirmed','all'] as const;
 export function AccountsPayments(){
+ const[queue,setQueue]=usePageChoice('paymentsQueue',paymentQueues,'awaiting');
  const[confirmedAmount,setConfirmedAmount]=useState(''),[confirmedOutstanding,setConfirmedOutstanding]=useState('');
- const[editReference,setEditReference]=useState(''),[editDate,setEditDate]=useState(''),[editReason,setEditReason]=useState(''),[data,setData]=useState<any>(),[error,setError]=useState(''),[search,setSearch]=useState(''),[customer,setCustomer]=useState(''),[category,setCategory]=useState(''),[invoiceStage,setInvoiceStage]=useState(''),[amountFilter,setAmountFilter]=useState(''),[queue,setQueue]=useState<'awaiting'|'confirmed'|'all'>('awaiting'),[selected,setSelected]=useState<any>(),[transactionId,setTransactionId]=useState(''),[paymentDate,setPaymentDate]=useState(''),[amount,setAmount]=useState(''),[outstanding,setOutstanding]=useState(''),[busy,setBusy]=useState(false),[actionError,setActionError]=useState(''),[success,setSuccess]=useState(''),[requestKey,setRequestKey]=useState('');
+ const[editReference,setEditReference]=useState(''),[editDate,setEditDate]=useState(''),[editReason,setEditReason]=useState(''),[data,setData]=useState<any>(),[error,setError]=useState(''),[search,setSearch]=useState(''),[customer,setCustomer]=useState(''),[category,setCategory]=useState(''),[invoiceStage,setInvoiceStage]=useState(''),[amountFilter,setAmountFilter]=useState(''),[selected,setSelected]=useState<any>(),[transactionId,setTransactionId]=useState(''),[paymentDate,setPaymentDate]=useState(''),[amount,setAmount]=useState(''),[outstanding,setOutstanding]=useState(''),[busy,setBusy]=useState(false),[actionError,setActionError]=useState(''),[success,setSuccess]=useState(''),[requestKey,setRequestKey]=useState('');
  const [page,setPage]=useListPage(JSON.stringify([search,customer,category,invoiceStage,queue]));
  useUnsavedChanges(!!selected&&(!!transactionId||!!paymentDate||!!amount||!!outstanding||['edit','amount'].includes(selected.paymentMode)&&!!editReason||selected.paymentMode==='amount'&&(!!confirmedAmount||!!confirmedOutstanding)));
  useEffect(()=>{let active=true;void api('/accounts-workspace/payment-records').then(r=>{if(active)setData(r);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[]);
