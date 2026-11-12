@@ -3,7 +3,8 @@ import {actors,login} from './release-fixtures.js';
 const open={id:'cancel-me',name:'Cancelled fixture site',ipo:'CHP-901',stage:'received',installation:true,projectType:'ups',operationsTeam:'central',documents:[],history:[],accounts:[],blockers:[],planningBatches:[],version:3};
 const other={...open,id:'other',name:'Active fixture site',ipo:'CHP-902'};
 const reason='Customer cancelled the PO by email.';
-const cancelled={...open,cancelled:true,cancellation:{reason,cancelledBy:'Moaz Ahsan',cancelledAt:'2026-11-12T08:00:00.000Z'},version:4};
+const proof={id:'22222222-2222-4222-8222-222222222222',name:'customer-email.png',mediaType:'image/png'};
+const cancelled={...open,cancelled:true,cancellation:{reason,proof:[proof],cancelledBy:'Moaz Ahsan',cancelledAt:'2026-11-12T08:00:00.000Z'},version:4};
 async function board(page:Page,kind:'head'|'lead',sites:unknown[]){
  await page.route('**/api/operations-board/sites',r=>r.fulfill({json:{sites,access:{kind,team:kind==='lead'?'central':null,name:kind==='head'?'Moaz Ahsan':'Central lead'}}}));
  await page.route('**/api/operations-board/vendors',r=>r.fulfill({json:{vendors:[]}}));
@@ -14,6 +15,7 @@ test('Operations head cancels a site with a reason; leads do not see the button'
  await board(page,'head',[open,other]);
  let site:unknown=open,body:Record<string,unknown>|undefined;
  await page.route('**/api/operations-board/sites/cancel-me',r=>r.fulfill({json:site}));
+ await page.route('**/api/operations-board/sites/cancel-me/files',r=>r.fulfill({json:proof}));
  await page.route('**/api/operations-board/sites/cancel-me/decisions',async r=>{body=r.request().postDataJSON();site=cancelled;await r.fulfill({json:cancelled});});
  await page.goto('/operations/sites/cancel-me');
  await page.getByRole('button',{name:'Cancel site'}).click();
@@ -21,11 +23,16 @@ test('Operations head cancels a site with a reason; leads do not see the button'
  await expect(panel).toContainText('Use this only when the customer has cancelled');
  const confirm=panel.getByRole('button',{name:'Cancel site'});await expect(confirm).toBeDisabled();
  await panel.getByLabel('Reason for cancelling (required)').fill(reason);
+ await expect(confirm).toBeDisabled(); // proof is still missing
+ await panel.getByLabel(/Proof of cancellation/).setInputFiles({name:'customer-email.png',mimeType:'image/png',buffer:Buffer.from([137,80,78,71,13,10,26,10,1])});
+ await expect(panel.getByRole('button',{name:'customer-email.png',exact:true})).toBeVisible();
+ await expect(confirm).toBeEnabled();
  await page.screenshot({path:'test-results/operations-site-cancellation-confirm.png',fullPage:true});
  await confirm.click();
  const banner=page.getByLabel('Site cancelled',{exact:true});
  await expect(banner).toContainText('Cancelled by Moaz Ahsan on 12 Nov 2026.');await expect(banner).toContainText(reason);
- expect(body).toMatchObject({action:'cancel-site',reason,version:3});
+ expect(body).toMatchObject({action:'cancel-site',reason,version:3,proofIds:[proof.id]});
+ await expect(banner).toContainText('Proof of cancellation');await expect(banner.getByRole('button',{name:'customer-email.png',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Cancel site'})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Assign team'})).toHaveCount(0);
  await page.screenshot({path:'test-results/operations-site-cancelled.png',fullPage:true});

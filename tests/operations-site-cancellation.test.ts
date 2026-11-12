@@ -50,15 +50,21 @@ test('Operations head cancels a site as a new version; everyone concerned is not
   assert.ok((await repo.sites(users.head.id)).sites.some(s=>s.id==='cancel-me'));
   assert.ok((await new MaterialDraftRepository(db.pool).intake(users.owner.id)).registeredPending.some(s=>s.siteId==='cancel-me'));
 
-  const cancel={action:'cancel-site' as const,version:1,edit:false,reason:'Customer cancelled the PO by email on 10 Nov.',requestKey:randomUUID()};
+  // Proof is uploaded to the site first (PNG screenshot of the customer's email).
+  const png=(text:string)=>({filename:text+'.png',mediaType:'image/png' as const,base64:Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),Buffer.from(text)]).toString('base64')});
+  const proof=await repo.upload(users.head.id,'cancel-me',png('customer-email')),otherProof=await repo.upload(users.head.id,'other',png('other-site'));
+  const cancel={action:'cancel-site' as const,version:1,edit:false,reason:'Customer cancelled the PO by email on 10 Nov.',proofIds:[proof.id],requestKey:randomUUID()};
   for(const key of ['lead','qc'])await assert.rejects(repo.command(users[key].id,'cancel-me',cancel),/Operations head or Management/);
   await assert.rejects(repo.command(users.accounts.id,'cancel-me',cancel),/document tracking only/);
   await assert.rejects(repo.command(users.head.id,'cancel-me',{...cancel,reason:' '}));
+  await assert.rejects(repo.command(users.head.id,'cancel-me',{...cancel,proofIds:[]}),/Attach proof/);
+  await assert.rejects(repo.command(users.head.id,'cancel-me',{...cancel,requestKey:randomUUID(),proofIds:[otherProof.id]}),/different site/);
   await assert.rejects(repo.command(users.head.id,'delivered',{...cancel,requestKey:randomUUID()}),/cannot be cancelled here because a delivery is already recorded/);
 
   const saved=await repo.command(users.head.id,'cancel-me',cancel);
   assert.equal(saved.version,2);assert.equal(saved.cancelled,true);
   const record=saved.cancellation as Record<string,unknown>;
+  assert.deepEqual((record.proof as {id:string}[]).map(f=>f.id),[proof.id]);
   assert.equal(record.cancelledBy,'Moaz Ahsan');assert.equal(record.reason,cancel.reason);assert.equal(record.stageAtCancellation,'received');
   assert.match(String(saved.history?.at(-1)?.description),/Moaz Ahsan cancelled this site\. Reason: Customer cancelled/);
   assert.equal((await repo.command(users.head.id,'cancel-me',cancel)).version,2,'retrying the same request does not cancel twice');

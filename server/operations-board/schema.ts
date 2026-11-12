@@ -40,7 +40,8 @@ export const commandSchema=z.discriminatedUnion('action',[
  commandBase.extend({action:z.literal('blocker'),text:z.string().trim().min(1).max(2000)}).strict(),
  commandBase.extend({action:z.literal('resolve-blocker'),blockerId:z.string().min(1).max(200),resolution:z.string().trim().min(1).max(2000)}).strict(),
  // Customer cancelled the site: Operations head or Management only, with a required reason.
- commandBase.extend({action:z.literal('cancel-site'),reason:z.string().trim().min(3,'Give the reason this site was cancelled.').max(2000)}).strict(),
+ // Proof (email, WhatsApp screenshot, letter) is required: files uploaded to this site first.
+ commandBase.extend({action:z.literal('cancel-site'),reason:z.string().trim().min(3,'Give the reason this site was cancelled.').max(2000),proofIds:z.array(z.uuid()).min(1,'Attach proof that the customer cancelled.').max(10).refine(v=>new Set(v).size===v.length,'Attach each proof file once.')}).strict(),
 ]);
 export type BoardCommand=z.infer<typeof commandSchema>;
 export const vendorSchema=z.object({id:z.uuid().optional(),version:z.number().int().nonnegative(),requestKey:z.uuid(),team:teamSchema.nullable().optional(),kind:z.enum(['vendor','member','vehicle']).default('vendor'),name:z.string().trim().min(1).max(200),phone:z.string().trim().max(100).default(''),roles:z.array(z.enum(['structure','electrical','earthing','delivery'])).min(1).max(4),active:z.boolean().default(true),deleted:z.boolean().optional(),reason:z.string().trim().max(2000).default('')}).strict();

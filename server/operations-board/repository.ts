@@ -404,7 +404,8 @@ export class OperationsBoardRepository{
     if(v.edit)throw new HttpError(422,'A cancellation cannot be edited.');
     const blockers=await siteCancellationBlockers(c,id,site);
     if(blockers.length)throw new HttpError(409,`${site.name} cannot be cancelled here because ${blockers.join('; ')}. Ask Management to review.`);
-    snapshot=cancelSite(site,{reason:v.reason,actor,name:a.name},now);kind='Site cancelled';
+    const files=await this.references(c,id,v.proofIds);
+    snapshot=cancelSite(site,{reason:v.reason,actor,name:a.name,proof:v.proofIds.map(file=>files.get(file)!)},now);kind='Site cancelled';
     audiences=['operations-head','management','accounts','inventory','coordinator',...(site.operationsTeam?[`${site.operationsTeam}-operations`]:[])];
    }else{
     const blocker=site.blockers.find(b=>b.id===v.blockerId&&b.status==='open');if(!blocker)throw new HttpError(409,'This blocker is not open.');
