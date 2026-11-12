@@ -135,3 +135,18 @@ test('later reviewed stock log issues stay exact to their IPO/order and preserve
  assert.deepEqual(gojra.lines.map(line=>[line.reference,line.issued]),[['CPZ-DO-833','33']]);
  assert.match(gojra.review!,/partial/);
 });
+
+test('Noorkot keeps the panel issue and links both remaining signed deliveries to CHP-349',()=>{
+ const site='registered-UBL:SOLAR:349';
+ const issue=historicalQcIssues(site,'CHP-349')!;
+ const byDo=(reference:string)=>issue.lines.filter(line=>line.reference===reference);
+ assert.deepEqual(byDo('DO810').map(line=>line.issued),['49']);
+ assert.equal(byDo('CPZ-DO-815').length,14);
+ assert.equal(byDo('CPZ-DO-816').length,31);
+ assert.deepEqual(byDo('CPZ-DO-815').slice(0,3).map(line=>[line.issued,line.variable]),[['2',false],['8',false],['2',false]]);
+ assert.deepEqual(byDo('CPZ-DO-816').filter(line=>line.itemId.startsWith('CH-CBL-DC')).map(line=>[line.issued,line.unit,line.variable]),[['165','m',true],['166','m',true]]);
+ assert.equal(byDo('CPZ-DO-815').find(line=>line.itemId==='CH-Pvc Pipe 1.5 Inch')?.unit,'length');
+ assert.equal(new Set(issue.lines.map(line=>line.key)).size,46);
+ assert.equal(issue.review,undefined);
+ assert.equal(historicalQcIssues(site,'CHP-348'),null);
+});
