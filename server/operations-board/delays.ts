@@ -9,7 +9,7 @@ const finishedAndSubmitted=(site:WorkflowSite)=>siteBucket(site)==='completed'&&
 /** Date-only historical facts use their latest possible start; never fabricate hours. */
 export function siteDelays(site:WorkflowSite,values:StageTargets,now:string):Delay[]{
  const time=Date.parse(now),delays:Delay[]=[];
- if(finishedAndSubmitted(site))return delays;
+ if(finishedAndSubmitted(site)||site.cancelled===true)return delays;
  const add=(key:string,stage:string,due:number,basis:string)=>{if(Number.isFinite(due)&&time>due)delays.push({id:`${site.id}:delay:${key}`,siteId:site.id,stage,due:new Date(due).toISOString(),hoursOverdue:Math.round((time-due)/3600000*10)/10,basis});};
  if(siteBucket(site)!=='completed'){
   let key:string=site.stage,label=site.stage==='received'?'Team & vendor assignment':'Awaiting delivery';
@@ -35,7 +35,7 @@ export function siteDelays(site:WorkflowSite,values:StageTargets,now:string):Del
 }
 /** A blocker enriches the overdue site's existing case instead of adding another card. */
 export function activeSiteAlerts(sites:WorkflowSite[],targets:StageTargets,now:string){return sites.flatMap(site=>{
- if(finishedAndSubmitted(site))return [];
+ if(finishedAndSubmitted(site)||site.cancelled===true)return [];
  const blockers=site.blockers.filter(b=>b.status==='open'),delays=siteDelays(site,targets,now);
  return blockers.length||delays.length?[{id:site.id,site:site.name,ipo:site.ipo,operationsTeam:site.operationsTeam,blockers,delays}]:[];
 });}

@@ -72,6 +72,8 @@ export class MaterialDraftRepository{
    const known=registered.some(r=>reference(r.snapshot.ipo??'','')===reference(source.ipo_number,source.order_number??''));
    if(known&&!links.some(l=>l.ipo_id===source.ipo_id))heldIpos.add(source.ipo_id);
   }
+  // A customer-cancelled Operations site leaves Upcoming Projects; its saved records stay.
+  for(const source of confirmed)if(registered.some(b=>b.snapshot.cancelled===true&&(b.site_id===source.registeredSiteId||b.snapshot.origin?.ipoId===source.ipo_id&&b.snapshot.origin?.operationsIssuanceId===source.operations_issuance_id)))heldIpos.add(source.ipo_id);
   const approvedIpos=await approvedMaterialIdentities(c,links.map(link=>link.ipo_id));
   for(const link of links){
    link.board=registered.find(r=>r.site_id===link.board_site_id)?.snapshot??link.board;
@@ -187,7 +189,7 @@ export class MaterialDraftRepository{
   const batches=(await this.pool.query('SELECT DISTINCT ON(batch_id) version,snapshot FROM operations_board_batch_versions ORDER BY batch_id,version DESC')).rows;
   const operationsBatches=inventoryOperationsBatches(batches,boardRows,sources);
   const registeredPending=boardRows
-   .filter(r=>!r.snapshot.superseded&&!r.snapshot.completed&&['received','awaiting'].includes(r.snapshot.stage)&&r.snapshot.sample!==true&&!sources.some(s=>s.registeredSiteId===r.site_id))
+   .filter(r=>!r.snapshot.superseded&&!r.snapshot.completed&&r.snapshot.cancelled!==true&&['received','awaiting'].includes(r.snapshot.stage)&&r.snapshot.sample!==true&&!sources.some(s=>s.registeredSiteId===r.site_id))
    .map(r=>({siteId:r.site_id,ipo:r.snapshot.ipo,siteName:r.snapshot.name,customer:r.snapshot.customer??'',installation:r.snapshot.installation,dispatchDate:plannedInventoryDelivery({...r.snapshot,id:r.site_id}),installationDate:plannedInventoryInstallation(r.snapshot),linkStatus:'approved-boq-link-required' as const,linkReview:r.snapshot.materialLinkReview??null}));
   return {access,sources,registeredPending,operationsBatches,catalogue:stock.catalogue,aliases:stock.aliases,warehouses:access.owner?stock.warehouses:access.warehouses,stockPosting:false};
  }
