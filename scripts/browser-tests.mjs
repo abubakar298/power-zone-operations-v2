@@ -3,10 +3,18 @@ import { spawnSync } from "node:child_process";
 
 // Each spec gets a fresh disposable database. This preserves production-strength
 // authentication throttling rather than disabling it for a growing browser suite.
-const specs = readdirSync(new URL("../tests/browser/", import.meta.url))
+const allSpecs = readdirSync(new URL("../tests/browser/", import.meta.url))
   .filter((name) => name.endsWith(".spec.ts"))
   .sort();
-if (!specs.length) throw new Error("No browser test specifications found.");
+if (!allSpecs.length) throw new Error("No browser test specifications found.");
+// CI may split the specs across machines with PZ_E2E_SHARD="part/total" (e.g. "1/2").
+// Without it, every spec runs, as before.
+const shard = /^([1-9]\d*)\/([1-9]\d*)$/.exec(process.env.PZ_E2E_SHARD ?? "");
+if (process.env.PZ_E2E_SHARD && (!shard || Number(shard[1]) > Number(shard[2])))
+  throw new Error("PZ_E2E_SHARD must look like 1/2.");
+const specs = shard
+  ? allSpecs.filter((_, index) => index % Number(shard[2]) === Number(shard[1]) - 1)
+  : allSpecs;
 // Every spec uses the same source assets; only its disposable database changes.
 const build = spawnSync("pnpm", ["build"], { stdio: "inherit", env: process.env });
 if (build.error) throw build.error;

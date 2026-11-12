@@ -1,6 +1,8 @@
 name: Power Zone verification
 on:
   push:
+    # codex/** branches are checked by their pull request; a push run as well
+    # only repeated the same check.
     branches:
       [
         main,
@@ -10,15 +12,20 @@ on:
         "milestone-4/**",
         "milestone-5/**",
         "hardening/**",
-        "codex/**",
       ]
   pull_request:
 permissions:
   contents: read
+# A newer push to the same pull request stops the older, now useless run.
+# Runs on main are never cancelled: Render deploys only after main's check passes.
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
-  verify:
+  build:
+    name: Build and type check
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,15 +41,71 @@ jobs:
         run: pnpm build
       - name: Type check tests and operator tools
         run: pnpm typecheck:tools
+
+  tests:
+    # The same test files as before, split across machines that run at the same time.
+    name: Native PostgreSQL tests (part ${{ matrix.shard }} of 4)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@11.25.0 --activate
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
       - name: Native PostgreSQL integration tests
-        run: pnpm test
+        run: pnpm exec tsx --test --test-concurrency=1 --test-shard=${{ matrix.shard }}/4 tests/*.test.ts
+
+  browser:
+    name: Browser tests (part ${{ matrix.shard }} of 2)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@11.25.0 --activate
+      - name: Install
+        run: pnpm install --frozen-lockfile
       - name: Install browser
         run: pnpm exec playwright install --with-deps chromium
       - name: Browser smoke tests with native PostgreSQL
         run: pnpm test:e2e
+        env:
+          PZ_E2E_SHARD: ${{ matrix.shard }}/2
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: browser-failure-evidence
+          name: browser-failure-evidence-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
+
+  # Branch protection requires a check named "verify". It passes only when every
+  # part above passed (a skipped or cancelled part counts as a failure).
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    needs: [build, tests, browser]
+    if: always()
+    steps:
+      - name: All parts passed
+        run: |
+          echo "build=${{ needs.build.result }} tests=${{ needs.tests.result }} browser=${{ needs.browser.result }}"
+          test "${{ needs.build.result }}" = success
+          test "${{ needs.tests.result }}" = success
+          test "${{ needs.browser.result }}" = success
