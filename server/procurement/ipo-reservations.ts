@@ -4,6 +4,7 @@ import { z } from "zod";
 import { sameUnit } from "../../shared/stock-units.js";
 import { ipoReservationWarehouses } from "../../shared/procurement-warehouse.js";
 import { plannedInventoryDelivery, plannedInventoryInstallation } from "../operations-board/batch-delivery.js";
+import { localPreviewDocumentIdCtes } from "../maintenance/archived-documents.js";
 import { SERVICE_LINE } from "./supply.js";
 
 type Db = Pool | PoolClient;
@@ -19,6 +20,7 @@ type StockIdentity = { itemId: string; unit: string; purchaseKey: string | null 
 
 export async function receivedIpoReservations(db: Db, stock: StockIdentity[]) {
   const demand = (await db.query<Demand>(`
+    WITH ${localPreviewDocumentIdCtes}
     SELECT i.id ipo_id,o.id issuance_id,i.number,i.snapshot->>'siteName' site,
       i.snapshot#>>'{customer,name}' customer,l.item_key,l.unit,l.quantity,
       to_char(w.expected_delivery,'YYYY-MM-DD') expected_date
@@ -31,9 +33,8 @@ export async function receivedIpoReservations(db: Db, stock: StockIdentity[]) {
     ) l ON l.issuance_id=o.id
     WHERE w.delivered_on IS NULL AND coalesce(w.stage,'')<>'closed'
       AND NOT EXISTS(SELECT 1 FROM archived_sample_ipos a WHERE a.ipo_id=o.ipo_id AND a.restored_at IS NULL)
-      AND NOT EXISTS(SELECT 1 FROM test_workflow_archives a
-        WHERE a.records->'localPreviewDocumentIds' ? o.ipo_id::text
-          OR a.records->'localPreviewDocumentIds' ? o.id::text)
+      AND NOT EXISTS(SELECT 1 FROM archived_preview_ids a WHERE a.id=o.ipo_id::text)
+      AND NOT EXISTS(SELECT 1 FROM archived_preview_ids a WHERE a.id=o.id::text)
     ORDER BY i.number,l.item_key,l.unit`)).rows.filter(line =>
       !SERVICE_LINE.test(line.item_key) && line.unit.trim().toUpperCase() !== "LS",
     );

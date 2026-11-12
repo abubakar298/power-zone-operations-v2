@@ -413,9 +413,17 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
           'Fixture history','Projection scale test',gen_random_uuid(),$2
         FROM operations_boq_issuances o CROSS JOIN generate_series(1,5) v WHERE o.number LIKE 'PROC-LOAD-IPO-%'`,
       [warehouse, fixture.owner]);
+      const archived = (await client.query(`SELECT ipo_id,id FROM operations_boq_issuances
+        WHERE number LIKE 'PROC-LOAD-IPO-%' ORDER BY number LIMIT 3`)).rows;
+      const archiveIds = [[archived[0].ipo_id], { [archived[1].id]: true }, archived[2].ipo_id];
+      for (const [index, ids] of archiveIds.entries()) {
+        await client.query("INSERT INTO test_workflow_archives(key,cutoff,counts,records) VALUES($1,now(),'{}',$2)",
+          [`PROC-LOAD-ARCHIVE-${index}`, { localPreviewDocumentIds: ids, preservedEvidence: index === 0 ? Array.from({ length: 20_000 }, () => randomUUID()) : [] }]);
+      }
       await client.query("SET LOCAL statement_timeout='5s'");
       const backlog = await procurementWarehouseStock(client);
-      assert.equal(backlog.reservations.filter(line => line.ipoNumber.startsWith("PROC-LOAD-IPO-") && line.warehouse === warehouse).length, 1000);
+      assert.equal(backlog.reservations.filter(line => line.ipoNumber.startsWith("PROC-LOAD-IPO-") && line.warehouse === warehouse).length, 997);
+      assert.ok(archived.every(ipo => !backlog.reservations.some(line => line.ipoId === ipo.ipo_id)));
     } finally {
       await client.query("ROLLBACK");
       client.release();
