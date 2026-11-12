@@ -109,6 +109,20 @@ const signedDeliveryIssues = new Map<string, {
       // The installation material sheet classifies flexible pipe as a local purchase.
     ],
   }],
+  ['registered-UBL:UPS:184/250', {
+    ipo: 'CHP-163(184/250)',
+    // The signed DO and its material sheet identify the handwritten duct and pipe as store issues.
+    reference: 'CPZ-DO-863',
+    items: [
+      ['CH-PCS-HYB-1P-006', '6 kW hybrid inverter', '1'],
+      ['CH-BMS-LV', 'Low-voltage BMS', '1'],
+      ['CH-BAT-LV-05 KW', '5 kWh low-voltage battery', '2'],
+      ['CH-VPD-63A/2P', 'Voltage protection device', '1'],
+      ['CH-5WAY-DB', '5-way distribution box', '1'],
+      ['CH-Duct Slot 60x60', 'Slotted duct 60 × 60', '1'],
+      ['CH-Flex Pipe 1', '1-inch flexible pipe', '10', 'ft'],
+    ],
+  }],
   ['registered-UBL:UPS:20/250', {
     ipo: 'CHP-163(20/250)',
     reference: 'CPZ-DO-0176',

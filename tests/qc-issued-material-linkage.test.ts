@@ -150,3 +150,20 @@ test('Noorkot keeps the panel issue and links both remaining signed deliveries t
  assert.equal(issue.review,undefined);
  assert.equal(historicalQcIssues(site,'CHP-348'),null);
 });
+
+test('Architect Society uses signed DO863 for order 184/250 and rejects order 65/250',()=>{
+ const site='registered-UBL:UPS:184/250';
+ const issue=historicalQcIssues(site,'CHP-163 · 184/250')!;
+ assert.deepEqual(issue.lines.map(line=>[line.itemId,line.issued,line.unit]),[
+  ['CH-PCS-HYB-1P-006','1','piece'],
+  ['CH-BMS-LV','1','piece'],
+  ['CH-BAT-LV-05 KW','2','piece'],
+  ['CH-VPD-63A/2P','1','piece'],
+  ['CH-5WAY-DB','1','piece'],
+  ['CH-Duct Slot 60x60','1','piece'],
+  ['CH-Flex Pipe 1','10','ft'],
+ ]);
+ assert.ok(issue.lines.every(line=>line.reference==='CPZ-DO-863'));
+ assert.equal(issue.review,undefined);
+ assert.equal(historicalQcIssues(site,'CHP-163 · 65/250'),null);
+});
