@@ -1,3 +1,4 @@
+import {reviewedWarehouseReference} from "./warehouse-reference.js";
 import {dispatchReconciliationEligibleSql} from './dispatch-reconciliation-eligibility.js';
 import {siteAcknowledgementModels,issuedPanelLinesBySite} from '../../shared/site-acknowledgement.js';
 import {temporaryNegativeDoBalanceAllowed} from './do-negative-balance.js';
@@ -43,7 +44,7 @@ export class MaterialStockRepository{
  async overview(actor:string){
   const {warehouses}=await this.drafts.warehouses(actor);
   const authorities=(await this.pool.query('SELECT warehouse,source_sha256 FROM inventory_warehouse_authority_current WHERE warehouse=ANY($1::text[])',[warehouses])).rows;
-  const reference=(await this.pool.query("SELECT source_sha256 FROM inventory_warehouse_sources ORDER BY (coalesce(metadata->>'canonicalIds','') ~ '^[1-9][0-9]*$') DESC,created_at DESC,source_sha256 LIMIT 1")).rows[0]?.source_sha256;
+  const reference=await reviewedWarehouseReference(this.pool);
   const sources=new Map(warehouses.map(w=>[w,authorities.find(a=>a.warehouse===w)?.source_sha256??reference]));
   const faulty:Record<string,unknown>[]=[];
   const positions:Record<string,unknown[]> = Object.fromEntries(warehouses.map(w=>[w,[]]));
@@ -61,8 +62,8 @@ export class MaterialStockRepository{
   await this.scope(actor,warehouse);
   const authority=(await this.pool.query('SELECT warehouse,version,source_sha256,state FROM inventory_warehouse_authority_current WHERE warehouse=$1',[warehouse])).rows[0];
   // Reading an imported closing source does not activate it for physical issuance.
-  const reference=authority?null:(await this.pool.query("SELECT source_sha256 FROM inventory_warehouse_sources ORDER BY (coalesce(metadata->>'canonicalIds','') ~ '^[1-9][0-9]*$') DESC,created_at DESC,source_sha256 LIMIT 1")).rows[0];
-  const source=authority?.source_sha256??reference?.source_sha256;
+  const reference=authority?null:await reviewedWarehouseReference(this.pool);
+  const source=authority?.source_sha256??reference;
   if(!source)return {authority:null,positions:[],referenceOnly:true};
   const positions=(await warehousePositions(this.pool,source,warehouse)).map(p=>({ledgerKey:p.ledgerKey,itemId:p.baseline.itemId,description:p.baseline.description,unit:p.baseline.unit,opening:p.baseline.opening,totalIn:p.totalIn,totalOut:p.totalOut,currentClosing:p.currentClosing,ledgerRevision:p.ledgerRevision,unknown:p.currentClosing===null,negative:p.currentClosing!==null&&new Decimal(p.currentClosing).lt(0)}));
   return {authority:authority??null,positions,referenceOnly:!authority};

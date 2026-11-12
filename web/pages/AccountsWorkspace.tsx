@@ -1,3 +1,4 @@
+import { AccountsPurchases } from "./procurement/AccountsPurchases.js";
 import {historicalClosureException} from '../../shared/historical-closure-exceptions.js';
 import {HistoricalClosureDocuments} from '../components/HistoricalClosureDocuments.js';
 import {useBackStep} from '../navigation/useBackStep.js';
@@ -606,6 +607,7 @@ export function AccountsWorkspace({
       {["Programme Dashboard","Project Tracking"].includes(tab) && <><div className="pz-action-row"><Button variant="neutral" onClick={()=>{setProgrammeSiteKey(undefined);navigate('Project Sites');}}>Site history</Button></div><ProgrammeDashboard userId={session.user.id} title="Project Tracking" endpoint="/accounts-workspace/programmes" onOpenSite={row=>{if(row.recordKey?.startsWith('ipo:'))void openIpo(row.recordKey.slice(4));else{setProgrammeSiteKey(row.sourceKey);navigate('Project Sites');}}}/></>}
       {tab === "Project Sites" && <><header className="accounts-panel-heading accounts-subpage-heading"><h2>Site Details</h2><Button variant="neutral" onClick={()=>navigate("Project Tracking")}>Back to Project Tracking</Button></header><AccountsImportedSites initialSiteKey={programmeSiteKey} onOpenIpo={id=>void openIpo(id)}/></>}
       {tab === "Physical Documents" && <AccountsPhysicalDocuments/>}
+      {tab === "Approved supplier purchases" && <AccountsPurchases session={session} />}
       {tab === "Approved Documents" && <AccountsCustomerDocuments/>}
       {tab === 'Material Costing & PT Entry' && <AccountsMaterialCosting onRecorded={async(row:any)=>{await load();if(row.report?.job_key&&!isDeliveryOnlyDo(row.report))await openJob(row.report.job_key);}}/>}
       {tab === "Payments to Record" && <><Button variant="neutral" onClick={()=>navigate("My Workspace")}>Back to Dashboard</Button><AccountsPayments/></>}

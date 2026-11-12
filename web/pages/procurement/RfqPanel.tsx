@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
 import "./procurement.css";
+import type { Supplier } from "./Suppliers.js";
 import { readRfqReply } from "./rfq-reader.js";
 import { fmtAt, fmtDay, qty, type RequestDetail } from "./types.js";
 
@@ -9,7 +10,7 @@ interface Rfq {
   id: string; number: string; dueOn: string; createdAt: string; createdBy: string; terms: string[]; items: { itemKey: string }[];
   vendors: { id: string; vendor: string; contact: string; repliedAt: string | null }[];
 }
-interface RfqList { rfqs: Rfq[]; defaults: { dueOn: string; terms: string[] }; vendorsUsed: string[]; can: { create: boolean } }
+interface RfqList { rfqs: Rfq[]; defaults: { dueOn: string; terms: string[] }; vendorsUsed: string[]; suppliers?: Supplier[]; can: { create: boolean } }
 
 /**
  * Quotations from vendors on a purchase request (Moaz, 24 Oct 2026): send one tender-style RFQ to several vendors at
@@ -38,6 +39,8 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
   useEffect(() => { void load(); }, [load]);
 
   const asked = useMemo(() => [...new Map((data?.rfqs ?? []).flatMap((f) => f.vendors.map((v) => [v.vendor.toLowerCase(), v.vendor] as const))).values()], [data]);
+  const supplierNames = [...new Map([...(data?.vendorsUsed ?? []), ...(data?.suppliers ?? []).map(item => item.name)]
+    .map(name => [name.toLowerCase(), name])).values()];
   const quotedBy = (name: string) => d.lines.filter((l) => l.quotes.some((q) => q.vendor.trim().toLowerCase() === name.trim().toLowerCase())).length;
   const edit = d.can.edit;
   const anyQuotes = d.lines.some((l) => l.quotes.length > 0);
@@ -46,7 +49,10 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
     setBusy(true);
     try {
       const r = await api<RfqList & { rfq: Rfq }>(`/procurement/requests/${d.id}/rfqs`, {
-        body: { vendors: vendors.filter((v) => v.name.trim()).map((v) => ({ name: v.name.trim(), contact: v.contact.trim() })), dueOn, terms: terms.split("\n").map((t) => t.trim()).filter(Boolean) },
+        body: { vendors: vendors.filter(v => v.name.trim()).map(v => {
+          const match = data?.suppliers?.find(item => item.name.toLowerCase() === v.name.trim().toLowerCase());
+          return { name: v.name.trim(), contact: v.contact.trim() || [match?.email, match?.phone].filter(Boolean).join(" · ") };
+        }), dueOn, terms: terms.split("\n").map((t) => t.trim()).filter(Boolean) },
         csrf: session.csrfToken,
       });
       setData(r); setMaking(false); setVendors([{ name: "", contact: "" }]);
@@ -120,7 +126,7 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
         {data?.can.create && making && (
           <div className="pr-rfq-form">
             <b>New request for quotation</b>
-            <datalist id={`rfq-vendors-${d.id}`}>{data.vendorsUsed.map((v) => <option key={v} value={v} />)}</datalist>
+            <datalist id={`rfq-vendors-${d.id}`}>{supplierNames.map((v) => <option key={v} value={v} />)}</datalist>
             {vendors.map((v, i) => (
               <div className="pr-addrow" key={i}>
                 <input aria-label={`Vendor ${i + 1}`} list={`rfq-vendors-${d.id}`} placeholder="Vendor name" value={v.name} maxLength={200} onChange={(e) => setVendors(vendors.map((x, n) => (n === i ? { ...x, name: e.target.value } : x)))} />
@@ -143,7 +149,7 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
             <b>Enter a vendor's quotation for all items</b>
             <div className="pr-addrow">
               <input aria-label="Vendor for this quotation" list={`rfq-asked-${d.id}`} placeholder="Vendor" value={vendor} maxLength={200} onChange={(e) => setVendor(e.target.value)} onBlur={(e) => e.target.value.trim() && pickVendor(e.target.value.trim())} />
-              <datalist id={`rfq-asked-${d.id}`}>{[...new Map([...asked, ...(data?.vendorsUsed ?? [])].map((v) => [v.trim().toLowerCase(), v] as const)).values()].map((v) => <option key={v} value={v} />)}</datalist>
+              <datalist id={`rfq-asked-${d.id}`}>{[...new Map([...asked, ...supplierNames].map((v) => [v.trim().toLowerCase(), v] as const)).values()].map((v) => <option key={v} value={v} />)}</datalist>
               <label className="sw-link pr-upload">Read the vendor's filled Excel<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ""; }} /></label>
             </div>
             {read && <p className="pr-muted" role="status">{read}</p>}

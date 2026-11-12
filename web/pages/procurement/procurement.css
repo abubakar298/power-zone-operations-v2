@@ -103,3 +103,25 @@
 /* PO details for the buyer (26 Oct 2026). */
 .pr-po{display:grid;gap:10px;padding:6px 0}
 .pr-po .ops-kv{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+
+.pr-warehouse-select {
+  display: inline-flex;
+  align-items: flex-start;
+  min-width: var(--pz-control-height);
+  min-height: var(--pz-control-height);
+}
+.pr-warehouse-shortages {
+  max-height: 340px;
+  overflow-y: auto;
+}
+.pr-warehouse-shortages thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.pr-warehouse-shortages {
+  overflow-anchor: none;
+}
+.pr-restock-repeat tr:first-child td {
+  border-top: 3px solid var(--pz-selected-border);
+}

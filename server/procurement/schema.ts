@@ -29,6 +29,15 @@ export const requestUpdateSchema = requestSchema.partial().strict();
 export const lineSchema = z
   .object({ itemKey: z.string().trim().min(1).max(200), quantity: positive, unit: z.string().trim().max(30).default(""), note: z.string().trim().max(500).default("") })
   .strict();
+export const warehouseDraftSchema = requestSchema.extend({
+  requestKey: z.uuid(),
+  warehouse: z.string().trim().min(1).max(200),
+  lines: z.array(z.object({
+    itemId: z.string().trim().min(1).max(200),
+    unit: z.string().trim().min(1).max(40),
+    quantity: positive,
+  }).strict()).min(1).max(150),
+}).omit({ deliveryTo: true }).strict();
 export const lineUpdateSchema = z
   .object({ quantity: positive.optional(), unit: z.string().trim().min(1).max(30).optional(), note: z.string().trim().max(500).optional() })
   .strict();
@@ -105,3 +114,11 @@ export const accessChangeSchema = z
     reason: z.string().trim().min(3, "Write why (at least 3 characters).").max(500),
   })
   .strict();
+
+
+const supplierSchema = z.object({
+  name: z.string().trim().min(1, "Enter a supplier name.").max(200),
+  email: z.union([z.email(), z.literal("")]).default(""),
+  phone: z.string().trim().max(100).default(""),
+}).strict();
+export const suppliersSchema = z.object({ suppliers: z.array(supplierSchema).min(1).max(500) }).strict();

@@ -32,7 +32,8 @@ export interface RequestDetail {
   orderedBy: string | null; orderedAt: string | null; orderReference: string; receivedBy: string | null; receivedAt: string | null;
   lines: RequestLine[]; events: { id: string; kind: string; fromStatus: string | null; toStatus: string | null; note: string; actor: string; at: string }[];
   totals: { atChosen: string; lastComparable: string; chosenComparable: string; saving: string; firstPurchases: number };
-  can: { edit: boolean; submit: boolean; decide: boolean; selfApprove: boolean; order: boolean; receive: boolean; cancel: boolean };
+  accountsHandoff?: { required: boolean; sentAt: string | null; acknowledgedAt: string | null; forwardedAt: string | null };
+  can: { sendToAccounts?: boolean; edit: boolean; submit: boolean; decide: boolean; selfApprove: boolean; order: boolean; receive: boolean; cancel: boolean };
   selfApproved: boolean;
 }
 export interface Overview { me: Me; inventory: InventoryRow[]; receivedPOs: ReceivedPo[]; upcoming: UpcomingPo[]; requests: RequestRow[] }

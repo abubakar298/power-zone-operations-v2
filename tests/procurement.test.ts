@@ -10,6 +10,12 @@ import { readConfig } from "../server/config.js";
 import { createDashboardSamples } from "../server/coordinator/samples.js";
 import { OperationsRepository } from "../server/operations/repository.js";
 import { ProcurementRepository } from "../server/procurement/repository.js";
+import { OperationsBoardRepository } from "../server/operations-board/repository.js";
+import { commandSchema } from "../server/operations-board/schema.js";
+import { recordPtEntry } from "../server/accounts/pt-entries.js";
+import { MaterialStockRepository } from "../server/inventory/material-stock.js";
+import { PurchaseReceivingRepository } from "../server/inventory/purchase-receiving.js";
+import { RfqRepository, buildRfqPdf, buildApprovedPurchasePdf } from "../server/procurement/rfq.js";
 import { hashPassword } from "../server/auth/crypto.js";
 
 test("Procurement: stock against coming sites, purchase requests with quotations, Abu Bakar's approval, ordering, receiving, and access", async () => {
@@ -183,6 +189,170 @@ test("Procurement: stock against coming sites, purchase requests with quotations
     await assert.rejects(repo.setCount(u.store,{itemKey:cable.itemKey,quantity:'99',unit:'m',note:'Must not bypass warehouse ledger.'}),/Global counts and receipts/);
     await assert.rejects(repo.markReceived(u.store,r.id,{lines:[{itemKey:cable.itemKey,quantity:'1'}],note:'Must select warehouse.'}),/Global counts and receipts/);
     assert.equal((await db.pool.query('SELECT count(*)::int n FROM stock_on_hand_entries')).rows[0].n,beforeGuard);
+  } finally {
+    await db.close();
+  }
+});
+
+test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi-item draft", async () => {
+  const db = await testDatabase();
+  try {
+    const cableId = "CH-CBL-DC-16MM/1C-B";
+    const acBreakerId = "CH-BRK-AC-10A/1P";
+    const breakerId = "CH-BRK-DC-16A/2P";
+    const warehouse = "Lahore warehouse";
+    const unknownId = "CH-11WAY-DB";
+    const fixture = await materialStockFixture(db.pool, cableId, { canonicalIds: 4 }, [
+      { itemId: acBreakerId, warehouse, unit: "piece", description: "AC breaker", opening: 9, in: 0, out: 0, closing: 9, openingStatus: "Reviewed source", review: "" },
+      { itemId: breakerId, warehouse, unit: "piece", description: "DC breaker", opening: 0, in: 0, out: 0, closing: 0, openingStatus: "Reviewed source", review: "" },
+      { itemId: unknownId, warehouse: "Karachi warehouse", unit: "piece", description: "DC breaker", opening: null, in: 0, out: 0, closing: null, openingStatus: "Not recorded", review: "" },
+    ]);
+    const buyer = randomUUID();
+    await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,'Test buyer','isolated','Operations')",
+      [buyer, buyer + "@example.test"]);
+    await db.pool.query("INSERT INTO procurement_access(user_id,capability,granted_reason) VALUES($1,'buyer','isolated test')", [buyer]);
+    await db.pool.query(`INSERT INTO inventory_minimum_stock_versions(warehouse,item_id,unit,version,minimum,source_sha256,reason,request_key,request_sha256,created_by)
+      VALUES($1,$2,'piece',1,5,$3,'Fixture minimum',$4,$5,$6)`, [warehouse, breakerId, fixture.stockSha, randomUUID(), "d".repeat(64), fixture.owner]);
+
+    const repo = new ProcurementRepository(db.pool);
+    const suppliers = { suppliers: [{ name: "Supplier A", email: "a@example.test", phone: "" }, { name: "Supplier B", email: "", phone: "" }] };
+    assert.deepEqual(await repo.addSuppliers(buyer, suppliers), { added: 2, duplicates: 0 });
+    assert.deepEqual(await repo.addSuppliers(buyer, suppliers), { added: 0, duplicates: 2 });
+    assert.equal((await repo.suppliers(buyer)).length, 2);
+    await assert.rejects(repo.suppliers(fixture.reviewer), /Only the Procurement buyer/);
+
+    await assert.rejects(repo.warehouseStock(fixture.reviewer), /available to Procurement buyers and Management/);
+    const result = await repo.warehouseStock(buyer);
+    assert.deepEqual(result.warehouses, ["Karachi warehouse", warehouse]);
+    const row = (itemId: string, scope = warehouse) => result.rows.find(item => item.itemId === itemId && item.warehouse === scope)!;
+    assert.equal(row(cableId).onHand, "7");
+    assert.equal(row(cableId).minimum, null);
+    assert.equal(row(breakerId).onHand, "0");
+    assert.equal(row(breakerId).minimum, "5.000000");
+    assert.equal(row(unknownId, "Karachi warehouse").onHand, null);
+    assert.equal(row(breakerId).category, "DC switchgear");
+    assert.equal(row(acBreakerId).purchaseItem?.itemKey, acBreakerId);
+
+    const input = {
+      requestKey: randomUUID(), title: "Two warehouse items", warehouse, purpose: "", neededBy: null, paymentTerms: "",
+      lines: [{ itemId: acBreakerId, unit: "piece", quantity: "6" }, { itemId: breakerId, unit: "piece", quantity: "2" }],
+    };
+    await assert.rejects(repo.createWarehouseDraft(buyer, { ...input, lines: [...input.lines, { itemId: "NO SUCH ITEM", unit: "piece", quantity: "1" }] }),
+      /no reviewed purchase item/);
+    assert.equal((await repo.listRequests(buyer)).length, 0);
+    const [first, replay] = await Promise.all([repo.createWarehouseDraft(buyer, input), repo.createWarehouseDraft(buyer, input)]);
+    assert.equal(first.id, replay.id);
+    assert.equal(first.deliveryTo, warehouse);
+    assert.equal(first.status, "draft");
+    assert.deepEqual(first.lines.map(line => [line.itemKey, line.quantity]).sort(), [[acBreakerId, "6"], [breakerId, "2"]]);
+    assert.equal((await repo.listRequests(buyer)).length, 1);
+    await assert.rejects(repo.createWarehouseDraft(buyer, { ...input, title: "Different request" }), /already used/);
+    await assert.rejects(repo.createWarehouseDraft(fixture.owner, { ...input, requestKey: randomUUID() }), /Only the Procurement buyer/);
+
+    const coordinator = randomUUID();
+    const accounts = randomUUID();
+    for (const [id, role] of [[coordinator, "Coordinator"], [accounts, "Accounts"]]) {
+      await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,'isolated',$3)", [id, id + "@example.test", role]);
+    }
+    const samples = await createDashboardSamples(db.pool, coordinator, fixture.owner);
+    const ipoId = samples.find((sample: { ipoId?: string }) => sample.ipoId)!.ipoId!;
+    const issuance = await new OperationsRepository(db.pool).issue(coordinator, { ipoId, notes: "Reservation fixture", requestKey: randomUUID() });
+    await db.pool.query(`INSERT INTO operations_stock_demand(issuance_id,line_number,item_key,brand,quantity,unit)
+      VALUES($1,900,$2,'',4,'NOS')`, [issuance.id, acBreakerId]);
+    const findReservation = (result: Awaited<ReturnType<typeof repo.warehouseStock>>) =>
+      result.reservations.find(reservation => reservation.ipoId === ipoId && reservation.itemId === acBreakerId)!;
+    let snapshot = await repo.warehouseStock(buyer);
+    assert.equal(findReservation(snapshot).quantity, "4");
+    assert.equal(findReservation(snapshot).warehouse, null);
+    assert.equal(findReservation(snapshot).expectedUseDate, null);
+    assert.equal(snapshot.rows.find(item => item.itemId === acBreakerId)!.afterReservations, "9");
+
+    const board = new OperationsBoardRepository(db.pool);
+    const existing = (await board.sites(fixture.owner)).sites.find(site => site.origin?.ipoId === ipoId);
+    const boardId = existing?.id ?? "isolated-procurement-reservation";
+    if (!existing) await board.importSource(fixture.owner, { sourceSha256: "f".repeat(64), rows: [{
+      id: boardId, ipo: "Fixture display number", name: "Fictional project", stage: "received",
+      installation: false, projectType: "delivery-only", origin: { ipoId, operationsIssuanceId: issuance.id },
+    }] });
+    if (existing?.scopePending) {
+      const current = (await db.pool.query("SELECT version,snapshot FROM operations_board_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1", [boardId])).rows[0];
+      await db.pool.query(`INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by)
+        VALUES($1,$2,$3,'Fixture scope','Delivery-only fixture',$4,$5)`,
+      [boardId, current.version + 1, { ...current.snapshot, scopePending: false, installation: false, projectType: "delivery-only" },
+        randomUUID(), fixture.owner]);
+    }
+    const decide = async (value: Record<string, unknown>) => board.command(fixture.owner, boardId, commandSchema.parse({
+      ...value, version: (await board.site(fixture.owner, boardId)).version, requestKey: randomUUID(),
+    }));
+    await decide({ action: "assign-team", team: "central", warehouse });
+    snapshot = await repo.warehouseStock(buyer);
+    assert.equal(findReservation(snapshot).warehouse, warehouse);
+    assert.equal(findReservation(snapshot).expectedUseDate, null);
+    assert.equal(snapshot.rows.find(item => item.itemId === acBreakerId)!.afterReservations, "5");
+    const vendor = await board.saveVendor(fixture.owner, { version: 0, requestKey: randomUUID(), team: "central", kind: "vendor",
+      name: "Fictional delivery vendor", phone: "", roles: ["delivery", "structure", "electrical", "earthing"], active: true, reason: "" });
+    await decide({ action: "plan", dispatchDate: "2026-12-03", assignments: { delivery: vendor.id, structure: vendor.id, electrical: vendor.id, earthing: vendor.id } });
+    snapshot = await repo.warehouseStock(buyer);
+    assert.equal(findReservation(snapshot).expectedUseDate, "2026-12-03");
+    assert.equal(snapshot.rows.find(item => item.itemId === acBreakerId)!.reserved, "4");
+
+    const approver = fixture.owner;
+    await db.pool.query("INSERT INTO procurement_access(user_id,capability,granted_reason) VALUES($1,'approver','isolated test')", [approver]);
+    await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,$2,'dispatcher',$3)",
+      [fixture.reviewer, warehouse, fixture.owner]);
+    const { rfq } = await new RfqRepository(db.pool, repo).create(buyer, first.id,
+      { vendors: [{ name: "Supplier A", contact: "" }], dueOn: "2099-12-31", terms: [] });
+    assert.deepEqual(rfq.items.map(item => [item.sr, item.category]), [[1, "AC switchgear"], [2, "DC switchgear"]]);
+    const supplierPdf = buildRfqPdf(rfq, rfq.vendors[0]);
+    assert.match(supplierPdf.toString("latin1"), /\/AcroForm/);
+    assert.match(supplierPdf.toString("latin1"), /Remarks - item 2/);
+    const award = new Map([[acBreakerId, { vendor: "Supplier A", rate: "110" }], [breakerId, { vendor: "Supplier B", rate: "125" }]]);
+    for (const line of first.lines) await repo.addQuote(buyer, first.id, line.id, { ...award.get(line.itemKey)!, note: "" });
+    await assert.rejects(repo.selfApprove(buyer, first.id, { note: "" }), /owner must approve/);
+    await assert.rejects(repo.submit(buyer, first.id), /recommendation/);
+    await repo.submit(buyer, first.id, "Supplier A for AC breakers and Supplier B for DC breakers.");
+    const approved = await repo.decide(approver, first.id, { decision: "approve", note: "" });
+    assert.deepEqual(approved.lines.map(line => line.chosen?.vendor).sort(), ["Supplier A", "Supplier B"]);
+    assert.ok(buildApprovedPurchasePdf(approved).length > 1000);
+    await assert.rejects(repo.approvedDocument(accounts, first.id), /not been sent to Accounts/);
+    await assert.rejects(repo.approvedDocument(fixture.reviewer, first.id), /Purchase prices/);
+    await assert.rejects(repo.markOrdered(buyer, first.id, { orderReference: "Old path" }), /Accounts must forward/);
+    await repo.sendApprovedToAccounts(buyer, first.id);
+    await repo.sendApprovedToAccounts(buyer, first.id);
+    assert.equal((await repo.accountsQueue(accounts)).length, 1);
+    assert.equal((await repo.storeView(fixture.reviewer)).toReceive.length, 0);
+    await assert.rejects(repo.accountsAction(buyer, first.id, "acknowledge"), /Accounts user/);
+    await repo.accountsAction(accounts, first.id, "acknowledge");
+    await assert.rejects(repo.accountsAction(accounts, first.id, "forward"), /record its PT reference/);
+    const ptInput = { sourceKind: "Procurement" as const, sourceId: first.id, sourceVersion: 1, ptReference: "PT-TEST-1", entryDate: "2026-12-01", notes: "" };
+    const pt = await recordPtEntry(db.pool, accounts, ptInput);
+    assert.equal((await recordPtEntry(db.pool, accounts, ptInput)).id, pt.id);
+    assert.equal((await repo.accountsQueue(accounts))[0].ptReference, "PT-TEST-1");
+    await repo.accountsAction(accounts, first.id, "forward");
+    await repo.accountsAction(accounts, first.id, "forward");
+    const receiving = (await repo.storeView(fixture.reviewer)).toReceive;
+    assert.deepEqual(receiving.map(purchase => purchase.id), [first.id]);
+    assert.equal(receiving[0].lines.find(line => line.itemKey === acBreakerId)?.due, "6");
+
+    await new WarehouseAuthorityRepository(db.pool).command(approver, { warehouse, version: 0,
+      sourceSha256: fixture.stockSha, state: "active", reason: "Isolated purchase receipt test.", requestKey: randomUUID() });
+    const stock = new MaterialStockRepository(db.pool);
+    const proof = await stock.uploadEvidence(fixture.reviewer, { warehouse, filename: "test-receiving.pdf", mediaType: "application/pdf",
+      base64: Buffer.from("%PDF-1.7 isolated purchase fixture").toString("base64") });
+    const receivingRepo = new PurchaseReceivingRepository(db.pool);
+    const before = (await stock.positions(fixture.reviewer, warehouse)).positions.find(position => position.itemId === acBreakerId)!;
+    const partial = {
+      requestId: first.id, requestKey: randomUUID(), warehouse, sourceSha256: fixture.stockSha, authorityVersion: 1,
+      evidenceId: proof.id, reason: "Received two AC breakers.", lines: [{ itemKey: acBreakerId, itemId: acBreakerId,
+        unit: "piece", quantity: "2", ledgerRevision: before.ledgerRevision }],
+    };
+    const receipt = await receivingRepo.receive(fixture.reviewer, partial);
+    assert.equal((await receivingRepo.receive(fixture.reviewer, partial)).id, receipt.id);
+    assert.match(receipt.number, /^CPZ-IGP-/);
+    const after = (await stock.positions(fixture.reviewer, warehouse)).positions.find(position => position.itemId === acBreakerId)!;
+    assert.equal(after.currentClosing, "11");
+    assert.equal((await repo.storeView(fixture.reviewer)).toReceive[0].lines.find(line => line.itemKey === acBreakerId)?.due, "4");
+    assert.equal(Number((await repo.warehouseStock(buyer)).rows.find(line => line.itemId === acBreakerId)?.incoming[0].quantity), 4);
   } finally {
     await db.close();
   }

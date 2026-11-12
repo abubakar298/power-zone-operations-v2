@@ -9,6 +9,8 @@ import { Button } from "../../ui/Button.js";
 import {ManagementHeaderSwitcher} from "../../components/ManagementHeaderSwitcher.js";
 import { NotificationCenter } from "../../components/NotificationCenter.js";
 import { PurchaseRequests } from "./PurchaseRequests.js";
+import { ProcurementSuppliers } from "./Suppliers.js";
+import { ProcurementWarehouseStock } from "./WarehouseStock.js";
 import { MiscSites } from "./MiscSites.js";
 import "../ops/ops.css";
 import "../../components/global-search.css";
@@ -16,14 +18,16 @@ import "./procurement.css";
 import { fmtAt, fmtDay, fmtShort, pkr, qty, relDay, shiftDays, short, stageText, STATUS_CHIP, type InventoryRow, type Overview, type RequestDetail } from "./types.js";
 
 const PasswordChange = lazy(() => import("../Dashboard.js").then((m) => ({ default: m.PasswordChange })));
-type View = "dashboard" | "received" | "upcoming" | "stock" | "misc" | "requests" | "account";
-const VIEWS: View[] = ["dashboard", "received", "upcoming", "stock", "misc", "requests", "account"];
+type View = "dashboard" | "received" | "upcoming" | "stock" | "warehouse-stock" | "misc" | "requests" | "suppliers" | "account";
+const VIEWS: View[] = ["dashboard", "received", "upcoming", "stock", "warehouse-stock", "misc", "requests", "suppliers", "account"];
 const PAGE: Record<Exclude<View, "dashboard">, { title: string; note: string }> = {
   received: { title: "POs received", note: "Every site with a customer PO and an IPO. Material is checked against stock, oldest PO first." },
   upcoming: { title: "Upcoming POs", note: "Heads-up BOQs from Coordination whose customer PO has not arrived yet. Their material counts into what to buy." },
   stock: { title: "Inventory status", note: "What Store has, what the received and upcoming POs need, what is on order, and what is left to buy." },
+  "warehouse-stock": { title: "Warehouse stock", note: "Review on-hand balances and minimums from Inventory and create a purchase request." },
   misc: { title: "Misc items", note: "Misc items BOQs filled by Design with the survey report, site by site. Store sends them to site; until then they count into what to buy." },
   requests: { title: "Purchase requests", note: "Needed items go on a request, vendors quote, Abu Bakar approves, you order, Store receives." },
+  suppliers: { title: "Suppliers", note: "Manage the supplier directory used when preparing RFQs." },
   account: { title: "My account", note: "Your identity and access to the Procurement workspace." },
 };
 const REGIONS = ["Punjab", "Sindh", "Khyber Pakhtunkhwa", "Balochistan", "Gilgit-Baltistan", "Azad Jammu and Kashmir", "Islamabad Capital Territory"];
@@ -153,16 +157,18 @@ export function ProcurementShell({ session, onLogout, viewingAs, onReturn }: { s
             <div className="ops-nav-label">Procurement</div>
             {item("received", "POs received", I.po, counts.received)}
             {item("upcoming", "Upcoming POs", I.clock, counts.upcoming)}
+            {item("warehouse-stock", "Warehouse stock", I.box)}
             {item("stock", "Inventory status", I.box, counts.toBuy, true)}
             {item("misc", "Misc items", I.misc)}
             {item("requests", "Purchase requests", I.req, counts.requests)}
+            {item("suppliers", "Suppliers", I.po)}
           </nav>
           <div className="ops-side-foot">Procurement · Power Zone V2</div>
         </aside>
         <main className="ops-main">
           {error && <p className="ops-feedback" role="alert">{error}</p>}
-          {view !== "dashboard" && <div className="ops-page-head"><div><h2>{PAGE[view].title}</h2><p>{PAGE[view].note}{region && view !== "stock" && view !== "misc" && view !== "requests" && view !== "account" ? ` Showing ${region} only.` : ""}</p></div></div>}
-          {!scoped && view !== "account" && view !== "requests" && view !== "misc" ? <p className="ops-foot">Loading…</p> : (
+          {view !== "dashboard" && <div className="ops-page-head"><div><h2>{PAGE[view].title}</h2><p>{PAGE[view].note}{region && view !== "stock" && view !== "warehouse-stock" && view !== "misc" && view !== "suppliers" && view !== "requests" && view !== "account" ? ` Showing ${region} only.` : ""}</p></div></div>}
+          {!scoped && view !== "warehouse-stock" && view !== "account" && view !== "requests" && view !== "misc" && view !== "suppliers" ? <p className="ops-foot">Loading…</p> : (
             <>
               {view === "dashboard" && scoped && <Home session={session} data={scoped} region={region} onGo={go} onOpenRequest={openReq} />}
               {view === "received" && scoped && <ReceivedPage data={scoped} />}
@@ -170,6 +176,8 @@ export function ProcurementShell({ session, onLogout, viewingAs, onReturn }: { s
               {view === "stock" && scoped && <StockPage data={scoped} busy={busy} onFromToBuy={() => void fromToBuy()} />}
             </>
           )}
+          {view === "warehouse-stock" && <ProcurementWarehouseStock session={session} onCreated={openReq} />}
+          {view === "suppliers" && <ProcurementSuppliers session={session} />}
           {view === "misc" && <MiscSites session={session} mode="buyer" />}
           {view === "requests" && <PurchaseRequests session={session} mode="buyer" openId={openRequest} onOpened={() => undefined} onChanged={() => void load()} key={openRequest ?? "list"} />}
           {view === "account" && (
