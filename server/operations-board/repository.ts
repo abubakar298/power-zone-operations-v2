@@ -10,6 +10,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {attachHistoricalEvidence} from './historical-evidence.js';
 import {validateBatch,type BatchSnapshot} from './batches.js';
 import {activeSiteAlerts} from './delays.js';
+import {siteCancellationBlockers,cancelSite,requireNotCancelled} from './site-cancellation.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {HttpError} from '../http/errors.js';
@@ -191,6 +192,7 @@ export class OperationsBoardRepository{
    for(const stop of [...v.stops,...v.cancelledSites].sort((a,b)=>a.siteId.localeCompare(b.siteId))){
     const row=await this.current(c,stop.siteId,true);this.scope(a,row.snapshot);
     if(row.version!==stop.siteVersion)throw new HttpError(409,'A selected site changed. Reload the batch before saving.');
+    if(row.snapshot.cancelled===true&&v.stops.some(s=>s.siteId===stop.siteId))throw new HttpError(409,`${row.snapshot.name} was cancelled and cannot be planned in a batch.`);
     selected.push(workflowSiteSchema.parse(row.snapshot));versions.set(stop.siteId,row.version);
    }
    const vendors=await this.vendorList(c);
@@ -334,8 +336,10 @@ export class OperationsBoardRepository{
    if(v.action==='plan'&&!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Dispatch planning belongs to the assigned Operations lead.');
    if(['qc','ups-job'].includes(v.action)&&!['owner','head','qc'].includes(a.kind)&&!a.qcDelegated)throw new HttpError(403,'Only the assigned QC team can record installation progress.');
    if(v.action==='historical-evidence'&&v.category==='handover'&&!['owner','head','qc'].includes(a.kind)&&!a.qcDelegated)throw new HttpError(403,'Only the assigned QC team can attach installation handover evidence.');
+   if(v.action==='cancel-site'&&!['owner','head'].includes(a.kind))throw new HttpError(403,'Only the Operations head or Management can cancel a site.');
    const replay=(await c.query('SELECT version,snapshot,request_sha256 FROM operations_board_versions WHERE site_id=$1 AND request_key=$2',[id,v.requestKey])).rows[0];
    if(replay){if(replay.request_sha256!==fingerprint)throw new HttpError(409,'This request key was used for a different site decision.');return {...replay.snapshot,version:replay.version};}
+   requireNotCancelled(row.snapshot);
    if(row.version!==v.version)throw new HttpError(409,'The site was updated. Reload before saving your decision.');
    if(v.edit&&!v.reason)throw new HttpError(422,'Give a reason for editing the saved decision.');
    const site=workflowSiteSchema.parse(row.snapshot),now=new Date().toISOString();
@@ -396,6 +400,12 @@ export class OperationsBoardRepository{
     const stage=currentStage(site);if(site.blockers.some(b=>b.status==='open'&&b.stage===stage&&b.reason===v.text))throw new HttpError(409,'This blocker reason is already recorded.');
     const blocker={id:randomUUID(),reason:v.text,stage,status:'open' as const,raisedAt:now,raisedBy:a.name,actorId:actor};
     snapshot={...site,blockers:[...site.blockers,blocker],history:[...site.history,{date:now,description:`${a.name} raised a blocker at ${stage}: ${v.text}`}]};kind='Site blocker raised';audiences=['operations-head','management',...(site.operationsTeam?[`${site.operationsTeam}-operations`]:[])];
+   }else if(v.action==='cancel-site'){
+    if(v.edit)throw new HttpError(422,'A cancellation cannot be edited.');
+    const blockers=await siteCancellationBlockers(c,id,site);
+    if(blockers.length)throw new HttpError(409,`${site.name} cannot be cancelled here because ${blockers.join('; ')}. Ask Management to review.`);
+    snapshot=cancelSite(site,{reason:v.reason,actor,name:a.name},now);kind='Site cancelled';
+    audiences=['operations-head','management','accounts','inventory','coordinator',...(site.operationsTeam?[`${site.operationsTeam}-operations`]:[])];
    }else{
     const blocker=site.blockers.find(b=>b.id===v.blockerId&&b.status==='open');if(!blocker)throw new HttpError(409,'This blocker is not open.');
     snapshot={...site,blockers:site.blockers.map(b=>b.id===v.blockerId?{...b,status:'resolved' as const,resolution:v.resolution,resolvedAt:now,resolvedBy:a.name}:b),history:[...site.history,{date:now,description:`${a.name} resolved the blocker: ${v.resolution}`}]};kind='Site blocker resolved';

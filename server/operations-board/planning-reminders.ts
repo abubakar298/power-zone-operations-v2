@@ -43,7 +43,7 @@ export class PlanningReminderProjector{
   const activatedAt=new Date(activation).getTime();
   const sites=(await c.query(`SELECT site_id,snapshot FROM (SELECT DISTINCT ON(site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC) v WHERE snapshot->>'stage'='received'`)).rows;
   for(const {site_id,snapshot:s} of sites){
-   if(!SOLAR_TYPES.includes(s.projectType)||s.dispatchDate||(Array.isArray(s.planningBatches)&&s.planningBatches.length)||s.completed===true)continue;
+   if(!SOLAR_TYPES.includes(s.projectType)||s.dispatchDate||(Array.isArray(s.planningBatches)&&s.planningBatches.length)||s.completed===true||s.cancelled===true)continue;
    const startedKey=typeof s.stageStartedAt==='string'?s.stageStartedAt:typeof s.receivedAt==='string'?s.receivedAt:null;
    const started=startedKey?Date.parse(startedKey):NaN;
    if(!startedKey||!Number.isFinite(started))continue;
