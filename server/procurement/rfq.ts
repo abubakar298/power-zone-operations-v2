@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from "pg";
-import { jsPDF } from "jspdf";
+import { AcroFormTextField, jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import { zipSync } from "fflate";
 import { HttpError } from "../http/errors.js";
@@ -13,7 +13,7 @@ type Db = Pool | PoolClient;
 const NEW_NUMBER = "'RFQ-' || to_char(now(),'YY') || '-' || lpad(nextval('purchase_rfq_number')::text,3,'0')";
 export const RFQ_REPLY_DAYS = 3;
 
-export interface RfqItem { sr: number; itemKey: string; name: string; specification: string; unit: string; quantity: string }
+export interface RfqItem { category?: string; sr: number; itemKey: string; name: string; specification: string; unit: string; quantity: string }
 export interface Rfq {
   id: string; number: string; requestId: string; requestNumber: string; dueOn: string; createdAt: string; createdBy: string;
   terms: string[]; items: RfqItem[]; contact: { name: string; email: string };
@@ -78,6 +78,7 @@ export class RfqRepository {
       rfqs: await this.load(this.pool, { requestId }),
       defaults: { dueOn: plusDays(new Date(), RFQ_REPLY_DAYS), terms: defaultTerms(r) },
       vendorsUsed: used,
+      suppliers: w.buyer ? await this.procurement.suppliers(actor) : [],
       can: { create: w.buyer && r.status === "draft" && r.kind !== "direct" },
     };
   }
@@ -97,11 +98,25 @@ export class RfqRepository {
       }
       if (input.dueOn < toDay(new Date())) throw new HttpError(400, "The due date has passed.");
       const items = (await c.query(
-        `SELECT l.item_key, l.quantity, l.unit, COALESCE(m.display_name, x.name, l.item_key) AS name, COALESCE(m.approved_specification, '') AS spec
-         FROM purchase_request_lines l LEFT JOIN item_master m ON m.key=l.item_key LEFT JOIN misc_items x ON x.key=l.item_key
-         WHERE l.request_id=$1 ORDER BY l.created_at, l.item_key`,
+        `SELECT l.item_key, l.quantity, l.unit, COALESCE(m.display_name, x.name, l.item_key) AS name,
+           COALESCE(m.approved_specification, '') AS spec,
+           COALESCE(exact.category, linked.category, NULLIF(m.item_group,''), 'Other items') AS category
+         FROM purchase_request_lines l
+         LEFT JOIN item_master m ON m.key=l.item_key
+         LEFT JOIN misc_items x ON x.key=l.item_key
+         LEFT JOIN inventory_final_stock_ids exact ON exact.item_id=l.item_key
+         LEFT JOIN LATERAL (
+           SELECT min(f.category) AS category
+           FROM inventory_catalogue_final_current v JOIN inventory_final_stock_ids f ON f.item_id=v.item_id
+           WHERE v.rate_key=l.item_key HAVING count(DISTINCT f.category)=1
+         ) linked ON true
+         WHERE l.request_id=$1
+         ORDER BY category,l.item_key,l.unit`,
         [requestId],
-      )).rows.map((l, i): RfqItem => ({ sr: i + 1, itemKey: l.item_key, name: l.name, specification: l.spec, unit: l.unit, quantity: fixed(num(l.quantity)) }));
+      )).rows.map((l, i): RfqItem => ({
+        sr: i + 1, itemKey: l.item_key, name: l.name, specification: l.spec, unit: l.unit,
+        quantity: fixed(num(l.quantity)), category: l.category,
+      }));
       if (!items.length) throw new HttpError(422, "Add items to the request first.");
       const f = (await c.query(
         `INSERT INTO purchase_rfqs(number, request_id, due_on, terms, items, contact, created_by) VALUES(${NEW_NUMBER}, $1, $2, $3, $4, $5, $6) RETURNING id, number`,
@@ -145,14 +160,62 @@ export function buildRfqPdf(rfq: Rfq, vendor: Vendor) {
   });
   let y = (pdf as any).lastAutoTable.finalY + 6;
   pdf.setFontSize(9);
-  pdf.text(pdf.splitTextToSize("Please quote your best rates for the items below, on the terms listed. Fill in the rate, brand and delivery time for each item you can supply.", 182), 14, y);
-  autoTable(pdf, {
-    startY: y + 8, theme: "grid", margin: { bottom: reportBottomMargin },
-    styles: { fontSize: 7.5, cellPadding: 1.6, valign: "top" }, headStyles: { fillColor: [40, 40, 60], fontSize: 7.5 },
-    head: [["Sr", "Item ID", "Description", "Unit", "Qty", "Unit rate (PKR)", "Total (PKR)", "Brand / make", "Delivery (days)"]],
-    body: rfq.items.map((i) => [i.sr, clean(i.itemKey), clean(i.name) + (i.specification ? `\n${clean(i.specification)}` : ""), clean(i.unit), i.quantity, "", "", "", ""]),
-    columnStyles: { 0: { cellWidth: 8 }, 1: { cellWidth: 26 }, 2: { cellWidth: 52 }, 3: { cellWidth: 12 }, 4: { cellWidth: 12, halign: "right" }, 5: { cellWidth: 20 }, 6: { cellWidth: 20 }, 7: { cellWidth: 18 }, 8: { cellWidth: 14 } },
-  });
+  if (rfq.items.every(item => item.category)) {
+    pdf.text(pdf.splitTextToSize("Enter the unit rate in PKR and any remarks, including brand and delivery time.", 182), 14, y);
+    let category: string | undefined;
+    const body = rfq.items.flatMap(item => {
+      const divider = category === item.category ? [] : [[{
+        content: clean(item.category), colSpan: 7, styles: { fillColor: [240, 237, 250] as [number, number, number], fontStyle: "bold" as const },
+      }]];
+      category = item.category;
+      return [...divider, [
+        item.sr, clean(item.itemKey), clean(item.name) + (item.specification ? `\n${clean(item.specification)}` : ""),
+        clean(item.unit), item.quantity, "", "",
+      ]];
+    });
+    autoTable(pdf, {
+      startY: y + 8, theme: "grid", margin: { left: 14, right: 14, bottom: reportBottomMargin }, rowPageBreak: "avoid",
+      styles: { fontSize: 8, cellPadding: 2, valign: "top", overflow: "linebreak" },
+      headStyles: { fillColor: [81, 67, 148], textColor: 255 },
+      head: [["SR#", "Item ID", "Description", "Unit", "Qty", "Unit rate (PKR)", "Remarks"]], body,
+      columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 33 }, 2: { cellWidth: 48 }, 3: { cellWidth: 14 },
+        4: { cellWidth: 13, halign: "right" }, 5: { cellWidth: 25 }, 6: { cellWidth: 39 } },
+      didDrawCell: ({ cell, row, section, column }) => {
+        const serial = Array.isArray(row.raw) ? row.raw[0] : null;
+        if (section !== "body" || typeof serial !== "number" || column.index < 5) return;
+        const remarks = column.index === 6;
+        const field = new AcroFormTextField();
+        field.fieldName = `${remarks ? "Remarks" : "Unit rate (PKR)"} - item ${serial}`;
+        field.x = cell.x + 1;
+        field.y = cell.y + 1;
+        field.width = cell.width - 2;
+        field.height = cell.height - 2;
+        field.fontSize = 8;
+        field.multiline = remarks;
+        if (!remarks) field.textAlign = "right";
+        pdf.addField(field);
+      },
+    });
+    // Compress page streams, while writing AcroForm objects as PDF dictionaries.
+    const internal = pdf.internal as typeof pdf.internal & {
+      putStream: (options: { data?: string; filters?: string[] }) => void;
+      acroformPlugin: { acroFormDictionaryRoot: { DA: string } };
+    };
+    const putStream = internal.putStream;
+    internal.putStream = options => putStream(options.data ? options : { ...options, filters: [] });
+    const form = internal.acroformPlugin.acroFormDictionaryRoot;
+    form.DA = "/F1 8 Tf 0 g";
+    Object.defineProperty(form, "DR", { value: "2 0 R" });
+  } else {
+    pdf.text(pdf.splitTextToSize("Please quote your best rates for the items below, on the terms listed. Fill in the rate, brand and delivery time for each item you can supply.", 182), 14, y);
+    autoTable(pdf, {
+      startY: y + 8, theme: "grid", margin: { bottom: reportBottomMargin },
+      styles: { fontSize: 7.5, cellPadding: 1.6, valign: "top" }, headStyles: { fillColor: [40, 40, 60], fontSize: 7.5 },
+      head: [["Sr", "Item ID", "Description", "Unit", "Qty", "Unit rate (PKR)", "Total (PKR)", "Brand / make", "Delivery (days)"]],
+      body: rfq.items.map((i) => [i.sr, clean(i.itemKey), clean(i.name) + (i.specification ? `\n${clean(i.specification)}` : ""), clean(i.unit), i.quantity, "", "", "", ""]),
+      columnStyles: { 0: { cellWidth: 8 }, 1: { cellWidth: 26 }, 2: { cellWidth: 52 }, 3: { cellWidth: 12 }, 4: { cellWidth: 12, halign: "right" }, 5: { cellWidth: 20 }, 6: { cellWidth: 20 }, 7: { cellWidth: 18 }, 8: { cellWidth: 14 } },
+    });
+  }
   y = (pdf as any).lastAutoTable.finalY + 7;
   const ensure = (h: number) => { if (y + h > 297 - reportBottomMargin) { pdf.addPage(); y = 20; } };
   ensure(10); pdf.setFont("helvetica", "bold"); pdf.text("Terms", 14, y); pdf.setFont("helvetica", "normal"); y += 5;
@@ -260,4 +323,36 @@ export function buildComparisonXlsx(d: Detail) {
     ["Bold = lowest rate for the item."],
   ];
   return xlsxBook([{ name: "Comparison", rows, widths: [6, 22, 34, 8, 10, 12, ...c.vendors.map(() => 14), 18, 12, 14] }]);
+}
+
+export function buildApprovedPurchasePdf(request: Awaited<ReturnType<ProcurementRepository["getRequest"]>>) {
+  const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
+  drawReportLogo(pdf);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(14);
+  pdf.text("APPROVED PURCHASE RFQ", 14, 38);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  const details = [
+    `${request.number} | ${request.title}`, `Receiving warehouse: ${request.deliveryTo}`,
+    `Approved by ${request.decidedBy} on ${request.decidedAt ? longDay(toDay(request.decidedAt)) : "date not recorded"}`,
+  ].flatMap(line => pdf.splitTextToSize(clean(line), 182));
+  pdf.text(details, 14, 46);
+  const money = (value: string) => new Intl.NumberFormat("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value));
+  autoTable(pdf, {
+    startY: 51 + details.length * 4, theme: "grid", rowPageBreak: "avoid",
+    margin: { left: 14, right: 14, bottom: reportBottomMargin },
+    styles: { fontSize: 8, valign: "top", cellPadding: 2 },
+    headStyles: { fillColor: [81, 67, 148], textColor: 255 },
+    head: [["SR#", "Item ID / description", "Unit", "Qty", "Approved supplier", "Rate (PKR)", "Total (PKR)"]],
+    body: request.lines.map((line, index) => [
+      index + 1, clean(`${line.itemKey}\n${line.name}`), clean(line.unit), line.quantity,
+      clean(line.chosen?.vendor), line.chosen ? money(line.chosen.rate) : "—", money(line.lineTotal),
+    ]),
+    foot: [["", "Approved total", "", "", "", "", money(request.totals.atChosen)]],
+    showFoot: "lastPage",
+    columnStyles: { 3: { halign: "right" }, 5: { halign: "right" }, 6: { halign: "right" } },
+  });
+  drawReportFooter(pdf, request.number);
+  return Buffer.from(pdf.output("arraybuffer"));
 }

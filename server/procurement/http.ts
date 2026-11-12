@@ -7,10 +7,10 @@ import type { MiscItemsRepository } from "./misc.js";
 import type { StockWatchRepository } from "./stock-watch.js";
 import type { ProcurementAccessRepository } from "./access.js";
 import { requireRecentPassword } from "../security/events.js";
-import { buildComparisonPdf, buildComparisonXlsx, buildRfqPdf, buildRfqXlsx, buildRfqZip, safeFileName, type RfqRepository } from "./rfq.js";
+import { buildApprovedPurchasePdf, buildComparisonPdf, buildComparisonXlsx, buildRfqPdf, buildRfqXlsx, buildRfqZip, safeFileName, type RfqRepository } from "./rfq.js";
 import {
   chooseSchema, countSchema, decisionSchema, lineSchema, lineUpdateSchema, miscItemSchema, miscItemUpdateSchema, miscKeySchema, miscSaveSchema,
-  noteSchema, orderedSchema, quoteSchema, receiveSchema, requestSchema, requestUpdateSchema, watchOrderSchema, watchSettingSchema, rfqSchema, importQuotesSchema, accessChangeSchema,
+  noteSchema, orderedSchema, quoteSchema, receiveSchema, requestSchema, requestUpdateSchema, watchOrderSchema, watchSettingSchema, rfqSchema, importQuotesSchema, accessChangeSchema, warehouseDraftSchema, suppliersSchema,
 } from "./schema.js";
 
 export function procurementHttp(repo: ProcurementRepository, requireSession: RequestHandler, misc: MiscItemsRepository, watch: StockWatchRepository, rfqs: RfqRepository, access: ProcurementAccessRepository) {
@@ -35,12 +35,22 @@ export function procurementHttp(repo: ProcurementRepository, requireSession: Req
 
   r.get("/me", async (req, res) => res.json(await repo.me(actor(req))));
   r.get("/overview", async (req, res) => res.json(await repo.overview(actor(req))));
+  r.get("/suppliers", async (req, res) => res.json({ suppliers: await repo.suppliers(actor(req)) }));
+  r.post("/suppliers", async (req, res) => res.json(await repo.addSuppliers(actor(req), parse(suppliersSchema, req.body))));
+  r.get("/warehouse-stock", async (req, res) => res.json(await repo.warehouseStock(actor(req))));
   r.get("/store", async (req, res) => res.json(await repo.storeView(actor(req))));
   r.get("/items", async (req, res) => res.json({ items: await repo.searchItems(actor(req), String(req.query.q ?? "")) }));
   r.post("/stock/counts", async (req, res) => { await repo.setCount(actor(req), parse(countSchema, req.body)); res.json({ ok: true }); });
 
+  r.get("/accounts-queue", async (req, res) => res.json({ rows: await repo.accountsQueue(actor(req)) }));
+  r.post("/requests/:id/send-to-accounts", async (req, res) => res.json(await repo.sendApprovedToAccounts(actor(req), id(req.params.id))));
+  r.post("/requests/:id/accounts-action", async (req, res) => {
+    const { action } = parse(z.object({ action: z.enum(["acknowledge", "forward"]) }).strict(), req.body);
+    res.json(await repo.accountsAction(actor(req), id(req.params.id), action));
+  });
   r.get("/requests", async (req, res) => res.json({ requests: await repo.listRequests(actor(req)) }));
   r.post("/requests", async (req, res) => res.json(await repo.createRequest(actor(req), parse(requestSchema, req.body))));
+  r.post("/requests/from-warehouse", async (req, res) => res.json(await repo.createWarehouseDraft(actor(req), parse(warehouseDraftSchema, req.body))));
   r.post("/requests/from-to-buy", async (req, res) => res.json(await repo.createFromToBuy(actor(req))));
   r.get("/requests/:id", async (req, res) => res.json(await repo.getRequest(actor(req), id(req.params.id))));
   r.post("/requests/:id/update", async (req, res) => res.json(await repo.updateRequest(actor(req), id(req.params.id), parse(requestUpdateSchema, req.body))));
@@ -53,7 +63,7 @@ export function procurementHttp(repo: ProcurementRepository, requireSession: Req
   r.post("/requests/:id/lines/:lineId/choose", async (req, res) =>
     res.json(await repo.chooseQuote(actor(req), id(req.params.id), id(req.params.lineId, "line"), parse(chooseSchema, req.body).quoteId)));
   r.post("/requests/:id/quotes/:quoteId/remove", async (req, res) => res.json(await repo.removeQuote(actor(req), id(req.params.id), id(req.params.quoteId, "quotation"))));
-  r.post("/requests/:id/submit", async (req, res) => res.json(await repo.submit(actor(req), id(req.params.id))));
+  r.post("/requests/:id/submit", async (req, res) => res.json(await repo.submit(actor(req), id(req.params.id), parse(noteSchema, req.body).note)));
   r.post("/requests/:id/decide", async (req, res) => {
     const input = parse(decisionSchema, req.body);
     if (input.decision === "approve") requireRecentPassword(req);
@@ -115,6 +125,13 @@ export function procurementHttp(repo: ProcurementRepository, requireSession: Req
   r.get("/rfqs/:rfqId/vendors/:vendorId/xlsx", async (req, res) => { const { f, v } = await vendorOf(req); send(res, buildRfqXlsx(f, v), XLSX, `${f.number} ${v.vendor}.xlsx`, rfqName(f, v.vendor, v.id)); });
   r.get("/rfqs/:rfqId/all.zip", async (req, res) => { const f = await rfqs.rfq(actor(req), id(req.params.rfqId, "quotation request")); send(res, buildRfqZip(f), "application/zip", `${f.number} all vendors.zip`, rfqName(f, "All vendors", "all")); });
   r.post("/requests/:id/quotes/import", async (req, res) => res.json(await repo.importQuotes(actor(req), id(req.params.id), parse(importQuotesSchema, req.body))));
+  r.get("/requests/:id/approved.pdf", async (req, res) => {
+    const d = await repo.approvedDocument(actor(req), id(req.params.id));
+    res.set("Cache-Control", "private, no-store");
+    send(res, buildApprovedPurchasePdf(d), "application/pdf", `${d.number} approved RFQ.pdf`, {
+      documentType: "Approved purchase RFQ", identity: `approved-purchase:${d.id}`, customer: "Procurement", site: d.deliveryTo, reference: d.number,
+    });
+  });
   r.get("/requests/:id/comparison.pdf", async (req, res) => { const d = await repo.getRequest(actor(req), id(req.params.id)); send(res, buildComparisonPdf(d), "application/pdf", `${d.number} comparative statement.pdf`, cmpName(d)); });
   r.get("/requests/:id/comparison.xlsx", async (req, res) => { const d = await repo.getRequest(actor(req), id(req.params.id)); send(res, buildComparisonXlsx(d), XLSX, `${d.number} comparative statement.xlsx`, cmpName(d)); });
   return r;

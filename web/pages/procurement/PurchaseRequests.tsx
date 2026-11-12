@@ -1,3 +1,4 @@
+import { downloadDepartmentFile } from "../../download-file.js";
 import {recentFirst} from '../../../shared/recent-records.js';
 import {PagedTableBody,PagedResults} from '../../ui/PagedTableBody.js';
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -24,6 +25,7 @@ const STEPS: { key: RequestStatus | "quotes"; label: string }[] = [
 ];
 const EVENT_TEXT: Record<string, string> = {
   created: "Created", submitted: "Sent to Abu Bakar", approved: "Approved", sent_back: "Sent back for changes", rejected: "Rejected",
+  accounts_sent: "Sent to Accounts", accounts_acknowledged: "Acknowledged by Accounts", inventory_forwarded: "Sent to Inventory receiving",
   rfq_sent: "Quotations requested", self_approved: "Self-approved by the buyer", ordered: "Marked ordered", part_received: "Part received into Store", received: "Received into Store", cancelled: "Cancelled",
 };
 
@@ -120,6 +122,7 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
   const [hits, setHits] = useState<ItemHit[]>([]);
   const [adding, setAdding] = useState<{ item: ItemHit; quantity: string } | null>(null);
   const [note, setNote] = useState("");
+  const [recommendation, setRecommendation] = useState("");
   const [orderRef, setOrderRef] = useState("");
   const [password, setPassword] = useState("");
 
@@ -297,8 +300,11 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
           {d.can.submit && (
             <>
               <p className="pr-muted">{hasQuotes ? "Every item has a chosen quotation. Send it to Abu Bakar for approval." : "Every item needs at least one quotation before it can go to Abu Bakar."}</p>
+              <Field id="pr-recommendation" label="Buyer’s recommendation">
+                <textarea id="pr-recommendation" value={recommendation} onChange={event => setRecommendation(event.target.value)} maxLength={1000} />
+              </Field>
               <div className="pr-actions">
-                <Button variant="primary" loading={busy} disabled={!hasQuotes} onClick={() => void post("/submit", {}, "Sent to Abu Bakar for approval.")}>Send to Abu Bakar</Button>
+                <Button variant="primary" loading={busy} disabled={!hasQuotes || Boolean(d.accountsHandoff?.required && !recommendation.trim())} onClick={() => void post("/submit", { note: recommendation }, "Sent to Abu Bakar for approval.")}>Send to Abu Bakar</Button>
                 {d.can.cancel && <Button variant="neutral" loading={busy} onClick={() => void post("/cancel", { note }, "Request cancelled.")}>Cancel request</Button>}
               </div>
             </>
@@ -306,6 +312,7 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
           {d.can.decide && (
             <>
               <p className="pr-muted">PKR {pkr(d.totals.atChosen)} for {d.lines.length} item{d.lines.length === 1 ? "" : "s"}{Number(d.totals.saving) > 0 ? `, ${pkr(d.totals.saving)} below last rates` : ""}. Only you can approve this.</p>
+              {d.events.find(event => event.kind === "submitted")?.note && <p><strong>Buyer’s recommendation</strong><br />{d.events.find(event => event.kind === "submitted")?.note}</p>}
               <textarea className="pr-note" placeholder="Note to Hamza (needed to send back or reject)" value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} />
               <label className="pr-muted pr-password">Your password, to approve (asked again after 5 minutes)
                 <input type="password" autoComplete="current-password" maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -332,6 +339,16 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
               </div>
             </div>
           )}
+          {["approved", "ordered", "received"].includes(d.status) && !d.selfApproved && <div className="pr-actions">
+            <Button variant="secondary" onClick={async () => {
+              try { await downloadDepartmentFile(`/procurement/requests/${d.id}/approved.pdf`, `${d.number} approved RFQ.pdf`); }
+              catch (error) { setError(error instanceof Error ? error.message : "Unable to download the approved RFQ."); }
+            }}>Download approved RFQ</Button>
+            {d.can.sendToAccounts && <Button variant="primary" loading={busy}
+              onClick={() => void post("/send-to-accounts", {}, "Approved purchase sent to Accounts.")}>Send to Accounts</Button>}
+          </div>}
+          {d.accountsHandoff?.sentAt && <p className="pr-muted">{d.accountsHandoff.forwardedAt ? "Sent to Inventory receiving"
+            : d.accountsHandoff.acknowledgedAt ? "Acknowledged by Accounts" : "Awaiting acknowledgement in Accounts"}</p>}
           {d.can.order && (
             <>
               <p className="pr-muted">{d.selfApproved ? "Self-approved" : "Approved"} by {d.decidedBy} {fmtAt(d.decidedAt)}. Place the orders with the chosen vendors, then record the vendor order number(s).</p>

@@ -21,7 +21,11 @@ test('Operations planning, UPS/Solar/BESS QC, blockers and corrections preserve 
   await repo.importSource(users.owner,{sourceSha256:'a'.repeat(64),rows:[...rows,{id:'unknown',ipo:'IPO-unknown',name:'Unknown scope',stage:'received',installation:null,projectType:null,scopePending:true}]});
   const command=async(name:string,id:string,value:Record<string,unknown>)=>repo.command(users[name],id,commandSchema.parse({version:(await repo.site(users.owner,id)).version,requestKey:randomUUID(),...value}));
   await assert.rejects(command('lead','ups',{action:'assign-team',team:'central'}),/not found|Only Moaz/);
-  for(const row of [...rows,{id:'unknown'}])await command('head',row.id,{action:'assign-team',team:'central'});
+  await assert.rejects(command('head','ups',{action:'assign-team',team:'central'}),/Choose Lahore or Karachi/);
+  for(const row of [...rows,{id:'unknown'}]){
+   const assigned=await command('head',row.id,{action:'assign-team',team:'central',warehouse:'Lahore warehouse'});
+   assert.equal(assigned.procurementWarehouse,'Lahore warehouse');
+  }
   const vendor=await repo.saveVendor(users.lead,{version:0,requestKey:randomUUID(),kind:'vendor',name:'Installation vendor',phone:'',roles:['structure','electrical','earthing','delivery'],active:true,reason:''});
   const assignments={structure:vendor.id,electrical:'pz-team',earthing:vendor.id,delivery:vendor.id};
   await assert.rejects(repo.saveVendor(users.qc,{version:0,requestKey:randomUUID(),kind:'vendor',name:'Forbidden',phone:'',roles:['delivery'],active:true,reason:''}),/Operations lead/);

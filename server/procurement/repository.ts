@@ -1,8 +1,12 @@
 import {lockActiveActor} from '../auth/actor-lock.js';
 import type { Pool, PoolClient } from "pg";
+import { createHash } from "node:crypto";
+import type { z } from "zod";
 import { HttpError } from "../http/errors.js";
 import { transaction } from "../db/transaction.js";
-import { STATUS_LABELS, type RequestStatus } from "./schema.js";
+import { STATUS_LABELS, type RequestStatus, type suppliersSchema, type warehouseDraftSchema } from "./schema.js";
+import { reviewedWarehouses } from "../inventory/warehouse-reference.js";
+import { procurementWarehouseStock } from "./warehouse-stock.js";
 import { boughtByBuyer, computeSupply, fixed, isMiscItem, lastRates, num, PROCUREMENT_ITEMS, rateMaster, sameUnit, toDay } from "./supply.js";
 
 type Db = Pool | PoolClient;
@@ -80,6 +84,35 @@ export class ProcurementRepository {
     return { me, ...supply, requests: prices ? await this.requestRows(this.pool, this.seesDirect(me)) : [] };
   }
 
+  async suppliers(actor: string) {
+    await this.buyer(actor, this.pool);
+    return (await this.pool.query<{ id: string; name: string; email: string; phone: string }>(
+      "SELECT id,name,email,phone FROM procurement_suppliers ORDER BY lower(name),id",
+    )).rows;
+  }
+
+  async addSuppliers(actor: string, input: z.infer<typeof suppliersSchema>) {
+    return transaction(this.pool, async c => {
+      await lockActiveActor(c, actor);
+      await this.buyer(actor, c);
+      const inserted = await c.query(`
+        INSERT INTO procurement_suppliers(name,email,phone,created_by)
+        SELECT s.name,s.email,s.phone,$1 FROM jsonb_to_recordset($2::jsonb) s(name text,email text,phone text)
+        ON CONFLICT DO NOTHING RETURNING id`, [actor, JSON.stringify(input.suppliers)]);
+      const added = inserted.rowCount ?? 0;
+      if (added) await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [actor, `procurement.suppliers.added:${added}`]);
+      return { added, duplicates: input.suppliers.length - added };
+    });
+  }
+
+  async warehouseStock(actor: string) {
+    const me = await this.me(actor);
+    if (!me.buyer && !["Admin", "Management"].includes(me.role)) {
+      throw new HttpError(403, "Warehouse stock is available to Procurement buyers and Management.");
+    }
+    return procurementWarehouseStock(this.pool);
+  }
+
   /**
    * Store's page (Shaigan, 21 Oct 2026): every item to count with its current level, and the ordered
    * purchases waiting to be received, with quantities and vendors but no prices.
@@ -90,8 +123,16 @@ export class ProcurementRepository {
     if(me.role==="Inventory")await this.inventoryDispatcher(actor);
     const { inventory } = await computeSupply(this.pool, this.pool);
     const ordered = (await this.pool.query(
-      `SELECT r.id, r.number, r.title, r.order_reference, r.ordered_at, r.delivery_to, r.needed_by, r.vendor, r.expected_on, u.display_name AS ordered_by
-       FROM purchase_requests r LEFT JOIN users u ON u.id=r.ordered_by WHERE r.status='ordered' ORDER BY r.ordered_at`,
+      `SELECT r.id, r.number, r.title, r.order_reference, r.ordered_at, r.delivery_to, r.needed_by, r.vendor, r.expected_on, u.display_name AS ordered_by,
+        CASE WHEN f.forwarded THEN r.delivery_to END AS receiving_warehouse
+       FROM purchase_requests r LEFT JOIN users u ON u.id=r.ordered_by
+       CROSS JOIN LATERAL (SELECT EXISTS (
+         SELECT 1 FROM purchase_request_events e WHERE e.request_id=r.id AND e.kind='inventory_forwarded'
+       ) AS forwarded) f
+       WHERE r.status='ordered' AND ($2 OR NOT f.forwarded OR EXISTS (
+         SELECT 1 FROM inventory_material_access a WHERE a.user_id=$1 AND a.warehouse=r.delivery_to AND a.capability='dispatcher'
+       )) ORDER BY r.ordered_at`,
+      [actor, me.role !== "Inventory"],
     )).rows;
     const lines = ordered.length ? (await this.pool.query(
       `SELECT l.request_id, l.item_key, l.quantity, l.unit, q.vendor FROM purchase_request_lines l LEFT JOIN purchase_quotes q ON q.id=l.chosen_quote_id
@@ -106,7 +147,7 @@ export class ProcurementRepository {
       toReceive: ordered.map((o) => ({
         id: o.id as string, number: o.number as string, title: o.title as string, orderReference: o.order_reference as string, orderedAt: o.ordered_at as string,
         orderedBy: (o.ordered_by ?? null) as string | null, deliveryTo: o.delivery_to as string, neededBy: o.needed_by ? toDay(o.needed_by) : null,
-        expectedOn: o.expected_on ? toDay(o.expected_on) : null,
+        expectedOn: o.expected_on ? toDay(o.expected_on) : null, receivingWarehouse: o.receiving_warehouse as string | null,
         lines: lines.filter((l) => l.request_id === o.id).map((l) => {
           const received = got.get(`${o.id}|${l.item_key}`) ?? 0;
           return {
@@ -172,6 +213,87 @@ export class ProcurementRepository {
     return this.requestRows(this.pool, this.seesDirect(me));
   }
 
+  private async accountsHandoff(c: Db, id: string) {
+    const rows = (await c.query<{ kind: string; at: string }>(`
+      SELECT kind,created_at AS at FROM purchase_request_events WHERE request_id=$1
+      AND (kind IN ('accounts_sent','accounts_acknowledged','inventory_forwarded')
+        OR kind='created' AND changes->>'requiresAccounts'='true') ORDER BY created_at`, [id])).rows;
+    const events = new Map(rows.map(row => [row.kind, row.at]));
+    return {
+      required: events.has("created"),
+      sentAt: events.get("accounts_sent") ?? null,
+      acknowledgedAt: events.get("accounts_acknowledged") ?? null,
+      forwardedAt: events.get("inventory_forwarded") ?? null,
+    };
+  }
+
+  async sendApprovedToAccounts(actor: string, id: string) {
+    return transaction(this.pool, async c => {
+      await lockActiveActor(c, actor);
+      await this.buyer(actor, c);
+      const status = await this.lock(c, id);
+      const handoff = await this.accountsHandoff(c, id);
+      if (handoff.sentAt) return this.getRequest(actor, id, c);
+      const request = (await c.query("SELECT self_approved,delivery_to FROM purchase_requests WHERE id=$1", [id])).rows[0];
+      if (status !== "approved" || request.self_approved) throw new HttpError(422, "An owner-approved request is required.");
+      if (!(await reviewedWarehouses(c)).includes(request.delivery_to)) throw new HttpError(422, "The request needs a reviewed receiving warehouse before it can go to Accounts.");
+      await this.event(c, id, actor, "accounts_sent", status, status);
+      await this.touch(c, id);
+      return this.getRequest(actor, id, c);
+    });
+  }
+
+  async accountsQueue(actor: string) {
+    const me = await this.me(actor);
+    if (!PRICE_ROLES.has(me.role)) throw new HttpError(403, "Accounts access required.");
+    return (await this.pool.query(`
+      SELECT r.id,r.number,r.title,r.delivery_to AS warehouse,r.status,sent.created_at AS "sentAt",
+        ack.created_at AS "acknowledgedAt",fwd.created_at AS "forwardedAt",
+        pt.pt_reference AS "ptReference",pt.entry_date::text AS "ptDate"
+      FROM purchase_requests r
+      JOIN purchase_request_events sent ON sent.request_id=r.id AND sent.kind='accounts_sent'
+      LEFT JOIN purchase_request_events ack ON ack.request_id=r.id AND ack.kind='accounts_acknowledged'
+      LEFT JOIN purchase_request_events fwd ON fwd.request_id=r.id AND fwd.kind='inventory_forwarded'
+      LEFT JOIN accounts_pt_entries pt ON pt.source_kind='Procurement' AND pt.source_id=r.id AND pt.source_version=1
+      ORDER BY sent.created_at DESC,r.id`)).rows;
+  }
+
+  async accountsAction(actor: string, id: string, action: "acknowledge" | "forward") {
+    return transaction(this.pool, async c => {
+      await lockActiveActor(c, actor);
+      const me = await this.me(actor, c);
+      if (me.role !== "Accounts") throw new HttpError(403, "An Accounts user must record this handoff.");
+      const status = await this.lock(c, id);
+      const handoff = await this.accountsHandoff(c, id);
+      if (!handoff.sentAt) throw new HttpError(404, "This purchase has not been sent to Accounts.");
+      if (action === "acknowledge" && handoff.acknowledgedAt || action === "forward" && handoff.forwardedAt) {
+        return { id, status };
+      }
+      if (status !== "approved") throw new HttpError(422, "Only an approved purchase can move through Accounts.");
+      if (action === "acknowledge") {
+        await this.event(c, id, actor, "accounts_acknowledged", status, status);
+        return { id, status };
+      }
+      const pt = (await c.query("SELECT id FROM accounts_pt_entries WHERE source_kind='Procurement' AND source_id=$1 AND source_version=1", [id])).rows[0];
+      if (!handoff.acknowledgedAt || !pt) throw new HttpError(422, "Acknowledge the purchase and record its PT reference before forwarding it.");
+      await c.query("UPDATE purchase_requests SET status='ordered',ordered_by=$2,ordered_at=now(),updated_at=now() WHERE id=$1", [id, actor]);
+      await this.event(c, id, actor, "inventory_forwarded", status, "ordered", "", { ptEntryId: pt.id });
+      return { id, status: "ordered" as const };
+    });
+  }
+
+  async approvedDocument(actor: string, id: string) {
+    const detail = await this.getRequest(actor, id);
+    const me = await this.me(actor);
+    if (!["approved", "ordered", "received"].includes(detail.status) || detail.selfApproved) {
+      throw new HttpError(404, "Owner-approved purchase document not available.");
+    }
+    if (me.role === "Accounts" && !detail.accountsHandoff.sentAt) {
+      throw new HttpError(404, "This purchase has not been sent to Accounts.");
+    }
+    return detail;
+  }
+
   async getRequest(actor: string, id: string, c: Db = this.pool) {
     const me = await this.priceReader(actor, c);
     const r = (await c.query(
@@ -213,6 +335,7 @@ export class ProcurementRepository {
       [id],
     )).rows.map((e) => ({ id: e.id as string, kind: e.kind as string, fromStatus: e.from_status as string | null, toStatus: e.to_status as string | null, note: e.note as string, actor: e.actor as string, at: e.created_at as string }));
     const status = r.status as RequestStatus;
+    const accountsHandoff = await this.accountsHandoff(c, id);
     return {
       id: r.id as string, number: r.number as string, title: r.title as string, purpose: r.purpose as string, neededBy: r.needed_by ? toDay(r.needed_by) : null,
       deliveryTo: r.delivery_to as string, paymentTerms: r.payment_terms as string, status, statusLabel: STATUS_LABELS[status],
@@ -220,16 +343,17 @@ export class ProcurementRepository {
       decidedBy: (r.decided_by_name ?? null) as string | null, decidedAt: r.decided_at as string | null, decisionNote: r.decision_note as string,
       orderedBy: (r.ordered_by_name ?? null) as string | null, orderedAt: r.ordered_at as string | null, orderReference: r.order_reference as string,
       receivedBy: (r.received_by_name ?? null) as string | null, receivedAt: r.received_at as string | null, selfApproved: r.self_approved === true,
-      lines, events,
+      lines, events, accountsHandoff,
       totals: { atChosen: fixed(atChosen), lastComparable: fixed(lastComparable), chosenComparable: fixed(chosenComparable), saving: fixed(lastComparable - chosenComparable), firstPurchases },
       can: {
         edit: me.buyer && status === "draft",
         submit: me.buyer && status === "draft",
         decide: me.approver && status === "pending_approval",
-        selfApprove: me.buyer && (status === "pending_approval" || (status === "draft" && lines.length > 0 && lines.every((l) => l.chosen))),
-        order: me.buyer && status === "approved",
+        selfApprove: me.buyer && !accountsHandoff.required && (status === "pending_approval" || (status === "draft" && lines.length > 0 && lines.every((l) => l.chosen))),
+        order: me.buyer && status === "approved" && !accountsHandoff.required && !accountsHandoff.sentAt,
+        sendToAccounts: me.buyer && status === "approved" && !r.self_approved && !accountsHandoff.sentAt,
         receive: me.role === "Inventory" && status === "ordered",
-        cancel: me.buyer && ["draft", "pending_approval", "approved"].includes(status),
+        cancel: me.buyer && !accountsHandoff.sentAt && ["draft", "pending_approval", "approved"].includes(status),
       },
     };
   }
@@ -262,6 +386,48 @@ export class ProcurementRepository {
         [input.title, input.purpose, input.neededBy, input.deliveryTo || "Power Zone Store", input.paymentTerms, actor],
       )).rows[0].id as string;
       await this.event(c, id, actor, "created", null, "draft");
+      return this.getRequest(actor, id, c);
+    });
+  }
+
+  async createWarehouseDraft(actor: string, input: z.infer<typeof warehouseDraftSchema>) {
+    const { requestKey, warehouse, lines, title, purpose, neededBy, paymentTerms } = input;
+    const fingerprint = createHash("sha256").update(JSON.stringify(input)).digest("hex");
+    return transaction(this.pool, async (c) => {
+      await lockActiveActor(c, actor);
+      await this.buyer(actor, c);
+      await c.query("SELECT pg_advisory_xact_lock(hashtextextended('procurement.warehouse-draft.' || $1,0))", [requestKey]);
+      const prior = (await c.query(
+        `SELECT request_id, created_by, changes->>'fingerprint' AS fingerprint
+         FROM purchase_request_events WHERE kind='created' AND changes->>'requestKey'=$1`, [requestKey],
+      )).rows[0];
+      if (prior) {
+        if (prior.created_by !== actor || prior.fingerprint !== fingerprint) {
+          throw new HttpError(409, "This request key was already used. Start a new draft.");
+        }
+        return this.getRequest(actor, prior.request_id, c);
+      }
+      const stock = await procurementWarehouseStock(c, false);
+      if (!stock.warehouses.includes(warehouse)) throw new HttpError(422, "Choose a reviewed warehouse.");
+      const picks = new Map(stock.rows.filter(row => row.warehouse === warehouse).map(row => [JSON.stringify([row.itemId, row.unit]), row]));
+      const used = new Set<string>();
+      const validated = lines.map(line => {
+        const match = picks.get(JSON.stringify([line.itemId, line.unit]))?.purchaseItem;
+        if (!match) throw new HttpError(422, `${line.itemId} has no reviewed purchase item and unit link for this warehouse.`);
+        if (used.has(match.itemKey)) throw new HttpError(422, `${line.itemId} maps to an item already on this request.`);
+        used.add(match.itemKey);
+        return { ...match, quantity: line.quantity };
+      });
+      const id = (await c.query(
+        `INSERT INTO purchase_requests(number,title,purpose,needed_by,delivery_to,payment_terms,created_by)
+         VALUES(${NEW_NUMBER},$1,$2,$3,$4,$5,$6) RETURNING id`,
+        [title, purpose, neededBy, warehouse, paymentTerms, actor],
+      )).rows[0].id as string;
+      for (const line of validated) {
+        await c.query("INSERT INTO purchase_request_lines(request_id,item_key,quantity,unit) VALUES($1,$2,$3,$4)",
+          [id, line.itemKey, line.quantity, line.unit]);
+      }
+      await this.event(c, id, actor, "created", null, "draft", "Created from warehouse stock", { requestKey, fingerprint, warehouse, lines, requiresAccounts: true });
       return this.getRequest(actor, id, c);
     });
   }
@@ -404,16 +570,17 @@ export class ProcurementRepository {
     });
   }
 
-  async submit(actor: string, id: string) {
+  async submit(actor: string, id: string, recommendation = "") {
     return transaction(this.pool, async (c) => {
       await this.draft(c, actor, id);
+      if ((await this.accountsHandoff(c, id)).required && !recommendation.trim()) throw new HttpError(422, "Enter the buyer’s recommendation before submitting.");
       const lines = (await c.query("SELECT id, item_key, chosen_quote_id FROM purchase_request_lines WHERE request_id=$1", [id])).rows;
       if (!lines.length) throw new HttpError(422, "Add at least one item before sending the request.");
       const missing = lines.filter((l) => !l.chosen_quote_id).map((l) => l.item_key);
       if (missing.length) throw new HttpError(422, `Add a quotation for: ${missing.join(", ")}.`);
       await this.freezeRates(c, lines);
       await c.query("UPDATE purchase_requests SET status='pending_approval', submitted_at=now(), updated_at=now() WHERE id=$1", [id]);
-      await this.event(c, id, actor, "submitted", "draft", "pending_approval");
+      await this.event(c, id, actor, "submitted", "draft", "pending_approval", recommendation);
       return this.getRequest(actor, id, c);
     });
   }
@@ -435,6 +602,7 @@ export class ProcurementRepository {
       const me = await this.buyer(actor, c);
       const status = await this.lock(c, id);
       if (status !== "draft" && status !== "pending_approval") throw new HttpError(422, "Only a draft or a request waiting for approval can be approved.");
+      if ((await this.accountsHandoff(c, id)).required) throw new HttpError(403, "The owner must approve this purchase.");
       if (status === "draft") {
         const lines = (await c.query("SELECT id, item_key, chosen_quote_id FROM purchase_request_lines WHERE request_id=$1", [id])).rows;
         if (!lines.length) throw new HttpError(422, "Add at least one item before approving the request.");
@@ -494,6 +662,8 @@ export class ProcurementRepository {
       await this.buyer(actor, c);
       const status = await this.lock(c, id);
       if (status !== "approved") throw new HttpError(422, "Only an approved request can be ordered.");
+      const handoff = await this.accountsHandoff(c, id);
+      if (handoff.required || handoff.sentAt) throw new HttpError(422, "Accounts must forward this approved purchase to Inventory.");
       await c.query("UPDATE purchase_requests SET status='ordered', ordered_by=$2, ordered_at=now(), order_reference=$3, updated_at=now() WHERE id=$1", [id, actor, input.orderReference]);
       await this.event(c, id, actor, "ordered", status, "ordered", input.orderReference);
       return this.getRequest(actor, id, c);
@@ -546,6 +716,7 @@ export class ProcurementRepository {
     return transaction(this.pool, async (c) => {
       await this.buyer(actor, c);
       const status = await this.lock(c, id);
+      if ((await this.accountsHandoff(c, id)).sentAt) throw new HttpError(422, "Accounts has received this purchase.");
       if (!["draft", "pending_approval", "approved"].includes(status)) throw new HttpError(422, "This request can no longer be cancelled.");
       await c.query("UPDATE purchase_requests SET status='cancelled', updated_at=now() WHERE id=$1", [id]);
       await this.event(c, id, actor, "cancelled", status, "cancelled", input.note);

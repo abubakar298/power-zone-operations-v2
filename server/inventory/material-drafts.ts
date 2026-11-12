@@ -1,3 +1,4 @@
+import {reviewedWarehouses} from "./warehouse-reference.js";
 import {postTemporaryInward,previewTemporaryInward} from './temporary-inward-posting.js';
 import {MastersRepository} from '../masters/repository.js';
 import {materialCorrectionAlerts} from './material-correction-alerts.js';
@@ -182,8 +183,7 @@ export class MaterialDraftRepository{
  saveMinimumStock(actor:string,input:unknown){return new MinimumStockRepository(this.pool).save(actor,input);}
  async warehouses(actor:string,printing=false){
   const access=await this.access(actor,this.pool,printing);
-  const rows=await this.pool.query(`SELECT DISTINCT payload->>'warehouse' AS warehouse FROM inventory_warehouse_source_balances WHERE source_sha256=(SELECT source_sha256 FROM inventory_warehouse_sources ORDER BY (coalesce(metadata->>'canonicalIds','') ~ '^[1-9][0-9]*$') DESC,created_at DESC,source_sha256 LIMIT 1) ORDER BY warehouse`);
-  return {warehouses:rows.rows.map(r=>r.warehouse as string).filter(w=>access.owner||access.warehouses.includes(w))};
+  return {warehouses:(await reviewedWarehouses(this.pool)).filter(w=>access.owner||access.warehouses.includes(w))};
  }
  async itemDatabase(actor:string){await this.access(actor);return new MastersRepository(this.pool).catalogueDescriptions(actor);}
  async addCatalogueItem(actor:string,input:unknown){await this.access(actor);return new MastersRepository(this.pool).createCatalogueItem(actor,input);}

@@ -1,3 +1,4 @@
+import { ipoReservationWarehouses } from "../../shared/procurement-warehouse.js";
 import {targetStageIds} from '../../shared/operations-stages.js';
 export {targetStageIds} from '../../shared/operations-stages.js';
 import {z} from 'zod';
@@ -14,6 +15,7 @@ export const sourceSiteSchema=z.object({
  stage:z.enum(['received','awaiting','delivered','completed']),installation:z.boolean().nullable(),completed:z.boolean().optional(),scopePending:z.boolean().optional(),
  projectType:z.enum(['solar-bess','solar','bess','ups','delivery-only']).nullish(),
  operationsTeam:teamSchema.nullish(),
+ procurementWarehouse:z.enum(ipoReservationWarehouses).optional(),
  documents:z.array(document).max(1000).optional(),
  inventoryReceiving:z.object({dispatchId:z.uuid(),number:z.string(),evidenceId:z.uuid(),name:z.string(),mediaType:z.string(),receivedAt:z.iso.datetime()}).optional(),
 }).passthrough().superRefine((site,ctx)=>{if(site.installation===null&&site.scopePending!==true)ctx.addIssue({code:'custom',message:'Unknown installation scope must remain explicitly flagged.',path:['scopePending']});});
@@ -30,7 +32,7 @@ const vendorId=z.union([z.uuid(),z.literal('pz-team')]);
 export const vendorAssignmentsSchema=z.object({structure:vendorId.optional(),electrical:vendorId.optional(),earthing:vendorId.optional(),delivery:vendorId.optional()}).strict();
 const completionFields={date:z.iso.date(),evidenceIds:z.array(z.uuid()).max(30).default([]),acknowledgementId:z.uuid().optional(),irrId:z.uuid().optional(),variableSignoffId:z.uuid().optional(),noVariableItemsUsed:z.boolean().optional()};
 export const commandSchema=z.discriminatedUnion('action',[
- commandBase.extend({action:z.literal('assign-team'),team:teamSchema}).strict(),
+ commandBase.extend({action:z.literal('assign-team'),team:teamSchema,warehouse:z.enum(ipoReservationWarehouses).optional()}).strict(),
  commandBase.extend({action:z.literal('plan'),dispatchDate:z.iso.date(),assignments:vendorAssignmentsSchema,teamMemberIds:z.array(z.uuid()).max(50).refine(v=>new Set(v).size===v.length,'Choose each team member once.').optional()}).strict(),
  commandBase.extend({action:z.literal('delivery'),dispatchId:z.uuid().optional(),deliveryDate:z.iso.date(),signedDoId:z.uuid(),materialPhotoId:z.uuid(),partial:z.boolean().default(false)}).strict(),
  commandBase.extend({action:z.literal('delivery-return'),scope:z.enum(['full','partial']),date:z.iso.date().optional(),dateUnknown:z.boolean(),warehouse:z.string().trim().max(200).default(''),reference:z.string().trim().max(200).default(''),reason:z.string().trim().min(3).max(2000)}).strict(),

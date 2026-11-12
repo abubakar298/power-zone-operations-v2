@@ -19,9 +19,14 @@ type Db=Pool|PoolClient;
 export class PurchaseReceivingRepository{
  constructor(private pool:Pool){}
  private async candidates(c:Db,itemKey:string){return (await c.query(`SELECT item_id,payload->>'stockDescription' description,payload->'stockUnits' units FROM inventory_catalogue_final_current WHERE payload->>'finalStockId'='true' AND (item_id=$1 OR rate_key=$1 OR item_id IN(SELECT item_id FROM inventory_item_aliases_current WHERE alias=$1)) ORDER BY item_id`,[itemKey])).rows;}
+ private async checkReceivingWarehouse(c:Db,requestId:string,destination:string,warehouse:string){
+  if(destination!==warehouse&&(await c.query("SELECT 1 FROM purchase_request_events WHERE request_id=$1 AND kind='inventory_forwarded'",[requestId])).rowCount)
+   throw new HttpError(422,`This purchase was forwarded to ${destination}.`);
+ }
  async intake(actor:string,requestId:string,warehouse:string){
   await requireWarehouseAccess(actor,warehouse,this.pool);
   const request=(await this.pool.query('SELECT id,number,status,vendor,delivery_to FROM purchase_requests WHERE id=$1',[requestId])).rows[0];if(!request)throw new HttpError(404,'Purchase request not found.');
+  await this.checkReceivingWarehouse(this.pool,requestId,request.delivery_to,warehouse);
   const authority=(await this.pool.query('SELECT source_sha256,version,state FROM inventory_warehouse_authority_current WHERE warehouse=$1',[warehouse])).rows[0]??null;
   const lines=(await this.pool.query(`SELECT l.item_key,l.quantity::text ordered,l.unit,coalesce((SELECT sum(e.quantity) FROM stock_on_hand_entries e WHERE e.request_id=l.request_id AND e.item_key=l.item_key AND e.kind='receipt'),0)::text received FROM purchase_request_lines l WHERE request_id=$1 ORDER BY item_key`,[requestId])).rows;
   const result=[];for(const line of lines){const candidates=await this.candidates(this.pool,line.item_key);result.push({...line,due:Decimal.max(0,new Decimal(line.ordered).minus(line.received)).toString(),candidates});}
@@ -36,7 +41,8 @@ export class PurchaseReceivingRepository{
    const replay=(await c.query('SELECT id,number,warehouse,request_fingerprint,verified_by FROM inventory_material_purchase_receipts WHERE request_key=$1',[input.requestKey])).rows[0];
    if(replay){await requireWarehouseAccess(actor,replay.warehouse,c);if(replay.verified_by!==actor||replay.request_fingerprint!==hash(input))throw new HttpError(409,'This request belongs to another purchase receipt.');return {id:replay.id,number:replay.number,stockPosted:true};}
    await requireWarehouseAccess(actor,input.warehouse,c);
-   const order=(await c.query('SELECT id,number,status FROM purchase_requests WHERE id=$1 FOR UPDATE',[input.requestId])).rows[0];if(!order)throw new HttpError(404,'Purchase request not found.');if(order.status!=='ordered')throw new HttpError(409,'Only an ordered purchase can receive a new physical warehouse receipt.');
+   const order=(await c.query('SELECT id,number,status,delivery_to FROM purchase_requests WHERE id=$1 FOR UPDATE',[input.requestId])).rows[0];if(!order)throw new HttpError(404,'Purchase request not found.');if(order.status!=='ordered')throw new HttpError(409,'Only an ordered purchase can receive a new physical warehouse receipt.');
+   await this.checkReceivingWarehouse(c,input.requestId,order.delivery_to,input.warehouse);
    await lockWarehouseAuthority(c,input.warehouse,input.sourceSha256,input.authorityVersion);
    if((await c.query(`SELECT 1 FROM inventory_temporary_inward_postings
      WHERE warehouse=$1 AND lower(btrim(external_reference))=lower(btrim($2)) LIMIT 1`,[input.warehouse,order.number])).rowCount)

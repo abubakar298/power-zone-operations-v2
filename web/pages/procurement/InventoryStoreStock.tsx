@@ -12,7 +12,7 @@ import { MiscSites } from "./MiscSites.js";
 
 interface StoreItem { itemKey: string; name: string; unit: string; inRateMaster: boolean; misc?: boolean; inStock: string; counted: boolean; lastCountAt: string | null; stockUnit: string | null }
 interface ToReceive {
-  id: string; number: string; title: string; orderReference: string; orderedAt: string; orderedBy: string | null; deliveryTo: string; neededBy: string | null; expectedOn: string | null;
+  id: string; number: string; title: string; orderReference: string; orderedAt: string; orderedBy: string | null; deliveryTo: string; receivingWarehouse?: string | null; neededBy: string | null; expectedOn: string | null;
   lines: { itemKey: string; name: string; quantity: string; received: string; due: string; unit: string; vendor: string }[];
 }
 interface ItemHit { itemKey: string; name: string; unit: string }
@@ -98,7 +98,7 @@ export function InventoryStoreStock({ session }: { session: Session }) {
                   <div className="sto-order-head">
                     <div><b>{r.number} · {r.title}{r.lines.some((l) => Number(l.received) > 0) && <> <span className="sw-chip">Part received</span></>}</b><small>Ordered {fmtAt(r.orderedAt)}{r.orderedBy ? ` by ${r.orderedBy}` : ""} · {r.orderReference}{r.expectedOn ? ` · expected ${fmtDay(r.expectedOn)}` : r.neededBy ? ` · needed by ${fmtDay(r.neededBy)}` : ""}</small></div>
                   </div>
-                  {data.warehouseReceivingRequired?<PurchaseReceiving requestId={r.id} warehouses={data.warehouses??[]} session={session} onReceived={()=>{setWarehouseRevision(v=>v+1);void load();}}/>:<><div className="pz-table-scroll">
+                  {data.warehouseReceivingRequired?<PurchaseReceiving requestId={r.id} receivingWarehouse={r.receivingWarehouse} warehouses={data.warehouses??[]} session={session} onReceived={()=>{setWarehouseRevision(v=>v+1);void load();}}/>:<><div className="pz-table-scroll">
                     <table className="ops-table">
                       <thead><tr><th>Item</th><th className="num">Ordered</th><th className="num">Received so far</th><th className="num">Arrived now</th><th>Vendor</th></tr></thead>
                       <tbody>{r.lines.map((l) => {

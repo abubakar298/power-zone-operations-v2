@@ -348,8 +348,9 @@ export class OperationsBoardRepository{
    if(v.action==='assign-team'){
     if(v.edit&&!site.operationsTeam)throw new HttpError(409,'There is no saved team assignment to edit.');
     if(site.operationsTeam&&!v.edit)throw new HttpError(409,'The saved team assignment is locked. Use Edit and give a reason.');
-    if(site.operationsTeam===v.team)throw new HttpError(422,'This team is already assigned.');
-    snapshot={...site,operationsTeam:v.team,stageStartedAt:site.stageStartedAt??now,history:[...site.history,{date:now,description:`${a.name} assigned this site to ${v.team==='central'?'Central':'South'} Operations.${v.edit?' Reason: '+v.reason:''}`}]};kind='Operations team assigned';
+    if(!v.warehouse)throw new HttpError(422,'Choose Lahore or Karachi for this IPO reservation.');
+    if(site.operationsTeam===v.team&&site.procurementWarehouse===v.warehouse)throw new HttpError(422,'This team and warehouse are already assigned.');
+    snapshot={...site,operationsTeam:v.team,procurementWarehouse:v.warehouse,stageStartedAt:site.stageStartedAt??now,history:[...site.history,{date:now,description:`${a.name} assigned this site to ${v.team==='central'?'Central':'South'} Operations and ${v.warehouse}.${v.edit?' Reason: '+v.reason:''}`}]};kind='Operations team assigned';
    }else if(v.action==='plan'){
     const vendors=await this.vendorList(c);
     for(const [role,selected] of Object.entries(v.assignments)){const vendor=vendors.find(r=>r.id===selected);if(!(v.edit&&site.assignments?.[role]===selected)&&(!vendor?.active||!vendor.roles.includes(role)||vendor.kind!=='vendor'||!vendor.internal&&vendor.team!==site.operationsTeam))throw new HttpError(422,'Choose an active vendor for each applicable service.');}

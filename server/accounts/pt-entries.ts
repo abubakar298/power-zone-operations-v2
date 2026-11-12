@@ -7,7 +7,7 @@ import {z} from 'zod';
 import {AccountsRepository} from './repository.js';
 import {HttpError} from '../http/errors.js';
 import {transaction} from '../db/transaction.js';
-export const ptEntrySchema=z.object({sourceKind:z.enum(['IPO','Inventory']),sourceId:z.uuid(),sourceVersion:z.number().int().positive(),ptReference:z.string().trim().min(1).max(200),entryDate:z.iso.date(),notes:z.string().trim().max(2000)}).strict();
+export const ptEntrySchema=z.object({sourceKind:z.enum(['IPO','Inventory','Procurement']),sourceId:z.uuid(),sourceVersion:z.number().int().positive(),ptReference:z.string().trim().min(1).max(200),entryDate:z.iso.date(),notes:z.string().trim().max(2000)}).strict();
 export async function recordPtEntry(pool:Pool,actor:string,input:z.infer<typeof ptEntrySchema>){
  await new AccountsRepository(pool).access(actor);
  return transaction(pool,async c=>{
@@ -18,6 +18,12 @@ export async function recordPtEntry(pool:Pool,actor:string,input:z.infer<typeof 
    if(!source)throw new HttpError(404,'IPO not received by Accounts.');
    // Issued IPOs are immutable documents; each ID identifies version one.
    if(input.sourceVersion!==1)throw new HttpError(409,'Refresh the issued IPO before recording its PT entry.');
+  }else if(input.sourceKind==='Procurement'){
+   const source=(await c.query(`SELECT r.id,r.status FROM purchase_requests r
+     WHERE r.id=$1 AND EXISTS (SELECT 1 FROM purchase_request_events e WHERE e.request_id=r.id AND e.kind='accounts_acknowledged')
+     FOR UPDATE OF r`,[input.sourceId])).rows[0];
+   if(!source)throw new HttpError(404,'Acknowledge the approved purchase in Accounts before recording PT.');
+   if(input.sourceVersion!==1||!['approved','ordered','received'].includes(source.status))throw new HttpError(409,'Only an approved purchase can be recorded in PT.');
   }else{
    const report=(await c.query('SELECT id,job_key FROM inventory_reports WHERE id=$1 FOR UPDATE',[input.sourceId])).rows[0];
    if(!report)throw new HttpError(404,'Inventory report not found.');
