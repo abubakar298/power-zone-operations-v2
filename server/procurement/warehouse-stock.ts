@@ -15,14 +15,15 @@ export async function procurementWarehouseStock(db: Db, includeReservations = tr
       "SELECT warehouse,source_sha256 FROM inventory_warehouse_authority_current",
   );
   const catalogueRows = await db.query<{ item_id: string; category: string | null; item_key: string | null; name: string | null; unit: string | null }>(`
-      SELECT c.item_id, f.category AS category, i.key AS item_key, i.display_name AS name, i.unit
+      WITH purchase_items AS MATERIALIZED (SELECT key,display_name,unit FROM ${PROCUREMENT_ITEMS} items)
+      SELECT c.item_id,f.category,
+        coalesce(direct.key,linked.key) item_key,
+        CASE WHEN direct.key IS NULL THEN linked.display_name ELSE direct.display_name END name,
+        CASE WHEN direct.key IS NULL THEN linked.unit ELSE direct.unit END unit
       FROM inventory_catalogue_final_current c
       JOIN inventory_final_stock_ids f ON f.item_id=c.item_id
-      LEFT JOIN LATERAL (
-        SELECT i.key,i.display_name,i.unit FROM ${PROCUREMENT_ITEMS} i
-        WHERE i.key IN (c.item_id,c.rate_key)
-        ORDER BY (i.key=c.item_id) DESC LIMIT 1
-      ) i ON true
+      LEFT JOIN purchase_items direct ON direct.key=c.item_id
+      LEFT JOIN purchase_items linked ON direct.key IS NULL AND linked.key=c.rate_key
       WHERE c.payload->>'finalStockId'='true'`);
   const minimumRows = await db.query<{ warehouse: string; item_id: string; unit: string; minimum: string }>(`
       SELECT DISTINCT ON (warehouse,item_id,unit) warehouse,item_id,unit,minimum::text
