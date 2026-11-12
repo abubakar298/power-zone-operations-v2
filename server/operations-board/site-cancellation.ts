@@ -1,6 +1,6 @@
 import type {PoolClient} from 'pg';
 import {HttpError} from '../http/errors.js';
-import {siteBucket,type WorkflowSite} from './workflow.js';
+import {siteBucket,type WorkflowSite,type FileReference} from './workflow.js';
 /** A customer-cancelled site. Saved deliveries, DOs, stock, invoices and closures are never
  * changed here, so a site that already has any of them is refused and needs Management review. */
 export async function siteCancellationBlockers(c:PoolClient,id:string,site:WorkflowSite){
@@ -18,8 +18,8 @@ export async function siteCancellationBlockers(c:PoolClient,id:string,site:Workf
  if(invoices)reasons.push('Accounts has recorded an invoice for it');
  return reasons;
 }
-export function cancelSite(site:WorkflowSite,input:{reason:string;actor:string;name:string},now:string):WorkflowSite{
- return {...site,cancelled:true,cancellation:{reason:input.reason,cancelledBy:input.name,cancelledById:input.actor,cancelledAt:now,stageAtCancellation:site.stage},
+export function cancelSite(site:WorkflowSite,input:{reason:string;actor:string;name:string;proof:FileReference[]},now:string):WorkflowSite{
+ return {...site,cancelled:true,cancellation:{reason:input.reason,proof:input.proof,cancelledBy:input.name,cancelledById:input.actor,cancelledAt:now,stageAtCancellation:site.stage},
   history:[...site.history,{date:now,description:`${input.name} cancelled this site. Reason: ${input.reason}`}]};
 }
 export function requireNotCancelled(site:Record<string,unknown>){
