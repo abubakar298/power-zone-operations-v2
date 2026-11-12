@@ -104,3 +104,6 @@
 .approved-inventory .temporary-sheet-table thead th:nth-child(4){text-align:center}
 
 .inventory-sheet-copies{display:flex;align-items:center;gap:8px;font-size:13px}.inventory-sheet-copies select{min-height:40px}
+
+.temporary-inward-posting-dialog .temporary-inward-opening{display:flex;align-items:flex-start;gap:8px}
+.temporary-inward-posting-dialog .temporary-inward-opening input[type=checkbox]{width:auto;min-height:0;flex:none;margin:4px 0 0}

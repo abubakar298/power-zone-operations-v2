@@ -67,7 +67,7 @@ export function TemporaryInwardPosting({ id, number, warehouse, date, session, o
 
   return <>
     <span ref={opener}><Button variant="secondary" onClick={() => void open()}>Post to Stock</Button></span>
-    <dialog ref={dialog} className="material-document-dialog warehouse-movement-dialog"
+    <dialog ref={dialog} className="material-document-dialog temporary-inward-posting-dialog"
       aria-label="Review warehouse inward" onCancel={event => { if (busy) event.preventDefault(); }}
       onClose={() => opener.current?.querySelector('button')?.focus()}>
       <div className="pz-panel pz-stack">
@@ -90,13 +90,13 @@ export function TemporaryInwardPosting({ id, number, warehouse, date, session, o
             </table>
           </div>
           {needsOpening && (management
-            ? <label><input type="checkbox" checked={confirmed}
+            ? <label className="temporary-inward-opening"><input type="checkbox" checked={confirmed}
                 onChange={event => setConfirmed(event.target.checked)}/>
               {' '}I verified there was zero stock before this receipt for each item without a reviewed balance.
             </label>
             : <p>Management must confirm the opening quantity for items without a reviewed balance.</p>)}
         </>}
-        <div className="temporary-document-actions">
+        <div className="temporary-document-editor-actions">
           <Button autoFocus variant="neutral" disabled={busy} onClick={() => dialog.current?.close()}>Cancel</Button>
           <Button variant="primary" loading={busy && Boolean(review)} loadingLabel="Posting stock…"
             disabled={busy || !review || Boolean(needsOpening && (!management || !confirmed))}
