@@ -208,9 +208,12 @@ export function ProcurementWarehouseStock({ session, onCreated, createRequested 
     const order = row.incoming[0];
     return <tr key={stockKey(row)}>
       <td>{index + 1}</td><td><strong>{row.itemId}</strong><small>{row.description}</small></td><td>{row.warehouse}</td>
-      <td className="num">{displayed(difference)} {row.unit}</td>
+      <td className="num">{displayed(row.afterReservations)} {row.unit}</td>
+      <td className="num">{displayed(row.minimum)} {row.unit}</td>
+      <td className="num procurement-shortage">{displayed(difference)} {row.unit}</td>
       <td>{order ? <><strong>{displayed(order.quantity)} {order.unit}</strong>
-        <small>{order.expected ? fmtDay(order.expected) : "Date unassigned"}</small></> : "No linked orders"}</td>
+        <small>{order.expected ? fmtDay(order.expected) : "Date unassigned"}</small>
+        <small>{order.reference || order.request_number}</small></> : "No open orders"}</td>
       <td>{rowActions(row, difference, repeated)}</td>
     </tr>;
   }
@@ -311,8 +314,8 @@ export function ProcurementWarehouseStock({ session, onCreated, createRequested 
         </Field>
         <Field id="procurement-stock-sort" label="Sort by">
           <select id="procurement-stock-sort" value={sort} onChange={event => setSort(event.target.value)}>
-            <option value="category">Category and item ID</option><option value="ascending">After reservations, low to high</option><option value="descending">After reservations, high to low</option>
-            <option value="hand-asc">On hand, low to high</option><option value="hand-desc">On hand, high to low</option>
+            <option value="category">Category and item ID</option><option value="ascending">After reserve · low to high</option><option value="descending">After reserve · high to low</option>
+            <option value="hand-asc">On hand · low to high</option><option value="hand-desc">On hand · high to low</option>
           </select>
         </Field>
       </div>
@@ -323,15 +326,17 @@ export function ProcurementWarehouseStock({ session, onCreated, createRequested 
         {selected.length > 0 && <small>Receiving warehouse · {receivingWarehouse}</small>}
       </div>
       <section className="pz-panel pz-stack">
-        <div className="pz-action-row">
+        <div className="procurement-panel-head">
           <h2>Needs restocking</h2>
+          <div className="procurement-panel-tools"><small className="procurement-shortage-count">{shortages.length} shortages</small>
           {shortages.length > 5 && <Button variant="neutral" onClick={() => setPauseRestocking(paused => !paused)}>
             {pauseRestocking ? "Resume scrolling" : "Pause scrolling"}
-          </Button>}
+          </Button>}</div>
         </div>
         {shortages.length ? <div className="pz-table-scroll pr-warehouse-shortages" ref={restockingRef} role="region" aria-label="Restocking shortages" tabIndex={0}>
           <table className="ops-table procurement-stock-table">
-            <thead><tr><th>SR#</th><th>Item ID / description</th><th>Warehouse</th><th className="num">Short by</th><th>Next incoming</th><th>Action</th></tr></thead>
+            <thead><tr><th>SR#</th><th>Item ID / description</th><th>Warehouse</th><th className="num">After reservations</th>
+              <th className="num">Minimum</th><th className="num">Short by</th><th>Incoming stock</th><th>Action</th></tr></thead>
             <tbody>{shortages.map((row, index) => restockRow(row, index))}</tbody>
             {shortages.length > 5 && <tbody className="pr-restock-repeat" aria-hidden="true">
               {shortages.slice(0, 5).map((row, index) => restockRow(row, index, true))}
@@ -357,7 +362,7 @@ export function ProcurementWarehouseStock({ session, onCreated, createRequested 
         {details.kind === "reserved" ? <ReservationTable rows={details.row.reservationDetails} /> : <IncomingTable rows={details.row.incoming} />}
       </dialog>}
       <section className="pz-panel pz-stack">
-      <div className="pz-action-row"><h2>Inventory catalogue</h2><small>{visible.length} stock lines</small></div>
+      <div className="procurement-panel-head"><h2>Inventory catalogue</h2><small>{visible.length} stock lines</small></div>
       <div className="pz-table-scroll">
         <table className="ops-table procurement-stock-table">
           <thead><tr><th>SR#</th><th>Item ID / description</th><th>Warehouse</th><th>Unit</th><th className="num">On hand</th>
