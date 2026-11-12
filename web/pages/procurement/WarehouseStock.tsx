@@ -17,6 +17,7 @@ interface Reservation {
   itemKey: string;
   unit: string;
   quantity: string;
+  sharedDispatchPending: boolean;
   expectedUseDate: string | null;
 }
 interface Incoming {
@@ -26,6 +27,8 @@ interface Incoming {
   expected: string | null;
   quantity: string;
   unit: string;
+  item_key: string;
+  warehouse: string;
 }
 interface StockRow {
   itemId: string;
@@ -42,7 +45,13 @@ interface StockRow {
   referenceOnly: boolean;
   purchaseItem: { itemKey: string; unit: string } | null;
 }
-interface WarehouseStockData { warehouses: string[]; rows: StockRow[]; reservations: Reservation[] }
+interface WarehouseStockData {
+  warehouses: string[];
+  rows: StockRow[];
+  reservations: Reservation[];
+  unlinkedReservations: Reservation[];
+  unlinkedIncoming: Incoming[];
+}
 const stockKey = (row: StockRow) => JSON.stringify([row.warehouse, row.itemId, row.unit]);
 const displayed = (value: string | null) => value == null ? "Not available" : decimalDisplay(value, 2);
 const orderQuantity = (row: StockRow) => row.incoming.reduce((sum, order) => sum.plus(order.quantity), new Decimal(0)).toString();
@@ -136,6 +145,8 @@ export function ProcurementWarehouseStock({ session, onCreated }: { session: Ses
   const selected = data.rows.filter(row => Object.hasOwn(picks, stockKey(row)));
   const pagination = paginateRows(visible, page);
   const unassigned = data.reservations.filter(row => row.warehouse == null);
+  const unlinkedReservations = data.unlinkedReservations.filter(row => !warehouse || row.warehouse === warehouse);
+  const unlinkedIncoming = data.unlinkedIncoming.filter(row => !warehouse || row.warehouse === warehouse);
   const shortages = visible.filter(row => shortage(row)?.gt(0));
   function pick(row: StockRow, checked: boolean, suggested = "") {
     setPicks(previous => {
@@ -264,18 +275,18 @@ export function ProcurementWarehouseStock({ session, onCreated }: { session: Ses
         <summary>Warehouse unassigned · {unassigned.length} reservation {unassigned.length === 1 ? "line" : "lines"}</summary>
         <ReservationTable rows={unassigned} />
       </details>}
+      {unlinkedReservations.length > 0 && <details>
+        <summary>Reservations that need an Inventory link · {unlinkedReservations.length}</summary>
+        <ReservationTable rows={unlinkedReservations} showWarehouse />
+      </details>}
+      {unlinkedIncoming.length > 0 && <details>
+        <summary>Incoming order lines that need a warehouse or Inventory link · {unlinkedIncoming.length}</summary>
+        <IncomingTable rows={unlinkedIncoming} showWarehouse />
+      </details>}
       {details && <section id="procurement-stock-details" tabIndex={-1} className="pz-stack">
         <div className="pz-action-row"><h3>{details.kind === "reserved" ? "IPO reservations" : "Incoming orders"} · {details.row.itemId}</h3>
           <Button variant="neutral" onClick={() => setDetails(null)}>Close details</Button></div>
-        {details.kind === "reserved" ? <ReservationTable rows={details.row.reservationDetails} /> : <div className="pz-table-scroll">
-          <table className="ops-table">
-            <thead><tr><th>SR#</th><th>Order / supplier</th><th className="num">Still due</th><th>Expected arrival</th></tr></thead>
-            <tbody>{details.row.incoming.map((order, index) => <tr key={order.request_number}>
-              <td>{index + 1}</td><td><strong>{order.reference || order.request_number}</strong><small>{order.supplier || "Supplier unassigned"}</small></td>
-              <td className="num">{displayed(order.quantity)} {order.unit}</td><td>{order.expected ? fmtDay(order.expected) : "Date unassigned"}</td>
-            </tr>)}</tbody>
-          </table>
-        </div>}
+        {details.kind === "reserved" ? <ReservationTable rows={details.row.reservationDetails} /> : <IncomingTable rows={details.row.incoming} />}
       </section>}
       <div className="pz-table-scroll">
         <table className="ops-table">
@@ -288,7 +299,8 @@ export function ProcurementWarehouseStock({ session, onCreated }: { session: Ses
               <td>{row.warehouse}</td><td>{row.unit}</td>
               <td className="num">{displayed(row.onHand)}{row.referenceOnly && <small>Reference balance</small>}</td>
               <td className="num">{row.incoming.length > 0 ? <Button variant="secondary" onClick={() => showDetails(row, "incoming")}>{displayed(orderQuantity(row))}</Button> : "—"}</td>
-              <td className="num">{row.reservationDetails.length ? <Button variant="secondary" onClick={() => showDetails(row, "reserved")}>{displayed(row.reserved)}</Button> : displayed(row.reserved)}</td>
+              <td className="num">{row.reservationDetails.length ? <Button variant="secondary" onClick={() => showDetails(row, "reserved")}>{displayed(row.reserved)}</Button> : displayed(row.reserved)}
+                {row.reservationDetails.some(reservation => reservation.sharedDispatchPending) && <small>Shared dispatch needs review</small>}</td>
               <td className="num">{displayed(row.afterReservations)}</td>
               <td className="num">{displayed(row.minimum)}</td>
               <td>{row.purchaseItem ? <label className="pr-warehouse-select"><input type="checkbox" aria-label={`Select ${row.itemId} (${row.unit})`}
@@ -303,14 +315,29 @@ export function ProcurementWarehouseStock({ session, onCreated }: { session: Ses
   </section>;
 }
 
-function ReservationTable({ rows }: { rows: Reservation[] }) {
+function IncomingTable({ rows, showWarehouse = false }: { rows: Incoming[]; showWarehouse?: boolean }) {
   return <div className="pz-table-scroll">
     <table className="ops-table">
-      <thead><tr><th>SR#</th><th>IPO / site</th><th>Customer</th><th>Item ID</th><th className="num">Reserved</th><th>Expected use date</th></tr></thead>
+      <thead><tr><th>SR#</th><th>Order / supplier</th>{showWarehouse && <><th>Item ID</th><th>Delivery destination</th></>}
+        <th className="num">Still due</th><th>Expected arrival</th></tr></thead>
+      <tbody>{rows.map((order, index) => <tr key={JSON.stringify([order.request_number, order.item_key])}>
+        <td>{index + 1}</td><td><strong>{order.reference || order.request_number}</strong><small>{order.supplier || "Supplier unassigned"}</small></td>
+        {showWarehouse && <><td>{order.item_key}</td><td>{order.warehouse || "Warehouse unassigned"}</td></>}
+        <td className="num">{displayed(order.quantity)} {order.unit}</td><td>{order.expected ? fmtDay(order.expected) : "Date unassigned"}</td>
+      </tr>)}</tbody>
+    </table>
+  </div>;
+}
+
+function ReservationTable({ rows, showWarehouse = false }: { rows: Reservation[]; showWarehouse?: boolean }) {
+  return <div className="pz-table-scroll">
+    <table className="ops-table">
+      <thead><tr><th>SR#</th><th>IPO / site</th><th>Customer</th><th>Item ID</th>{showWarehouse && <th>Warehouse</th>}<th className="num">Reserved</th><th>Expected use date</th></tr></thead>
       <tbody>{rows.map((row, index) => <tr key={JSON.stringify([row.ipoId, row.itemKey, row.unit])}>
         <td>{index + 1}</td><td><strong>{row.ipoNumber}</strong>{row.site && <small>{row.site}</small>}</td>
         <td>{row.customer || "Customer not recorded"}</td><td>{row.itemId || row.itemKey}{!row.itemId && <small>Inventory link needs review</small>}</td>
-        <td className="num">{displayed(row.quantity)} {row.unit}</td>
+        {showWarehouse && <td>{row.warehouse}</td>}
+        <td className="num">{displayed(row.quantity)} {row.unit}{row.sharedDispatchPending && <small>Shared dispatch needs review</small>}</td>
         <td>{row.expectedUseDate ? fmtDay(row.expectedUseDate) : "Not yet planned"}</td>
       </tr>)}</tbody>
     </table>

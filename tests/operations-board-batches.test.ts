@@ -32,7 +32,8 @@ test('shared batch bookings are atomic, versioned and resource-conflict safe wit
   for(const v of [a,b])v.deliveryDate='2026-10-29';
   for(const v of [a,b])for(const stop of v.stops)stop.plannedDate='2026-10-29';
   const concurrent=await Promise.allSettled([repo.saveBatch(owner,a),repo.saveBatch(owner,b)]);assert.equal(concurrent.filter(r=>r.status==='fulfilled').length,1);assert.equal(concurrent.filter(r=>r.status==='rejected').length,1);
-  const one=await readWorkflowSite(repo,owner,'one');await repo.command(owner,'one',{action:'assign-team',team:'south',version:one.version,requestKey:randomUUID(),edit:true,reason:'Regional reassignment'});
+  const one=await readWorkflowSite(repo,owner,'one');await repo.command(owner,'one',{action:'assign-team',team:'south',warehouse:'Karachi warehouse',version:one.version,requestKey:randomUUID(),edit:true,reason:'Regional reassignment'});
+  assert.equal((await readWorkflowSite(repo,owner,'one')).procurementWarehouse,'Karachi warehouse');
   const scoped=await repo.batches(lead);assert.equal(scoped.batches.find(b=>b.id===booked.id)!.stops.some(s=>s.siteId==='one'),false);assert.equal(scoped.batches.find(b=>b.id===booked.id)!.canEdit,false);
   await assert.rejects(repo.saveBatch(lead,first),/not found/);
   await repo.importSource(owner,{sourceSha256:'b'.repeat(64),rows:['installed-route-a','installed-route-b'].map(id=>({id,ipo:id,name:id,stage:'delivered',projectType:'ups',installation:true,completed:false,operationsTeam:'central',deliveryDate:'2026-10-27'}))});

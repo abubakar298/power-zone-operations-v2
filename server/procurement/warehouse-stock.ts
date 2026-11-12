@@ -85,19 +85,29 @@ export async function procurementWarehouseStock(db: Db, includeReservations = tr
     return candidates.length === 1 ? candidates[0] : null;
   };
   const byStock = new Map<typeof rows[number], typeof reservations>();
+  const unlinkedReservations: typeof reservations = [];
   for (const reservation of reservations) {
     const row = reservation.warehouse && reservation.itemId && stockLink(reservation.warehouse, reservation.itemId, reservation.unit);
     if (row) byStock.set(row, [...(byStock.get(row) ?? []), reservation]);
+    else if (reservation.warehouse) unlinkedReservations.push(reservation);
+  }
+  const incomingByStock = new Map<typeof rows[number], typeof purchases>();
+  const unlinkedIncoming: typeof purchases = [];
+  for (const purchase of purchases) {
+    const row = rows.find(row => purchase.warehouse === row.warehouse &&
+      purchase.item_key === row.purchaseItem?.itemKey && sameUnit(purchase.unit, row.unit) &&
+      stockLink(row.warehouse, row.itemId, purchase.unit) === row);
+    if (row) incomingByStock.set(row, [...(incomingByStock.get(row) ?? []), purchase]);
+    else unlinkedIncoming.push(purchase);
   }
   return {
     warehouses,
     reservations,
+    unlinkedReservations,
+    unlinkedIncoming,
     rows: rows.map(row => {
       const reserved = (byStock.get(row) ?? []).reduce((total, reservation) => total.plus(reservation.quantity), new Decimal(0));
-      const incoming = purchases.filter(purchase => purchase.warehouse === row.warehouse &&
-        purchase.item_key === row.purchaseItem?.itemKey && sameUnit(purchase.unit, row.unit) &&
-        stockLink(row.warehouse, row.itemId, purchase.unit) === row);
-      return { ...row, reserved: reserved.toString(), incoming, reservationDetails: byStock.get(row) ?? [],
+      return { ...row, reserved: reserved.toString(), incoming: incomingByStock.get(row) ?? [], reservationDetails: byStock.get(row) ?? [],
         afterReservations: row.onHand == null ? null : new Decimal(row.onHand).minus(reserved).toString() };
     }),
   };

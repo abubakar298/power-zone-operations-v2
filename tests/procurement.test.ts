@@ -259,6 +259,8 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
     const issuance = await new OperationsRepository(db.pool).issue(coordinator, { ipoId, notes: "Reservation fixture", requestKey: randomUUID() });
     await db.pool.query(`INSERT INTO operations_stock_demand(issuance_id,line_number,item_key,brand,quantity,unit)
       VALUES($1,900,$2,'',4,'NOS')`, [issuance.id, acBreakerId]);
+    await db.pool.query(`INSERT INTO operations_stock_demand(issuance_id,line_number,item_key,brand,quantity,unit)
+      VALUES($1,901,'FIXTURE UNMAPPED STOCK','',3,'NOS')`, [issuance.id]);
     const findReservation = (result: Awaited<ReturnType<typeof repo.warehouseStock>>) =>
       result.reservations.find(reservation => reservation.ipoId === ipoId && reservation.itemId === acBreakerId)!;
     let snapshot = await repo.warehouseStock(buyer);
@@ -289,6 +291,7 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
     assert.equal(findReservation(snapshot).warehouse, warehouse);
     assert.equal(findReservation(snapshot).expectedUseDate, null);
     assert.equal(snapshot.rows.find(item => item.itemId === acBreakerId)!.afterReservations, "5");
+    assert.ok(snapshot.unlinkedReservations.some(line => line.ipoId === ipoId && line.itemKey === "FIXTURE UNMAPPED STOCK"));
     const vendor = await board.saveVendor(fixture.owner, { version: 0, requestKey: randomUUID(), team: "central", kind: "vendor",
       name: "Fictional delivery vendor", phone: "", roles: ["delivery", "structure", "electrical", "earthing"], active: true, reason: "" });
     await decide({ action: "plan", dispatchDate: "2026-12-03", assignments: { delivery: vendor.id, structure: vendor.id, electrical: vendor.id, earthing: vendor.id } });
@@ -353,6 +356,32 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
     assert.equal(after.currentClosing, "11");
     assert.equal((await repo.storeView(fixture.reviewer)).toReceive[0].lines.find(line => line.itemKey === acBreakerId)?.due, "4");
     assert.equal(Number((await repo.warehouseStock(buyer)).rows.find(line => line.itemId === acBreakerId)?.incoming[0].quantity), 4);
+
+    const secondSite = randomUUID();
+    const draftId = randomUUID();
+    const dispatchId = randomUUID();
+    const lineKeys = [randomUUID(), randomUUID()];
+    const dispatchSnapshot = {
+      sites: [{ siteId: ipoId }, { siteId: secondSite }],
+      lines: [{ key: lineKeys[0], sites: [ipoId] }, { key: lineKeys[1], sites: [ipoId, secondSite] }],
+    };
+    await db.pool.query("INSERT INTO inventory_material_drafts(id,created_by) VALUES($1,$2)", [draftId, fixture.owner]);
+    await db.pool.query(`INSERT INTO inventory_material_draft_versions(draft_id,version,snapshot,request_key,request_fingerprint,created_by)
+      VALUES($1,1,$2,$3,$4,$5)`, [draftId, dispatchSnapshot, randomUUID(), "a".repeat(64), fixture.owner]);
+    await db.pool.query(`INSERT INTO inventory_material_dispatches(id,number,draft_id,draft_version,source_sha256,warehouse,snapshot,request_key,request_fingerprint,created_by)
+      VALUES($1,'FIXTURE-PARENT-DO',$2,1,$3,$4,$5,$6,$7,$8)`,
+    [dispatchId, draftId, fixture.stockSha, warehouse, dispatchSnapshot, randomUUID(), "b".repeat(64), fixture.owner]);
+    for (const [index, lineKey] of lineKeys.entries()) {
+      await db.pool.query(`INSERT INTO inventory_material_dispatch_lines(dispatch_id,line_key,source_sha256,ledger_key,item_id,unit,description,quantity)
+        VALUES($1,$2,$3,$4,$5,'piece','AC breaker',1)`, [dispatchId, lineKey, fixture.stockSha, after.ledgerKey, acBreakerId]);
+      await db.pool.query(`INSERT INTO inventory_warehouse_operational_movements(id,source_sha256,ledger_key,ledger_revision,kind,draft_id,dispatch_id,line_key,in_delta,out_delta,closing_before,closing_after,created_by)
+        VALUES($1,$2,$3,$4,'dispatch-out',$5,$6,$7,0,1,$8,$9,$10)`,
+      [randomUUID(), fixture.stockSha, after.ledgerKey, after.ledgerRevision + index + 1, draftId, dispatchId, lineKey, 11 - index, 10 - index, fixture.owner]);
+    }
+    snapshot = await repo.warehouseStock(buyer);
+    assert.equal(findReservation(snapshot).quantity, "3", "A posted parent DO line linked to a single IPO reduces only that reservation.");
+    assert.equal(findReservation(snapshot).sharedDispatchPending, true, "An unsplit shared line requires allocation review.");
+    assert.equal(snapshot.rows.find(item => item.itemId === acBreakerId)!.afterReservations, "6");
   } finally {
     await db.close();
   }

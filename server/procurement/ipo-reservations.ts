@@ -45,15 +45,25 @@ export async function receivedIpoReservations(db: Db, stock: StockIdentity[]) {
     );
 
   const ipoIds = [...new Set(demand.map(line => line.ipo_id))];
-  const posted = ipoIds.length ? (await db.query<{ ipo_id: string; item_id: string; unit: string; quantity: string }>(`
-    SELECT d.snapshot#>>'{sites,0,siteId}' ipo_id,l.item_id,l.unit,sum(m.out_delta)::text quantity
+  const posted = ipoIds.length ? (await db.query<{ ipo_id: string; item_id: string; unit: string; quantity: string; shared: boolean }>(`
+    SELECT site.ipo_id,l.item_id,l.unit,sum(m.out_delta)::text quantity,
+      cardinality(allocated.site_ids)>1 AS shared
     FROM inventory_warehouse_operational_movements m
     JOIN inventory_material_dispatches_active d ON d.id=m.dispatch_id
     JOIN inventory_material_dispatch_lines_active l ON l.dispatch_id=d.id AND l.line_key=m.line_key
-    WHERE m.kind='dispatch-out' AND jsonb_array_length(d.snapshot->'sites')=1
-      AND d.snapshot#>>'{sites,0,siteId}'=ANY($1::text[])
-    GROUP BY 1,2,3`, [ipoIds])).rows : [];
-  const remainingPosted = posted.map(out => ({ ...out, remaining: new Decimal(out.quantity) }));
+    LEFT JOIN LATERAL (
+      SELECT line->'sites' sites FROM jsonb_array_elements(d.snapshot->'lines') line
+      WHERE line->>'key'=l.line_key::text
+    ) detail ON true
+    CROSS JOIN LATERAL (
+      SELECT array_agg(DISTINCT s->>'siteId') site_ids FROM jsonb_array_elements(d.snapshot->'sites') s
+      WHERE s->>'siteId' IS NOT NULL AND
+        (coalesce(jsonb_array_length(detail.sites),0)=0 OR detail.sites ? (s->>'siteId'))
+    ) allocated
+    CROSS JOIN LATERAL unnest(allocated.site_ids) site(ipo_id)
+    WHERE m.kind='dispatch-out' AND site.ipo_id=ANY($1::text[])
+    GROUP BY 1,2,3,5`, [ipoIds])).rows : [];
+  const remainingPosted = posted.filter(out => !out.shared).map(out => ({ ...out, remaining: new Decimal(out.quantity) }));
   const warehouseSchema = z.enum(ipoReservationWarehouses);
   const dateSchema = z.iso.date();
   return demand.flatMap(line => {
@@ -80,6 +90,7 @@ export async function receivedIpoReservations(db: Db, stock: StockIdentity[]) {
       warehouse: assigned.success ? assigned.data : null,
       itemId, itemKey: line.item_key, unit: line.unit,
       quantity: quantity.toString(),
+      sharedDispatchPending: posted.some(out => out.shared && out.ipo_id === line.ipo_id && out.item_id === itemId && sameUnit(out.unit, line.unit)),
       expectedUseDate: plannedInventoryDelivery(board) ?? plannedInventoryInstallation(board) ??
         (plannedDate.success ? plannedDate.data : line.expected_date),
     }];
