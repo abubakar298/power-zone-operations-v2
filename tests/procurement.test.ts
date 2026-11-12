@@ -220,7 +220,7 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
     assert.deepEqual(await repo.addSuppliers(buyer, suppliers), { added: 2, duplicates: 0 });
     assert.deepEqual(await repo.addSuppliers(buyer, suppliers), { added: 0, duplicates: 2 });
     assert.equal((await repo.suppliers(buyer)).length, 2);
-    await assert.rejects(repo.suppliers(fixture.reviewer), /Only the Procurement buyer/);
+    await assert.rejects(repo.suppliers(fixture.reviewer), /Only the Procurement buyer or approver/);
 
     await assert.rejects(repo.warehouseStock(fixture.reviewer), /available to Procurement buyers and Management/);
     const result = await repo.warehouseStock(buyer);
@@ -247,6 +247,9 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
     assert.equal(first.status, "draft");
     assert.deepEqual(first.lines.map(line => [line.itemKey, line.quantity]).sort(), [[acBreakerId, "6"], [breakerId, "2"]]);
     assert.equal((await repo.listRequests(buyer)).length, 1);
+    const dummy = await repo.createRequest(buyer, { title: "Prototype request", purpose: "", neededBy: null, deliveryTo: "", paymentTerms: "" });
+    assert.ok((await repo.listRequests(buyer)).some(row => row.id === dummy.id));
+    assert.deepEqual((await repo.listRequests(buyer, true)).map(row => row.id), [first.id]);
     await assert.rejects(repo.createWarehouseDraft(buyer, { ...input, title: "Different request" }), /already used/);
     await assert.rejects(repo.createWarehouseDraft(fixture.owner, { ...input, requestKey: randomUUID() }), /Only the Procurement buyer/);
 
@@ -302,6 +305,7 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
 
     const approver = fixture.owner;
     await db.pool.query("INSERT INTO procurement_access(user_id,capability,granted_reason) VALUES($1,'approver','isolated test')", [approver]);
+    assert.deepEqual(await repo.addSuppliers(approver, { suppliers: [{ name: "Owner-imported supplier", email: "", phone: "" }] }), { added: 1, duplicates: 0 });
     await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,$2,'dispatcher',$3)",
       [fixture.reviewer, warehouse, fixture.owner]);
     const { rfq } = await new RfqRepository(db.pool, repo).create(buyer, first.id,

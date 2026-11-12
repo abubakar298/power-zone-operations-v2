@@ -85,16 +85,21 @@ export class ProcurementRepository {
   }
 
   async suppliers(actor: string) {
-    await this.buyer(actor, this.pool);
+    await this.supplierManager(actor, this.pool);
     return (await this.pool.query<{ id: string; name: string; email: string; phone: string }>(
       "SELECT id,name,email,phone FROM procurement_suppliers ORDER BY lower(name),id",
     )).rows;
   }
 
+  private async supplierManager(actor: string, c: Db) {
+    const me = await this.me(actor, c);
+    if (!me.buyer && !me.approver) throw new HttpError(403, "Only the Procurement buyer or approver can manage suppliers.");
+  }
+
   async addSuppliers(actor: string, input: z.infer<typeof suppliersSchema>) {
     return transaction(this.pool, async c => {
       await lockActiveActor(c, actor);
-      await this.buyer(actor, c);
+      await this.supplierManager(actor, c);
       const inserted = await c.query(`
         INSERT INTO procurement_suppliers(name,email,phone,created_by)
         SELECT s.name,s.email,s.phone,$1 FROM jsonb_to_recordset($2::jsonb) s(name text,email text,phone text)
@@ -193,14 +198,18 @@ export class ProcurementRepository {
   // ----- purchase requests -----
   /** Abu Bakar's own inverter, battery and BMS orders stay out of the buyer's list (Moaz, 24 Oct 2026). */
   private seesDirect(me: Me) { return me.approver || PRICE_ROLES.has(me.role); }
-  private async requestRows(c: Db, direct = true) {
+  private async requestRows(c: Db, direct = true, warehouseOnly = false) {
     return (await c.query(
       `SELECT r.*, u.display_name AS created_by_name,
         (SELECT count(*) FROM purchase_request_lines l WHERE l.request_id=r.id)::int AS line_count,
         (SELECT COALESCE(sum(l.quantity*q.rate),0) FROM purchase_request_lines l JOIN purchase_quotes q ON q.id=l.chosen_quote_id WHERE l.request_id=r.id) AS total,
         (SELECT string_agg(DISTINCT q.vendor, ', ') FROM purchase_request_lines l JOIN purchase_quotes q ON q.id=l.chosen_quote_id WHERE l.request_id=r.id) AS vendors
-       FROM purchase_requests r JOIN users u ON u.id=r.created_by WHERE $1 OR r.kind<>'direct' ORDER BY r.updated_at DESC LIMIT 500`,
-      [direct],
+       FROM purchase_requests r JOIN users u ON u.id=r.created_by
+       WHERE ($1 OR r.kind<>'direct') AND (NOT $2 OR EXISTS (
+         SELECT 1 FROM purchase_request_events e WHERE e.request_id=r.id AND e.kind='created' AND e.changes->>'requiresAccounts'='true'
+       ))
+       ORDER BY r.updated_at DESC LIMIT 500`,
+      [direct, warehouseOnly],
     )).rows.map((r) => ({
       id: r.id as string, number: r.number as string, title: r.title as string, status: r.status as RequestStatus, statusLabel: STATUS_LABELS[r.status as RequestStatus],
       lines: r.line_count as number, total: fixed(num(r.total)), selfApproved: r.self_approved === true, vendors: (r.vendors ?? "") as string, createdBy: r.created_by_name as string,
@@ -208,9 +217,9 @@ export class ProcurementRepository {
       orderedAt: r.ordered_at as string | null, receivedAt: r.received_at as string | null, neededBy: r.needed_by ? toDay(r.needed_by) : null,
     }));
   }
-  async listRequests(actor: string) {
+  async listRequests(actor: string, warehouseOnly = false) {
     const me = await this.priceReader(actor);
-    return this.requestRows(this.pool, this.seesDirect(me));
+    return this.requestRows(this.pool, this.seesDirect(me), warehouseOnly);
   }
 
   private async accountsHandoff(c: Db, id: string) {

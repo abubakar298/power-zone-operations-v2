@@ -204,8 +204,8 @@ export function ProcurementWarehouseStock({ session, onCreated }: { session: Ses
   }
 
   return <section className="pz-panel pz-stack">
-    <h3>{review ? "Review selected stock items" : "Warehouse stock"}</h3>
     {review ? <form className="pz-stack" onSubmit={create}>
+      <h3>Review selected stock items</h3>
       <Field id="procurement-warehouse-draft-title" label="Request title (required)">
         <input id="procurement-warehouse-draft-title" value={title} onChange={event => setTitle(event.target.value)} maxLength={200} required />
       </Field>

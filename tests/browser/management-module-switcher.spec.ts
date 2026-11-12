@@ -21,6 +21,8 @@ test('Management keeps View as beside account controls across shared module shel
  await aligned();await page.setViewportSize({width:390,height:844});await aligned();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'test-results/operations-header-mobile.png',fullPage:false});await page.setViewportSize({width:1280,height:900});
  await select('Accounts');await expect(page.getByRole('heading',{name:/^Welcome,/})).toBeVisible();await expect(page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Material Costing & PT Entry',exact:true})).toBeVisible();
  await select('Procurement');await expect(page.getByRole('button',{name:'Power Zone — Dashboard',exact:true})).toContainText('Procurement');await expect(page.getByRole('button',{name:'View as',exact:true})).toBeVisible();await aligned();await page.setViewportSize({width:390,height:844});await aligned();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.setViewportSize({width:1280,height:900});await page.reload();await expect(page.getByRole('button',{name:'View as',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Warehouse stock',exact:true})).toBeVisible();
+ await expect(page.getByRole('navigation',{name:'Main',exact:true}).getByRole('button')).toHaveText(['Warehouse stock','Purchase requests','Suppliers','My account']);
  await select('Management');await expect(page.getByRole('heading',{name:'Dashboard',exact:true})).toBeVisible();
  await select('Design');await expect(page.getByRole('button',{name:'View as',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Survey History',exact:true})).toBeVisible();
  await select('Project Coordination');await expect(page.getByRole('button',{name:'View as',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'View as',exact:true})).toHaveAttribute('title','Current view: Project Coordination');
@@ -30,5 +32,18 @@ test('Management keeps View as beside account controls across shared module shel
  await select('Operations');await expect(page.getByRole('heading',{name:'Site updates',exact:true})).toBeVisible();await page.screenshot({path:'test-results/operations-header-desktop.png',fullPage:false});
  await page.getByRole('button',{name:'Account menu',exact:true}).click();await page.getByRole('menuitem',{name:'Sign out',exact:true}).click();await expect(page.getByRole('button',{name:'Sign in',exact:true})).toBeVisible();
  await login(page.request,'moaz-header@example.test');await page.goto('/operations/sites');await expect(page.getByRole('heading',{name:'Site updates',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'View as',exact:true})).toHaveCount(0);
+ const buyer=randomUUID();
+ await pool.query("INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,'buyer-header@example.test','Test Procurement Buyer','Operations',$2)",[buyer,admin.password_hash]);
+ await pool.query("INSERT INTO procurement_access(user_id,capability,granted_reason) VALUES($1,'buyer','browser fixture')",[buyer]);
+ const buyerHeaders=await login(page.request,'buyer-header@example.test');
+ const dummy=await page.request.post('/api/procurement/requests',{headers:buyerHeaders,data:{title:'Dummy request from the old portal'}});
+ expect(dummy.ok(),await dummy.text()).toBe(true);
+ await page.goto('/dashboard#workspace=stock');
+ await expect(page.getByRole('heading',{name:'Warehouse stock',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Purchase requests',exact:true}).click();
+ await expect(page.getByText('No requests here.')).toBeVisible();
+ await expect(page.getByText('Dummy request from the old portal')).toHaveCount(0);
+ await page.getByRole('button',{name:'Select items for a new request',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Warehouse stock',exact:true})).toBeVisible();
  }finally{await pool.end();}
 });

@@ -48,7 +48,7 @@ export function procurementHttp(repo: ProcurementRepository, requireSession: Req
     const { action } = parse(z.object({ action: z.enum(["acknowledge", "forward"]) }).strict(), req.body);
     res.json(await repo.accountsAction(actor(req), id(req.params.id), action));
   });
-  r.get("/requests", async (req, res) => res.json({ requests: await repo.listRequests(actor(req)) }));
+  r.get("/requests", async (req, res) => res.json({ requests: await repo.listRequests(actor(req), req.query.workflow === "warehouse") }));
   r.post("/requests", async (req, res) => res.json(await repo.createRequest(actor(req), parse(requestSchema, req.body))));
   r.post("/requests/from-warehouse", async (req, res) => res.json(await repo.createWarehouseDraft(actor(req), parse(warehouseDraftSchema, req.body))));
   r.post("/requests/from-to-buy", async (req, res) => res.json(await repo.createFromToBuy(actor(req))));
