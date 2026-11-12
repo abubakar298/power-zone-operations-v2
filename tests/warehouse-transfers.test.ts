@@ -1,3 +1,4 @@
+import {negativeDoWindowEndsAt} from '../shared/stock-reconciliation-window.js';
 import {signDispatch} from './signed-dispatch-fixture.js';
 import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
 import {test} from 'node:test';
@@ -61,7 +62,7 @@ test('warehouse transfers post source OUT once, destination counted partial IN o
   const issueSigned=async(actor:string,command:Parameters<WarehouseTransferRepository['issue']>[1])=>{const r=await repo.issue(actor,command);if(!r.stockPosted)await signDispatch(db.pool,actor,'transfer-out',r.id,command.source.warehouse);return {...r,stockPosted:true,awaitingSignedGate:false};};
   const input={requestKey:randomUUID(),source:{warehouse:'Lahore warehouse',sourceSha256:sourceSha,authorityVersion:1},destination:{warehouse:'Karachi warehouse',sourceSha256:sourceSha,authorityVersion:1},reason:'Fictional dispatch between warehouses',transport:{vehicle:'TEST-000',driver:'Fictional driver',reference:'TEST ONLY'},lines:[{lineKey:randomUUID(),itemId:item,sourceLedgerKey:fromKey,destinationLedgerKey:toKey,quantity:'8',sourceLedgerRevision:0,destinationLedgerRevision:0}]};
   await assert.rejects(issueSigned(ids.sourceKeeper,input),/dispatcher/);await assert.rejects(issueSigned(ids.destination,input),/dispatcher/);await assert.rejects(repo.list(ids.unassigned),/document access/);
-  const expiredClock=t.mock.method(Date,'now',()=>Date.parse('2026-11-09T07:52:11.000Z'));
+  const expiredClock=t.mock.method(Date,'now',()=>Date.parse(negativeDoWindowEndsAt));
   await assert.rejects(issueSigned(ids.source,{...input,lines:[{...input.lines[0],quantity:'101'}]}),/insufficient/);expiredClock.mock.restore();
   await assert.rejects(issueSigned(ids.source,{...input,lines:[{...input.lines[0],itemId:'OLD-CABLE-ID'}]}),/exact final/);
   await assert.rejects(issueSigned(ids.source,{...input,lines:[{...input.lines[0],destinationLedgerKey:warehouseLedgerKey(item,'Karachi warehouse','coil')}]}),/reviewed conversion/);

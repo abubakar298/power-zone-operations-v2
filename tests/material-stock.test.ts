@@ -17,11 +17,12 @@ import {prepareInventoryReview} from '../server/inventory/review-source.js';
 import {MaterialUsageRepository} from '../server/inventory/material-usage.js';
 import {MaterialStockRepository} from '../server/inventory/material-stock.js';
 import {MaterialDraftRepository} from '../server/inventory/material-drafts.js';
+import {negativeDoWindowEndsAt} from '../shared/stock-reconciliation-window.js';
 import {createDashboardSamples} from '../server/coordinator/samples.js';
 import {OperationsRepository} from '../server/operations/repository.js';
 import {SiteWorkflowRepository} from '../server/site-workflow/repository.js';
 test('physical warehouse dispatch posts once, supports partial trips, protects stock and immutable issued rows',async(t)=>{
- const expiredClock=t.mock.method(Date,'now',()=>Date.parse('2026-11-09T07:52:11.000Z'));
+ const expiredClock=t.mock.method(Date,'now',()=>Date.parse(negativeDoWindowEndsAt));
  const db=await testDatabase();try{
   const f=await materialStockFixture(db.pool,'CH-CBL-AC-16MM/4C-PK'),opsUser=randomUUID(),coord=randomUUID(),keeper=randomUUID();
   for(const [id,role] of [[opsUser,'Operations'],[coord,'Coordinator'],[keeper,'Inventory']])await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[id,id+'@example.test',role,role,'isolated']);
