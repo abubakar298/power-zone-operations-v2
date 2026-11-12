@@ -123,6 +123,17 @@ export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:Re
  r.get('/temporary-documents',async(req,res)=>res.json(await repo.temporaryDocuments(req.authSession!.user.id)));
  r.get('/temporary-documents/:id/document.pdf',async(req,res)=>{const id=z.uuid().safeParse(req.params.id);if(!id.success)throw new HttpError(400,'Invalid temporary document.');const doc=await repo.temporaryDocument(req.authSession!.user.id,id.data);res.locals.downloadContext={documentType:'Temporary document',identity:`temporary-document:${doc.id}`,revision:doc.version??1};res.type('pdf').set('Content-Disposition',`inline; filename="${doc.number}.pdf"`).send(temporaryDocumentPdf(doc));});
  r.post('/temporary-documents',async(req,res)=>res.json(await repo.saveTemporaryDocument(req.authSession!.user.id,req.body)));
+ const inwardId=(value:unknown)=>{
+  const id=z.uuid().safeParse(value);
+  if(!id.success)throw new HttpError(400,'Invalid saved inward.');
+  return id.data;
+ };
+ r.get('/temporary-documents/:id/stock-posting',async(req,res)=>{
+  res.json(await repo.previewTemporaryInward(req.authSession!.user.id,inwardId(req.params.id)));
+ });
+ r.post('/temporary-documents/:id/stock-posting',async(req,res)=>{
+  res.json(await repo.postTemporaryInward(req.authSession!.user.id,inwardId(req.params.id),req.body));
+ });
  r.get('/intake',async(req,res)=>res.json(await repo.intake(req.authSession!.user.id)));
  r.get('/drafts',async(req,res)=>res.json(await repo.list(req.authSession!.user.id)));
  r.get('/drafts/:id',async(req,res)=>{const id=z.uuid().safeParse(req.params.id);if(!id.success)throw new HttpError(400,'Invalid material draft.');res.json(await repo.detail(req.authSession!.user.id,id.data));});

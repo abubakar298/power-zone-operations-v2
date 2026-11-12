@@ -1,3 +1,4 @@
+import {postTemporaryInward,previewTemporaryInward} from './temporary-inward-posting.js';
 import {MastersRepository} from '../masters/repository.js';
 import {materialCorrectionAlerts} from './material-correction-alerts.js';
 import {readDispatchDocuments,dispatchDocumentEvidence} from './dispatch-document-status.js';
@@ -91,11 +92,13 @@ export class MaterialDraftRepository{
  private async stockCatalogue(c:Pool|PoolClient=this.pool){
   const source=(await c.query("SELECT source_sha256,metadata FROM inventory_warehouse_sources WHERE metadata->>'canonicalIds' ~ '^[1-9][0-9]*$' ORDER BY created_at DESC,source_sha256 LIMIT 1")).rows[0];
   const map=new Map<string,{itemId:string;description:string;units:string[]}>(),warehouses=new Set<string>();
+  const reviewedIds=new Set<string>();
   if(source){
    for(const {payload:r} of (await c.query('SELECT payload FROM inventory_warehouse_source_balances WHERE source_sha256=$1 ORDER BY ledger_key',[source.source_sha256])).rows){
+    if(r.origin!=='temporary-inward-opening'&&r.origin!=='operational-unreviewed')reviewedIds.add(r.itemId);
     const old=map.get(r.itemId);map.set(r.itemId,{itemId:r.itemId,description:old?.description??r.description,units:[...new Set([...(old?.units??[]),r.unit])]});warehouses.add(r.warehouse);
    }
-   if(map.size!==Number(source.metadata.canonicalIds))throw new HttpError(409,'The reviewed stock catalogue is incomplete. Verify its source before selecting item IDs.');
+   if(reviewedIds.size!==Number(source.metadata.canonicalIds))throw new HttpError(409,'The reviewed stock catalogue is incomplete. Verify its source before selecting item IDs.');
   }else{
    for(const r of (await c.query("SELECT item_id,payload FROM inventory_catalogue_final_current WHERE payload->>'finalStockId'='true' ORDER BY item_id")).rows)map.set(r.item_id,{itemId:r.item_id,description:r.payload.stockDescription??r.payload.technicalDescription,units:r.payload.stockUnits??[]});
    for(const r of (await c.query('SELECT DISTINCT warehouse FROM inventory_material_access')).rows)warehouses.add(r.warehouse);
@@ -140,8 +143,10 @@ export class MaterialDraftRepository{
  }
  async temporaryDocuments(actor:string){
   const access=await this.access(actor,this.pool,true),catalogue=await this.stockCatalogue();
-  const rows=await this.pool.query('SELECT snapshot FROM inventory_temporary_documents WHERE ($1 OR warehouse=ANY($2::text[])) ORDER BY created_at DESC',[access.owner,access.warehouses]);
-  return {documents:rows.rows.map(r=>r.snapshot),warehouses:access.owner?catalogue.warehouses:access.warehouses,items:catalogue.catalogue.map(r=>({id:r.itemId,description:r.description,unit:r.units[0]??''}))};
+  const rows=await this.pool.query(`SELECT d.snapshot,p.snapshot AS stock_posting
+    FROM inventory_temporary_documents d LEFT JOIN inventory_temporary_inward_postings p ON p.document_id=d.id
+    WHERE ($1 OR d.warehouse=ANY($2::text[])) ORDER BY d.created_at DESC`,[access.owner,access.warehouses]);
+  return {documents:rows.rows.map(r=>r.stock_posting?{...r.snapshot,stockPosting:r.stock_posting}:r.snapshot),warehouses:access.owner?catalogue.warehouses:access.warehouses,items:catalogue.catalogue.map(r=>({id:r.itemId,description:r.description,unit:r.units[0]??''}))};
  }
  /** One temporary document for printing, within the same warehouse scope as the list. */
  async temporaryDocument(actor:string,id:string){
@@ -149,6 +154,8 @@ export class MaterialDraftRepository{
   const row=(await this.pool.query('SELECT snapshot FROM inventory_temporary_documents WHERE id=$1 AND ($2 OR warehouse=ANY($3::text[]))',[id,access.owner,access.warehouses])).rows[0];
   if(!row)throw new HttpError(404,'Temporary document not found.');return row.snapshot;
  }
+ previewTemporaryInward(actor:string,id:string){return previewTemporaryInward(this.pool,actor,id);}
+ postTemporaryInward(actor:string,id:string,value:unknown){return postTemporaryInward(this.pool,actor,id,value);}
  async saveTemporaryDocument(actor:string,value:unknown){
   const input=z.object({requestKey:z.uuid(),id:z.union([z.uuid(),z.literal('')]),version:z.number().int().nonnegative(),type:z.enum(['IGP','OGP','TRF','IRR','OTHER']),date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),warehouse:z.string().trim().min(1).max(200),party:z.string().max(500),sourceReference:z.string().max(500),actualReference:z.string().max(500),notes:z.string().max(5000),detailsConfirmed:z.boolean(),lines:z.array(z.object({itemId:z.string().max(200),description:z.string().max(1000),quantity:z.union([z.literal(''),z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/)]),unit:z.string().max(40),remarks:z.string().max(2000)}).strict()).min(1).max(500)}).strict().safeParse(value);
   if(!input.success)throw new HttpError(422,'Check the temporary document, quantities and warehouse.');
@@ -159,7 +166,10 @@ export class MaterialDraftRepository{
    if(replay){this.scope(access,replay.snapshot.warehouse);if(!isDeepStrictEqual(replay.input,v))throw new HttpError(409,'This save request was already used for different details.');return replay.snapshot;}
    const id=v.id||randomUUID(),old=v.id?(await c.query('SELECT * FROM inventory_temporary_documents WHERE id=$1 FOR UPDATE',[id])).rows[0]:undefined;
    if(v.id&&!old)throw new HttpError(404,'Temporary document not found.');
-   if(old){this.scope(access,old.warehouse);if(old.version!==v.version)throw new HttpError(409,'This document changed. Reopen it before saving.');if(old.snapshot.type!==v.type)throw new HttpError(422,'The saved document type cannot change.');}
+   if(old){this.scope(access,old.warehouse);
+    if((await c.query('SELECT 1 FROM inventory_temporary_inward_postings WHERE document_id=$1',[id])).rowCount)
+     throw new HttpError(409,'This inward has posted stock and its saved details are locked.');
+    if(old.version!==v.version)throw new HttpError(409,'This document changed. Reopen it before saving.');if(old.snapshot.type!==v.type)throw new HttpError(422,'The saved document type cannot change.');}
    else if(v.version!==0)throw new HttpError(409,'Create a new temporary document first.');
    const version=(old?.version??0)+1,sequence=old?null:(await c.query("SELECT nextval('inventory_temporary_document_number_seq') AS number")).rows[0].number;
    const snapshot={...v,id,version,number:old?.number??`TMP-${v.type}-${v.date.replaceAll('-','')}-${String(sequence).padStart(4,'0')}`,createdAt:old?.snapshot.createdAt??new Date().toISOString()};

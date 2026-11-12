@@ -38,6 +38,9 @@ export class PurchaseReceivingRepository{
    await requireWarehouseAccess(actor,input.warehouse,c);
    const order=(await c.query('SELECT id,number,status FROM purchase_requests WHERE id=$1 FOR UPDATE',[input.requestId])).rows[0];if(!order)throw new HttpError(404,'Purchase request not found.');if(order.status!=='ordered')throw new HttpError(409,'Only an ordered purchase can receive a new physical warehouse receipt.');
    await lockWarehouseAuthority(c,input.warehouse,input.sourceSha256,input.authorityVersion);
+   if((await c.query(`SELECT 1 FROM inventory_temporary_inward_postings
+     WHERE warehouse=$1 AND lower(btrim(external_reference))=lower(btrim($2)) LIMIT 1`,[input.warehouse,order.number])).rowCount)
+    throw new HttpError(409,'Stock for this reference was already posted through Inventory.');
    const evidence=(await c.query('SELECT id,warehouse,sha256 FROM inventory_material_evidence WHERE id=$1',[input.evidenceId])).rows[0];if(!evidence||evidence.warehouse!==input.warehouse)throw new HttpError(422,'Upload the signed receiving copy for this warehouse.');
    if((await c.query('SELECT 1 FROM inventory_material_purchase_receipts WHERE request_id=$1 AND evidence_id=$2',[input.requestId,input.evidenceId])).rowCount)throw new HttpError(409,'This purchase receipt evidence has already been credited.');
    if(new Set(input.lines.map(r=>r.itemKey)).size!==input.lines.length)throw new HttpError(422,'Record each purchase line once in this receipt.');

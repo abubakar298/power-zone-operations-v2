@@ -27,9 +27,11 @@ export async function stockLedger(pool:Pool,actor:string,input:unknown){
  SELECT 'correction:'||c.case_id,c.created_at::text,b.payload->>'itemId',b.payload->>'description',b.payload->>'warehouse',b.payload->>'unit',c.in_delta::text,'0',c.case_id,'','Approved return correction',''
  FROM inventory_warehouse_return_corrections c JOIN balances b USING(source_sha256,ledger_key)
  UNION ALL
- SELECT 'posted:'||m.id::text,m.created_at::text,b.payload->>'itemId',b.payload->>'description',b.payload->>'warehouse',b.payload->>'unit',m.in_delta::text,m.out_delta::text,
- coalesce(rd.number,rr.number,t.number,p.number,r.number,d.number,''),'',m.kind,''
+ SELECT 'posted:'||m.id::text,coalesce(i.snapshot->>'receivedOn',m.created_at::text),b.payload->>'itemId',b.payload->>'description',b.payload->>'warehouse',b.payload->>'unit',m.in_delta::text,m.out_delta::text,
+ coalesce(i.snapshot->>'number',rd.number,rr.number,t.number,p.number,r.number,d.number,''),'',
+ CASE WHEN i.document_id IS NOT NULL THEN 'Inventory inward' ELSE m.kind END,coalesce(i.external_reference,'')
  FROM inventory_warehouse_operational_movements m JOIN balances b USING(source_sha256,ledger_key)
+ LEFT JOIN inventory_temporary_inward_postings i ON i.document_id=m.temporary_inward_id
  LEFT JOIN inventory_material_dispatches_active d ON d.id=m.dispatch_id
  LEFT JOIN inventory_material_receipts r ON r.id=m.receipt_id
  LEFT JOIN inventory_material_purchase_receipts p ON p.id=m.purchase_receipt_id
