@@ -508,7 +508,7 @@ export function Dashboard({
     const t = setInterval(check, 120_000);
     return () => { live = false; clearInterval(t); };
   }, [session.user.id, isManagerRole]);
-  if(managementProcurement&&canViewDepartments(principalSession.user.role))return <Suspense fallback={null}><CurrentProcurementShell session={principalSession} onLogout={onLogout} viewingAs={principalSession.user.displayName} onReturn={()=>void selectDepartment("dashboard")}/></Suspense>;
+  if(managementProcurement&&canViewDepartments(principalSession.user.role))return <Suspense fallback={null}><CurrentProcurementShell session={principalSession} onLogout={onLogout} viewingAs={principalSession.user.displayName} onReturn={()=>void selectDepartment("dashboard")} onOpenAccounts={()=>void selectDepartment("finance")}/></Suspense>;
   // The Operations login has its own shell (Moaz, 19 Oct 2026); every other role keeps this one unchanged.
   if ((session.user.role as string) === "Operations")
     return (

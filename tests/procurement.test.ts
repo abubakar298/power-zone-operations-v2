@@ -201,12 +201,14 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
     const cableId = "CH-CBL-DC-16MM/1C-B";
     const acBreakerId = "CH-BRK-AC-10A/1P";
     const breakerId = "CH-BRK-DC-16A/2P";
+    const fallbackId = "CH-CABLE-TIES";
     const warehouse = "Lahore warehouse";
     const unknownId = "CH-11WAY-DB";
-    const fixture = await materialStockFixture(db.pool, cableId, { canonicalIds: 4 }, [
+    const fixture = await materialStockFixture(db.pool, cableId, { canonicalIds: 5 }, [
       { itemId: acBreakerId, warehouse, unit: "piece", description: "AC breaker", opening: 9, in: 0, out: 0, closing: 9, openingStatus: "Reviewed source", review: "" },
       { itemId: breakerId, warehouse, unit: "piece", description: "DC breaker", opening: 0, in: 0, out: 0, closing: 0, openingStatus: "Reviewed source", review: "" },
       { itemId: unknownId, warehouse: "Karachi warehouse", unit: "piece", description: "DC breaker", opening: null, in: 0, out: 0, closing: null, openingStatus: "Not recorded", review: "" },
+      { itemId: fallbackId, warehouse, unit: "packet", description: "Cable ties", opening: 1, in: 0, out: 0, closing: 1, openingStatus: "Reviewed source", review: "" },
     ]);
     const buyer = randomUUID();
     await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,'Test buyer','isolated','Operations')",
@@ -233,10 +235,11 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
     assert.equal(row(unknownId, "Karachi warehouse").onHand, null);
     assert.equal(row(breakerId).category, "DC switchgear");
     assert.equal(row(acBreakerId).purchaseItem?.itemKey, acBreakerId);
+    assert.deepEqual(row(fallbackId).purchaseItem, { itemKey: fallbackId, unit: "packet" });
 
     const input = {
       requestKey: randomUUID(), title: "Two warehouse items", warehouse, purpose: "", neededBy: null, paymentTerms: "",
-      lines: [{ itemId: acBreakerId, unit: "piece", quantity: "6" }, { itemId: breakerId, unit: "piece", quantity: "2" }],
+      lines: [{ itemId: acBreakerId, unit: "piece", quantity: "6" }, { itemId: breakerId, unit: "piece", quantity: "2" }, { itemId: fallbackId, unit: "packet", quantity: "2" }],
     };
     await assert.rejects(repo.createWarehouseDraft(buyer, { ...input, lines: [...input.lines, { itemId: "NO SUCH ITEM", unit: "piece", quantity: "1" }] }),
       /no reviewed purchase item/);
@@ -245,7 +248,8 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
     assert.equal(first.id, replay.id);
     assert.equal(first.deliveryTo, warehouse);
     assert.equal(first.status, "draft");
-    assert.deepEqual(first.lines.map(line => [line.itemKey, line.quantity]).sort(), [[acBreakerId, "6"], [breakerId, "2"]]);
+    assert.deepEqual(first.lines.map(line => [line.itemKey, line.quantity]).sort(), [[acBreakerId, "6"], [breakerId, "2"], [fallbackId, "2"]]);
+    assert.equal(first.lines.find(line => line.itemKey === fallbackId)?.lastRate, null);
     assert.equal((await repo.listRequests(buyer)).length, 1);
     const dummy = await repo.createRequest(buyer, { title: "Prototype request", purpose: "", neededBy: null, deliveryTo: "", paymentTerms: "" });
     assert.ok((await repo.listRequests(buyer)).some(row => row.id === dummy.id));
@@ -310,17 +314,21 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
       [fixture.reviewer, warehouse, fixture.owner]);
     const { rfq } = await new RfqRepository(db.pool, repo).create(buyer, first.id,
       { vendors: [{ name: "Supplier A", contact: "" }], dueOn: "2099-12-31", terms: [] });
-    assert.deepEqual(rfq.items.map(item => [item.sr, item.category]), [[1, "AC switchgear"], [2, "DC switchgear"]]);
+    assert.deepEqual(rfq.items.map(item => [item.sr, item.category]), [[1, "AC switchgear"], [2, "DC switchgear"], [3, "Other items"]]);
     const supplierPdf = buildRfqPdf(rfq, rfq.vendors[0]);
     assert.match(supplierPdf.toString("latin1"), /\/AcroForm/);
     assert.match(supplierPdf.toString("latin1"), /Remarks - item 2/);
-    const award = new Map([[acBreakerId, { vendor: "Supplier A", rate: "110" }], [breakerId, { vendor: "Supplier B", rate: "125" }]]);
-    for (const line of first.lines) await repo.addQuote(buyer, first.id, line.id, { ...award.get(line.itemKey)!, note: "" });
+    const award = new Map([[acBreakerId, { vendor: "Supplier A", rate: "110" }], [breakerId, { vendor: "Supplier B", rate: "125" }], [fallbackId, { vendor: "Supplier A", rate: "10" }]]);
+    for (const [vendor, expectedOn] of [["Supplier A", "2026-12-05"], ["Supplier B", "2026-12-07"]]) {
+      await repo.importQuotes(buyer, first.id, { vendor, expectedOn, vendorTerms: "Quoted delivery",
+        lines: first.lines.filter(line => award.get(line.itemKey)?.vendor === vendor)
+          .map(line => ({ lineId: line.id, rate: award.get(line.itemKey)!.rate, note: "" })) });
+    }
     await assert.rejects(repo.selfApprove(buyer, first.id, { note: "" }), /owner must approve/);
     await assert.rejects(repo.submit(buyer, first.id), /recommendation/);
     await repo.submit(buyer, first.id, "Supplier A for AC breakers and Supplier B for DC breakers.");
     const approved = await repo.decide(approver, first.id, { decision: "approve", note: "" });
-    assert.deepEqual(approved.lines.map(line => line.chosen?.vendor).sort(), ["Supplier A", "Supplier B"]);
+    assert.deepEqual(approved.lines.map(line => line.chosen?.vendor).sort(), ["Supplier A", "Supplier A", "Supplier B"]);
     assert.ok(buildApprovedPurchasePdf(approved).length > 1000);
     await assert.rejects(repo.approvedDocument(accounts, first.id), /not been sent to Accounts/);
     await assert.rejects(repo.approvedDocument(fixture.reviewer, first.id), /Purchase prices/);
@@ -336,6 +344,10 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
     const pt = await recordPtEntry(db.pool, accounts, ptInput);
     assert.equal((await recordPtEntry(db.pool, accounts, ptInput)).id, pt.id);
     assert.equal((await repo.accountsQueue(accounts))[0].ptReference, "PT-TEST-1");
+    const buyerQueue = (await repo.accountsQueue(buyer))[0];
+    assert.equal(buyerQueue.id, first.id);
+    assert.equal(buyerQueue.ptRecorded, true);
+    assert.equal(buyerQueue.ptReference, null);
     await repo.accountsAction(accounts, first.id, "forward");
     await repo.accountsAction(accounts, first.id, "forward");
     const receiving = (await repo.storeView(fixture.reviewer)).toReceive;
@@ -349,18 +361,27 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
       base64: Buffer.from("%PDF-1.7 isolated purchase fixture").toString("base64") });
     const receivingRepo = new PurchaseReceivingRepository(db.pool);
     const before = (await stock.positions(fixture.reviewer, warehouse)).positions.find(position => position.itemId === acBreakerId)!;
+    const fallbackBefore = (await stock.positions(fixture.reviewer, warehouse)).positions.find(position => position.itemId === fallbackId)!;
+    const intake = await receivingRepo.intake(fixture.reviewer, first.id, warehouse);
+    assert.ok(intake.lines.find(line => line.item_key === fallbackId)?.candidates.some((candidate: { item_id: string }) => candidate.item_id === fallbackId));
     const partial = {
       requestId: first.id, requestKey: randomUUID(), warehouse, sourceSha256: fixture.stockSha, authorityVersion: 1,
       evidenceId: proof.id, reason: "Received two AC breakers.", lines: [{ itemKey: acBreakerId, itemId: acBreakerId,
-        unit: "piece", quantity: "2", ledgerRevision: before.ledgerRevision }],
+        unit: "piece", quantity: "2", ledgerRevision: before.ledgerRevision },
+        { itemKey: fallbackId, itemId: fallbackId, unit: "packet", quantity: "1", ledgerRevision: fallbackBefore.ledgerRevision }],
     };
     const receipt = await receivingRepo.receive(fixture.reviewer, partial);
     assert.equal((await receivingRepo.receive(fixture.reviewer, partial)).id, receipt.id);
     assert.match(receipt.number, /^CPZ-IGP-/);
+    assert.deepEqual((await repo.getRequest(buyer, first.id)).receipts.map(item => item.number), [receipt.number]);
     const after = (await stock.positions(fixture.reviewer, warehouse)).positions.find(position => position.itemId === acBreakerId)!;
     assert.equal(after.currentClosing, "11");
+    assert.equal((await stock.positions(fixture.reviewer, warehouse)).positions.find(position => position.itemId === fallbackId)?.currentClosing, "2");
     assert.equal((await repo.storeView(fixture.reviewer)).toReceive[0].lines.find(line => line.itemKey === acBreakerId)?.due, "4");
-    assert.equal(Number((await repo.warehouseStock(buyer)).rows.find(line => line.itemId === acBreakerId)?.incoming[0].quantity), 4);
+    const arriving = await repo.warehouseStock(buyer);
+    assert.equal(Number(arriving.rows.find(line => line.itemId === acBreakerId)?.incoming[0].quantity), 4);
+    assert.equal(arriving.rows.find(line => line.itemId === acBreakerId)?.incoming[0].expected, "2026-12-05");
+    assert.equal(arriving.rows.find(line => line.itemId === breakerId)?.incoming[0].expected, "2026-12-07");
 
     const secondSite = randomUUID();
     const draftId = randomUUID();
@@ -413,9 +434,17 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
           'Fixture history','Projection scale test',gen_random_uuid(),$2
         FROM operations_boq_issuances o CROSS JOIN generate_series(1,5) v WHERE o.number LIKE 'PROC-LOAD-IPO-%'`,
       [warehouse, fixture.owner]);
+      const archived = (await client.query(`SELECT ipo_id,id FROM operations_boq_issuances
+        WHERE number LIKE 'PROC-LOAD-IPO-%' ORDER BY number LIMIT 3`)).rows;
+      const archiveIds = [[archived[0].ipo_id], { [archived[1].id]: true }, archived[2].ipo_id];
+      for (const [index, ids] of archiveIds.entries()) {
+        await client.query("INSERT INTO test_workflow_archives(key,cutoff,counts,records) VALUES($1,now(),'{}',$2)",
+          [`PROC-LOAD-ARCHIVE-${index}`, { localPreviewDocumentIds: ids, preservedEvidence: index === 0 ? Array.from({ length: 20_000 }, () => randomUUID()) : [] }]);
+      }
       await client.query("SET LOCAL statement_timeout='5s'");
       const backlog = await procurementWarehouseStock(client);
-      assert.equal(backlog.reservations.filter(line => line.ipoNumber.startsWith("PROC-LOAD-IPO-") && line.warehouse === warehouse).length, 1000);
+      assert.equal(backlog.reservations.filter(line => line.ipoNumber.startsWith("PROC-LOAD-IPO-") && line.warehouse === warehouse).length, 997);
+      assert.ok(archived.every(ipo => !backlog.reservations.some(line => line.ipoId === ipo.ipo_id)));
     } finally {
       await client.query("ROLLBACK");
       client.release();

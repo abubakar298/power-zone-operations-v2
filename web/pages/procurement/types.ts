@@ -21,7 +21,7 @@ export interface RequestRow {
   createdAt: string; updatedAt: string; submittedAt: string | null; decidedAt: string | null; orderedAt: string | null; receivedAt: string | null; neededBy: string | null;
   selfApproved: boolean;
 }
-export interface Quote { id: string; vendor: string; rate: string; note: string; createdAt: string }
+export interface Quote { id: string; vendor: string; rate: string; note: string; createdAt: string; expectedOn: string | null; vendorTerms: string }
 export interface RequestLine {
   id: string; itemKey: string; name: string; masterUnit: string | null; quantity: string; received: string; unit: string; note: string; quotes: Quote[]; chosenQuoteId: string | null;
   chosen: Quote | null; best: Quote | null; lastRate: { rate: string; unit: string; source: string; comparable: boolean } | null; difference: string | null; lineTotal: string;
@@ -31,6 +31,7 @@ export interface RequestDetail {
   createdBy: string; createdAt: string; submittedAt: string | null; decidedBy: string | null; decidedAt: string | null; decisionNote: string;
   orderedBy: string | null; orderedAt: string | null; orderReference: string; receivedBy: string | null; receivedAt: string | null;
   lines: RequestLine[]; events: { id: string; kind: string; fromStatus: string | null; toStatus: string | null; note: string; actor: string; at: string }[];
+  receipts?: { id: string; number: string; warehouse: string; recordedAt: string }[];
   totals: { atChosen: string; lastComparable: string; chosenComparable: string; saving: string; firstPurchases: number };
   accountsHandoff?: { required: boolean; sentAt: string | null; acknowledgedAt: string | null; forwardedAt: string | null };
   can: { sendToAccounts?: boolean; edit: boolean; submit: boolean; decide: boolean; selfApprove: boolean; order: boolean; receive: boolean; cancel: boolean };

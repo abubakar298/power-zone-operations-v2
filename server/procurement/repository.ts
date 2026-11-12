@@ -115,7 +115,10 @@ export class ProcurementRepository {
     if (!me.buyer && !["Admin", "Management"].includes(me.role)) {
       throw new HttpError(403, "Warehouse stock is available to Procurement buyers and Management.");
     }
-    return procurementWarehouseStock(this.pool);
+    return transaction(this.pool, async c => {
+      await c.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      return { ...await procurementWarehouseStock(c), canCreateRequest: me.buyer };
+    });
   }
 
   /**
@@ -254,17 +257,20 @@ export class ProcurementRepository {
 
   async accountsQueue(actor: string) {
     const me = await this.me(actor);
-    if (!PRICE_ROLES.has(me.role)) throw new HttpError(403, "Accounts access required.");
+    const accountsAccess = PRICE_ROLES.has(me.role);
+    if (!accountsAccess && !me.buyer) throw new HttpError(403, "Accounts or Procurement buyer access required.");
     return (await this.pool.query(`
       SELECT r.id,r.number,r.title,r.delivery_to AS warehouse,r.status,sent.created_at AS "sentAt",
         ack.created_at AS "acknowledgedAt",fwd.created_at AS "forwardedAt",
-        pt.pt_reference AS "ptReference",pt.entry_date::text AS "ptDate"
+        CASE WHEN $1 THEN pt.pt_reference END AS "ptReference",pt.entry_date::text AS "ptDate",
+        (pt.id IS NOT NULL) AS "ptRecorded"
       FROM purchase_requests r
       JOIN purchase_request_events sent ON sent.request_id=r.id AND sent.kind='accounts_sent'
       LEFT JOIN purchase_request_events ack ON ack.request_id=r.id AND ack.kind='accounts_acknowledged'
       LEFT JOIN purchase_request_events fwd ON fwd.request_id=r.id AND fwd.kind='inventory_forwarded'
       LEFT JOIN accounts_pt_entries pt ON pt.source_kind='Procurement' AND pt.source_id=r.id AND pt.source_version=1
-      ORDER BY sent.created_at DESC,r.id`)).rows;
+      WHERE $1 OR r.created_by=$2
+      ORDER BY sent.created_at DESC,r.id`, [accountsAccess, actor])).rows;
   }
 
   async accountsAction(actor: string, id: string, action: "acknowledge" | "forward") {
@@ -323,7 +329,10 @@ export class ProcurementRepository {
     const got = await this.receivedByLine(c, [id]);
     let atChosen = 0, lastComparable = 0, chosenComparable = 0, firstPurchases = 0;
     const lines = lineRows.map((l) => {
-      const qs = quotes.filter((q) => q.line_id === l.id).map((q) => ({ id: q.id as string, vendor: q.vendor as string, rate: fixed(num(q.rate)), note: q.note as string, createdAt: q.created_at as string }));
+      const qs = quotes.filter((q) => q.line_id === l.id).map((q) => ({
+        id: q.id as string, vendor: q.vendor as string, rate: fixed(num(q.rate)), note: q.note as string, createdAt: q.created_at as string,
+        expectedOn: q.expected_on ? toDay(q.expected_on) : null, vendorTerms: q.vendor_terms as string,
+      }));
       const chosen = qs.find((q) => q.id === l.chosen_quote_id) ?? null;
       const best = qs[0] ?? null;
       const last = live ? live(l.item_key) : l.last_rate == null ? null : { rate: num(l.last_rate), unit: l.last_rate_unit as string, source: l.last_rate_source as string };
@@ -345,6 +354,9 @@ export class ProcurementRepository {
     )).rows.map((e) => ({ id: e.id as string, kind: e.kind as string, fromStatus: e.from_status as string | null, toStatus: e.to_status as string | null, note: e.note as string, actor: e.actor as string, at: e.created_at as string }));
     const status = r.status as RequestStatus;
     const accountsHandoff = await this.accountsHandoff(c, id);
+    const receipts = accountsHandoff.forwardedAt ? (await c.query<{ id: string; number: string; warehouse: string; recordedAt: string }>(`
+      SELECT id,number,warehouse,created_at AS "recordedAt" FROM inventory_material_purchase_receipts
+      WHERE request_id=$1 ORDER BY created_at,id`, [id])).rows : [];
     return {
       id: r.id as string, number: r.number as string, title: r.title as string, purpose: r.purpose as string, neededBy: r.needed_by ? toDay(r.needed_by) : null,
       deliveryTo: r.delivery_to as string, paymentTerms: r.payment_terms as string, status, statusLabel: STATUS_LABELS[status],
@@ -352,7 +364,7 @@ export class ProcurementRepository {
       decidedBy: (r.decided_by_name ?? null) as string | null, decidedAt: r.decided_at as string | null, decisionNote: r.decision_note as string,
       orderedBy: (r.ordered_by_name ?? null) as string | null, orderedAt: r.ordered_at as string | null, orderReference: r.order_reference as string,
       receivedBy: (r.received_by_name ?? null) as string | null, receivedAt: r.received_at as string | null, selfApproved: r.self_approved === true,
-      lines, events, accountsHandoff,
+      lines, events, accountsHandoff, receipts,
       totals: { atChosen: fixed(atChosen), lastComparable: fixed(lastComparable), chosenComparable: fixed(chosenComparable), saving: fixed(lastComparable - chosenComparable), firstPurchases },
       can: {
         edit: me.buyer && status === "draft",
@@ -432,11 +444,11 @@ export class ProcurementRepository {
          VALUES(${NEW_NUMBER},$1,$2,$3,$4,$5,$6) RETURNING id`,
         [title, purpose, neededBy, warehouse, paymentTerms, actor],
       )).rows[0].id as string;
+      await this.event(c, id, actor, "created", null, "draft", "Created from warehouse stock", { requestKey, fingerprint, warehouse, lines, requiresAccounts: true });
       for (const line of validated) {
         await c.query("INSERT INTO purchase_request_lines(request_id,item_key,quantity,unit) VALUES($1,$2,$3,$4)",
           [id, line.itemKey, line.quantity, line.unit]);
       }
-      await this.event(c, id, actor, "created", null, "draft", "Created from warehouse stock", { requestKey, fingerprint, warehouse, lines, requiresAccounts: true });
       return this.getRequest(actor, id, c);
     });
   }
@@ -526,7 +538,7 @@ export class ProcurementRepository {
    * One vendor's quotation for many items at once, typed in a grid or read from the vendor's filled RFQ Excel
    * (Moaz, 24 Oct 2026). A vendor's earlier rate on the same item is replaced, and stays chosen if it was.
    */
-  async importQuotes(actor: string, id: string, input: { vendor: string; lines: { lineId: string; rate: string; note: string }[] }) {
+  async importQuotes(actor: string, id: string, input: { vendor: string; expectedOn?: string | null; vendorTerms?: string; lines: { lineId: string; rate: string; note: string }[] }) {
     return transaction(this.pool, async (c) => {
       await this.draft(c, actor, id);
       const mine = new Set((await c.query("SELECT id FROM purchase_request_lines WHERE request_id=$1", [id])).rows.map((r) => r.id as string));
@@ -543,7 +555,8 @@ export class ProcurementRepository {
           await c.query("UPDATE purchase_request_lines SET chosen_quote_id=NULL WHERE id=$1 AND chosen_quote_id=$2", [l.lineId, q.id]);
           await c.query("DELETE FROM purchase_quotes WHERE id=$1", [q.id]);
         }
-        const q = (await c.query("INSERT INTO purchase_quotes(line_id,vendor,rate,note,created_by) VALUES($1,$2,$3,$4,$5) RETURNING id", [l.lineId, input.vendor, l.rate, l.note, actor])).rows[0];
+        const q = (await c.query("INSERT INTO purchase_quotes(line_id,vendor,rate,note,created_by,expected_on,vendor_terms) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id",
+          [l.lineId, input.vendor, l.rate, l.note, actor, input.expectedOn ?? null, input.vendorTerms ?? ""])).rows[0];
         if (old.some((x) => x.chosen)) await c.query("UPDATE purchase_request_lines SET chosen_quote_id=$2 WHERE id=$1", [l.lineId, q.id]);
         await this.chooseLowestIfNone(c, l.lineId);
       }

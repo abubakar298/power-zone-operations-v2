@@ -5,6 +5,7 @@ import {z} from 'zod';
 import {transaction} from '../db/transaction.js';
 import {HttpError} from '../http/errors.js';
 import {ipoSiteIdentity,applyIpoSiteIdentity} from '../orders/site-identity.js';
+import {localPreviewDocumentIdCtes} from '../maintenance/archived-documents.js';
 import {checkMaterialSourceLink} from './source-link-policy.js';
 export const materialSourceLinkSchema=z.object({boardSiteId:z.string().min(1).max(160),boardVersion:z.number().int().positive(),ipoId:z.uuid(),reason:z.string().trim().min(1).max(2000),requestKey:z.uuid()}).strict();
 const sha=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
@@ -21,15 +22,9 @@ export async function approvedMaterialIdentity(c:Pool|PoolClient,ipoId:string){
  * Director-correction and saved-PO checks; no result is cached across requests. */
 export async function approvedMaterialIdentities(c:Pool|PoolClient,ipoIds:string[]){
  const ids=[...new Set(ipoIds)],result=new Map<string,any>();if(!ids.length)return result;
- const rows=(await c.query(`WITH archive_sources AS MATERIALIZED (
-  SELECT records->'localPreviewDocumentIds' AS ids FROM test_workflow_archives
- ), archived_ids AS MATERIALIZED (
-  SELECT DISTINCT id FROM (
-   SELECT value#>>'{}' AS id FROM archive_sources CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(ids)='array' THEN ids ELSE '[]'::jsonb END) value WHERE jsonb_typeof(value)='string'
-   UNION ALL SELECT key FROM archive_sources CROSS JOIN LATERAL jsonb_object_keys(CASE WHEN jsonb_typeof(ids)='object' THEN ids ELSE '{}'::jsonb END) key
-   UNION ALL SELECT ids#>>'{}' FROM archive_sources WHERE jsonb_typeof(ids)='string'
-   UNION ALL SELECT ipo_id::text FROM archived_sample_ipos WHERE ipo_id=ANY($1::uuid[]) AND restored_at IS NULL
-  ) archived
+ const rows=(await c.query(`WITH ${localPreviewDocumentIdCtes}, archived_ids AS MATERIALIZED (
+   SELECT id FROM archived_preview_ids
+   UNION SELECT ipo_id::text FROM archived_sample_ipos WHERE ipo_id=ANY($1::uuid[]) AND restored_at IS NULL
  ) SELECT i.id,i.number,i.snapshot,p.po_number AS saved_po_reference,(a.id IS NOT NULL) AS archived
  FROM internal_purchase_orders i JOIN customer_purchase_orders p ON p.id=i.customer_po_id
  LEFT JOIN archived_ids a ON a.id=i.id::text WHERE i.id=ANY($1::uuid[])`,[ids])).rows;

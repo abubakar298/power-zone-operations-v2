@@ -4,69 +4,74 @@ import { z } from "zod";
 import { sameUnit } from "../../shared/stock-units.js";
 import { ipoReservationWarehouses } from "../../shared/procurement-warehouse.js";
 import { plannedInventoryDelivery, plannedInventoryInstallation } from "../operations-board/batch-delivery.js";
+import { localPreviewDocumentIdCtes } from "../maintenance/archived-documents.js";
 import { SERVICE_LINE } from "./supply.js";
 
 type Db = Pool | PoolClient;
 type Demand = {
-  ipo_id: string; number: string; site: string | null; customer: string | null;
+  ipo_id: string; issuance_id: string; number: string; site: string | null; customer: string | null;
   item_key: string; unit: string; quantity: string; expected_date: string | null;
-  board_id: string | null; board: Record<string, unknown> | null;
+};
+type Board = {
+  site_id: string; ipo_id: string | null; issuance_id: string | null; linked_ipo_id: string | null;
+  stage: string | null; cancelled: string | null; plan: Record<string, unknown>;
 };
 type StockIdentity = { itemId: string; unit: string; purchaseKey: string | null };
 
 export async function receivedIpoReservations(db: Db, stock: StockIdentity[]) {
   const demand = (await db.query<Demand>(`
-    WITH pending_issuances AS MATERIALIZED (
-      SELECT o.id,o.ipo_id,w.expected_delivery
-      FROM operations_boq_issuances o
-      LEFT JOIN site_workflow w ON w.issuance_id=o.id
-      WHERE w.delivered_on IS NULL AND coalesce(w.stage,'')<>'closed'
-        AND NOT EXISTS(SELECT 1 FROM archived_sample_ipos a WHERE a.ipo_id=o.ipo_id AND a.restored_at IS NULL)
-        AND NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.records->'localPreviewDocumentIds' ? o.ipo_id::text
-          OR a.records->'localPreviewDocumentIds' ? o.id::text)
-    ), latest_board AS MATERIALIZED (
-      SELECT DISTINCT ON (site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC
-    ), current_board AS MATERIALIZED (
-      SELECT site_id,snapshot#>>'{origin,ipoId}' ipo_id,
-        snapshot->>'stage' stage,snapshot->>'cancelled' cancelled,
-        jsonb_build_object(
-          'procurementWarehouse',snapshot->'procurementWarehouse',
-          'installation',snapshot->'installation',
-          'installationPlanDate',snapshot->'installationPlanDate',
-          'dispatchDate',snapshot->'dispatchDate',
-          'planningBatches',snapshot->'planningBatches'
-        ) reservation_plan,
-        snapshot#>>'{origin,operationsIssuanceId}' issuance_id
-      FROM latest_board WHERE (snapshot->>'superseded') IS DISTINCT FROM 'true'
-    ), board_links AS (
-      SELECT o.id,b.site_id
-      FROM pending_issuances o JOIN current_board b ON b.ipo_id=o.ipo_id::text AND b.issuance_id=o.id::text
-      UNION
-      SELECT o.id,b.site_id
-      FROM pending_issuances o JOIN inventory_material_source_links m ON m.ipo_id=o.ipo_id
-      JOIN current_board b ON b.site_id=m.board_site_id
-    ), exact_board AS (
-      SELECT id,min(site_id) site_id FROM board_links GROUP BY id HAVING count(*)=1
-    ), item_demand AS (
-      SELECT l.issuance_id,l.item_key,l.unit,sum(l.quantity)::text quantity
-      FROM operations_stock_demand l JOIN pending_issuances o ON o.id=l.issuance_id
-      GROUP BY l.issuance_id,l.item_key,l.unit
-    )
-    SELECT i.id ipo_id,i.number,i.snapshot->>'siteName' site,i.snapshot#>>'{customer,name}' customer,
-      l.item_key,l.unit,l.quantity,to_char(o.expected_delivery,'YYYY-MM-DD') expected_date,
-      board.site_id board_id,board.reservation_plan board
-    FROM pending_issuances o JOIN internal_purchase_orders i ON i.id=o.ipo_id
-    JOIN item_demand l ON l.issuance_id=o.id
-    LEFT JOIN exact_board link ON link.id=o.id
-    LEFT JOIN current_board board ON board.site_id=link.site_id
-    WHERE coalesce(board.cancelled,'false')<>'true'
-      AND coalesce(board.stage,'received') NOT IN ('delivered','completed')
+    WITH ${localPreviewDocumentIdCtes}
+    SELECT i.id ipo_id,o.id issuance_id,i.number,i.snapshot->>'siteName' site,
+      i.snapshot#>>'{customer,name}' customer,l.item_key,l.unit,l.quantity,
+      to_char(w.expected_delivery,'YYYY-MM-DD') expected_date
+    FROM operations_boq_issuances o
+    JOIN internal_purchase_orders i ON i.id=o.ipo_id
+    LEFT JOIN site_workflow w ON w.issuance_id=o.id
+    JOIN (
+      SELECT issuance_id,item_key,unit,sum(quantity)::text quantity FROM operations_stock_demand
+      GROUP BY issuance_id,item_key,unit
+    ) l ON l.issuance_id=o.id
+    WHERE w.delivered_on IS NULL AND coalesce(w.stage,'')<>'closed'
+      AND NOT EXISTS(SELECT 1 FROM archived_sample_ipos a WHERE a.ipo_id=o.ipo_id AND a.restored_at IS NULL)
+      AND NOT EXISTS(SELECT 1 FROM archived_preview_ids a WHERE a.id=o.ipo_id::text)
+      AND NOT EXISTS(SELECT 1 FROM archived_preview_ids a WHERE a.id=o.id::text)
     ORDER BY i.number,l.item_key,l.unit`)).rows.filter(line =>
       !SERVICE_LINE.test(line.item_key) && line.unit.trim().toUpperCase() !== "LS",
     );
+  if (!demand.length) return [];
 
-  const ipoIds = [...new Set(demand.map(line => line.ipo_id))];
-  const posted = ipoIds.length ? (await db.query<{ ipo_id: string; item_id: string; unit: string; quantity: string; shared: boolean }>(`
+  const issuanceByIpo = new Map(demand.map(line => [line.ipo_id, line.issuance_id]));
+  const ipoIds = [...issuanceByIpo.keys()];
+  const boards = (await db.query<Board>(`
+    WITH current_versions AS MATERIALIZED (
+      SELECT DISTINCT ON (site_id) site_id,version FROM operations_board_versions ORDER BY site_id,version DESC
+    )
+    SELECT b.site_id,b.snapshot#>>'{origin,ipoId}' ipo_id,
+      b.snapshot#>>'{origin,operationsIssuanceId}' issuance_id,m.ipo_id linked_ipo_id,
+      b.snapshot->>'stage' stage,b.snapshot->>'cancelled' cancelled,
+      jsonb_build_object('procurementWarehouse',b.snapshot->'procurementWarehouse',
+        'installation',b.snapshot->'installation','installationPlanDate',b.snapshot->'installationPlanDate',
+        'dispatchDate',b.snapshot->'dispatchDate','planningBatches',b.snapshot->'planningBatches') plan
+    FROM current_versions v JOIN operations_board_versions b USING(site_id,version)
+    LEFT JOIN inventory_material_source_links m ON m.board_site_id=b.site_id
+    WHERE (b.snapshot->>'superseded') IS DISTINCT FROM 'true'
+      AND (b.snapshot#>>'{origin,ipoId}'=ANY($1::text[]) OR m.ipo_id=ANY($2::uuid[]))`, [ipoIds, ipoIds])).rows;
+  const boardByIssuance = new Map<string, Board | null>();
+  for (const board of boards) {
+    const linked = board.linked_ipo_id ? issuanceByIpo.get(board.linked_ipo_id) : undefined;
+    const fromOrigin = board.ipo_id ? issuanceByIpo.get(board.ipo_id) : undefined;
+    const matches = new Set([linked, fromOrigin === board.issuance_id ? fromOrigin : undefined]);
+    for (const issuance of matches) {
+      if (issuance) boardByIssuance.set(issuance, boardByIssuance.has(issuance) ? null : board);
+    }
+  }
+  const activeDemand = demand.filter(line => {
+    const board = boardByIssuance.get(line.issuance_id);
+    return board?.cancelled !== "true" && board?.stage !== "delivered" && board?.stage !== "completed";
+  });
+
+  const activeIpos = [...new Set(activeDemand.map(line => line.ipo_id))];
+  const posted = activeIpos.length ? (await db.query<{ ipo_id: string; item_id: string; unit: string; quantity: string; shared: boolean }>(`
     SELECT site.ipo_id,l.item_id,l.unit,sum(m.out_delta)::text quantity,
       cardinality(allocated.site_ids)>1 AS shared
     FROM inventory_warehouse_operational_movements m
@@ -83,11 +88,11 @@ export async function receivedIpoReservations(db: Db, stock: StockIdentity[]) {
     ) allocated
     CROSS JOIN LATERAL unnest(allocated.site_ids) site(ipo_id)
     WHERE m.kind='dispatch-out' AND site.ipo_id=ANY($1::text[])
-    GROUP BY 1,2,3,5`, [ipoIds])).rows : [];
+    GROUP BY 1,2,3,5`, [activeIpos])).rows : [];
   const remainingPosted = posted.filter(out => !out.shared).map(out => ({ ...out, remaining: new Decimal(out.quantity) }));
   const warehouseSchema = z.enum(ipoReservationWarehouses);
   const dateSchema = z.iso.date();
-  return demand.flatMap(line => {
+  return activeDemand.flatMap(line => {
     const matching = stock.filter(item =>
       (item.itemId === line.item_key || item.purchaseKey === line.item_key) && sameUnit(item.unit, line.unit),
     );
@@ -103,9 +108,10 @@ export async function receivedIpoReservations(db: Db, stock: StockIdentity[]) {
       out.remaining = out.remaining.minus(used);
     }
     if (quantity.lte(0)) return [];
-    const board = { ...line.board, id: line.board_id };
-    const assigned = warehouseSchema.safeParse(line.board?.procurementWarehouse);
-    const plannedDate = dateSchema.safeParse(line.board?.dispatchDate);
+    const matchedBoard = boardByIssuance.get(line.issuance_id);
+    const board = { ...matchedBoard?.plan, id: matchedBoard?.site_id };
+    const assigned = warehouseSchema.safeParse(matchedBoard?.plan.procurementWarehouse);
+    const plannedDate = dateSchema.safeParse(matchedBoard?.plan.dispatchDate);
     return [{
       ipoId: line.ipo_id, ipoNumber: line.number, customer: line.customer, site: line.site,
       warehouse: assigned.success ? assigned.data : null,

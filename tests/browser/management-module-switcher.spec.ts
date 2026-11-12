@@ -3,6 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
 import {actors,login} from './release-fixtures.js';
+import {materialStockFixture} from '../material-stock-fixture.js';
 test('Management keeps View as beside account controls across shared module shells and mobile Operations',async({page})=>{
  await actors(page.request);
  const fixture=JSON.parse(await readFile(`.local/e2e-fixture-${process.env.PZ_E2E_PORT??'3180'}.json`,'utf8'));
@@ -21,8 +22,13 @@ test('Management keeps View as beside account controls across shared module shel
  await aligned();await page.setViewportSize({width:390,height:844});await aligned();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'test-results/operations-header-mobile.png',fullPage:false});await page.setViewportSize({width:1280,height:900});
  await select('Accounts');await expect(page.getByRole('heading',{name:/^Welcome,/})).toBeVisible();await expect(page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Material Costing & PT Entry',exact:true})).toBeVisible();
  await select('Procurement');await expect(page.getByRole('button',{name:'Power Zone — Dashboard',exact:true})).toContainText('Procurement');await expect(page.getByRole('button',{name:'View as',exact:true})).toBeVisible();await aligned();await page.setViewportSize({width:390,height:844});await aligned();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.setViewportSize({width:1280,height:900});await page.reload();await expect(page.getByRole('button',{name:'View as',exact:true})).toBeVisible();
- await expect(page.getByRole('heading',{name:'Warehouse stock',exact:true})).toBeVisible();
- await expect(page.getByRole('navigation',{name:'Main',exact:true}).getByRole('button')).toHaveText(['Warehouse stock','Purchase requests','Suppliers','My account']);
+ await expect(page.getByRole('heading',{name:'Stock overview',exact:true})).toBeVisible();
+ await expect(page.getByRole('navigation',{name:'Procurement workspace',exact:true}).getByRole('button')).toHaveText(['Stock overview','Requests & RFQs','Suppliers','Owner approvals','Accounts · Salaas','Inventory · IGPO']);
+ const createButton=page.getByRole('button',{name:'Create request',exact:true});
+ await expect(createButton).toHaveCSS('background-color','rgb(81, 67, 148)');
+ await expect(createButton).toHaveCSS('border-radius','8px');
+ expect(await page.locator('.procurement-workspace').evaluate(element=>getComputedStyle(element).fontFamily)).toMatch(/BlinkMacSystemFont|system-ui/);
+ await page.screenshot({path:'test-results/procurement-stock-desktop.png',fullPage:false});
  await select('Management');await expect(page.getByRole('heading',{name:'Dashboard',exact:true})).toBeVisible();
  await select('Design');await expect(page.getByRole('button',{name:'View as',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Survey History',exact:true})).toBeVisible();
  await select('Project Coordination');await expect(page.getByRole('button',{name:'View as',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'View as',exact:true})).toHaveAttribute('title','Current view: Project Coordination');
@@ -35,15 +41,39 @@ test('Management keeps View as beside account controls across shared module shel
  const buyer=randomUUID();
  await pool.query("INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,'buyer-header@example.test','Test Procurement Buyer','Operations',$2)",[buyer,admin.password_hash]);
  await pool.query("INSERT INTO procurement_access(user_id,capability,granted_reason) VALUES($1,'buyer','browser fixture')",[buyer]);
+ const warehouse='Lahore warehouse';
+ const items=[['CH-BRK-AC-10A/1P','piece'],['CH-CABLE-TIES','packet']];
+ await materialStockFixture(pool,'CH-CBL-DC-16MM/1C-B',{canonicalIds:4},items.map(([itemId,unit])=>({
+  itemId,unit,warehouse,description:itemId,opening:9,in:0,out:0,closing:9,openingStatus:'Reviewed source',review:'',
+ })));
  const buyerHeaders=await login(page.request,'buyer-header@example.test');
  const dummy=await page.request.post('/api/procurement/requests',{headers:buyerHeaders,data:{title:'Dummy request from the old portal'}});
  expect(dummy.ok(),await dummy.text()).toBe(true);
  await page.goto('/dashboard#workspace=stock');
- await expect(page.getByRole('heading',{name:'Warehouse stock',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Purchase requests',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Stock overview',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Requests & RFQs',exact:true}).click();
  await expect(page.getByText('No requests here.')).toBeVisible();
  await expect(page.getByText('Dummy request from the old portal')).toHaveCount(0);
  await page.getByRole('button',{name:'Select items for a new request',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Warehouse stock',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Create request',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Back to stock overview',exact:true}).click();
+ await expect(page.getByLabel('Warehouse',{exact:true})).toHaveValue('');
+ const first=page.getByRole('row').filter({hasText:items[0][0]}).first();
+ await first.getByRole('button',{name:'Add to request',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Add selected items',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Back to stock overview',exact:true}).click();
+ await page.getByRole('button',{name:'Clear selection',exact:true}).click();
+ for(const [id,unit] of items)await page.getByRole('checkbox',{name:`Select ${id} (${unit}) at ${warehouse}`,exact:true}).check();
+ await page.getByRole('button',{name:'Add selected to request',exact:true}).click();
+ await expect(page.getByRole('columnheader',{name:'On hand',exact:true})).toBeVisible();
+ await expect(page.getByRole('columnheader',{name:'After reservations',exact:true})).toBeVisible();
+ await page.getByLabel('Request title (required)',{exact:true}).fill('Replacement warehouse request');
+ for(const [id,unit] of items)await page.getByLabel(`Quantity for ${id} (${unit})`,{exact:true}).fill('2');
+ await page.getByRole('button',{name:'Create purchase request',exact:true}).click();
+ await expect(page.getByRole('heading',{name:/Replacement warehouse request$/})).toBeVisible();
+ for(const [label,empty] of [['Owner approvals','Nothing is waiting for your approval.'],['Accounts · Salaas','There are no approved purchases in this queue.'],['Inventory · IGPO','No requests here.']]){
+  await page.getByRole('button',{name:label,exact:true}).click();
+  await expect(page.getByText(empty,{exact:true})).toBeVisible();
+ }
  }finally{await pool.end();}
 });

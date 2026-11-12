@@ -98,7 +98,7 @@ export class RfqRepository {
       }
       if (input.dueOn < toDay(new Date())) throw new HttpError(400, "The due date has passed.");
       const items = (await c.query(
-        `SELECT l.item_key, l.quantity, l.unit, COALESCE(m.display_name, x.name, l.item_key) AS name,
+        `SELECT l.item_key, l.quantity, l.unit, COALESCE(m.display_name, x.name, exact.description, l.item_key) AS name,
            COALESCE(m.approved_specification, '') AS spec,
            COALESCE(exact.category, linked.category, NULLIF(m.item_group,''), 'Other items') AS category
          FROM purchase_request_lines l
