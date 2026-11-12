@@ -186,10 +186,48 @@ export class MaterialDraftRepository{
   const boardRows=await withInventoryReceiving(this.pool,(await this.pool.query(`SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC`)).rows);
   const batches=(await this.pool.query('SELECT DISTINCT ON(batch_id) version,snapshot FROM operations_board_batch_versions ORDER BY batch_id,version DESC')).rows;
   const operationsBatches=inventoryOperationsBatches(batches,boardRows,sources);
+  // An issued partial DO can be ahead of gate posting or the Operations board.
+  // Use its exact saved preparation for navigation, without changing the issuance source rules.
+  const partialDispatches=(await this.pool.query<{planId:string;site:Source;createdAt:Date}>(`
+   WITH latest_dispatch AS (
+    SELECT DISTINCT ON (d.snapshot#>>'{sites,0,siteId}')
+     d.snapshot, d.warehouse, d.created_at
+    FROM inventory_material_dispatches_active d
+    WHERE d.snapshot->>'kind'='fixed' AND d.snapshot->>'parent'='false'
+      AND d.snapshot#>>'{sites,0,siteId}' IS NOT NULL
+    ORDER BY d.snapshot#>>'{sites,0,siteId}',d.created_at DESC,d.id DESC
+   )
+   SELECT plan.id AS "planId",d.snapshot#>'{sites,0}' AS site,d.created_at AS "createdAt"
+   FROM latest_dispatch d
+   JOIN inventory_site_material_plans plan ON plan.id::text=d.snapshot#>>'{combinedPlan,id}'
+   JOIN LATERAL (
+    SELECT * FROM inventory_site_material_plan_versions v
+    WHERE v.plan_id=plan.id ORDER BY v.version DESC LIMIT 1
+   ) version ON true
+   JOIN inventory_material_draft_versions fixed ON fixed.draft_id=version.fixed_draft_id AND fixed.version=version.fixed_draft_version
+   LEFT JOIN inventory_material_draft_versions variable ON variable.draft_id=version.variable_draft_id AND variable.version=version.variable_draft_version
+   WHERE d.snapshot->>'partialDelivery'='true'
+    AND fixed.snapshot#>>'{sites,0,siteId}'=d.snapshot#>>'{sites,0,siteId}'
+    AND fixed.snapshot->>'warehouse'=d.warehouse
+    AND (version.variable_draft_id IS NULL OR variable.snapshot->>'warehouse'=d.warehouse)
+    AND ($1 OR d.warehouse=ANY($2::text[]))
+    AND NOT EXISTS (SELECT 1 FROM site_workflow w WHERE w.ipo_id::text=d.snapshot#>>'{sites,0,siteId}' AND w.stage='closed')
+    AND NOT EXISTS (SELECT 1 FROM archived_sample_ipos a WHERE a.ipo_id::text=d.snapshot#>>'{sites,0,siteId}' AND a.restored_at IS NULL)
+    AND NOT EXISTS (SELECT 1 FROM test_workflow_archives a WHERE a.records->'localPreviewDocumentIds' ? (d.snapshot#>>'{sites,0,siteId}'))
+  `,[access.owner,access.warehouses])).rows;
+  const boardsById=new Map(boardRows.map(row=>[row.site_id,row.snapshot]));
+  const continuingProjects=partialDispatches.flatMap(({planId,site,createdAt})=>{
+   const board=site.registeredSiteId?boardsById.get(site.registeredSiteId):undefined;
+   if(board&&(board.completed||board.stage==='completed'||board.cancelled||board.transferred||board.archived||board.superseded||board.sample))return [];
+   return [{siteId:site.siteId,registeredSiteId:site.registeredSiteId,ipo:site.ipo,orderNumber:site.orderNumber,
+    siteName:site.siteName,customer:site.customer,planId,createdAt:new Date(createdAt).toISOString(),
+    dispatchDate:board&&site.registeredSiteId?plannedInventoryDelivery({...board,id:site.registeredSiteId}):site.dispatchDate??null,
+    installationDate:board?plannedInventoryInstallation(board):site.installationDate??null}];
+  });
   const registeredPending=boardRows
    .filter(r=>!r.snapshot.superseded&&!r.snapshot.completed&&['received','awaiting'].includes(r.snapshot.stage)&&r.snapshot.sample!==true&&!sources.some(s=>s.registeredSiteId===r.site_id))
    .map(r=>({siteId:r.site_id,ipo:r.snapshot.ipo,siteName:r.snapshot.name,customer:r.snapshot.customer??'',installation:r.snapshot.installation,dispatchDate:plannedInventoryDelivery({...r.snapshot,id:r.site_id}),installationDate:plannedInventoryInstallation(r.snapshot),linkStatus:'approved-boq-link-required' as const,linkReview:r.snapshot.materialLinkReview??null}));
-  return {access,sources,registeredPending,operationsBatches,catalogue:stock.catalogue,aliases:stock.aliases,warehouses:access.owner?stock.warehouses:access.warehouses,stockPosting:false};
+  return {access,sources,registeredPending,continuingProjects,operationsBatches,catalogue:stock.catalogue,aliases:stock.aliases,warehouses:access.owner?stock.warehouses:access.warehouses,stockPosting:false};
  }
  /** Issuance revalidates pending source identity while locking the same rows
   * that Operations uses for delivery updates. Draft preparation alone does not. */
