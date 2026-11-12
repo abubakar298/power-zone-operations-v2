@@ -16,30 +16,51 @@ type StockIdentity = { itemId: string; unit: string; purchaseKey: string | null 
 
 export async function receivedIpoReservations(db: Db, stock: StockIdentity[]) {
   const demand = (await db.query<Demand>(`
-    WITH latest_board AS (
+    WITH pending_issuances AS MATERIALIZED (
+      SELECT o.id,o.ipo_id,w.expected_delivery
+      FROM operations_boq_issuances o
+      LEFT JOIN site_workflow w ON w.issuance_id=o.id
+      WHERE w.delivered_on IS NULL AND coalesce(w.stage,'')<>'closed'
+        AND NOT EXISTS(SELECT 1 FROM archived_sample_ipos a WHERE a.ipo_id=o.ipo_id AND a.restored_at IS NULL)
+        AND NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.records->'localPreviewDocumentIds' ? o.ipo_id::text
+          OR a.records->'localPreviewDocumentIds' ? o.id::text)
+    ), latest_board AS MATERIALIZED (
       SELECT DISTINCT ON (site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC
+    ), current_board AS MATERIALIZED (
+      SELECT site_id,snapshot#>>'{origin,ipoId}' ipo_id,
+        snapshot->>'stage' stage,snapshot->>'cancelled' cancelled,
+        jsonb_build_object(
+          'procurementWarehouse',snapshot->'procurementWarehouse',
+          'installation',snapshot->'installation',
+          'installationPlanDate',snapshot->'installationPlanDate',
+          'dispatchDate',snapshot->'dispatchDate',
+          'planningBatches',snapshot->'planningBatches'
+        ) reservation_plan,
+        snapshot#>>'{origin,operationsIssuanceId}' issuance_id
+      FROM latest_board WHERE (snapshot->>'superseded') IS DISTINCT FROM 'true'
+    ), board_links AS (
+      SELECT o.id,b.site_id
+      FROM pending_issuances o JOIN current_board b ON b.ipo_id=o.ipo_id::text AND b.issuance_id=o.id::text
+      UNION
+      SELECT o.id,b.site_id
+      FROM pending_issuances o JOIN inventory_material_source_links m ON m.ipo_id=o.ipo_id
+      JOIN current_board b ON b.site_id=m.board_site_id
+    ), exact_board AS (
+      SELECT id,min(site_id) site_id FROM board_links GROUP BY id HAVING count(*)=1
+    ), item_demand AS (
+      SELECT l.issuance_id,l.item_key,l.unit,sum(l.quantity)::text quantity
+      FROM operations_stock_demand l JOIN pending_issuances o ON o.id=l.issuance_id
+      GROUP BY l.issuance_id,l.item_key,l.unit
     )
     SELECT i.id ipo_id,i.number,i.snapshot->>'siteName' site,i.snapshot#>>'{customer,name}' customer,
-      l.item_key,l.unit,sum(l.quantity)::text quantity,to_char(w.expected_delivery,'YYYY-MM-DD') expected_date,
-      board.site_id board_id,board.snapshot board
-    FROM operations_boq_issuances o JOIN internal_purchase_orders i ON i.id=o.ipo_id
-    JOIN operations_stock_demand l ON l.issuance_id=o.id
-    LEFT JOIN site_workflow w ON w.issuance_id=o.id
-    LEFT JOIN LATERAL (
-      SELECT matched.site_id,matched.snapshot FROM (
-      SELECT b.site_id,b.snapshot,count(*) OVER () AS matches FROM latest_board b
-      WHERE (b.snapshot->>'superseded') IS DISTINCT FROM 'true'
-        AND ((b.snapshot#>>'{origin,ipoId}'=i.id::text AND b.snapshot#>>'{origin,operationsIssuanceId}'=o.id::text)
-          OR EXISTS (SELECT 1 FROM inventory_material_source_links m WHERE m.ipo_id=i.id AND m.board_site_id=b.site_id))
-      ) matched WHERE matched.matches=1
-    ) board ON true
-    WHERE w.delivered_on IS NULL AND coalesce(w.stage,'')<>'closed'
-      AND coalesce(board.snapshot->>'cancelled','false')<>'true'
-      AND coalesce(board.snapshot->>'stage','received') NOT IN ('delivered','completed')
-      AND NOT EXISTS(SELECT 1 FROM archived_sample_ipos a WHERE a.ipo_id=i.id AND a.restored_at IS NULL)
-      AND NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.records->'localPreviewDocumentIds' ? i.id::text
-        OR a.records->'localPreviewDocumentIds' ? o.id::text)
-    GROUP BY i.id,l.item_key,l.unit,w.expected_delivery,board.site_id,board.snapshot
+      l.item_key,l.unit,l.quantity,to_char(o.expected_delivery,'YYYY-MM-DD') expected_date,
+      board.site_id board_id,board.reservation_plan board
+    FROM pending_issuances o JOIN internal_purchase_orders i ON i.id=o.ipo_id
+    JOIN item_demand l ON l.issuance_id=o.id
+    LEFT JOIN exact_board link ON link.id=o.id
+    LEFT JOIN current_board board ON board.site_id=link.site_id
+    WHERE coalesce(board.cancelled,'false')<>'true'
+      AND coalesce(board.stage,'received') NOT IN ('delivered','completed')
     ORDER BY i.number,l.item_key,l.unit`)).rows.filter(line =>
       !SERVICE_LINE.test(line.item_key) && line.unit.trim().toUpperCase() !== "LS",
     );

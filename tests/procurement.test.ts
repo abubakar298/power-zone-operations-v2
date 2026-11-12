@@ -10,6 +10,7 @@ import { readConfig } from "../server/config.js";
 import { createDashboardSamples } from "../server/coordinator/samples.js";
 import { OperationsRepository } from "../server/operations/repository.js";
 import { ProcurementRepository } from "../server/procurement/repository.js";
+import { procurementWarehouseStock } from "../server/procurement/warehouse-stock.js";
 import { OperationsBoardRepository } from "../server/operations-board/repository.js";
 import { commandSchema } from "../server/operations-board/schema.js";
 import { recordPtEntry } from "../server/accounts/pt-entries.js";
@@ -382,6 +383,39 @@ test("Warehouse stock uses the Inventory ledger and creates one retry-safe multi
     assert.equal(findReservation(snapshot).quantity, "3", "A posted parent DO line linked to a single IPO reduces only that reservation.");
     assert.equal(findReservation(snapshot).sharedDispatchPending, true, "An unsplit shared line requires allocation review.");
     assert.equal(snapshot.rows.find(item => item.itemId === acBreakerId)!.afterReservations, "6");
+
+    // Exercise the real projection with a backlog of IPOs and versioned Operations records.
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`INSERT INTO customer_purchase_orders(id,customer_id,po_number,input,created_by)
+        SELECT gen_random_uuid(),p.customer_id,'PROC-LOAD-PO-'||n,'{}',$2
+        FROM internal_purchase_orders i JOIN customer_purchase_orders p ON p.id=i.customer_po_id
+        CROSS JOIN generate_series(1,1000) n WHERE i.id=$1`, [ipoId, fixture.owner]);
+      await client.query(`INSERT INTO internal_purchase_orders(id,customer_po_id,number,snapshot,fingerprint,request_key,created_by)
+        SELECT gen_random_uuid(),id,replace(po_number,'-PO-','-IPO-'),'{}','fixture',gen_random_uuid(),$1
+        FROM customer_purchase_orders WHERE po_number LIKE 'PROC-LOAD-PO-%'`, [fixture.owner]);
+      await client.query(`INSERT INTO operations_boq_issuances(id,ipo_id,boq_revision_id,number,snapshot,request_key,created_by)
+        SELECT gen_random_uuid(),i.id,o.boq_revision_id,i.number,'{}',gen_random_uuid(),$2
+        FROM internal_purchase_orders i JOIN operations_boq_issuances o ON o.id=$1
+        WHERE i.number LIKE 'PROC-LOAD-IPO-%'`, [issuance.id, fixture.owner]);
+      await client.query(`INSERT INTO operations_stock_demand(issuance_id,line_number,item_key,brand,quantity,unit)
+        SELECT id,1,$1,'',1,'piece' FROM operations_boq_issuances WHERE number LIKE 'PROC-LOAD-IPO-%'`, [acBreakerId]);
+      await client.query(`INSERT INTO operations_board_sites(id,created_by)
+        SELECT 'proc-load-'||ipo_id,$1 FROM operations_boq_issuances WHERE number LIKE 'PROC-LOAD-IPO-%'`, [fixture.owner]);
+      await client.query(`INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by)
+        SELECT 'proc-load-'||o.ipo_id,v,jsonb_build_object('stage','received','procurementWarehouse',$1::text,
+          'origin',jsonb_build_object('ipoId',o.ipo_id,'operationsIssuanceId',o.id)),
+          'Fixture history','Projection scale test',gen_random_uuid(),$2
+        FROM operations_boq_issuances o CROSS JOIN generate_series(1,5) v WHERE o.number LIKE 'PROC-LOAD-IPO-%'`,
+      [warehouse, fixture.owner]);
+      await client.query("SET LOCAL statement_timeout='5s'");
+      const backlog = await procurementWarehouseStock(client);
+      assert.equal(backlog.reservations.filter(line => line.ipoNumber.startsWith("PROC-LOAD-IPO-") && line.warehouse === warehouse).length, 1000);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
   } finally {
     await db.close();
   }
