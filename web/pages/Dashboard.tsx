@@ -360,8 +360,9 @@ export function Dashboard({
       if(destination==='operations'&&area==='procurement'&&principalSession.user.role!=='IT Support'){
         await api('/auth/department-view',{csrf:principalSession.csrfToken,body:{userId:null}});
         clearDepartmentUser();setDepartmentUser(undefined);
-        sessionStorage.setItem('pz:management-procurement',principalSession.user.id);setManagementProcurement(true);
-        history.replaceState(null,'','/dashboard#workspace=dashboard');return true;
+        sessionStorage.setItem('pz:management-procurement',principalSession.user.id);
+        history.replaceState(null,'','/dashboard#workspace=warehouse-stock');
+        setManagementProcurement(true);return true;
       }
       sessionStorage.removeItem('pz:management-procurement');setManagementProcurement(false);
       if(destination==='inventory'&&principalSession.user.role!=='IT Support'){clearDepartmentUser();window.location.assign('/inventory');return true;}
@@ -499,7 +500,7 @@ export function Dashboard({
     const check = () => void api<{ approver: boolean }>("/procurement/me")
       .then(async (m) => {
         if (!m.approver) { if (live) setApprovals({ approver: false, waiting: 0 }); return; }
-        const r = await api<{ requests: { status: string }[] }>("/procurement/requests");
+        const r = await api<{ requests: { status: string }[] }>("/procurement/requests?workflow=warehouse");
         if (live) setApprovals({ approver: true, waiting: r.requests.filter((x) => x.status === "pending_approval").length });
       })
       .catch(() => { if (live) setApprovals({ approver: false, waiting: 0 }); });

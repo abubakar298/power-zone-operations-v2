@@ -33,31 +33,20 @@ const EVENT_TEXT: Record<string, string> = {
  * Purchase requests: the buyer raises them with quotations; Abu Bakar approves; the buyer orders; Store receives.
  * `mode="approver"` is Abu Bakar's view: it opens on the requests waiting for him and shows the decision buttons.
  */
-export function PurchaseRequests({ session, mode, openId, onOpened, onChanged }: {
-  session: Session; mode: "buyer" | "approver" | "reader"; openId?: string; onOpened?: () => void; onChanged?: () => void;
+export function PurchaseRequests({ session, mode, openId, onNewRequest, onChanged }: {
+  session: Session; mode: "buyer" | "approver" | "reader"; openId?: string; onNewRequest?: () => void; onChanged?: () => void;
 }) {
   const [rows, setRows] = useState<RequestRow[] | null>(null);
   const [tab, setTab] = usePageChoice("requestTab", null, mode === "approver" ? "pending" : "all");
   const [selected, setSelected] = useState<string | undefined>(openId);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-
   const load = useCallback(async () => {
-    try { setRows((await api<{ requests: RequestRow[] }>("/procurement/requests")).requests); setError(""); }
+    try { setRows((await api<{ requests: RequestRow[] }>("/procurement/requests?workflow=warehouse")).requests); setError(""); }
     catch (e) { setError(e instanceof ApiError ? e.message : "Unable to load purchase requests."); }
   }, []);
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => { if (openId) { setSelected(openId); onOpened?.(); } }, [openId, onOpened]);
+  useEffect(() => setSelected(openId), [openId]);
 
-  const create = async (path: string, body: unknown) => {
-    setBusy(true);
-    try {
-      const r = await api<RequestDetail>(path, { body, csrf: session.csrfToken });
-      setNewTitle(""); setSelected(r.id); onChanged?.(); setError("");
-    } catch (e) { setError(e instanceof ApiError ? e.message : "The request was not created."); }
-    finally { setBusy(false); }
-  };
   const counts = useMemo(() => new Map(TABS.map((t) => [t.key, (rows ?? []).filter((r) => t.match(r.status)).length])), [rows]);
   const visible = useMemo(() => (rows ?? []).filter((r) => TABS.find((t) => t.key === tab)!.match(r.status)), [rows, tab]);
 
@@ -65,19 +54,9 @@ export function PurchaseRequests({ session, mode, openId, onOpened, onChanged }:
   return (
     <div className="pr">
       {error && <p className="ops-feedback" role="alert">{error}</p>}
-      <div className="ops-banner">
-        <svg className="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5v5M12 16v.01" /></svg>
-        Draft → Quotations in → Sent to Abu Bakar → Approved by Abu Bakar (the only approver) → Ordered by Hamza → Received into Store. Items use rate master IDs; the last approved purchase becomes the item's last buying rate.
-      </div>
-      {mode === "buyer" && (
-        <div className="ops-card pr-new">
-          <Field id="pr-new-title" label="New request">
-            <input id="pr-new-title" placeholder="Title, for example: Cables for Skardu" value={newTitle} maxLength={200} onChange={(e) => setNewTitle(e.target.value)} />
-          </Field>
-          <Button variant="neutral" loading={busy} disabled={!newTitle.trim()} onClick={() => void create("/procurement/requests", { title: newTitle.trim() })}>Create empty request</Button>
-          <Button variant="primary" loading={busy} onClick={() => void create("/procurement/requests/from-to-buy", {})}>Make a request from "To buy"</Button>
-        </div>
-      )}
+      {mode === "buyer" && onNewRequest && <div className="pz-action-row">
+        <Button variant="primary" onClick={onNewRequest}>Select items for a new request</Button>
+      </div>}
       <section className="ops-card">
         <div className="ops-tabs" role="tablist" aria-label="Status">
           {TABS.map((t) => <button type="button" key={t.key} aria-pressed={tab === t.key} onClick={() => setTab(t.key)}>{t.label} <span className="n">{counts.get(t.key) ?? 0}</span></button>)}
