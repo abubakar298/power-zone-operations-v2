@@ -1,3 +1,4 @@
+import {TemporaryInwardPosting,type InwardPosting} from './TemporaryInwardPosting.js';
 import {ListPagination,paginateRows,useListPage} from '../ui/ListPagination.js';
 import {useUnsavedChanges,confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 import React,{useEffect,useMemo,useState,useRef}from'react';
@@ -10,7 +11,7 @@ import {TemporaryDocumentSheet} from './TemporaryDocumentSheet.js';
 
 type TemporaryType='IGP'|'OGP'|'TRF'|'IRR'|'OTHER';
 type TemporaryLine={itemId:string;description:string;quantity:string;unit:string;remarks:string};
-type TemporaryDocument={version?:number;id:string;number:string;type:TemporaryType;createdAt:string;date:string;warehouse:string;party:string;sourceReference:string;actualReference:string;notes:string;lines:TemporaryLine[];detailsConfirmed:boolean};
+type TemporaryDocument={version?:number;id:string;number:string;type:TemporaryType;createdAt:string;date:string;warehouse:string;party:string;sourceReference:string;actualReference:string;notes:string;lines:TemporaryLine[];detailsConfirmed:boolean;stockPosting?:InwardPosting};
 const types:{id:TemporaryType;label:string;title:string}[]=[
  {id:'IGP',label:'IGP · Purchase inward',title:'Inwards Gate Pass'},
  {id:'OGP',label:'OGP · Material issue / site delivery',title:'Outwards Gate Pass'},
@@ -31,10 +32,10 @@ export function TemporaryDocuments({initialCreate=false,session}:{initialCreate?
  const [locations,setLocations]=useState<string[]>([]),[stockItems,setStockItems]=useState<{id:string;description:string;unit:string}[]>([]),[busy,setBusy]=useState(false);const request=useRef<{signature:string;key:string}|null>(null);
  useEffect(()=>{void api<{documents:TemporaryDocument[];warehouses:string[];items:typeof stockItems}>('/material-dispatches/temporary-documents').then(data=>{setDocuments(data.documents);setLocations(data.warehouses);setStockItems(data.items);}).catch(e=>setNotice(e.message));},[]);
  useEffect(()=>{window.scrollTo(0,0);},[Boolean(draft),Boolean(printing)]);
- const pending=useMemo(()=>documents.filter(d=>!d.detailsConfirmed),[documents]);
+ const pending=useMemo(()=>documents.filter(d=>!d.detailsConfirmed&&!d.stockPosting),[documents]);
  const [search,setSearch]=useState(''),[status,setStatus]=useState('all');
  const [page,setPage]=useListPage(search+'|'+status);
- const filtered=documents.filter(d=>(status==='all'||(status==='pending'?!d.detailsConfirmed:d.detailsConfirmed))&&[d.number,d.party,d.warehouse,d.sourceReference,d.actualReference,d.type].join(' ').toLowerCase().includes(search.toLowerCase()));
+ const filtered=documents.filter(d=>(status==='all'||(status==='pending'?!d.detailsConfirmed&&!d.stockPosting:d.detailsConfirmed||!!d.stockPosting))&&[d.number,d.party,d.warehouse,d.sourceReference,d.actualReference,d.type].join(' ').toLowerCase().includes(search.toLowerCase()));
  const pagination=paginateRows(filtered,page),visible=pagination.rows;
 
  const startNew=()=>{setPrinting(null);setNotice('');setDraft(emptyDraft());};
@@ -58,7 +59,13 @@ export function TemporaryDocuments({initialCreate=false,session}:{initialCreate?
   </div>}
   <div className="temporary-documents-bucket"><div className="temporary-bucket-heading"><div><h3>Saved temporary documents</h3><p>Find, edit and print all saved temporary documents.</p></div><StatusBadge tone={pending.length?'warning':'success'}>{pending.length} pending</StatusBadge></div>
    <div className="pz-form-grid"><Field id="temporary-search" label="Search temporary documents"><input id="temporary-search" type="search" value={search} onChange={e=>setSearch(e.target.value)}/></Field><Field id="temporary-status" label="Status"><select id="temporary-status" value={status} onChange={e=>setStatus(e.target.value)}><option value="all">All documents</option><option value="pending">Needs actual details</option><option value="confirmed">Details confirmed</option></select></Field></div>
-   {!visible.length?<p className="temporary-documents-empty">No temporary documents match this search.</p>:<div className="temporary-documents-list">{visible.map(doc=><article className="temporary-document-row" key={doc.id}><div><strong>{doc.number}</strong><span>{titleOf(doc.type)} · {doc.party||'Party/site not entered'} · {doc.warehouse} · {doc.date}</span><small>{doc.detailsConfirmed?'Actual details confirmed':'Needs actual details'}</small></div><div className="temporary-document-row-actions"><Button variant="neutral" onClick={()=>edit(doc)}>Edit document</Button><Button variant="secondary" onClick={()=>setPrinting(doc)}>Print</Button></div></article>)}</div>}
+   {!visible.length?<p className="temporary-documents-empty">No temporary documents match this search.</p>:<div className="temporary-documents-list">{visible.map(doc=><article className="temporary-document-row" key={doc.id}><div><strong>{doc.number}</strong><span>{titleOf(doc.type)} · {doc.party||'Party/site not entered'} · {doc.warehouse} · {doc.date}</span><small>{doc.stockPosting?'Stock posted':doc.detailsConfirmed?'Actual details confirmed':'Needs actual details'}</small></div><div className="temporary-document-row-actions">{!doc.stockPosting&&<Button variant="neutral" onClick={()=>edit(doc)}>Edit document</Button>}
+    {doc.type==='IGP'&&!doc.stockPosting&&!doc.detailsConfirmed&&!draft&&
+      <TemporaryInwardPosting id={doc.id} number={doc.number} warehouse={doc.warehouse} date={doc.date} session={session}
+        onPosted={stockPosting=>{
+          setDocuments(current=>current.map(saved=>saved.id===doc.id?{...saved,stockPosting}:saved));
+          setNotice(`${stockPosting.number} posted to ${stockPosting.warehouse}.`);
+        }}/>}<Button variant="secondary" onClick={()=>setPrinting(doc)}>Print</Button></div></article>)}</div>}
    <ListPagination pagination={pagination} onPageChange={setPage} label="temporary documents"/>
   </div>
  </section>;
