@@ -77,7 +77,7 @@ export class OperationsIncidentProjector{
    if(currentBlockers.length!==open.length)reasons.push('Open blocker belongs to another stage occurrence; review its disposition.');
    const blockers=currentBlockers.filter(b=>{const raised=operationsNotificationStart({recordedAt:b.raisedAt});return raised&&raised.at>=new Date(policy.activated_at).getTime()&&raised.at<=parsedNow.at;});
    if(currentBlockers.length!==blockers.length)reasons.push('Pre-activation or undated blockers are held from email; local alerts remain.');
-   const input:OperationsNotificationInput={siteId:row.site_id,stageKey:current.key,occurrenceKey,now:clock,start:current.start,target:current.key==='documents'?null:target?.values?.[current.key],completed:siteBucket(site)==='completed',documentsSubmittedToAccounts:submitted(site),recipients:{assigned:qc?.user_id,lead:lead?.user_id,management:owner?.user_id},openBlockerIds:blockers.map(b=>b.id)};
+   const input:OperationsNotificationInput={siteId:row.site_id,stageKey:current.key,occurrenceKey,now:clock,start:current.start,target:current.key==='documents'?null:target?.values?.[current.key],completed:siteBucket(site)==='completed'||site.cancelled===true,documentsSubmittedToAccounts:submitted(site)||site.cancelled===true,recipients:{assigned:qc?.user_id,lead:lead?.user_id,management:owner?.user_id},openBlockerIds:blockers.map(b=>b.id)};
    const decision=operationsNotificationPolicy(input);
    if(current.key==='documents'&&!decision.suppressed)reasons.push('Physical-document deadlines require their document-specific occurrence mapping.');
    if(site.planningBatches?.length)reasons.push('Batch-slot email deadlines require their separate occurrence mapping.');

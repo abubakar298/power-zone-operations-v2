@@ -35,6 +35,15 @@ test('each partial delivery is its own DO; a later DO never changes an earlier o
   const first=await plans.issueSaved(f.reviewer,saved.id,{version:saved.version,requestKey:randomUUID(),partialDelivery:true,note:'First partial delivery'},stock);
   const firstBefore=await issuedDo(first.id);
   assert.deepEqual(firstBefore.lines,[['CH-BAT-HV-05 KW','1'],['CH-CBL-AC-16MM/4C-PK','2']]);
+  const gatePending=(await db.pool.query("SELECT 1 FROM inventory_signed_dispatch_pending WHERE document_kind='dispatch' AND document_id=$1",[first.id])).rowCount;
+  assert.equal(gatePending,1);
+  const otherDispatcher=randomUUID();
+  await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,'Other dispatcher','Inventory','isolated')",[otherDispatcher,otherDispatcher+'@saved-issue.example.test']);
+  await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,'Karachi warehouse','dispatcher',$2)",[otherDispatcher,f.owner]);
+  const upcoming=await drafts.intake(f.reviewer);
+  assert.equal(upcoming.continuingProjects.find(s=>s.siteId===source.ipoId)?.planId,saved.id);
+  assert.equal((await drafts.intake(otherDispatcher)).continuingProjects.some(s=>s.siteId===source.ipoId),false);
+
   // Two days later (first DO still unsigned): the remaining fixed item goes out.
   const current=await plans.detail(f.reviewer,saved.id),site=current.fixed.snapshot.sites[0];
   const more=(lines:any[],add:Record<string,string>)=>lines.map((r:any)=>add[r.itemId]?{...r,out:String(Number(r.out||0)+Number(add[r.itemId]))}:r);
@@ -57,6 +66,7 @@ test('each partial delivery is its own DO; a later DO never changes an earlier o
   const additionalRecord=await stock.dispatch(f.reviewer,additional.id),additionalDo=await issuedDo(additional.id);
   assert.deepEqual(additionalDo.lines,[['CH-CBL-AC-16MM/4C-PK','3']],'The Additional DO holds only the extra material.');
   assert.equal(additionalRecord.snapshot.additional,true);
+
   assert.match(issuedDispatchPrintModel(additionalRecord).title,/Additional/);
   assert.doesNotMatch(issuedDispatchPrintModel(await stock.dispatch(f.reviewer,second.id)).title,/Additional/);
   assert.deepEqual(await issuedDo(first.id),firstBefore);assert.deepEqual(await issuedDo(second.id),secondDo);
