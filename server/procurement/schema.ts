@@ -101,6 +101,8 @@ export const rfqSchema = z
 export const importQuotesSchema = z
   .object({
     vendor: z.string().trim().min(1, "Enter the vendor.").max(200),
+    expectedOn: isoDate.nullable().optional(),
+    vendorTerms: z.string().trim().max(500).optional(),
     lines: z.array(z.object({ lineId: z.uuid(), rate: amount, note: z.string().trim().max(500).default("") }).strict()).min(1, "Enter at least one rate.").max(150),
   })
   .strict();

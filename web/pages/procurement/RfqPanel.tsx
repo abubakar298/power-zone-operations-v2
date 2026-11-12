@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { Button } from "../../ui/Button.js";
+import { FileUpload } from "../../ui/FileUpload.js";
+import { Field } from "../../ui/Field.js";
+import { money } from "../../numbers.js";
 import "./procurement.css";
 import type { Supplier } from "./Suppliers.js";
 import { readRfqReply } from "./rfq-reader.js";
@@ -27,6 +30,8 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
   const [dueOn, setDueOn] = useState("");
   const [terms, setTerms] = useState("");
   const [vendor, setVendor] = useState("");
+  const [expectedOn, setExpectedOn] = useState("");
+  const [vendorTerms, setVendorTerms] = useState("");
   const [rates, setRates] = useState<Record<string, { rate: string; note: string }>>({});
   const [read, setRead] = useState("");
 
@@ -44,6 +49,7 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
   const quotedBy = (name: string) => d.lines.filter((l) => l.quotes.some((q) => q.vendor.trim().toLowerCase() === name.trim().toLowerCase())).length;
   const edit = d.can.edit;
   const anyQuotes = d.lines.some((l) => l.quotes.length > 0);
+  const comparedVendors = [...new Map(d.lines.flatMap(line => line.quotes.map(quote => [quote.vendor.toLowerCase(), quote.vendor] as const))).values()];
 
   const make = async () => {
     setBusy(true);
@@ -62,6 +68,9 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
   };
   const pickVendor = (name: string) => {
     setVendor(name); setRead("");
+    const saved = d.lines.flatMap(line => line.quotes).find(quote => quote.vendor.toLowerCase() === name.toLowerCase());
+    setExpectedOn(saved?.expectedOn ?? "");
+    setVendorTerms(saved?.vendorTerms ?? "");
     const next: Record<string, { rate: string; note: string }> = {};
     for (const l of d.lines) {
       const q = l.quotes.find((x) => x.vendor.trim().toLowerCase() === name.trim().toLowerCase());
@@ -91,8 +100,8 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
       const r = rates[l.id];
       return r && r.rate.trim() ? [{ lineId: l.id, rate: r.rate.trim().replace(/,/g, ""), note: r.note.trim() }] : [];
     });
-    if (await post("/quotes/import", { vendor: vendor.trim(), lines }, `${vendor.trim()}: ${lines.length} rate${lines.length === 1 ? "" : "s"} saved. The lowest rate per item is chosen unless you picked another.`)) {
-      setVendor(""); setRates({}); setRead(""); void load();
+    if (await post("/quotes/import", { vendor: vendor.trim(), expectedOn: expectedOn || null, vendorTerms, lines }, `${vendor.trim()}: ${lines.length} rate${lines.length === 1 ? "" : "s"} saved.`)) {
+      pickVendor(""); void load();
     }
   };
 
@@ -150,11 +159,22 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
             <div className="pr-addrow">
               <input aria-label="Vendor for this quotation" list={`rfq-asked-${d.id}`} placeholder="Vendor" value={vendor} maxLength={200} onChange={(e) => setVendor(e.target.value)} onBlur={(e) => e.target.value.trim() && pickVendor(e.target.value.trim())} />
               <datalist id={`rfq-asked-${d.id}`}>{[...new Map([...asked, ...supplierNames].map((v) => [v.trim().toLowerCase(), v] as const)).values()].map((v) => <option key={v} value={v} />)}</datalist>
-              <label className="sw-link pr-upload">Read the vendor's filled Excel<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ""; }} /></label>
+              <Field id="procurement-filled-rfq" label="Upload a supplier’s filled RFQ">
+                <FileUpload id="procurement-filled-rfq" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={event => void upload(event.target.files?.[0])} onClear={() => pickVendor(vendor)} />
+              </Field>
             </div>
             {read && <p className="pr-muted" role="status">{read}</p>}
             {vendor.trim() && (
               <>
+                <div className="pz-form-grid">
+                  <Field id="procurement-quote-arrival" label="Expected delivery">
+                    <input id="procurement-quote-arrival" type="date" value={expectedOn} onChange={event => setExpectedOn(event.target.value)} />
+                  </Field>
+                  <Field id="procurement-quote-terms" label="Quote reference or terms">
+                    <input id="procurement-quote-terms" value={vendorTerms} maxLength={500} onChange={event => setVendorTerms(event.target.value)} />
+                  </Field>
+                </div>
                 <div className="pz-table-scroll">
                   <table className="ops-table">
                     <thead><tr><th>Item</th><th className="num">Qty</th><th className="num">Rate (PKR)</th><th>Brand, delivery, remarks</th></tr></thead>
@@ -173,16 +193,40 @@ export function RfqPanel({ session, d, post }: { session: Session; d: RequestDet
                 </div>
                 <div className="pr-actions">
                   <Button variant="primary" loading={busy} disabled={!d.lines.some((l) => (rates[l.id]?.rate ?? "").trim())} onClick={() => void save()}>Save {vendor.trim()}'s quotation</Button>
-                  <Button variant="neutral" onClick={() => { setVendor(""); setRates({}); setRead(""); }}>Cancel</Button>
+                  <Button variant="neutral" onClick={() => pickVendor("")}>Cancel</Button>
                 </div>
               </>
             )}
           </div>
         )}
 
-        {anyQuotes && (
-          <p className="pr-muted">Comparative statement, every vendor side by side: <a href={`/api/procurement/requests/${d.id}/comparison.pdf`} download>PDF</a> · <a href={`/api/procurement/requests/${d.id}/comparison.xlsx`} download>Excel</a></p>
-        )}
+        {anyQuotes && <section className="pz-panel pz-stack">
+          <div className="pz-action-row"><h3>Quote comparison · unit rates in PKR</h3>
+            <a href={`/api/procurement/requests/${d.id}/comparison.pdf`} download>PDF</a>
+            <a href={`/api/procurement/requests/${d.id}/comparison.xlsx`} download>Excel</a>
+          </div>
+          <div className="pz-table-scroll"><table className="ops-table">
+            <thead><tr><th>SR#</th><th>Item ID / description</th><th className="num">Qty</th><th className="num">Last buying rate</th>
+              <th className="num">Best rate</th>{comparedVendors.map(name => <th key={name}>{name}</th>)}<th>Selected supplier</th></tr></thead>
+            <tbody>{d.lines.map((line, index) => <tr key={line.id}>
+              <td>{index + 1}</td><td><strong>{line.itemKey}</strong><small>{line.name}</small></td>
+              <td className="num">{qty(line.quantity)} {line.unit}</td>
+              <td className="num">{line.lastRate ? money(line.lastRate.rate) : "—"}{line.lastRate && <small>{line.lastRate.source}{line.lastRate.comparable ? "" : " · different unit"}</small>}</td>
+              <td className="num">{line.best ? money(line.best.rate) : "—"}</td>
+              {comparedVendors.map(name => {
+                const quote = line.quotes.find(offer => offer.vendor.toLowerCase() === name.toLowerCase());
+                return <td key={name}>{quote ? <><strong>{money(quote.rate)}</strong>
+                  {quote.expectedOn && <small>{fmtDay(quote.expectedOn)}</small>}
+                  {quote.vendorTerms && <small>{quote.vendorTerms}</small>}</> : "—"}</td>;
+              })}
+              <td>{edit && line.quotes.length ? <select aria-label={`Supplier for ${line.itemKey}`} value={line.chosenQuoteId ?? ""}
+                onChange={event => void post(`/lines/${line.id}/choose`, { quoteId: event.target.value }, "Supplier choice saved.")}>
+                <option value="" disabled>Choose supplier</option>
+                {line.quotes.map(quote => <option key={quote.id} value={quote.id}>{quote.vendor} · {money(quote.rate)}</option>)}
+              </select> : line.chosen?.vendor ?? "—"}</td>
+            </tr>)}</tbody>
+          </table></div>
+        </section>}
       </div>
     </section>
   );

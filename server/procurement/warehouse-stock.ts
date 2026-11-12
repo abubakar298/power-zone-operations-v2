@@ -44,8 +44,12 @@ export async function procurementWarehouseStock(db: Db, includeReservations = tr
     const { warehouse, itemId, unit, description } = position.baseline;
     if (!sources.has(warehouse) || sources.get(warehouse) !== position.sourceSha256) return [];
     const item = catalogue.get(itemId);
-    const purchaseItem = item?.item_key && countsByPurchaseItem.get(item.item_key) === 1 && item.unit && sameUnit(unit, item.unit) && boughtByBuyer(item.item_key, item.name ?? "")
+    const buyerItem = boughtByBuyer(item?.item_key ?? itemId, item?.name ?? description);
+    const linkedPurchaseItem = item?.item_key && countsByPurchaseItem.get(item.item_key) === 1 && item.unit && sameUnit(unit, item.unit)
       ? { itemKey: item.item_key, unit: item.unit }
+      : null;
+    const purchaseItem = item && buyerItem
+      ? linkedPurchaseItem ?? { itemKey: itemId, unit }
       : null;
     return [{
       warehouse, itemId, unit, description,
@@ -54,6 +58,7 @@ export async function procurementWarehouseStock(db: Db, includeReservations = tr
       minimum: minimums.get(JSON.stringify([warehouse, itemId, unit])) ?? null,
       referenceOnly: !authority.has(warehouse),
       purchaseItem,
+      purchaseHold: purchaseItem ? null : buyerItem ? "Inventory item ID needs review" : "Handled outside Procurement",
     }];
   });
   const identities = new Map<string, { itemId: string; unit: string; purchaseKey: string | null }>();
@@ -72,13 +77,13 @@ export async function procurementWarehouseStock(db: Db, includeReservations = tr
       WHERE kind='receipt' AND request_id IS NOT NULL GROUP BY request_id,item_key
     )
     SELECT r.order_reference reference,r.number request_number,r.delivery_to warehouse,
-      l.item_key,l.unit,to_char(r.expected_on,'YYYY-MM-DD') expected,q.vendor supplier,
+      l.item_key,l.unit,to_char(coalesce(q.expected_on,r.expected_on),'YYYY-MM-DD') expected,q.vendor supplier,
       (l.quantity-coalesce(g.quantity,0))::text quantity
     FROM purchase_requests r JOIN purchase_request_lines l ON l.request_id=r.id
     LEFT JOIN purchase_quotes q ON q.id=l.chosen_quote_id
     LEFT JOIN receipts g ON g.request_id=l.request_id AND g.item_key=l.item_key
     WHERE r.status='ordered' AND l.quantity>coalesce(g.quantity,0)
-    ORDER BY r.expected_on NULLS LAST,r.number,l.item_key`)).rows : [];
+    ORDER BY coalesce(q.expected_on,r.expected_on) NULLS LAST,r.number,l.item_key`)).rows : [];
   const stockLink = (warehouse: string, itemId: string, unit: string) => {
     const matches = rows.filter(row => row.warehouse === warehouse && row.itemId === itemId && sameUnit(row.unit, unit));
     const exact = matches.filter(row => row.unit === unit);

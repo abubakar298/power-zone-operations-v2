@@ -33,17 +33,21 @@ const EVENT_TEXT: Record<string, string> = {
  * Purchase requests: the buyer raises them with quotations; Abu Bakar approves; the buyer orders; Store receives.
  * `mode="approver"` is Abu Bakar's view: it opens on the requests waiting for him and shows the decision buttons.
  */
-export function PurchaseRequests({ session, mode, openId, onNewRequest, onChanged }: {
-  session: Session; mode: "buyer" | "approver" | "reader"; openId?: string; onNewRequest?: () => void; onChanged?: () => void;
+export function PurchaseRequests({ session, mode, openId, onNewRequest, onChanged, inventoryOnly = false }: {
+  session: Session; mode: "buyer" | "approver" | "reader"; openId?: string; onNewRequest?: () => void; onChanged?: () => void; inventoryOnly?: boolean;
 }) {
   const [rows, setRows] = useState<RequestRow[] | null>(null);
   const [tab, setTab] = usePageChoice("requestTab", null, mode === "approver" ? "pending" : "all");
   const [selected, setSelected] = useState<string | undefined>(openId);
   const [error, setError] = useState("");
   const load = useCallback(async () => {
-    try { setRows((await api<{ requests: RequestRow[] }>("/procurement/requests?workflow=warehouse")).requests); setError(""); }
+    try {
+      const result = await api<{ requests: RequestRow[] }>("/procurement/requests?workflow=warehouse");
+      setRows(inventoryOnly ? result.requests.filter(row => row.status === "ordered" || row.status === "received") : result.requests);
+      setError("");
+    }
     catch (e) { setError(e instanceof ApiError ? e.message : "Unable to load purchase requests."); }
-  }, []);
+  }, [inventoryOnly]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => setSelected(openId), [openId]);
 
@@ -59,7 +63,7 @@ export function PurchaseRequests({ session, mode, openId, onNewRequest, onChange
       </div>}
       <section className="ops-card">
         <div className="ops-tabs" role="tablist" aria-label="Status">
-          {TABS.map((t) => <button type="button" key={t.key} aria-pressed={tab === t.key} onClick={() => setTab(t.key)}>{t.label} <span className="n">{counts.get(t.key) ?? 0}</span></button>)}
+          {TABS.filter(t => !inventoryOnly || ["all", "ordered", "received"].includes(t.key)).map((t) => <button type="button" key={t.key} aria-pressed={tab === t.key} onClick={() => setTab(t.key)}>{t.label} <span className="n">{counts.get(t.key) ?? 0}</span></button>)}
         </div>
         <div className="pz-table-scroll">
           <table className="ops-table">
@@ -328,6 +332,11 @@ export function RequestPage({ session, id, onBack, onChanged }: { session: Sessi
           </div>}
           {d.accountsHandoff?.sentAt && <p className="pr-muted">{d.accountsHandoff.forwardedAt ? "Sent to Inventory receiving"
             : d.accountsHandoff.acknowledgedAt ? "Acknowledged by Accounts" : "Awaiting acknowledgement in Accounts"}</p>}
+          {d.receipts && d.receipts.length > 0 && <div className="pz-stack">
+            <h4>Inventory receipts</h4>
+            {d.receipts.map(receipt => <p key={receipt.id}><strong>{receipt.number}</strong><br />
+              <small>{receipt.warehouse} · {fmtDay(receipt.recordedAt)}</small></p>)}
+          </div>}
           {d.can.order && (
             <>
               <p className="pr-muted">{d.selfApproved ? "Self-approved" : "Approved"} by {d.decidedBy} {fmtAt(d.decidedAt)}. Place the orders with the chosen vendors, then record the vendor order number(s).</p>

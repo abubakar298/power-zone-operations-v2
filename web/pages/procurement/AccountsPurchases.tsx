@@ -15,6 +15,7 @@ interface PurchaseHandoff {
   forwardedAt: string | null;
   ptReference: string | null;
   ptDate: string | null;
+  ptRecorded: boolean;
 }
 
 export function AccountsPurchases({ session }: { session: Session }) {
@@ -36,6 +37,7 @@ export function AccountsPurchases({ session }: { session: Session }) {
     return () => { active = false; };
   }, []);
   const purchase = rows?.find(row => row.id === selected);
+  const canProcess = session.user.role === "Accounts";
 
   async function run(action: "download" | "acknowledge" | "pt" | "forward") {
     if (!purchase || pending) return;
@@ -73,8 +75,8 @@ export function AccountsPurchases({ session }: { session: Session }) {
     <p>Receiving warehouse <strong>{purchase.warehouse}</strong></p>
     {purchase.acknowledgedAt
       ? <p>Acknowledged {fmtDay(purchase.acknowledgedAt)}</p>
-      : <div><Button variant="primary" loading={pending} onClick={() => void run("acknowledge")}>Acknowledge purchase</Button></div>}
-    {purchase.acknowledgedAt && !purchase.ptReference && <form className="pz-stack" onSubmit={(event: FormEvent) => { event.preventDefault(); void run("pt"); }}>
+      : canProcess ? <div><Button variant="primary" loading={pending} onClick={() => void run("acknowledge")}>Acknowledge purchase</Button></div> : <p>Awaiting acknowledgement from Accounts</p>}
+    {canProcess && purchase.acknowledgedAt && !purchase.ptRecorded && <form className="pz-stack" onSubmit={(event: FormEvent) => { event.preventDefault(); void run("pt"); }}>
       <div className="pz-form-grid">
         <Field id="supplier-purchase-pt-ref" label="PT reference (required)">
           <input id="supplier-purchase-pt-ref" value={reference} onChange={event => setReference(event.target.value)} maxLength={200} required />
@@ -85,8 +87,8 @@ export function AccountsPurchases({ session }: { session: Session }) {
       </div>
       <div><Button variant="primary" type="submit" loading={pending}>Save PT reference</Button></div>
     </form>}
-    {purchase.ptReference && <p>PT reference <strong>{purchase.ptReference}</strong> · {fmtDay(purchase.ptDate)}</p>}
-    {purchase.ptReference && !purchase.forwardedAt && <div>
+    {purchase.ptRecorded && <p>{purchase.ptReference ? <>PT reference <strong>{purchase.ptReference}</strong></> : "PT recorded"} · {fmtDay(purchase.ptDate)}</p>}
+    {canProcess && purchase.ptRecorded && !purchase.forwardedAt && <div>
       <Button variant="primary" loading={pending} onClick={() => void run("forward")}>Send to Inventory receiving</Button>
     </div>}
     {purchase.forwardedAt && <p>Sent to Inventory {fmtDay(purchase.forwardedAt)}</p>}
@@ -104,7 +106,7 @@ export function AccountsPurchases({ session }: { session: Session }) {
         <thead><tr><th>SR#</th><th>Request / description</th><th>Warehouse</th><th>Status</th><th>Action</th></tr></thead>
         <PagedTableBody label="approved purchases">{rows.map((row, i) => <tr key={row.id}>
           <td>{i + 1}</td><td><strong>{row.number}</strong><small>{row.title}</small></td>
-          <td>{row.warehouse}</td><td>{row.forwardedAt ? "Sent to Inventory" : row.ptReference ? "PT recorded" : row.acknowledgedAt ? "Awaiting PT" : "Awaiting acknowledgement"}</td>
+          <td>{row.warehouse}</td><td>{row.forwardedAt ? "Sent to Inventory" : row.ptRecorded ? "PT recorded" : row.acknowledgedAt ? "Awaiting PT" : "Awaiting acknowledgement"}</td>
           <td><Button variant="secondary" onClick={() => { setSelected(row.id); setReference(""); setEntryDate(""); }}>Open purchase</Button></td>
         </tr>)}</PagedTableBody>
       </table>

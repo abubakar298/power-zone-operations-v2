@@ -57,8 +57,8 @@ test('Accounts reviews delivered/completed documents and persists PT invoice ref
  await page.getByRole('button',{name:'View as',exact:true}).click();await page.getByRole('navigation',{name:'View department workspace'}).getByRole('button',{name:'Management',exact:true}).click();
  await page.getByRole('button',{name:'View as',exact:true}).click();await page.getByRole('navigation',{name:'View department workspace'}).getByRole('button',{name:'Procurement',exact:true}).click();
  await expect(page.getByRole('button',{name:'Power Zone — Dashboard',exact:true})).toContainText('Procurement');
- await expect(page.getByRole('heading',{name:'Warehouse stock',exact:true})).toBeVisible();
- await expect(page.getByRole('navigation',{name:'Main',exact:true}).getByRole('button',{name:/^POs received/})).toHaveCount(0);
+ await expect(page.getByRole('heading',{name:'Stock overview',exact:true})).toBeVisible();
+ await expect(page.getByRole('navigation',{name:'Procurement workspace',exact:true}).getByRole('button',{name:/^POs received/})).toHaveCount(0);
  await page.reload();await expect(page.getByRole('button',{name:'Power Zone — Dashboard',exact:true})).toContainText('Procurement');
  expect((await(await page.request.get('/api/auth/session')).json()).user.role).toBe('Management');
  await page.getByRole('button',{name:'View as',exact:true}).click();await page.getByRole('navigation',{name:'View department workspace'}).getByRole('button',{name:'Management',exact:true}).click();await expect(page.getByRole('button',{name:'View as',exact:true})).toBeVisible();

@@ -59,7 +59,10 @@ export async function rateMaster(c: Db, keys: string[]) {
       (SELECT rate FROM rate_versions v WHERE v.key=m.key AND v.status='Active' ORDER BY version DESC LIMIT 1) AS rate,
       (SELECT to_char(created_at,'YYYY-MM-DD') FROM rate_versions v WHERE v.key=m.key AND v.status='Active' ORDER BY version DESC LIMIT 1) AS since
      FROM item_master m WHERE m.key = ANY($1)
-     UNION ALL SELECT x.key, x.name, x.unit, NULL, NULL FROM misc_items x WHERE x.key = ANY($1)`,
+     UNION ALL SELECT x.key, x.name, x.unit, NULL, NULL FROM misc_items x WHERE x.key = ANY($1)
+     UNION ALL SELECT f.item_id,f.description,f.units->>0,NULL,NULL FROM inventory_final_stock_ids f
+     WHERE f.item_id=ANY($1) AND NOT EXISTS (SELECT 1 FROM item_master m WHERE m.key=f.item_id)
+       AND NOT EXISTS (SELECT 1 FROM misc_items x WHERE x.key=f.item_id)`,
     [keys],
   )).rows;
   return new Map(rows.map((r) => [r.key as string, { name: (r.display_name || r.key) as string, unit: r.unit as string, rate: r.rate == null ? null : num(r.rate), since: r.since as string | null }]));

@@ -82,12 +82,12 @@ test('Management: Master data tabs, Operations board, Procurement and Inventory 
  await notReloaded(page);
  // Procurement pages and tabs.
  await viewAs('Procurement');await expect(page.getByRole('button',{name:'Power Zone — Dashboard',exact:true})).toContainText('Procurement');await mark(page);
- await page.getByRole('button',{name:'Purchase requests',exact:true}).click();await expect(page.getByRole('heading',{name:'Purchase requests',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Requests & RFQs',exact:true}).click();await expect(page.getByRole('heading',{name:'Requests & RFQs',exact:true})).toBeVisible();
  await page.getByRole('button',{name:/^Draft/}).click();await pressed(page,/^Draft/);
  await page.getByRole('button',{name:/^Approved/}).click();await pressed(page,/^Approved/);
  await back(page);await pressed(page,/^Draft/);
  await back(page);await pressed(page,/^All/);
- await back(page);await expect(page.getByRole('heading',{name:'Warehouse stock',exact:true})).toBeVisible();
+ await back(page);await expect(page.getByRole('heading',{name:'Stock overview',exact:true})).toBeVisible();
  await notReloaded(page);
  // Inventory dashboard buckets and Documents Upload buckets.
  await page.goto('/inventory');await expect(page.getByRole('button',{name:/Upcoming Projects/})).toBeVisible();await mark(page);
