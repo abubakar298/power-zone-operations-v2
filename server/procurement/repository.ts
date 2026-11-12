@@ -115,7 +115,10 @@ export class ProcurementRepository {
     if (!me.buyer && !["Admin", "Management"].includes(me.role)) {
       throw new HttpError(403, "Warehouse stock is available to Procurement buyers and Management.");
     }
-    return procurementWarehouseStock(this.pool);
+    return transaction(this.pool, async c => {
+      await c.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      return procurementWarehouseStock(c);
+    });
   }
 
   /**
