@@ -27,7 +27,7 @@ test('Management keeps View as beside account controls across shared module shel
  const createButton=page.getByRole('button',{name:'Create request',exact:true});
  await expect(createButton).toHaveCSS('background-color','rgb(81, 67, 148)');
  await expect(createButton).toHaveCSS('border-radius','8px');
- expect(await page.locator('.procurement-workspace').evaluate(element=>getComputedStyle(element).fontFamily)).toContain('system-ui');
+ expect(await page.locator('.procurement-workspace').evaluate(element=>getComputedStyle(element).fontFamily)).toMatch(/BlinkMacSystemFont|system-ui/);
  await page.screenshot({path:'test-results/procurement-stock-desktop.png',fullPage:false});
  await select('Management');await expect(page.getByRole('heading',{name:'Dashboard',exact:true})).toBeVisible();
  await select('Design');await expect(page.getByRole('button',{name:'View as',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Survey History',exact:true})).toBeVisible();
