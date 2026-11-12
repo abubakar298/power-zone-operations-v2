@@ -27,7 +27,15 @@ export async function receivedIpoReservations(db: Db, stock: StockIdentity[]) {
     ), latest_board AS MATERIALIZED (
       SELECT DISTINCT ON (site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC
     ), current_board AS MATERIALIZED (
-      SELECT site_id,snapshot,snapshot#>>'{origin,ipoId}' ipo_id,
+      SELECT site_id,snapshot#>>'{origin,ipoId}' ipo_id,
+        snapshot->>'stage' stage,snapshot->>'cancelled' cancelled,
+        jsonb_build_object(
+          'procurementWarehouse',snapshot->'procurementWarehouse',
+          'installation',snapshot->'installation',
+          'installationPlanDate',snapshot->'installationPlanDate',
+          'dispatchDate',snapshot->'dispatchDate',
+          'planningBatches',snapshot->'planningBatches'
+        ) reservation_plan,
         snapshot#>>'{origin,operationsIssuanceId}' issuance_id
       FROM latest_board WHERE (snapshot->>'superseded') IS DISTINCT FROM 'true'
     ), board_links AS (
@@ -46,13 +54,13 @@ export async function receivedIpoReservations(db: Db, stock: StockIdentity[]) {
     )
     SELECT i.id ipo_id,i.number,i.snapshot->>'siteName' site,i.snapshot#>>'{customer,name}' customer,
       l.item_key,l.unit,l.quantity,to_char(o.expected_delivery,'YYYY-MM-DD') expected_date,
-      board.site_id board_id,board.snapshot board
+      board.site_id board_id,board.reservation_plan board
     FROM pending_issuances o JOIN internal_purchase_orders i ON i.id=o.ipo_id
     JOIN item_demand l ON l.issuance_id=o.id
     LEFT JOIN exact_board link ON link.id=o.id
     LEFT JOIN current_board board ON board.site_id=link.site_id
-    WHERE coalesce(board.snapshot->>'cancelled','false')<>'true'
-      AND coalesce(board.snapshot->>'stage','received') NOT IN ('delivered','completed')
+    WHERE coalesce(board.cancelled,'false')<>'true'
+      AND coalesce(board.stage,'received') NOT IN ('delivered','completed')
     ORDER BY i.number,l.item_key,l.unit`)).rows.filter(line =>
       !SERVICE_LINE.test(line.item_key) && line.unit.trim().toUpperCase() !== "LS",
     );
