@@ -159,6 +159,20 @@ export async function invoiceRegister(pool:Pool,actor:string){
  const shownQueues=(queues:Record<string,any[]>)=>Object.fromEntries(Object.entries(queues).map(([k,v])=>[k,shown(v)]));
  return relabelRegister({canRecord:['Admin','Accounts'].includes(role),submissions,submissionQueues:{...(extraCable.length?{extraCable}:{}),deliveryOnly:submissionRows.filter(r=>r.billingStage==='delivery-only'),delivery:submissionRows.filter(r=>r.billingStage==='delivery'),completion:submissionRows.filter(r=>r.billingStage==='completion')},queues:{delivery:rows.filter(r=>r.milestone==='delivery'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='delivery')),completion:rows.filter(r=>r.milestone==='completion'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='completion'))},entries:[...entries,...imported.filter(i=>!entries.some(e=>(e.site_key===i.snapshot.key||e.site_key===i.site_key)&&e.milestone===i.milestone))],importedCount:imported.length},shown,shownQueues);
 }
+/** Awaiting payment lists invoices, not sites. Find the site milestone behind one
+ * portal-submitted invoice so Accounts can add an extra invoice for that site through
+ * the same panel and recordInvoiceEntry checks as Invoices to Submit. Read-only. */
+export async function invoiceSiteForSubmission(pool:Pool,actor:string,submissionId:string){
+ await new AccountsRepository(pool).access(actor);
+ const event=(await invoiceSubmissions(pool)).find(s=>s.id===submissionId);
+ if(!event)throw new HttpError(404,'Submitted invoice not found.');
+ const {rows}=await candidates(pool),entries=(await pool.query('SELECT *,entry_date::text AS entry_date,amount::text AS amount FROM accounts_invoice_entries ORDER BY created_at DESC')).rows;
+ const submissions=await invoiceSubmissions(pool),updates=await latestInvoiceUpdates(pool);
+ // Only sites recordInvoiceEntry would accept (its candidate rows); held ones are refused there too.
+ const site=invoiceSubmissionRows(rows,[],entries,submissions,updates).find(r=>!r.recordingHeld&&r.sourceKind===event.source_kind&&r.key===event.site_key&&r.milestone===event.milestone);
+ if(!site)throw new HttpError(409,'An extra invoice cannot be added for this site here. Its invoices come from the reviewed Accounts register.');
+ return withAccountsIpo(site);
+}
 /** Display-only reference corrections on the register's screen rows and saved-entry labels. */
 function relabelRegister<T extends {submissionQueues:Record<string,any[]>;queues:Record<string,any[]>;entries:any[]}>(register:T,shown:(rows:any[])=>any[],shownQueues:(q:Record<string,any[]>)=>Record<string,any[]>):T{
  return {...register,submissionQueues:shownQueues(register.submissionQueues),queues:shownQueues(register.queues),entries:register.entries.map((e:any)=>({...e,snapshot:withAccountsIpo(e.snapshot??{})}))};

@@ -1,0 +1,23 @@
+import {test,expect} from '@playwright/test';
+import {actors,login} from './release-fixtures.js';
+test('Awaiting payment opens the site behind a submitted invoice and adds an extra invoice through the same panel',async({page})=>{
+ await actors(page.request);await login(page.request,'accounts-release@example.test');
+ const submissionId='6f1d2b9e-6a8f-4c35-9a3e-0b6c2d9f1a11';
+ const paid={id:'submission:'+submissionId,submissionId,invoice:'INV-AX-1',site:'Awaiting extra site',customer:'United Bank Limited',ipo:'IPO-AX',category:'System · completion',amount:'500000.00',pending:'300000.00',submission:'Submitted',date:'2026-10-22',receiptConfirmed:false};
+ const register={id:'register-row',invoice:'INV-OLD',site:'Register-only site',customer:'United Bank Limited',ipo:'IPO-OLD',category:'System',amount:'100.00',pending:'100.00',submission:'Submitted',date:'2026-10-01',receiptConfirmed:false};
+ await page.route('**/api/accounts-workspace/payment-records',route=>route.fulfill({json:{sourceVersion:1,canRecord:true,pending:[],awaiting:[paid,register],invoices:[paid,register],internet:[],entries:[],receipts:[]}}));
+ const site={sourceKind:'Operations',key:'ax-site',sourceVersion:3,milestone:'completion',billingStage:'completion',site:'Awaiting extra site',ipo:'IPO-AX',invoiceCreated:true,invoices:[{key:'entry:one',entryId:'one',reference:'INV-AX-1',stage:'balance-completion',amount:'500000.00',entryDate:'2026-10-20',submittedOn:'2026-10-22'}]};
+ await page.route(`**/api/accounts-workspace/invoice-submissions/${submissionId}/site`,route=>route.fulfill({json:site}));
+ let body:any;await page.route('**/api/accounts-workspace/invoice-entries',route=>{if(route.request().method()!=='POST')return route.fallback();body=route.request().postDataJSON();return route.fulfill({status:201,json:{id:'two'}});});
+ await page.goto('/dashboard#workspace=finance&accountsTab=Payments+to+Record');
+ const list=page.getByRole('table').first();
+ await expect(list.locator('tbody tr',{hasText:'INV-OLD'}).getByRole('button',{name:'Add extra invoice'})).toHaveCount(0);
+ await list.locator('tbody tr',{hasText:'INV-AX-1'}).getByRole('button',{name:'Add extra invoice'}).click();
+ const dialog=page.getByRole('dialog',{name:'Awaiting extra site'});
+ await expect(dialog).toContainText('INV-AX-1');await dialog.getByRole('button',{name:'Add another invoice'}).click();
+ await dialog.getByLabel('PT invoice number').fill('INV-AX-2');await dialog.getByLabel('Invoice amount · PKR').fill('75000');
+ await dialog.getByRole('button',{name:'Save invoice'}).click();
+ await expect(page.getByRole('status').filter({hasText:'Invoice INV-AX-2 recorded'})).toBeVisible();
+ expect(body).toMatchObject({sourceKind:'Operations',siteKey:'ax-site',sourceVersion:3,milestone:'completion',ptReference:'INV-AX-2',amount:'75000',invoiceStage:'balance-completion'});
+ expect(body.requestKey).toMatch(/^[0-9a-f-]{36}$/);
+});
