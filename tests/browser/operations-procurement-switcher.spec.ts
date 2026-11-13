@@ -11,7 +11,7 @@ test('Moaz switches between Operations and Procurement and can raise requests', 
   const pool = new pg.Pool({ connectionString: fixture.databaseUrl });
   const email = 'moaz@powerzone.com.pk';
   try {
-    await pool.query("INSERT INTO users(email,display_name,role,password_hash) SELECT $1,'Moaz Ahsan','Operations',password_hash FROM users WHERE email='admin@example.test'", [email]);
+    await pool.query("INSERT INTO users(id,email,display_name,role,password_hash) SELECT gen_random_uuid(),$1,'Moaz Ahsan','Operations',password_hash FROM users WHERE email='admin@example.test'", [email]);
     await pool.query("INSERT INTO operations_board_access(user_id,kind,granted_by) SELECT m.id,'head',a.id FROM users m CROSS JOIN users a WHERE m.email=$1 AND a.email='admin@example.test'", [email]);
     await pool.query(await readFile('migrations/304_moaz_procurement_access.sql', 'utf8'));
     const headers = await login(page.request, email);
