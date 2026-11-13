@@ -64,5 +64,7 @@ export function IpoSharedPreview({ record, onBack, session, onOpen }: { record: 
       <div className="pz-action-row"><DownloadIpo record={record} ipoId={ipoId}/></div>
     </section>
     {session&&revisions.status&&<IpoRevisionPanel session={session} recordId={record.id} status={revisions.status} onChanged={revisions.reload} onOpen={onOpen}/>}
+    {/* Show why the panel cannot load instead of hiding it. */}
+    {session&&!revisions.status&&revisions.error&&<section className="pz-panel pz-stack" aria-label="IPO revisions"><h3>IPO revisions</h3><p role="alert" className="form-error">IPO revision is not available for this IPO: {revisions.error}</p><div><Button variant="neutral" onClick={revisions.reload}>Try again</Button></div></section>}
   </div>;
 }
