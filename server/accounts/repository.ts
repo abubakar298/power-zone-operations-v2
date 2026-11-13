@@ -1,4 +1,4 @@
-import { closureEpcCategory, correctedClosureCategories } from './closure-budget-categories.js';
+import { closureEpcCategory, correctedClosureCategories, issuedUblSolarBasis } from './closure-budget-categories.js';
 import {historicalClosureException} from '../../shared/historical-closure-exceptions.js';
 import {qcMaterialHandoff,qcMaterialHandoffs} from './qc-material-handoff.js';
 import {withAccountsIpo} from '../../shared/accounts-site-reference.js';
@@ -394,7 +394,7 @@ export class AccountsRepository {
       ).rows[0];
       if (!b) throw new HttpError(409, "Saved BOQ budget unavailable.");
       issuedBasis = {
-        isUblSolar: b.framework_type === "ubl-solar",
+        isUblSolar: issuedUblSolarBasis(b.framework_type, i.snapshot, b.snapshot.survey?.family),
         isBankUps: i.snapshot.allocation?.policy === "fixed-bank-ups" || /^UPS-/i.test(i.snapshot.solutionId ?? ""),
         lines: b.snapshot.lines,
       };
@@ -479,14 +479,21 @@ export class AccountsRepository {
     const nativePeerIds = phasePeers.filter(row => row.job_key.startsWith("ipo:"))
       .map(row => row.job_key.slice(4));
     const peerBases = nativePeerIds.length ? (await this.pool.query(
-      `SELECT i.id, b.snapshot->'lines' AS lines, f.payload->>'type'='ubl-solar' AS "isUblSolar",
+      `SELECT i.id, b.snapshot->'lines' AS lines, f.payload->>'type' AS framework_type,
+              b.snapshot#>>'{survey,family}' AS family,
+              jsonb_build_object('customer',i.snapshot->'customer','frameworkKey',i.snapshot->'frameworkKey',
+                'approvedCommercialSource',i.snapshot->'approvedCommercialSource') AS "order",
               (i.snapshot#>>'{allocation,policy}'='fixed-bank-ups' OR i.snapshot->>'solutionId' ~* '^UPS-') AS "isBankUps"
        FROM internal_purchase_orders i
        JOIN boq_revisions b ON b.id=(i.snapshot->>'boqRevisionId')::uuid
        LEFT JOIN project_framework_versions f ON f.id=(i.snapshot->>'frameworkId')::uuid
        WHERE i.id=ANY($1::uuid[])`, [nativePeerIds],
     )).rows : [];
-    const basisByIpo = new Map(peerBases.map(row => [row.id, row]));
+    const basisByIpo = new Map(peerBases.map(row => [row.id, {
+      isUblSolar: issuedUblSolarBasis(row.framework_type, row.order, row.family),
+      isBankUps: row.isBankUps,
+      lines: row.lines,
+    }]));
     const peerSnapshots = phasePeers.map(row =>
       correctedClosureCategories(row.snapshot, basisByIpo.get(row.job_key.slice(4))),
     );

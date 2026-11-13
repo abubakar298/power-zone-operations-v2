@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { BoqSnapshot } from '../server/boq/engine.js';
-import { correctedClosureCategories } from '../server/accounts/closure-budget-categories.js';
+import { correctedClosureCategories, issuedUblSolarBasis } from '../server/accounts/closure-budget-categories.js';
 import { closureEpcSelling } from '../server/accounts/phase-comparison.js';
 import { phaseBudgets } from '../server/director/repository.js';
 import { solarEpcLineCategory } from '../server/ubl/solar-epc.js';
@@ -19,7 +19,15 @@ test('reclassifies a submitted UBL Solar breakdown using the issued BOQ without 
     epcBudget: { 'Electrical Labour': '0', 'Earthing Cost': '50000', Deliveries: '0', 'Installation Cost': '824800' },
     input: { epc: { 'Electrical Labour': '21240', Deliveries: '34000' } },
   };
-  const basis = { isUblSolar: true, isBankUps: false, lines };
+  const oldIssuedOrder = {
+    customer: { shortCode: 'UBL' }, frameworkKey: '35-30-40:Revised',
+    approvedCommercialSource: { type: 'framework' },
+  };
+  const basis = {
+    isUblSolar: issuedUblSolarBasis(null, oldIssuedOrder, 'solar-hybrid'), isBankUps: false, lines,
+  };
+  assert.equal(issuedUblSolarBasis(null, oldIssuedOrder, 'bess-only'), false);
+  assert.equal(issuedUblSolarBasis(null, { ...oldIssuedOrder, approvedCommercialSource: { type: 'quotation' } }, 'solar-hybrid'), false);
   const before = structuredClone(saved);
   const repaired = correctedClosureCategories(saved, basis);
   assert.deepEqual(repaired.epcBudget, {

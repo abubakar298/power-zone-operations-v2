@@ -5,6 +5,14 @@ import { solarEpcLineCategory } from '../ubl/solar-epc.js';
 type FrozenLine = { key: string; description?: string; phase: string; epc?: string; total: string };
 type CostingBasis = { isUblSolar: boolean; isBankUps: boolean; lines: FrozenLine[] };
 
+export function issuedUblSolarBasis(frameworkType: unknown, order: any, family: unknown) {
+  return frameworkType === 'ubl-solar' || (
+    order.customer?.shortCode?.toUpperCase() === 'UBL' && family === 'solar-hybrid' &&
+    order.approvedCommercialSource?.type === 'framework' &&
+    /^(20-20-30|25-20-30|30-30-40|35-30-40):(Proposed|Negotiated|Revised)$/.test(order.frameworkKey ?? '')
+  );
+}
+
 export function closureEpcCategory(line: FrozenLine, isUblSolar: boolean) {
   return isUblSolar ? solarEpcLineCategory(line) : line.epc || 'Installation Cost';
 }
