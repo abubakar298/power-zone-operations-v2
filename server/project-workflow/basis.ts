@@ -1,3 +1,4 @@
+import { solarEpcLineCategory } from '../ubl/solar-epc.js';
 import {approvedBessBasis} from '../ubl/bess-framework.js';
 import type { Pool, PoolClient } from "pg";
 import { Decimal } from "decimal.js";
@@ -183,6 +184,8 @@ function savedUblBoq(r: any, p: any, m: any) {
     "UBL genset synchronization": "UBL Genset Synchronisation",
     "Router/device plus first month": "UBL Internet",
     "Installation labour": "Labour",
+    "Electrical labour": "Labour",
+    "Delivery/logistics": "Delivery",
     Delivery: "Delivery",
   };
   const watts = new Decimal(p.configuration.split("-")[0]).mul(1000).toString();
@@ -224,14 +227,7 @@ function savedUblBoq(r: any, p: any, m: any) {
       rateVersion: 0,
       rateStatus: "Frozen framework budget",
       phase,
-      epc:
-        key === "Labour"
-          ? "Electrical Labour"
-          : key === "Delivery"
-            ? "Deliveries"
-            : key === "Earthing Bore"
-              ? "Earthing Cost"
-              : "Installation Cost",
+      epc: solarEpcLineCategory({ key, description: i.item }),
     };
   });
   const total = lines
