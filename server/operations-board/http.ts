@@ -20,7 +20,8 @@ export function operationsBoardHttp(repo:OperationsBoardRepository,requireSessio
  r.post('/vendors',json({limit:'128kb'}),async(req,res)=>res.status(201).json(await repo.saveVendor(req.authSession!.user.id,parse(vendorSchema,req.body))));
  r.get('/targets',async(req,res)=>res.json(await repo.targets(req.authSession!.user.id)));
  r.post('/targets',json({limit:'128kb'}),async(req,res)=>res.status(201).json(await repo.saveTargets(req.authSession!.user.id,parse(targetsSchema,req.body))));
- r.get('/sites',async(req,res)=>res.json(await repo.sites(req.authSession!.user.id)));
+ r.get('/sites',async(req,res)=>{const actor=req.authSession!.user.id,board=await repo.sites(actor);res.json({...board,access:{...board.access,boqViewer:await repo.boqViewer(actor)}});});
+ r.get('/sites/:id/boq',async(req,res)=>res.json(await repo.siteBoq(req.authSession!.user.id,siteId(req.params.id))));
  r.get('/sites/:id/delivery-dispatches',async(req,res)=>res.json(await repo.deliveryDispatches(req.authSession!.user.id,siteId(req.params.id))));
  r.get('/sites/:id/local-purchases',async(req,res)=>{res.json(await repo.localPurchases(req.authSession!.user.id,siteId(req.params.id)));});
  r.post('/sites/:id/local-purchases',json({limit:'128kb'}),async(req,res)=>res.json(await repo.saveLocalPurchases(req.authSession!.user.id,siteId(req.params.id),req.body)));
