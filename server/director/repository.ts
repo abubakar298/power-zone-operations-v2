@@ -32,7 +32,7 @@ export function phaseBudgets(
           ? 1
           : line.key === snapshot.inverterConfig?.sku || /^(HYB-|CH-PCS-HYB-)/.test(line.key)
             ? 2
-            : line.key === "CH-BMS-HV"
+            : /^(CH-BMS-|BMS-)/i.test(line.key)
               ? 4
               : line.phase === "BESS"
                 ? 3

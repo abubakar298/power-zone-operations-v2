@@ -1,3 +1,4 @@
+import { closureEpcCategory, correctedClosureCategories, issuedUblSolarBasis } from './closure-budget-categories.js';
 import {historicalClosureException} from '../../shared/historical-closure-exceptions.js';
 import {qcMaterialHandoff,qcMaterialHandoffs} from './qc-material-handoff.js';
 import {withAccountsIpo} from '../../shared/accounts-site-reference.js';
@@ -331,6 +332,7 @@ export class AccountsRepository {
       irr={id:null,snapshot:{jobId:source.jobId,title:source.title,entry:{start:'',end:qcSource.completedDate,panelCount:'',panelWattage:'',usage:{},extra:[],remarks:'QC verified material usage',expectedReturns:'',receivedReturns:''},reconciliation:{sections:[],net:'0',gst:'0',gross:'0'}}};
     }else qcSource=null;
     let lines: any[], selling: string, basis: string;
+    let issuedBasis: Parameters<typeof correctedClosureCategories>[1];
     let phaseSelling: Record<string, string> = {};
     let agreedPv: ReturnType<typeof agreedBoqPvWatts> = null;
     if (/^ubl:\d+$/.test(key)) {
@@ -386,17 +388,22 @@ export class AccountsRepository {
       if (!i) throw new HttpError(404, "IPO not found.");
       const b = (
         await this.pool.query(
-          "SELECT br.snapshot,extra.input AS additional_input FROM boq_revisions br LEFT JOIN quotation_additional_inputs extra ON extra.quotation_id=$2 WHERE br.id=$1",
-          [i.snapshot.boqRevisionId, i.snapshot.quotationId],
+          "SELECT br.snapshot,extra.input AS additional_input,f.payload->>'type' AS framework_type FROM boq_revisions br LEFT JOIN quotation_additional_inputs extra ON extra.quotation_id=$2 LEFT JOIN project_framework_versions f ON f.id=$3::uuid WHERE br.id=$1",
+          [i.snapshot.boqRevisionId, i.snapshot.quotationId, i.snapshot.frameworkId ?? null],
         )
       ).rows[0];
       if (!b) throw new HttpError(409, "Saved BOQ budget unavailable.");
+      issuedBasis = {
+        isUblSolar: issuedUblSolarBasis(b.framework_type, i.snapshot, b.snapshot.survey?.family),
+        isBankUps: i.snapshot.allocation?.policy === "fixed-bank-ups" || /^UPS-/i.test(i.snapshot.solutionId ?? ""),
+        lines: b.snapshot.lines,
+      };
       agreedPv = agreedBoqPvWatts({agreedWatts:b.snapshot.engineering?.pvWatts,survey:b.snapshot.survey});
       selling = i.snapshot.quotationType?.saleType === "Cash Deal" ? i.snapshot.allocation.total : i.snapshot.allocation.subtotal;
       if (i.snapshot.peachtree?.taxMode !== "Tax Included" || i.snapshot.quotationType?.saleType === "Cash Deal")
         phaseSelling = Object.fromEntries(
           (i.snapshot.peachtree?.phases ?? []).map((p: any) => [
-            p.name,
+            issuedBasis?.isBankUps && p.name === "Installations" ? "EPC" : p.name,
             p.amount,
           ]),
         );
@@ -422,7 +429,7 @@ export class AccountsRepository {
                     : /^(CH-BMS-|BMS-)/.test(l.key)
                       ? "BMS"
                       : "EPC",
-        epc: l.epc || "Installation Cost",
+        epc: closureEpcCategory(l, issuedBasis!.isUblSolar),
       }));
       lines = lines.filter((l) => l.phase === "EPC");
       for (const p of savedPhases.filter((p) => p.name !== "EPC"))
@@ -453,14 +460,14 @@ export class AccountsRepository {
         "SELECT j.*,u.display_name AS recorded_by FROM accounts_active_job_closures j JOIN users u ON u.id=j.created_by WHERE job_key=$1 ORDER BY version DESC",
         [key],
       )
-    ).rows;
+    ).rows.map(row => ({ ...row, snapshot: correctedClosureCategories(row.snapshot, issuedBasis) }));
     let configurationComparison = null;
     const identity = (await new InventoryRepository(this.pool).jobs(actor)).find(j => j.key === key);
     const comparisonIdentity = history[0]?.snapshot?.identity ?? identity;
     const programme=await ublProgrammeLinks(this.pool),programmeLink=programme.find(l=>l.jobKey===key);
     const programmePeerKeys=programmeLink?.configuration?programme.filter(l=>l.jobKey!==key&&l.configuration===programmeLink.configuration).map(l=>l.jobKey):null;
-    const phasePeers = programmePeerKeys?(await this.pool.query(`SELECT j.snapshot FROM (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures WHERE job_key=ANY($1::text[]) ORDER BY job_key,version DESC) j WHERE j.stage='Closed' AND NOT EXISTS(SELECT 1 FROM closure_comparison_exclusions x WHERE x.job_key=j.job_key AND x.excluded) AND COALESCE(substring(j.snapshot#>>'{identity,configuration_id}' from '(20-20-30|25-20-30|30-30-40|35-30-40)'),j.snapshot#>>'{identity,configuration_id}',$2)=$2`,[programmePeerKeys,programmeLink.configuration])).rows:comparisonIdentity?.configuration_id && comparisonIdentity?.customer_code ? (await this.pool.query(`
-      SELECT j.snapshot FROM
+    const phasePeers = programmePeerKeys?(await this.pool.query(`SELECT j.job_key,j.snapshot FROM (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures WHERE job_key=ANY($1::text[]) ORDER BY job_key,version DESC) j WHERE j.stage='Closed' AND NOT EXISTS(SELECT 1 FROM closure_comparison_exclusions x WHERE x.job_key=j.job_key AND x.excluded) AND COALESCE(substring(j.snapshot#>>'{identity,configuration_id}' from '(20-20-30|25-20-30|30-30-40|35-30-40)'),j.snapshot#>>'{identity,configuration_id}',$2)=$2`,[programmePeerKeys,programmeLink.configuration])).rows:comparisonIdentity?.configuration_id && comparisonIdentity?.customer_code ? (await this.pool.query(`
+      SELECT j.job_key,j.snapshot FROM
         (SELECT DISTINCT ON(job_key) * FROM accounts_active_job_closures ORDER BY job_key,version DESC) j
       LEFT JOIN ubl_effective_site_orders o ON j.job_key='ubl:'||o.site_id
       LEFT JOIN internal_purchase_orders i ON j.job_key='ipo:'||i.id
@@ -469,6 +476,27 @@ export class AccountsRepository {
         AND COALESCE(j.snapshot->'identity'->>'configuration_id',o.configuration_id,i.snapshot->>'solutionId')=$2
         AND COALESCE(j.snapshot->'identity'->>'customer_code',CASE WHEN o.site_id IS NOT NULL THEN 'UBL' ELSE i.snapshot->'customer'->>'shortCode' END)=$3
     `,[key,comparisonIdentity.configuration_id,comparisonIdentity.customer_code])).rows : [];
+    const nativePeerIds = phasePeers.filter(row => row.job_key.startsWith("ipo:"))
+      .map(row => row.job_key.slice(4));
+    const peerBases = nativePeerIds.length ? (await this.pool.query(
+      `SELECT i.id, b.snapshot->'lines' AS lines, f.payload->>'type' AS framework_type,
+              b.snapshot#>>'{survey,family}' AS family,
+              jsonb_build_object('customer',i.snapshot->'customer','frameworkKey',i.snapshot->'frameworkKey',
+                'approvedCommercialSource',i.snapshot->'approvedCommercialSource') AS "order",
+              (i.snapshot#>>'{allocation,policy}'='fixed-bank-ups' OR i.snapshot->>'solutionId' ~* '^UPS-') AS "isBankUps"
+       FROM internal_purchase_orders i
+       JOIN boq_revisions b ON b.id=(i.snapshot->>'boqRevisionId')::uuid
+       LEFT JOIN project_framework_versions f ON f.id=(i.snapshot->>'frameworkId')::uuid
+       WHERE i.id=ANY($1::uuid[])`, [nativePeerIds],
+    )).rows : [];
+    const basisByIpo = new Map(peerBases.map(row => [row.id, {
+      isUblSolar: issuedUblSolarBasis(row.framework_type, row.order, row.family),
+      isBankUps: row.isBankUps,
+      lines: row.lines,
+    }]));
+    const peerSnapshots = phasePeers.map(row =>
+      correctedClosureCategories(row.snapshot, basisByIpo.get(row.job_key.slice(4))),
+    );
     if(programmePeerKeys){const complete=phasePeers.filter(r=>r.snapshot.summary?.actual!=null&&r.snapshot.summary?.actualMarkup!=null),cost=complete.reduce((n,r)=>n.add(r.snapshot.summary.actual),D('0')),markup=complete.reduce((n,r)=>n.add(r.snapshot.summary.actualMarkup),D('0'));configurationComparison={closedJobs:complete.length,averageActualMarkupPercent:cost.gt(0)?m(markup.div(cost).mul(100)):null};}
     const currentEvidence=await this.evidenceBundle(actor,key);
     const frozenEvidence=history[0]&&['Awaiting Management','Closed'].includes(history[0].stage)
@@ -479,7 +507,7 @@ export class AccountsRepository {
       qcMaterialSource:qcSource,
       agreedPv,
       configurationComparison,
-      phaseCostComparison: phaseCostComparison(phasePeers.map(r=>r.snapshot)),
+      phaseCostComparison: phaseCostComparison(peerSnapshots),
       identity,
       jobKey: key,
       jobId: irr.snapshot.jobId,
