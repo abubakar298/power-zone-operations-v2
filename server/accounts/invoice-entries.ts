@@ -2,7 +2,8 @@ import {historicalInvoiceTerms, issuedInvoiceTerms, invoiceMilestones} from './i
 import {withAccountsIpo} from '../../shared/accounts-site-reference.js';
 import {ublProgrammeLinks,withProgrammeAccounts} from '../ubl/programme-links.js';
 import {partialSolarInvoiceDate} from './partial-solar-delivery.js';
-import {invoiceSubmissions,submissionMatches,submissionReferences,submissionBillingBasis} from './invoice-submission-state.js';
+import {invoiceSubmissions,submissionMatches,submissionReferences,submissionBillingBasis,submissionKey} from './invoice-submission-state.js';
+import {paymentRegisterData} from './payment-records.js';
 import {applyOperationsStages} from './site-projection.js';
 import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
 import {randomUUID} from 'node:crypto';
@@ -108,7 +109,19 @@ async function candidates(c:Db){
  const issued=(queues.alreadyIssued as any[]);
  const eligibleOperations=operations.filter(o=>!submitted(o)&&!imported.some(e=>e.snapshot.key===o.key&&e.knownMilestones.includes(o.milestone))&&!issued.some(r=>sameSite(r,o)&&(r.milestone===o.milestone||r.milestone==='advance'&&o.milestone==='delivery')));
  const legacy=['delivery','completion'].flatMap(milestone=>(queues[milestone as 'delivery'|'completion'] as any[]).filter(r=>!isArchivedLegacySolar(r)&&!(historicalInvoiceTerms(r)&&exactOperationsKeys.has(r.key))&&!operations.some(o=>o.ipo===r.ipo&&o.site===r.site)).map(r=>({...attachSite(r),sourceKind:'Source register',sourceVersion:source.version,milestone})));
- return {rows:[...eligibleOperations,...legacy],imported,alreadyIssued:issued.filter(r=>!isArchivedLegacySolar(r)).map(r=>({...attachSite(r),sourceKind:'Source register',sourceVersion:source.version,milestone:r.milestone==='advance'?'delivery':r.milestone}))};
+ const alreadyIssued=issued.filter(r=>!isArchivedLegacySolar(r)).map(r=>({...attachSite(r),sourceKind:'Source register',sourceVersion:source.version,milestone:r.milestone==='advance'?'delivery':r.milestone}));
+ // Awaiting payment: milestones already submitted (in the portal or in the reviewed
+ // register) with money still due. Only an extra invoice may be recorded for these;
+ // they are not added to Invoices to Submit.
+ const portal=await invoiceSubmissions(c),awaitingRegister:any[]=[];
+ for(const row of sourceRows.filter((r:any)=>!r.cancelled&&!r.transferred&&!isArchivedLegacySolar(r))){
+  const base={...attachSite(row),sourceKind:'Source register',sourceVersion:source.version};
+  if(row.program==='Solar 70'){for(const [stage,milestone] of [['advance','delivery'],['completion','completion']] as const)if(row[stage]?.submitted===true&&row[stage]?.received!==true)awaitingRegister.push({...base,milestone});}
+  else if(row.singleInvoiceSubmitted===true&&row.singlePaymentReceived!==true)awaitingRegister.push({...base,milestone:row.deliveryOnly===true||row.installation===false||row.projectType==='delivery-only'?'delivery':'completion'});
+ }
+ const known=[...eligibleOperations,...legacy];
+ const awaiting=[...alreadyIssued.filter(r=>portal.some(e=>submissionMatches(r,e))),...awaitingRegister].filter((r,i,all)=>!known.some(k=>k.sourceKind===r.sourceKind&&k.key===r.key&&k.milestone===r.milestone)&&all.findIndex(o=>o.sourceKind===r.sourceKind&&o.key===r.key&&o.milestone===r.milestone)===i);
+ return {rows:known,imported,alreadyIssued,awaiting};
 }
 
 /** Creation of a PT invoice is separate from submission to the bank. Keep created
@@ -159,19 +172,28 @@ export async function invoiceRegister(pool:Pool,actor:string){
  const shownQueues=(queues:Record<string,any[]>)=>Object.fromEntries(Object.entries(queues).map(([k,v])=>[k,shown(v)]));
  return relabelRegister({canRecord:['Admin','Accounts'].includes(role),submissions,submissionQueues:{...(extraCable.length?{extraCable}:{}),deliveryOnly:submissionRows.filter(r=>r.billingStage==='delivery-only'),delivery:submissionRows.filter(r=>r.billingStage==='delivery'),completion:submissionRows.filter(r=>r.billingStage==='completion')},queues:{delivery:rows.filter(r=>r.milestone==='delivery'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='delivery')),completion:rows.filter(r=>r.milestone==='completion'&&!entries.some(e=>((e.source_kind===r.sourceKind&&e.site_key===r.key)||(e.snapshot.ipo===r.ipo&&e.snapshot.site===r.site))&&e.milestone==='completion'))},entries:[...entries,...imported.filter(i=>!entries.some(e=>(e.site_key===i.snapshot.key||e.site_key===i.site_key)&&e.milestone===i.milestone))],importedCount:imported.length},shown,shownQueues);
 }
-/** Awaiting payment lists invoices, not sites. Find the site milestone behind one
- * portal-submitted invoice so Accounts can add an extra invoice for that site through
- * the same panel and recordInvoiceEntry checks as Invoices to Submit. Read-only. */
-export async function invoiceSiteForSubmission(pool:Pool,actor:string,submissionId:string){
+/** Any Awaiting payment row (UPS, Solar advance/completion, portal-submitted) to the one
+ * site milestone recordInvoiceEntry accepts for it. Read-only. */
+export async function invoiceSiteForPaymentRow(pool:Pool,actor:string,rowId:string){
  await new AccountsRepository(pool).access(actor);
- const event=(await invoiceSubmissions(pool)).find(s=>s.id===submissionId);
- if(!event)throw new HttpError(404,'Submitted invoice not found.');
- const {rows}=await candidates(pool),entries=(await pool.query('SELECT *,entry_date::text AS entry_date,amount::text AS amount FROM accounts_invoice_entries ORDER BY created_at DESC')).rows;
+ const payment=(await paymentRegisterData(pool)).awaiting.find((r:any)=>r.id===rowId);
+ if(!payment)throw new HttpError(404,'Invoice not found in Awaiting payment.');
+ const {rows,alreadyIssued,awaiting}=await candidates(pool),entries=(await pool.query('SELECT *,entry_date::text AS entry_date,amount::text AS amount FROM accounts_invoice_entries ORDER BY created_at DESC')).rows;
  const submissions=await invoiceSubmissions(pool),updates=await latestInvoiceUpdates(pool);
- // Only sites recordInvoiceEntry would accept (its candidate rows); held ones are refused there too.
- const site=invoiceSubmissionRows(rows,[],entries,submissions,updates).find(r=>!r.recordingHeld&&r.sourceKind===event.source_kind&&r.key===event.site_key&&r.milestone===event.milestone);
- if(!site)throw new HttpError(409,'An extra invoice cannot be added for this site here. Its invoices come from the reviewed Accounts register.');
- return withAccountsIpo(site);
+ const accepted=[...rows,...awaiting],same=(a:any,b:any)=>a.sourceKind===b.sourceKind&&a.key===b.key&&a.milestone===b.milestone;
+ const sites=invoiceSubmissionRows(accepted,alreadyIssued,entries,submissions,updates).filter(r=>!r.recordingHeld&&accepted.some(a=>same(a,r)));
+ const event=payment.submissionId?submissions.find(s=>s.id===payment.submissionId):undefined;
+ let matches:any[];
+ if(event)matches=sites.filter(r=>r.sourceKind===event.source_kind&&r.key===event.site_key&&r.milestone===event.milestone);
+ else{
+  // Solar rows are "<register key>:advance|completion[:invoice:<number>]"; UPS rows name their register key.
+  const solar=/^(.*):(advance|completion)(?::invoice:.*)?$/.exec(String(payment.id));
+  const key=payment.sourceKey??(payment.sourceKeys?.length===1?payment.sourceKeys[0]:undefined)??solar?.[1];
+  const milestone=payment.billingMilestone??(solar?(solar[2]==='advance'?'delivery':'completion'):undefined);
+  matches=key?sites.filter(r=>[r.key,r.sourceKey].some(k=>k&&submissionKey(k)===submissionKey(key))&&(!milestone||r.milestone===milestone)):[];
+ }
+ if(matches.length!==1)throw new HttpError(409,'An extra invoice cannot be added for this invoice here. Its site link is not clear in the reviewed Accounts register.');
+ return withAccountsIpo(matches[0]);
 }
 /** Display-only reference corrections on the register's screen rows and saved-entry labels. */
 function relabelRegister<T extends {submissionQueues:Record<string,any[]>;queues:Record<string,any[]>;entries:any[]}>(register:T,shown:(rows:any[])=>any[],shownQueues:(q:Record<string,any[]>)=>Record<string,any[]>):T{
@@ -187,7 +209,7 @@ export async function recordInvoiceEntry(pool:Pool,actor:string,input:z.infer<ty
    throw new HttpError(409,'Request key already used.');}
   if(input.sourceKind==='Operations')await c.query('SELECT id FROM operations_board_sites WHERE id=$1 FOR UPDATE',[input.siteKey]);
   else await c.query("SELECT pg_advisory_xact_lock(hashtextextended('accounts.source-register',0))");
-  const source=(await candidates(c)).rows.find(r=>r.sourceKind===input.sourceKind&&r.key===input.siteKey&&r.milestone===input.milestone);
+  const found=await candidates(c),source=[...found.rows,...found.awaiting].find(r=>r.sourceKind===input.sourceKind&&r.key===input.siteKey&&r.milestone===input.milestone);
   if(!source||source.sourceVersion!==input.sourceVersion)throw new HttpError(409,'Site milestone or documents changed. Reload and review before recording the invoice.');
   // Duplicate protection is the invoice's own number, not the site milestone: one
   // milestone may carry separate invoices (for example Solar Panels and Remaining System).

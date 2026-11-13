@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {testDatabase} from './database.js';
 import {AccountsSourceRegisters} from '../server/accounts/source-registers.js';
-import {recordInvoiceEntry,invoiceRegister,recordInvoiceSubmission,invoiceSiteForSubmission} from '../server/accounts/invoice-entries.js';
+import {recordInvoiceEntry,invoiceRegister,recordInvoiceSubmission,invoiceSiteForPaymentRow} from '../server/accounts/invoice-entries.js';
 import {paymentRegisterData} from '../server/accounts/payment-records.js';
 import {recordInvoiceReceipt} from '../server/accounts/invoice-receipts.js';
 
@@ -32,10 +32,10 @@ test('Awaiting payment: an extra invoice for a submitted, part-paid site uses th
   await recordInvoiceReceipt(db.pool,ids.Accounts,{sourceRowId:awaiting.id,sourceVersion:payments.sourceVersion,receiptVersion:awaiting.receiptVersion,amount:'200000',paymentDate:'2026-10-28',transactionId:'TX-AX-1',requestKey:randomUUID()});
 
   // New: the site behind that invoice, the same shape as an Invoices to Submit row.
-  const found=await invoiceSiteForSubmission(db.pool,ids.Accounts,awaiting.submissionId);
+  const found=await invoiceSiteForPaymentRow(db.pool,ids.Accounts,awaiting.id);
   assert.deepEqual([found.sourceKind,found.key,found.sourceVersion,found.milestone,found.recordingHeld],['Operations',site,1,'completion',undefined]);
   assert.deepEqual(found.invoices.map((i:any)=>[i.entryId,i.reference,i.submittedOn]),[[first.id,'27-20001','2026-10-22']]);
-  await assert.rejects(invoiceSiteForSubmission(db.pool,ids.Accounts,randomUUID()),/not found/);
+  await assert.rejects(invoiceSiteForPaymentRow(db.pool,ids.Accounts,'submission:'+randomUUID()),/not found/);
 
   // Saving uses recordInvoiceEntry unchanged: role, request key and number checks stay.
   const extra={...base,sourceVersion:found.sourceVersion,ptReference:'27-20002',invoiceLabel:'Extra work',amount:'75000',requestKey:randomUUID()};
