@@ -75,11 +75,17 @@ test('IPO revision: reason and route, revised quotation, Management approves old
   const asUser=(key:string)=>({id:users[key].id,role:users[key].role} as unknown as User);
   assert.equal((await notifications.list(asUser('manager'))).filter((n:any)=>n.kind==='IPO revision approval required'&&!n.resolved_at).length,1);
 
+  const poHeaders=async()=>(await db.pool.query('SELECT count(*)::int n FROM customer_purchase_orders')).rows[0].n,headersBefore=await poHeaders();
   const decisionKey=randomUUID(),decision=await repo.decide(users.manager.id,proposal.id,{decision:'Approved',note:'',requestKey:decisionKey});
   assert.equal(decision.decision,'Approved');assert.ok(decision.revisedIpoId);
   assert.deepEqual(await repo.decide(users.manager.id,proposal.id,{decision:'Approved',note:'',requestKey:decisionKey}),decision,'retry is safe');
   const revised=(await db.pool.query('SELECT * FROM internal_purchase_orders WHERE id=$1',[decision.revisedIpoId])).rows[0];
   assert.equal(revised.number,proposal.number);assert.equal(revised.snapshot.ipoRevision.originalIpoId,original.id);
+  const originalRow=(await db.pool.query('SELECT * FROM internal_purchase_orders WHERE id=$1',[original.id])).rows[0];
+  assert.equal(revised.customer_po_id,originalRow.customer_po_id,'the revised IPO stays under the original customer PO');
+  assert.equal(await poHeaders(),headersBefore,'no new customer PO header is created');
+  // The one-IPO-per-site-per-PO guard still refuses any other second IPO under that PO.
+  await assert.rejects(db.pool.query('INSERT INTO internal_purchase_orders(id,customer_po_id,submission_id,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,NULL,$3,$4,$5,$6,$7)',[randomUUID(),originalRow.customer_po_id,'TEST-DUPLICATE-IPO',originalRow.snapshot,'x',randomUUID(),users.manager.id]),/already has an IPO under the customer PO/);
   assert.equal(JSON.stringify((await db.pool.query('SELECT * FROM internal_purchase_orders WHERE id=$1',[original.id])).rows[0]),originalJson,'the original IPO is unchanged');
   assert.equal((await db.pool.query('SELECT count(*)::int n FROM ipo_accounts_handoffs WHERE ipo_id=$1',[revised.id])).rows[0].n,1,'the revised IPO goes to Accounts');
   status=await repo.status(users.owner.id,recordId);
@@ -98,9 +104,14 @@ test('IPO revision: reason and route, revised quotation, Management approves old
   status=await repo.status(users.owner.id,recordId);
   assert.equal(status.current.id,revised.id);assert.equal(status.revisions[1].status,'Returned');assert.equal(status.revisions[1].decision?.note,'Keep the agreed payment terms.');
 
-  // Work started (PT posted on the current IPO) blocks any new revision.
+  // Work started (PT posted on the current IPO) stops a technical revision; a commercial revision
+  // is still allowed until the job has a closure record.
   await db.pool.query("INSERT INTO accounts_pt_entries(id,source_kind,source_id,source_version,pt_reference,entry_date,notes,created_by) VALUES($1,'IPO',$2,1,'PT-TEST','2026-11-13','test',$3)",[randomUUID(),revised.id,users.accounts.id]);
-  await assert.rejects(repo.start(users.owner.id,recordId,{route:'commercial',reason:'Another change after PT was posted.',requestKey:randomUUID()}),/Accounts has posted the PT/);
+  await assert.rejects(repo.start(users.owner.id,recordId,{route:'technical',reason:'Quantity change after PT was posted.',requestKey:randomUUID()}),/Accounts has posted the PT/);
+  status=await repo.status(users.owner.id,recordId);
+  assert.deepEqual(status.blockers.commercial,[]);assert.ok(status.blockers.technical.includes('Accounts has posted the PT'));
+  const afterPt=await repo.start(users.owner.id,recordId,{route:'commercial',reason:'Customer agreed a new price after PT was posted.',requestKey:randomUUID()});
+  assert.equal(afterPt.route,'commercial');
   for(const table of ['ipo_revision_requests','ipo_revision_proposals','ipo_revision_decisions'])await assert.rejects(db.pool.query(`DELETE FROM ${table}`));
  }finally{await db.close();}
 });

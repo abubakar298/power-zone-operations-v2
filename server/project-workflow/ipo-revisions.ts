@@ -13,7 +13,8 @@ import {ProjectWorkflowRepository} from './repository.js';
 /** IPO revision (phase 1). A saved IPO is never edited. A revision runs through a revised quotation
  * (commercial: same BOQ) or a revised BOQ and quotation (technical), then a proposed new IPO version
  * that Management approves after seeing the reason and old vs new. Approval issues the new version
- * as its own immutable IPO and hands it to Accounts. Allowed only before downstream work starts. */
+ * as its own immutable IPO, under the same customer PO, and hands it to Accounts. Commercial is allowed
+ * until the job has a closure record; technical stops once work has started (see `blockers`). */
 export const ipoRevisionStartSchema=z.object({route:z.enum(['commercial','technical']),reason:z.string().trim().min(10,'Write why the IPO is revised (at least 10 characters).').max(1900),requestKey:z.uuid()}).strict();
 export const ipoRevisionPrepareSchema=z.object({requestKey:z.uuid()}).strict();
 export const ipoRevisionDecisionSchema=z.object({decision:z.enum(['Approved','Returned']),note:z.string().trim().max(2000).default(''),requestKey:z.uuid()}).strict();
@@ -49,14 +50,20 @@ export class IpoRevisionRepository{
    WHERE q.record_id=$1 ORDER BY q.sequence`,[recordId])).rows;
  }
  private static status(row:any){return row.decision==='Approved'?'Approved':row.decision==='Returned'?'Returned':row.proposal_id?'Awaiting Management approval':'Revising quotation';}
- /** Work that has already started on this IPO stops a revision (agreed rule). */
+ /** Agreed rule: a commercial revision (prices, GST, terms) is allowed until the job has a closure
+  * record. A technical revision stops once work has started: PT posted, invoice recorded, closure or
+  * any Inventory DO. */
  async blockers(c:Db,ipoIds:string[],route:'commercial'|'technical'){
-  const boards=(await c.query("SELECT DISTINCT ON(site_id) site_id,snapshot FROM operations_board_versions WHERE snapshot->'origin'->>'ipoId'=ANY($1::text[]) ORDER BY site_id,version DESC",[ipoIds])).rows.map(r=>r.site_id as string);
   const reasons:string[]=[];
+  if(route==='commercial'){
+   if((await c.query("SELECT 1 FROM accounts_job_closures WHERE job_key=ANY($1::text[]) LIMIT 1",[ipoIds.map(id=>'ipo:'+id)])).rowCount)reasons.push('the job has a closure record');
+   return reasons;
+  }
+  const boards=(await c.query("SELECT DISTINCT ON(site_id) site_id,snapshot FROM operations_board_versions WHERE snapshot->'origin'->>'ipoId'=ANY($1::text[]) ORDER BY site_id,version DESC",[ipoIds])).rows.map(r=>r.site_id as string);
   if((await c.query("SELECT 1 FROM accounts_pt_entries WHERE source_kind='IPO' AND source_id=ANY($1::uuid[]) UNION ALL SELECT 1 FROM accounts_job_pt_entries WHERE job_key=ANY($2::text[]) LIMIT 1",[ipoIds,ipoIds.map(id=>'ipo:'+id)])).rowCount)reasons.push('Accounts has posted the PT');
   if((await c.query("SELECT 1 FROM accounts_invoice_entries WHERE site_key=ANY($1::text[]) UNION ALL SELECT 1 FROM accounts_invoice_submissions WHERE site_key=ANY($1::text[]) LIMIT 1",[[...ipoIds,...boards]])).rowCount)reasons.push('Accounts has recorded an invoice');
   if((await c.query("SELECT 1 FROM accounts_job_closures WHERE job_key=ANY($1::text[]) LIMIT 1",[ipoIds.map(id=>'ipo:'+id)])).rowCount)reasons.push('the job has a closure record');
-  if(route==='technical'&&(await c.query(`SELECT 1 FROM inventory_material_dispatches_active d WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(d.snapshot->'sites') s WHERE s->>'siteId'=ANY($1::text[]) OR s->>'registeredSiteId'=ANY($2::text[])) LIMIT 1`,[ipoIds,boards])).rowCount)reasons.push('Inventory has issued a DO for this site');
+  if((await c.query(`SELECT 1 FROM inventory_material_dispatches_active d WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(d.snapshot->'sites') s WHERE s->>'siteId'=ANY($1::text[]) OR s->>'registeredSiteId'=ANY($2::text[])) LIMIT 1`,[ipoIds,boards])).rowCount)reasons.push('Inventory has issued a DO for this site');
   return reasons;
  }
  private async load(actor:string,recordId:string,c:Db=this.pool,lock=false){
@@ -178,10 +185,10 @@ export class IpoRevisionRepository{
     if(p.base_ipo_id!==current.id)throw new HttpError(409,'The IPO changed since this revision started. Return it and start a new revision.');
     const blocked=await this.blockers(c,chain.map(i=>i.id),p.route);
     if(blocked.length)throw new HttpError(409,`This IPO can no longer be revised because ${blocked.join('; ')}. Return the revision.`);
-    const po=randomUUID();revisedIpoId=randomUUID();
-    // The revised IPO gets its own PO header (the customer PO number stays in the IPO itself), so the
-    // original PO header and IPO stay exactly as issued.
-    await c.query('INSERT INTO customer_purchase_orders(id,quotation_id,boq_revision_id,customer_id,po_number,document_id,input,created_by) VALUES($1,$2,$3,$4,$5,NULL,$6,$7)',[po,p.quotation_id,p.snapshot.boqRevisionId,r.customer_id,'',{...p.snapshot.input,ipoRevisionOf:current.id},actor]);
+    revisedIpoId=randomUUID();
+    // The revised IPO stays under the original customer PO; no new PO header is created. The PO header
+    // and the original IPO stay exactly as issued (migration 305 lets only an approved revision share it).
+    const po=(await c.query('SELECT customer_po_id FROM internal_purchase_orders WHERE id=$1',[current.id])).rows[0].customer_po_id;
     await c.query('INSERT INTO internal_purchase_orders(id,customer_po_id,submission_id,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,NULL,$3,$4,$5,$6,$7)',[revisedIpoId,po,p.number,p.snapshot,fingerprint(p.snapshot),randomUUID(),actor]);
     await c.query('INSERT INTO ipo_accounts_handoffs(id,ipo_id,created_by) VALUES($1,$2,$3)',[randomUUID(),revisedIpoId,r.coordinator_id]);
    }
