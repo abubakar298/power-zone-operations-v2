@@ -64,3 +64,6 @@
 .reconciled-stock .inventory-stock-matrix tbody td{border-left:0;font-weight:400}
 .reconciled-stock .inventory-stock-matrix tbody td:nth-child(4n+2){border-left:1px solid var(--pz-border)}
 .reconciled-stock .reconciled-stat:last-child>strong small{display:block;margin-top:4px;font-size:11px;line-height:1.3}
+
+.stock-ledger-events td{vertical-align:top}
+.stock-ledger-events td small{display:block}
