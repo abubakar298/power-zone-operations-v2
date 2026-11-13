@@ -74,5 +74,18 @@ test('each partial delivery is its own DO; a later DO never changes an earlier o
   assert.deepEqual(kinds,[[firstBefore.number,false],[secondDo.number,false],[additionalDo.number,true]].sort(),'All three DOs stay with the project; only the last is Additional.');
 
   const printed=issuedDispatchPrintModel(await stock.dispatch(f.reviewer,first.id));assert.deepEqual(printed.rows.map((r:any)=>[r.itemId,r.issued]).sort(),firstBefore.lines);
+  await db.pool.query('INSERT INTO inventory_retrospective_dispatches(dispatch_id,dispatch_number,warehouse,reason,authority) VALUES($1,$2,$3,$4,$5)',[second.id,secondDo.number,'Lahore warehouse','Isolated retrospective test','Test owner']);
+  const signed=await signDispatch(db.pool,keeper,'dispatch',second.id);
+  assert.equal(signed.stockPosted,false);
+  const gates=new GatePassRepository(db.pool);
+  const gate=(await gates.detail(f.owner,'dispatch',second.id)).copies[0];
+  const reviewReason='Verified the original warehouse ledger and signed gate copy.';
+  await assert.rejects(gates.postRetrospectiveOut(keeper,second.id,gate.evidence_id,reviewReason),/Management must confirm/);
+  await assert.rejects(gates.postRetrospectiveOut(f.owner,second.id,randomUUID(),reviewReason),/saved signed gate copy/);
+  assert.equal((await gates.list(f.owner)).records.find(r=>r.id===second.id)?.retrospective_out_pending,true);
+  assert.deepEqual(await gates.postRetrospectiveOut(f.owner,second.id,gate.evidence_id,reviewReason),{stockPosted:true});
+  assert.deepEqual(await gates.postRetrospectiveOut(f.owner,second.id,gate.evidence_id,reviewReason),{stockPosted:false});
+  assert.equal((await gates.list(f.owner)).records.find(r=>r.id===second.id)?.retrospective_out_pending,false);
+  assert.deepEqual((await db.pool.query("SELECT out_delta::float AS quantity FROM inventory_warehouse_operational_movements WHERE dispatch_id=$1 AND kind='dispatch-out' ORDER BY out_delta",[second.id])).rows,[{quantity:3},{quantity:4}]);
  }finally{await db.close();}
 });

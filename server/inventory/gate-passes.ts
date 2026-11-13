@@ -22,7 +22,14 @@ export class GatePassRepository{
   if(access.kind==='unassigned')throw new HttpError(403,'Warehouse document access is required.');
   const warehouses=owner?(await this.pool.query(`SELECT DISTINCT warehouse FROM (${docs}) d UNION SELECT warehouse FROM inventory_warehouse_authority_current ORDER BY warehouse`)).rows.map(r=>r.warehouse):(await this.pool.query("SELECT DISTINCT warehouse FROM inventory_material_access WHERE user_id=$1 AND capability IN('dispatcher','storekeeper') ORDER BY warehouse",[actor])).rows.map(r=>r.warehouse);
   if(!owner&&!warehouses.length)throw new HttpError(403,'Warehouse document access is required.');
-  const records=(await this.pool.query(`SELECT d.*, (SELECT count(*)::int FROM inventory_gate_pass_copies c WHERE c.document_kind=d.kind AND c.document_id=d.id AND c.copy_kind IN('signed-gate','signed-store')) signed_copies FROM (${docs}) d WHERE warehouse=ANY($1) ORDER BY created_at DESC,id DESC`,[warehouses])).rows;
+  const records=(await this.pool.query(`SELECT d.*, (SELECT count(*)::int FROM inventory_gate_pass_copies c WHERE c.document_kind=d.kind AND c.document_id=d.id AND c.copy_kind IN('signed-gate','signed-store')) signed_copies,
+   EXISTS(SELECT 1 FROM inventory_retrospective_dispatches r
+    JOIN inventory_signed_dispatch_pending p ON p.document_id=r.dispatch_id AND p.document_kind='dispatch'
+    WHERE d.kind='dispatch' AND r.dispatch_id=d.id
+    AND NOT EXISTS(SELECT 1 FROM inventory_signed_dispatch_postings s WHERE s.document_kind=p.document_kind AND s.document_id=p.document_id)
+    AND EXISTS(SELECT 1 FROM inventory_gate_pass_copies g WHERE g.document_kind='dispatch' AND g.document_id=d.id AND g.copy_kind='signed-gate')
+   ) retrospective_out_pending
+   FROM (${docs}) d WHERE warehouse=ANY($1) ORDER BY created_at DESC,id DESC`,[warehouses])).rows;
   const dispatches=(await this.pool.query('SELECT id,number,warehouse,snapshot,created_at FROM inventory_material_dispatches_active WHERE warehouse=ANY($1) ORDER BY created_at DESC,id',[warehouses])).rows;
   for(const record of records){const dispatch=record.kind==='dispatch'?dispatches.find(d=>d.id===record.id):undefined;if(dispatch){record.parent=!!dispatch.snapshot.parent;record.siteName=dispatch.snapshot.sites.map((site:any)=>site.siteName).join(' · ');record.ipo=dispatch.snapshot.sites.map((site:any)=>site.ipo??'').join(' · ');}}
   const signoffs=dispatches.flatMap(d=>(d.snapshot.sites??[]).filter((site:any)=>site.installation!==false&&d.snapshot.lines.some((line:any)=>line.sites.includes(site.siteId)&&Number(line.out)>0&&materialDocumentPolicy(line).customerUsageSignoff)).map((site:any)=>({kind:'dispatch',id:d.id,number:d.number,warehouse:d.warehouse,created_at:d.created_at,siteId:site.siteId,siteName:site.siteName,ipo:site.ipo??'',signoff:true})));
@@ -48,6 +55,27 @@ export class GatePassRepository{
   if(!row)throw new HttpError(404,'Warehouse document not found.');await requireWarehouseAccess(actor,row.warehouse,c,true);if(['dispatch','transfer-out','replacement-out','replacement-in'].includes(kind))row.snapshot={...row.snapshot,stockPosting:await dispatchPosted(c,kind as 'dispatch'|'transfer-out'|'replacement-out'|'replacement-in',id)};return row;
  }
  async detail(actor:string,kind:Kind,id:string){const record=await this.record(actor,kind,id),siteCopies=await this.siteCopySupport();return {id:record.id,number:record.number,warehouse:record.warehouse,created_at:record.created_at,parent:!!record.snapshot.parent,documentRevision:record.snapshot.doRevision??1,kind,copies:(await this.pool.query(`SELECT id,copy_kind,${siteCopies?'source_site_id':'NULL::uuid AS source_site_id'},evidence_id,note,created_at FROM inventory_gate_pass_copies WHERE document_kind=$1 AND document_id=$2 ORDER BY created_at,id`,[kind,id])).rows};}
+ async postRetrospectiveOut(actor:string,id:string,evidenceId:string,reason:string){
+  return transaction(this.pool,async c=>{
+   const user=await lockActiveActor(c,actor);
+   if(!['Admin','Management'].includes(user.role))throw new HttpError(403,'Management must confirm this historical stock OUT.');
+   const pending=(await c.query(`
+    SELECT p.warehouse FROM inventory_signed_dispatch_pending p
+    JOIN inventory_retrospective_dispatches r ON r.dispatch_id=p.document_id
+    JOIN inventory_material_dispatches_active d ON d.id=p.document_id AND d.warehouse=p.warehouse
+    WHERE p.document_kind='dispatch' AND p.document_id=$1 FOR UPDATE OF p
+   `,[id])).rows[0];
+   if(!pending)throw new HttpError(409,'This DO has no retrospective warehouse OUT awaiting review.');
+   const copy=(await c.query(`
+    SELECT 1 FROM inventory_gate_pass_copies
+    WHERE document_kind='dispatch' AND document_id=$1 AND evidence_id=$2 AND copy_kind='signed-gate' AND warehouse=$3
+   `,[id,evidenceId,pending.warehouse])).rowCount;
+   if(!copy)throw new HttpError(422,'Select a saved signed gate copy for this DO.');
+   const stockPosted=await postSignedDispatch(c,actor,'dispatch',id,'signed-gate',evidenceId,{reviewedRetrospective:true});
+   if(stockPosted)await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`inventory.retrospective_dispatch.reviewed:${id}:${reason}`]);
+   return {stockPosted};
+  });
+ }
  async attach(actor:string,raw:z.infer<typeof gatePassCopySchema>){const input=gatePassCopySchema.parse(raw),fingerprint=createHash('sha256').update(JSON.stringify(input)).digest('hex');return transaction(this.pool,async c=>{
    await lockActiveActor(c,actor);
   if(input.kind==='dispatch')await c.query("SELECT document_id FROM inventory_signed_dispatch_pending WHERE document_kind='dispatch' AND document_id=$1 FOR UPDATE",[input.documentId]);
