@@ -514,7 +514,7 @@ export function Dashboard({
   if ((session.user.role as string) === "Operations")
     return (
       <Suspense fallback={null}>
-        <OperationsRoleGate session={session} onLogout={onLogout} viewingAs={departmentUser ? principalSession.user.displayName : undefined} onReturn={departmentUser ? () => void selectDepartment("dashboard") : undefined} />
+        <OperationsRoleGate session={session} onLogout={onLogout} selectedArea={departmentUser ? operationsArea : undefined} viewingAs={departmentUser ? principalSession.user.displayName : undefined} onReturn={departmentUser ? () => void selectDepartment("dashboard") : undefined} />
       </Suspense>
     );
   return (
