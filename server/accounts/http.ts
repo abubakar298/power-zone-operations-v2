@@ -14,7 +14,7 @@ import{correctInvoice,invoiceCorrectionSchema}from'./invoice-corrections.js';
 import{recordInvoiceReceipt,invoiceReceiptSchema}from'./invoice-receipts.js';
 import {managementProgrammes} from '../director/management-programmes.js';
 import { json, Router, type RequestHandler } from "express";
-import {invoiceRegister,recordInvoiceEntry,invoiceEntrySchema,recordInvoiceSubmission,invoiceSubmissionSchema,invoiceSiteForSubmission} from './invoice-entries.js';
+import {invoiceRegister,recordInvoiceEntry,invoiceEntrySchema,recordInvoiceSubmission,invoiceSubmissionSchema,invoiceSiteForPaymentRow} from './invoice-entries.js';
 import {ptEntrySchema} from './pt-entries.js';
 import {paymentRegister,recordPayment,paymentRecordSchema} from './payment-records.js';
 import type {AccountsSourceRegisters} from './source-registers.js';
@@ -66,7 +66,7 @@ export function accountsHttp(
   r.post('/material-corrections/:id/resolve',async(req,res)=>res.json(await resolveMaterialCorrection(repo.pool,req.authSession!.user.id,String(req.params.id).slice(0,200),req.body)));
   r.get('/billing',async(req,res)=>{const data=await sources.billing(req.authSession!.user.id);res.json({...data,rows:data.rows.map(r=>withAccountsIpo(r))});});
   r.get('/invoice-entries',async(req,res)=>res.json(await invoiceRegister(repo.pool,req.authSession!.user.id)));
-  r.get('/invoice-submissions/:id/site',async(req,res)=>res.json(await invoiceSiteForSubmission(repo.pool,req.authSession!.user.id,parse(z.uuid(),req.params.id))));
+  r.get('/payment-row-site',async(req,res)=>res.json(await invoiceSiteForPaymentRow(repo.pool,req.authSession!.user.id,parse(z.object({id:z.string().min(1).max(500)}).strict(),req.query).id)));
   r.post('/invoice-updates',async(req,res)=>res.status(201).json(await recordInvoiceUpdate(repo.pool,req.authSession!.user.id,parse(invoiceUpdateSchema,req.body))));
   r.post('/material-costing/pt-entry',async(req,res)=>res.status(201).json(await markJobRecordedInPt(repo.pool,req.authSession!.user.id,parse(jobPtEntrySchema,req.body))));
   r.get('/originals',async(req,res)=>res.json(await originalsRegister(repo.pool,req.authSession!.user.id)));
