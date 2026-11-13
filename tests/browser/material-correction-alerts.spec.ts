@@ -1,20 +1,35 @@
 import {test,expect} from '@playwright/test';
 import {actors,login} from './release-fixtures.js';
-const alerts=[{id:'flag',site_name:'Pakpattan',legacy_ipo_number:'306',message:'Reconciliation needs correction:138m red +120m black. Closed job remains unchanged.'}];
-test('Accounts sees documentary correction alerts without reopening closed-job tasks',async({page})=>{
+const alerts=[{id:'material-recon:flag',site_name:'Pakpattan',legacy_ipo_number:'306',message:'Reconciliation needs correction:138m red +120m black. Closed job remains unchanged.'}];
+test('Accounts sees correction alerts on Alerts, not on the dashboard, and can mark one resolved',async({page})=>{
  await actors(page.request);await login(page.request,'accounts-release@example.test');
  await page.route('**/api/accounts-workspace',r=>r.fulfill({json:{ipos:[],closures:[],ptEntries:[]}}));
  await page.route('**/api/inventory-reconciliation/reports',r=>r.fulfill({json:{reports:[]}}));
  await page.route('**/api/accounts-workspace/work-queues',r=>r.fulfill({json:{invoicesToSubmit:0,paymentsToRecord:0}}));
  await page.route('**/api/accounts-workspace/material-costing?summary=1',r=>r.fulfill({json:{count:0}}));
- await page.route('**/api/accounts-workspace/material-corrections',r=>r.fulfill({json:{alerts}}));
+ await page.route('**/api/director/ups-alerts',r=>r.fulfill({json:{alerts:[]}}));
+ let open=alerts,resolved:any;
+ await page.route('**/api/accounts-workspace/material-corrections',r=>r.fulfill({json:{alerts:open}}));
+ await page.route('**/api/accounts-workspace/material-corrections/*/resolve',r=>{resolved=r.request().postDataJSON();open=[];return r.fulfill({json:{id:alerts[0].id,resolved:true}});});
  await page.goto('/dashboard#workspace=finance&accountsTab=My+Workspace');
- await expect(page.getByRole('heading',{name:'Reconciliation corrections · 1',exact:true})).toBeVisible();await expect(page.getByText(alerts[0].message,{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Flag reconciliation correction',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Alerts',exact:true})).toBeVisible();
+ await expect(page.getByText('Reconciliation corrections',{exact:false})).toHaveCount(0);
+ await page.getByRole('button',{name:'Alerts',exact:true}).click();
+ const panel=page.getByRole('region',{name:'Reconciliation corrections'});
+ await expect(panel.getByRole('heading',{name:'Reconciliation corrections · 1',exact:true})).toBeVisible();await expect(panel.getByText(alerts[0].message,{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Flag reconciliation correction',exact:true})).toHaveCount(0);
+ await panel.getByRole('button',{name:'Mark resolved',exact:true}).click();
+ const save=panel.getByRole('button',{name:'Save as resolved',exact:true});await expect(save).toBeDisabled();
+ await panel.getByLabel('What was done (required)').fill('PT corrected to 258 m.');await save.click();
+ await expect(panel).toContainText('Pakpattan marked resolved.');await expect(panel).toContainText('No open reconciliation corrections.');
+ expect(resolved).toMatchObject({note:'PT corrected to 258 m.'});
 });
-test('Inventory Parent register shows the same alert without exposing Accounts write controls',async({page})=>{
+test('Inventory sees correction alerts on its Alerts page, not on the dashboard or Parent register',async({page})=>{
  await actors(page.request);await login(page.request);
  await page.route('**/api/material-dispatches/parent-reviewed-ledger',r=>r.fulfill({json:{groups:[]}}));
  await page.route('**/api/material-dispatches/drafts',r=>r.fulfill({json:{drafts:[]}}));
  await page.route('**/api/material-dispatches/material-corrections',r=>r.fulfill({json:{alerts}}));
- await page.goto('/inventory/parent-dos/review');await expect(page.getByText(alerts[0].message,{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Flag reconciliation correction',exact:true})).toHaveCount(0);
+ await page.goto('/inventory/parent-dos/review');await expect(page.getByRole('heading',{name:'Parent DO reconciliation'})).toBeVisible();await expect(page.getByText(alerts[0].message,{exact:true})).toHaveCount(0);
+ await page.goto('/inventory/alerts');await expect(page.getByRole('heading',{name:'Alerts',exact:true})).toBeVisible();await expect(page.getByText(alerts[0].message,{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Flag reconciliation correction',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Mark resolved',exact:true})).toBeVisible();
+ await page.screenshot({path:'test-results/inventory-alerts.png',fullPage:true});
 });
