@@ -17,19 +17,30 @@ export async function stockLedger(pool:Pool,actor:string,input:unknown){
  ), balances AS (
  SELECT b.* FROM inventory_warehouse_source_balances b JOIN scope s ON s.source_sha256=b.source_sha256 AND s.warehouse=b.payload->>'warehouse'
  WHERE ($2::text IS NULL OR b.payload->>'itemId'=$2) AND ($3::text IS NULL OR b.payload->>'unit'=$3)
+ ), board_sites AS (
+ SELECT DISTINCT ON (site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC
+ ), historical_sites AS (
+ SELECT regexp_replace(upper(snapshot->>'ipo'),'[[:space:]·()]','','g') ipo_key,
+ jsonb_agg(jsonb_build_object('siteName',snapshot->>'name','customer',coalesce(c.name,snapshot->>'customer'))) sites
+ FROM board_sites
+ LEFT JOIN customers c ON lower(c.short_code)=lower(snapshot->>'customer')
+ WHERE nullif(trim(snapshot->>'ipo'),'') IS NOT NULL AND nullif(trim(snapshot->>'name'),'') IS NOT NULL
+ GROUP BY 1 HAVING count(*)=1
  ), events AS (
  SELECT 'history:'||e.event_id id,coalesce(e.payload->>'date','') date,e.payload->>'itemId' "itemId",e.payload->>'description' description,e.payload->>'warehouse' warehouse,e.payload->>'unit' unit,
  coalesce(e.payload->>'in','0') incoming,coalesce(e.payload->>'out','0') outgoing,coalesce(e.payload->>'doNumber',e.payload->>'document',e.payload->>'reference','') reference,coalesce(e.payload->>'ipo','') ipo,
- coalesce(e.payload->>'movement','Historical stock evidence') kind,coalesce(e.payload->>'notes',e.payload->>'remarks','') note
+ coalesce(e.payload->>'movement','Historical stock evidence') kind,coalesce(e.payload->>'notes',e.payload->>'remarks','') note,
+ coalesce(h.sites,'[]'::jsonb) sites
  FROM inventory_warehouse_source_events e JOIN scope s ON s.source_sha256=e.source_sha256 AND s.warehouse=e.payload->>'warehouse'
+ LEFT JOIN historical_sites h ON h.ipo_key=regexp_replace(upper(e.payload->>'ipo'),'[[:space:]·()]','','g')
  WHERE ($2::text IS NULL OR e.payload->>'itemId'=$2) AND ($3::text IS NULL OR e.payload->>'unit'=$3)
  UNION ALL
- SELECT 'correction:'||c.case_id,c.created_at::text,b.payload->>'itemId',b.payload->>'description',b.payload->>'warehouse',b.payload->>'unit',c.in_delta::text,'0',c.case_id,'','Approved return correction',''
+ SELECT 'correction:'||c.case_id,c.created_at::text,b.payload->>'itemId',b.payload->>'description',b.payload->>'warehouse',b.payload->>'unit',c.in_delta::text,'0',c.case_id,'','Approved return correction','','[]'::jsonb
  FROM inventory_warehouse_return_corrections c JOIN balances b USING(source_sha256,ledger_key)
  UNION ALL
  SELECT 'posted:'||m.id::text,coalesce(i.snapshot->>'receivedOn',m.created_at::text),b.payload->>'itemId',b.payload->>'description',b.payload->>'warehouse',b.payload->>'unit',m.in_delta::text,m.out_delta::text,
- coalesce(i.snapshot->>'number',rd.number,rr.number,t.number,p.number,r.number,d.number,''),'',
- CASE WHEN i.document_id IS NOT NULL THEN 'Inventory inward' ELSE m.kind END,coalesce(i.external_reference,'')
+ coalesce(i.snapshot->>'number',rd.number,rr.number,t.number,p.number,r.number,d.number,''),coalesce(linked.ipo,''),
+ CASE WHEN i.document_id IS NOT NULL THEN 'Inventory inward' ELSE m.kind END,coalesce(i.external_reference,''),coalesce(linked.sites,'[]'::jsonb)
  FROM inventory_warehouse_operational_movements m JOIN balances b USING(source_sha256,ledger_key)
  LEFT JOIN inventory_temporary_inward_postings i ON i.document_id=m.temporary_inward_id
  LEFT JOIN inventory_material_dispatches_active d ON d.id=m.dispatch_id
@@ -39,6 +50,13 @@ export async function stockLedger(pool:Pool,actor:string,input:unknown){
  LEFT JOIN inventory_material_replacement_dispatches rd ON rd.id=m.replacement_dispatch_id
  LEFT JOIN inventory_material_replacement_usable_releases rel ON rel.id=m.replacement_release_id
  LEFT JOIN inventory_material_replacement_returns rr ON rr.id=rel.return_id
+ LEFT JOIN inventory_material_replacement_cases rc ON rc.id=rr.case_id
+ LEFT JOIN LATERAL (
+ SELECT string_agg(DISTINCT nullif(concat_ws(' · ',nullif(site->>'ipo',''),nullif(site->>'orderNumber','')),''),' / ') ipo,
+ jsonb_agg(DISTINCT jsonb_build_object('siteName',site->>'siteName','customer',site->>'customer'))
+ FILTER (WHERE nullif(site->>'siteName','') IS NOT NULL OR nullif(site->>'customer','') IS NOT NULL) sites
+ FROM jsonb_array_elements(coalesce(rd.snapshot->'sites',rc.snapshot->'sites',d.snapshot->'sites','[]'::jsonb)) site
+ ) linked ON true
  ), filtered AS (SELECT * FROM events WHERE $4='all' OR ($4='in' AND incoming::numeric<>0) OR ($4='out' AND outgoing::numeric<>0))
  SELECT (SELECT count(*)::int FROM filtered) total,coalesce((SELECT jsonb_agg(row_to_json(page)) FROM (SELECT * FROM filtered ORDER BY date DESC,id DESC LIMIT 100 OFFSET $5) page),'[]'::jsonb) events`,[warehouses,f.itemId||null,f.unit||null,f.direction,f.offset]);
  return {events:result.rows[0].events,total:result.rows[0].total,offset:f.offset,limit:100};
