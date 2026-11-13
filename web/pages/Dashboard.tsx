@@ -5,6 +5,7 @@ import {AccountsBilling} from './AccountsBilling.js';
 import {accountsPageName} from '../../shared/accounts-navigation.js';
 import {notificationPath} from '../../shared/notification-target.js';
 import {UpsAlerts} from '../components/UpsAlerts.js';
+import {MaterialCorrectionAlerts} from '../components/MaterialCorrectionAlerts.js';
 import {ManagementDashboard} from "../components/ManagementDashboard.js";
 import {UpsManagementPortfolio} from "../components/UpsManagementPortfolio.js";
 import {DepartmentViewSwitcher} from "../components/DepartmentViewSwitcher.js";
@@ -1468,7 +1469,7 @@ export function Dashboard({
                   }
                 />
               )}
-              {view === "alerts" && ["Admin","Management","Accounts"].includes(session.user.role) && <UpsAlerts/>}
+              {view === "alerts" && ["Admin","Management","Accounts"].includes(session.user.role) && <><MaterialCorrectionAlerts session={session}/><UpsAlerts/></>}
               {view === "ubl-workflow" && <UblWorkflow session={session} />}
               {view === "ubl" &&
                 ["Admin", "Management"].includes(session.user.role) && (
