@@ -1,3 +1,4 @@
+import {isBoqViewer,siteBoqDetails} from './site-boq.js';
 import {readLocalPurchases,saveLocalPurchases,requireLocalPurchaseSite} from './local-purchases.js';
 import {siteDispatchChoices} from '../inventory/dispatch-document-status.js';
 import {queueOperationsEmails} from '../ipo-email/queue.js';
@@ -71,6 +72,9 @@ export class OperationsBoardRepository{
  }
  async deliveryDispatches(actor:string,id:string){const site=await this.site(actor,id);return {dispatches:await siteDispatchChoices(this.pool,id,(site as {origin?:{ipoId?:string}}).origin?.ipoId)};}
  async site(actor:string,id:string){const a=await this.access(actor),r=await this.current(this.pool,id);this.scope(a,r.snapshot);return {...r.snapshot,version:r.version};}
+ /** View-only BOQ details (items and quantities) for accounts granted in migration 306. */
+ async boqViewer(actor:string){return isBoqViewer(this.pool,actor);}
+ async siteBoq(actor:string,id:string){if(!await isBoqViewer(this.pool,actor))throw new HttpError(403,'BOQ details are not available for this account.');const a=await this.access(actor),r=await this.current(this.pool,id);this.scope(a,r.snapshot);return siteBoqDetails(this.pool,actor,id,r.snapshot);}
  async history(actor:string,id:string,before?:number){
   const a=await this.access(actor),site=await this.current(this.pool,id);this.scope(a,site.snapshot);
   const rows=(await this.pool.query('SELECT v.version,v.action,v.reason,v.created_at,u.display_name AS actor FROM operations_board_versions v JOIN users u ON u.id=v.created_by WHERE v.site_id=$1 AND ($2::integer IS NULL OR v.version<$2) ORDER BY v.version DESC LIMIT 100',[id,before??null])).rows;
