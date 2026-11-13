@@ -2760,7 +2760,7 @@ function RecordEditor({
     r.coordinationBucket === coordinationBuckets[1] &&
     !!r.data.designHandoffAt;
   if (!design && r.data.ipoShared)
-    return <IpoSharedPreview record={r} onBack={onBack} />;
+    return <IpoSharedPreview record={r} onBack={onBack} session={session} onOpen={onOpen} />;
   if (
     !design &&
     saleReview &&
