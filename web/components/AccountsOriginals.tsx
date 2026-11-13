@@ -9,15 +9,13 @@ import {displayDate} from './SiteDocumentsDialog.js';
 
 const location=(value:string)=>({'At site':'At site','With delivery driver':'With delivery driver','Received at Lahore head office':'Lahore office','TCS to Karachi office':'In transit to Karachi','TCS to Lahore head office':'In transit to Lahore','Received at Karachi office':'Karachi office','Submitted to Accounts':'Handed over to Accounts'}[value]??value);
 
-/** Required originals past the three-day Karachi deadline, plus sites missing the start date. */
+/** Required originals past the three-day Karachi deadline. A site without a completion
+ * or final delivery date shows that in its own Documents window, not as a list here. */
 export function OverdueOriginals({sites}:{sites:any[]}){
  const overdue=sites.flatMap(s=>s.originals.overdue.map((i:any)=>({...i,site:s}))).sort((a,b)=>b.daysOverdue-a.daysOverdue||String(a.site.name).localeCompare(String(b.site.name)));
- const missingDate=sites.filter(s=>s.originals.missingStartDate);
- if(!overdue.length&&!missingDate.length)return null;
+ if(!overdue.length)return null;
  return <section className="accounts-list-panel"><header className="accounts-panel-heading"><div><h2>Overdue physical originals</h2><p>Required originals must reach the Karachi office within three calendar days of the Job Completion Date (QC), or the final delivery date for delivery-only sites.</p></div><span>{overdue.length} {overdue.length===1?'original':'originals'}</span></header>
-  {overdue.length>0&&<div className="pz-table-scroll"><table className="site-documents-table"><thead><tr><th>SR#</th><th>Site / customer</th><th>Document</th><th>Completion / final delivery</th><th>Current location</th><th>Days overdue</th><th>Dispatch / tracking</th></tr></thead><tbody>{overdue.map((i:any,n:number)=><tr key={i.site.id+i.key}><td>{n+1}</td><td><strong>{i.site.name}</strong><small>{i.site.customer||'Customer not recorded'} · {i.site.ipo}</small></td><td><strong>{i.type}</strong><small>{i.batchLabel}</small></td><td>{displayDate(i.site.originals.startDate)}<small>{i.site.originals.startBasis}</small></td><td><strong>{location(i.location)}</strong>{i.status==='karachi-pending'&&<small>Accounts confirmation pending</small>}</td><td><StatusBadge tone="danger">{i.daysOverdue} {i.daysOverdue===1?'day':'days'}</StatusBadge></td><td>{i.tracking?`TCS ${i.tracking}`:i.carrier?i.carrier:'Not recorded'}{i.tracking&&i.carrier&&<small>{i.carrier}</small>}</td></tr>)}</tbody></table></div>}
-  {missingDate.length>0&&<p role="status" className="pz-caption">{missingDate.length} {missingDate.length===1?'site has':'sites have'} no recorded completion or final delivery date, so no deadline is set: {missingDate.map(s=>s.name).join(', ')}.</p>}
- </section>;
+  {overdue.length>0&&<div className="pz-table-scroll"><table className="site-documents-table"><thead><tr><th>SR#</th><th>Site / customer</th><th>Document</th><th>Completion / final delivery</th><th>Current location</th><th>Days overdue</th><th>Dispatch / tracking</th></tr></thead><tbody>{overdue.map((i:any,n:number)=><tr key={i.site.id+i.key}><td>{n+1}</td><td><strong>{i.site.name}</strong><small>{i.site.customer||'Customer not recorded'} · {i.site.ipo}</small></td><td><strong>{i.type}</strong><small>{i.batchLabel}</small></td><td>{displayDate(i.site.originals.startDate)}<small>{i.site.originals.startBasis}</small></td><td><strong>{location(i.location)}</strong>{i.status==='karachi-pending'&&<small>Accounts confirmation pending</small>}</td><td><StatusBadge tone="danger">{i.daysOverdue} {i.daysOverdue===1?'day':'days'}</StatusBadge></td><td>{i.tracking?`TCS ${i.tracking}`:i.carrier?i.carrier:'Not recorded'}{i.tracking&&i.carrier&&<small>{i.carrier}</small>}</td></tr>)}</tbody></table></div>} </section>;
 }
 
 /** Salaas confirms only the originals actually received, with their receipt date. */
