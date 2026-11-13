@@ -521,6 +521,7 @@ export function DepartmentWorkspace({
       : !designTaskStages.includes(r.stage) &&
         !["issued", "declined"].includes(r.stage),
   );
+  const pageFilters = page === iposSharedBucket ? filters : { ...filters, solutionType: "" };
   const filtered = (page === "Workspace" ? departmentTasks : rows).filter((r) =>
     matchesWorkspace(
       {
@@ -530,7 +531,7 @@ export function DepartmentWorkspace({
         ),
         site: `${r.site} ${r.siteCode}`,
       },
-      filters,
+      pageFilters,
     ),
   );
   const allCombinedFollowups = followupGroups(rows);
@@ -873,6 +874,7 @@ export function DepartmentWorkspace({
             value={filters}
             onChange={setFilters}
             compact
+            showJobType={page === iposSharedBucket}
             toolbarActions={department==='design'&&[designBuckets[2],designBuckets[3]].includes(page)?<Button variant="primary" onClick={()=>setShowUblSummary(true)}>UBL Technical Review Summary</Button>:undefined}
             showTaskModes={page === "Workspace"}
             searchLabel={

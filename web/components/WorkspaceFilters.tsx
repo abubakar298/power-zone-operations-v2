@@ -10,6 +10,7 @@ export const emptyWorkspaceFilters = {
   person: "",
   region: "",
   route: "",
+  solutionType: "",
   date: "",
   period: "all",
 };
@@ -21,7 +22,7 @@ export function matchesWorkspace(t: any, f: WorkspaceFilterValues) {
         .join(" ")
         .toLowerCase()
         .includes(f.search.toLowerCase())) &&
-    ["customer", "site", "person", "region", "route"].every(
+    ["customer", "site", "person", "region", "route", "solutionType"].every(
       (k) =>
         !f[k as keyof WorkspaceFilterValues] ||
         t[k] === f[k as keyof WorkspaceFilterValues],
@@ -38,6 +39,7 @@ export function WorkspaceFilters({
   searchLabel = "Search tasks",
   showTaskModes = true,
   compact = false,
+  showJobType = false,
   extraFilters,
   toolbarActions,
 }: {
@@ -47,13 +49,14 @@ export function WorkspaceFilters({
   searchLabel?: string;
   showTaskModes?: boolean;
   compact?: boolean;
+  showJobType?: boolean;
   extraFilters?:ReactNode;
   toolbarActions?:ReactNode;
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const change = (key: keyof WorkspaceFilterValues, v: string) =>
     onChange({ ...value, [key]: v });
-  const dimensions = ["customer", "site", "person", "region", "route"] as const;
+  const dimensions = ["customer", "site", "person", "region", "route", ...(showJobType ? ["solutionType" as const] : [])] as const;
   const activeFilters = [...dimensions, "date" as const].filter((key) => value[key]).length;
   if (compact) return <div className="pz-compact-filters">
     {showTaskModes && <div className="pz-action-row workspace-groups">
@@ -70,7 +73,7 @@ export function WorkspaceFilters({
       {(activeFilters > 0 || value.search) && <Button variant="neutral" onClick={() => onChange({...emptyWorkspaceFilters})}>Clear</Button>}
     </div>
     {filtersOpen && <div id="task-extra-filters" className="pz-filter-options">
-      {dimensions.map((key) => <Field key={key} id={`task-${key}`} label={key === "person" ? "Responsible person" : key.charAt(0).toUpperCase()+key.slice(1)}>
+      {dimensions.map((key) => <Field key={key} id={`task-${key}`} label={key === "solutionType" ? "Job type" : key === "person" ? "Responsible person" : key.charAt(0).toUpperCase()+key.slice(1)}>
         <select id={`task-${key}`} value={value[key]} onChange={(e) => change(key,e.target.value)}>
           <option value="">All</option>
           {[...new Set<string>(rows.map((row) => row[key]).filter(Boolean))].sort().map((option) => <option key={option}>{option}</option>)}
