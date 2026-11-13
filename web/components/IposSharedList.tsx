@@ -1,4 +1,4 @@
-import {recentFirst} from '../../shared/recent-records.js';
+import { sortSharedIpos } from "../../shared/shared-ipo-order.js";
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {departmentFetch} from '../department-view.js';
 import {DocumentListDetails} from './DocumentListDetails.js';
@@ -38,8 +38,9 @@ export function IposSharedList({ records, onPreview }: { records: any[]; onPrevi
   return <section className="pz-stack" aria-label="Shared IPO documents">
     <p className="pz-caption" role="status">{records.length} IPO{records.length === 1 ? "" : "s"}</p>
     <div className="pz-table-scroll"><table className="pz-table">
-      <thead><tr><th>Customer</th><th>Site / Branch code</th><th>IPO reference</th><th>PO reference / Date</th><th className="pz-ipo-actions-heading">Next actions</th></tr></thead>
-      <PagedTableBody label="sites and documents">{recentFirst(records).map((record) => <tr key={record.id}>
+      <thead><tr><th scope="col">SR#</th><th>Customer</th><th>Site / Branch code</th><th>IPO reference</th><th>PO reference / Date</th><th className="pz-ipo-actions-heading">Next actions</th></tr></thead>
+      <PagedTableBody label="sites and documents">{sortSharedIpos(records).map((record, index) => <tr key={record.id}>
+        <td>{index + 1}</td>
         <td>{record.customerCode || record.customer}</td>
         <td>{record.site}<br/><span className="pz-caption">{record.siteCode || "Not entered"}</span></td>
         <td>{record.data.ipoNumber || "Not available"}{record.data.sharedOrderNumber&&<div className="pz-caption">Order {record.data.sharedOrderNumber}</div>}<DocumentListDetails record={record}/>{record.data.historicalDelivered&&<small className="pz-caption" style={{display:"block"}}>Historical · already delivered</small>}</td>
