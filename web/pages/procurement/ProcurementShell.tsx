@@ -3,6 +3,7 @@ import { api, ApiError, type Session } from "../../api.js";
 import { BackButton } from "../../components/BackButton.js";
 import { Brand } from "../../components/Brand.js";
 import { Icon } from "../../components/Icon.js";
+import { OperationsProcurementSwitcher } from "../../components/OperationsProcurementSwitcher.js";
 import { ManagementHeaderSwitcher } from "../../components/ManagementHeaderSwitcher.js";
 import { WorkspaceAccountMenu } from "../../components/WorkspaceAccountMenu.js";
 import { confirmLeaveWorkspace } from "../../hooks/useUnsavedChanges.js";
@@ -33,12 +34,13 @@ function currentView(): View {
   return pages.find(page => page.id === requested)?.id ?? "warehouse-stock";
 }
 
-export function ProcurementShell({ session, onLogout, onReturn, onOpenAccounts }: {
+export function ProcurementShell({ session, onLogout, onReturn, onOpenAccounts, canSwitchToOperations }: {
   session: Session;
   onLogout: () => void;
   viewingAs?: string;
   onReturn?: () => void;
   onOpenAccounts?: () => void;
+  canSwitchToOperations?: boolean;
 }) {
   const [view, setView] = useState(currentView);
   const [mobile, setMobile] = useState(false);
@@ -103,6 +105,7 @@ export function ProcurementShell({ session, onLogout, onReturn, onOpenAccounts }
         <div className="procurement-breadcrumb">Workspace / <strong>Procurement</strong></div>
         <div className="procurement-header-actions">
           <Button variant="primary" onClick={createDraft}>Create request</Button>
+          {canSwitchToOperations && <OperationsProcurementSwitcher area="procurement" />}
           <ManagementHeaderSwitcher session={session} value="operations" operationsArea="procurement" />
           <WorkspaceAccountMenu name={session.user.displayName} label="Procurement" disabled={signingOut}
             onSignOut={onReturn ?? (() => void logout())} signOutLabel={onReturn ? "Return to Management" : undefined} />
