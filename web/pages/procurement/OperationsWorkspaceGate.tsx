@@ -9,7 +9,7 @@ const OperationsBoard=lazy(()=>import('../operations-board/OperationsBoard.js').
 /** Assigned board staff open the scoped Operations interface. Procurement
  * buyers retain their Procurement workspace; every other Operations login uses the scoped board.
  * A failed capability check never guesses an interface. */
-export function OperationsWorkspaceGate({ session, onLogout, viewingAs, onReturn }: { session: Session; onLogout: () => void; viewingAs?: string; onReturn?: () => void }) {
+export function OperationsWorkspaceGate({ session, onLogout, selectedArea, viewingAs, onReturn }: { session: Session; onLogout: () => void; selectedArea?: 'operations' | 'procurement'; viewingAs?: string; onReturn?: () => void }) {
   const [me, setMe] = useState<(Me & {operationsBoard?:boolean}) | "error" | null>(null),[attempt,setAttempt]=useState(0);
   useEffect(() => {
     let live = true;
@@ -18,6 +18,7 @@ export function OperationsWorkspaceGate({ session, onLogout, viewingAs, onReturn
   }, [session.user.id,attempt]);
   if (me === null) return <div className="ops"><p className="ops-foot" style={{ padding: 24 }}>Loading…</p></div>;
   if(me==='error')return <section className="pz-panel pz-stack"><p role="alert">Unable to open your assigned workspace.</p><Button onClick={()=>{setMe(null);setAttempt(v=>v+1);}}>Try again</Button></section>;
-  if (me.buyer && !(me.operationsBoard && location.pathname.startsWith('/operations/'))) return <ProcurementShell session={session} onLogout={onLogout} viewingAs={viewingAs} onReturn={onReturn} canSwitchToOperations={me.operationsBoard===true&&!viewingAs} />;
+  const boardSelected=selectedArea==='operations'||(selectedArea===undefined&&me.operationsBoard&&location.pathname.startsWith('/operations/'));
+  if (me.buyer && !boardSelected) return <ProcurementShell session={session} onLogout={onLogout} viewingAs={viewingAs} onReturn={onReturn} canSwitchToOperations={me.operationsBoard===true&&!viewingAs} />;
   return <Suspense fallback={<p role="status">Opening assigned Operations sites…</p>}><OperationsBoard session={session} onLogout={onLogout}/></Suspense>;
 }
