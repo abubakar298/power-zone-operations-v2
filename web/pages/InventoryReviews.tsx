@@ -1,4 +1,3 @@
-import {BackButton} from '../components/BackButton.js';
 import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
 import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
 import {StandaloneClosingReviews} from '../components/StandaloneClosingReviews.js';
@@ -37,10 +36,10 @@ export function InventoryReviews({session,onLogout,reviewScope,mode="closing"}:{
  function back(){if(!confirmLeaveWorkspace())return;setDetail(undefined);history.pushState(null,'',reviewBase);currentPath.current=reviewBase;window.scrollTo(0,0);}
  const rows=(data?.rows??[]).filter(r=>(mode==='parent'?r.source_row.sourceRow.reviewKind!=='standalone-closing':String(r.source_row.sourceRowId).startsWith('closing-check:'))&&(!reviewScope||reviewScope.caseKeys.includes(r.source_row.groupId+':'+r.source_row.sourceRowId))&&(!warehouse||r.source_row.warehouse===warehouse)&&(filter==='all'||filter==='review'&&!['source-verified','approved-awaiting-posting','posted'].includes(r.state)||filter==='verified'&&r.state==='source-verified'||filter===r.state)&&`${r.source_row.item??''} ${r.source_row.description} ${r.source_row.groupTitle}`.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>Number(a.state==='source-verified')-Number(b.state==='source-verified')||a.source_row.groupTitle.localeCompare(b.source_row.groupTitle)||a.source_row.description.localeCompare(b.source_row.description));
  return <div className="ob-shell">
-  <header className="ob-header"><Button className="ob-mobile-toggle" aria-label="Open navigation" onClick={()=>setMobile(!mobile)}><Icon name="menu"/></Button><Brand compact/><BackButton/><div className="ob-header-actions"><ManagementHeaderSwitcher session={session} value="inventory"/><WorkspaceAccountMenu name={session.user.displayName} label={'Inventory'} onSignOut={async()=>{if(!confirmLeaveWorkspace())return;try{await api('/auth/logout',{csrf:session.csrfToken,body:{}});onLogout();}catch(e){setError((e as Error).message);}}}/></div></header>
+  <header className="ob-header"><Button className="ob-mobile-toggle" aria-label="Open navigation" onClick={()=>setMobile(!mobile)}><Icon name="menu"/></Button><Brand compact/><div className="ob-header-actions"><ManagementHeaderSwitcher session={session} value="inventory"/><WorkspaceAccountMenu name={session.user.displayName} label={'Inventory'} onSignOut={async()=>{if(!confirmLeaveWorkspace())return;try{await api('/auth/logout',{csrf:session.csrfToken,body:{}});onLogout();}catch(e){setError((e as Error).message);}}}/></div></header>
   <InventoryNavigation mode="dispatcher" active={mode==='parent'?'parent-dos':'reconciliations'} mobile={mobile}/>
   <main className="ob-main">
-   <div className="ob-page-title"><div><h1>{reviewScope?.title??(mode==='parent'?'Parent DO reconciliation':'Closing reconciliations')}</h1><p>Review differences and preserve verified conclusions.</p></div><Button loading={busy} onClick={()=>{if(detail)void open(detail.id,false);else if(confirmLeaveWorkspace())void load();}}>Refresh</Button></div>
+   <div className="ob-page-title"><div><h1>{reviewScope?.title??(mode==='parent'?'Parent DO reconciliation':'Closing reconciliations')}</h1><p>Review differences and preserve verified conclusions.</p></div></div>
    {error&&<p className="form-error" role="alert">{error}</p>}{notice&&<p className="ob-success" role="status">{notice}</p>}
    {data&&!detail&&mode!=='parent'&&<StandaloneClosingReviews reviewRows={data.rows} busy={busy} onReview={id=>void open(id)}/>}
    {data&&!detail&&<section className="pz-panel pz-stack">

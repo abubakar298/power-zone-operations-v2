@@ -292,12 +292,6 @@ export function LegacyDesign({ session }: { session: Session }) {
         <Button variant="primary" onClick={() => open()} disabled={busy}>
           New design survey
         </Button>
-        <Button
-          variant="neutral"
-          onClick={() => void load().catch((e) => setError(e.message))}
-        >
-          Refresh workspace
-        </Button>
         {manager && (
           <>
             <Button

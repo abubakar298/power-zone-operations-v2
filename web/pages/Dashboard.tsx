@@ -896,7 +896,6 @@ export function Dashboard({
           {<>
             <Button variant="neutral" className="pz-header-brand" aria-label="Power Zone — Workspace" onClick={() => navigate("dashboard", undefined, true)}><Brand compact /></Button>
             <button className="icon-button mobile-nav-toggle" aria-label="Toggle navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(!mobileOpen)}><Icon name="menu" /></button>
-            <BackButton />
           </>}
           <span className="breadcrumb">
             Workspace <span aria-hidden="true">/</span>{" "}
@@ -1046,7 +1045,7 @@ export function Dashboard({
             )}
           </div>
         </header>
-        <main className="dashboard" aria-label={managementHome ? "Management landing page" : undefined}>
+        <main className="dashboard" aria-label={managementHome ? "Management landing page" : undefined}><div className="pz-page-back"><BackButton/></div>
           <WorkspaceBoundary key={workspaceVisit}>
             <Suspense
               fallback={

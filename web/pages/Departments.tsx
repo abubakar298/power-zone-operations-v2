@@ -154,16 +154,6 @@ export function Departments({
               : "Review received IPOs and prepare the supporting file for external accounting."}
           </p>
         </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            setError("");
-            void load().catch((e) => setError(e.message));
-          }}
-        >
-          Refresh queues
-        </button>
       </div>
       {error && (
         <p role="alert" className="form-error">

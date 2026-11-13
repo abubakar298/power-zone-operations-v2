@@ -100,7 +100,6 @@ export function ProcurementShell({ session, onLogout, onReturn, onOpenAccounts }
       <header className="procurement-topbar">
         <Button className="procurement-menu-toggle" aria-label="Toggle navigation" aria-controls="procurement-sidebar" aria-expanded={mobile} onClick={() => setMobile(!mobile)}><Icon name="menu" /></Button>
         <Button className="procurement-brand" aria-label="Power Zone — Dashboard" onClick={() => go("warehouse-stock")}><Brand compact /><span className="procurement-brand-label">Procurement</span></Button>
-        <BackButton />
         <div className="procurement-breadcrumb">Workspace / <strong>Procurement</strong></div>
         <div className="procurement-header-actions">
           <Button variant="primary" onClick={createDraft}>Create request</Button>
@@ -117,7 +116,7 @@ export function ProcurementShell({ session, onLogout, onReturn, onOpenAccounts }
           {handoffs.map(navButton)}
         </nav>
       </aside>
-      <main className="procurement-content">
+      <main className="procurement-content"><div className="pz-page-back"><BackButton/></div>
         {view !== "warehouse-stock" && <div className="procurement-page-head"><h1>{pages.find(page => page.id === view)?.title}</h1></div>}
         {error && <p role="alert" className="form-error">{error}</p>}
         <div className="ops ops-embed">

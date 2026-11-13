@@ -5,3 +5,5 @@
 @media(max-width:700px){.pz-back-button{min-height:36px;padding:0 9px}.pz-back-button span{display:none}}
 /* Inside an opened window: the arrow sits above the window heading. */
 .pz-dialog-back{display:flex;width:max-content;margin:14px 0 6px 18px}
+/* Page Back: sits above the page title, below the top bar (not in the top bar). */
+.pz-page-back{display:flex;margin:0 0 12px}.pz-page-back:empty{display:none}

@@ -44,7 +44,7 @@ export function ProgrammeDashboard({userId,onOpenSite,endpoint='/director/progra
   return key==='active'?'Contract value including tax':'Outstanding value including tax';
  };
  return <section className="programme-dashboard" aria-label="Bank programme progress" aria-busy={loading}>
-  <div className="programme-heading"><div><h2>{title}</h2><p>Delivery, installation and payments</p></div><Button variant="neutral" loading={loading} loadingLabel="Refreshing…" onClick={()=>void load()}>Refresh</Button></div>
+  <div className="programme-heading"><div><h2>{title}</h2><p>Delivery, installation and payments</p></div></div>
   {error&&<p className="form-error" role="alert">{error}{data?' Showing the last successful refresh.':''}</p>}
   <div className="programme-toolbar"><label>Programme<select value={programmeKey} onChange={e=>{setProgrammeKey(e.target.value);setSelectionKey('active');setSearch('');remember(e.target.value,'active','');}}>{options.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><label>Search sites<input type="search" value={search} onChange={e=>{setSearch(e.target.value);remember(programmeKey,selectionKey,e.target.value);}} maxLength={200} placeholder="IPO, order, site, customer PO or invoice"/></label></div>
   {!data&&!error?<p role="status">Loading programme progress…</p>:!programme?<p role="status">This programme is not available in the current record. Refresh to check again.</p>:<>

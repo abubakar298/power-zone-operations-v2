@@ -19,5 +19,5 @@ test('Inventory shows ordered site-flow buckets without Heads-up or redundant Pa
  await buckets.getByRole('button').filter({hasText:'Upcoming Projects'}).click();await expect(page.getByRole('cell',{name:'Ready IPO UBL'})).toBeVisible();
  await expect(page.getByText('Installation planned: 2026-11-03',{exact:true})).toBeVisible();
  expect(reviews).toBe(0);await page.screenshot({path:'test-results/inventory-dashboard-site-flow.png',fullPage:true});
- await expect(page.getByRole('button',{name:'Refresh',exact:true})).toBeEnabled();
+ await expect(page.getByRole('button',{name:/^Refresh/})).toHaveCount(0); // Refresh buttons were removed; the browser reload is used instead.
 });
