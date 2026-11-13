@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 44812)
-Total output lines: 4194
-
 import {batchedDecorateLookups,directDecorateLookups,type DecorateLookups} from './decorate-lookups.js';
 import { ipoInvoiceTerms } from "../../shared/ipo-invoice-terms.js";
 import {ublPoConfigurations,ublPoConfigurationChange} from './ubl-po-configuration.js';
@@ -1850,7 +1847,499 @@ export class ProjectWorkflowRepository {
           !management(u.role) &&
           u.role !== "Design"
         )
-          th…4812 tokens truncated…    )
+          throw new HttpError(
+            403,
+            "The assigned survey planner schedules and assigns the team.",
+          );
+        if (data.surveyDispatchId)
+          throw new HttpError(
+            409,
+            "This survey already belongs to an approved dispatch. Correct its dispatch before changing its schedule.",
+          );
+        if (data.surveyInProgress)
+          throw new HttpError(
+            409,
+            "Survey work has started. Scheduling cannot be changed here.",
+          );
+        const date = z.iso.date().parse(input.date);
+        const team = z.array(z.uuid()).min(1).max(20).parse(input.team);
+        for (const p of team) {
+          if (
+            !(
+              await c.query(
+                "SELECT id FROM users WHERE id=$1 AND active AND role='Design' UNION ALL SELECT id FROM survey_team_members WHERE id=$1 AND active",
+                [p],
+              )
+            ).rowCount
+          )
+            throw new HttpError(422, "Select an active surveyor.");
+        }
+        if (input.technicalOwnerId) {
+          r.technical_owner_id = await this.person(
+            c,
+            uuid(input.technicalOwnerId),
+            "Design",
+          );
+        }
+        data.scheduledSurveyDate = date;
+        data.surveyTeam = team;
+        if (stage === "survey_requested") stage = "survey_scheduled";
+        reason = note(input.notes);
+      } else if (v.action === "save-site-picture-link") {
+        this.requireRole(u, ["Design"]);
+        requireStage(["survey_scheduled", "report_received", "technical_review", "technical_revision"]);
+        const {sitePictureFolder} = await import('./site-picture-link.js');
+        const url = sitePictureFolder(input.url);
+        data.sitePictureFolder = {url, savedBy: actor, savedAt: new Date().toISOString()};
+        reason = "Site pictures and videos linked to their Google Drive folder; media remains in Drive.";
+      } else if (v.action === "start-survey") {
+        this.requireRole(u, ["Design"]);
+        requireStage(["survey_scheduled"]);
+        data.surveyInProgress = true;
+        reason = note(input.notes);
+      } else if (
+        v.action === "save-survey-inputs" ||
+        v.action === "save-survey-completion" ||
+        v.action === "review-survey-inputs"
+      ) {
+        this.requireRole(u, ["Design"]);
+        const reviewing = v.action === "review-survey-inputs";
+        requireStage(
+          reviewing
+            ? ["report_received", "technical_review", "technical_revision"]
+            : ["survey_scheduled"],
+        );
+        if (!data.surveyDispatchId)
+          throw new HttpError(
+            422,
+            "Approve the survey dispatch before preparing the completion report.",
+          );
+        const surveyCustomer = (
+          await c.query("SELECT short_code FROM customers WHERE id=$1", [
+            r.customer_id,
+          ])
+        ).rows[0];
+        const combinedUbl =
+          r.route === "survey-framework" &&
+          surveyCustomer?.short_code?.toUpperCase() === "UBL" && data.basis?.boq?.survey?.family!=="bess-only";
+        if (combinedUbl && v.action === "save-survey-inputs")
+          throw new HttpError(
+            422,
+            "Complete the Standard BOQ and UBL details, then save both together.",
+          );
+        if (!combinedUbl && v.action === "save-survey-completion")
+          throw new HttpError(
+            422,
+            "Combined UBL survey save is only available on the UBL pre-agreed survey route.",
+          );
+        const edit = z
+          .object({
+            customerName: z.string().trim().min(1).max(200),
+            siteName: z.string().trim().min(1).max(200),
+            address: z.string().trim().max(1000),
+          })
+          .strict()
+          .parse(input.masterDetails);
+        const customer = (
+          await c.query("SELECT * FROM customers WHERE id=$1 FOR UPDATE", [
+            r.customer_id,
+          ])
+        ).rows[0];
+        const site = (
+          await c.query(
+            "SELECT * FROM sites WHERE id=$1 AND customer_id=$2 FOR UPDATE",
+            [r.site_id, r.customer_id],
+          )
+        ).rows[0];
+        if (
+          !customer ||
+          !site ||
+          customer.status !== "Active" ||
+          site.status !== "Active"
+        )
+          throw new HttpError(422, "The customer and site must remain active.");
+        const customerChanged = customer.name !== edit.customerName;
+        const siteChanged =
+          site.name !== edit.siteName || site.location !== edit.address;
+        if (customerChanged || siteChanged) {
+          if (input.confirmMasterChange !== true)
+            throw new HttpError(
+              422,
+              "Confirm the customer/site database changes before saving.",
+            );
+          if (
+            (customerChanged && input.customerVersion !== customer.version) ||
+            (siteChanged && input.siteVersion !== site.version)
+          )
+            throw new HttpError(
+              409,
+              "Master details changed while this form was open. Reload and confirm the latest values.",
+            );
+          const before = {
+            customer: {
+              id: customer.id,
+              name: customer.name,
+              version: customer.version,
+            },
+            site: {
+              id: site.id,
+              name: site.name,
+              address: site.location,
+              version: site.version,
+            },
+          };
+          if (customerChanged)
+            await c.query(
+              "UPDATE customers SET name=$2,version=version+1 WHERE id=$1",
+              [customer.id, edit.customerName],
+            );
+          if (siteChanged)
+            await c.query(
+              "UPDATE sites SET name=$2,location=$3,version=version+1 WHERE id=$1",
+              [site.id, edit.siteName, edit.address],
+            );
+          data.surveyMasterChanges = [
+            ...(data.surveyMasterChanges ?? []),
+            {
+              before,
+              after: {
+                customer: {
+                  id: customer.id,
+                  name: edit.customerName,
+                  version: customer.version + (customerChanged ? 1 : 0),
+                },
+                site: {
+                  id: site.id,
+                  name: edit.siteName,
+                  address: edit.address,
+                  version: site.version + (siteChanged ? 1 : 0),
+                },
+              },
+              confirmedBy: actor,
+              at: new Date().toISOString(),
+            },
+          ];
+          await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [
+            actor,
+            `project.workflow.confirmed-master-update:${id}:customer-${customer.id}:site-${site.id}`,
+          ]);
+        }
+        await c.query(
+          "UPDATE project_workflow_records SET site_name=$2 WHERE id=$1",
+          [r.id, edit.siteName],
+        );
+        r.site_name = edit.siteName;
+        data.siteAddress = edit.address;
+        const schema = surveySchema.omit({
+          uploadIds: true,
+          ocrText: true,
+          ocrReviewed: true,
+        });
+        const previousInputs = data.surveyInputs;
+        data.surveyInputs = schema.parse({
+          ...input.survey,
+          brands: Object.fromEntries(
+            ["solar", "inverter", "battery", "cable", "switchgear"].map(
+              (key) => [key, data.surveyInputs?.brands?.[key] ?? 0],
+            ),
+          ),
+          customerId: r.customer_id,
+          siteName: edit.siteName,
+          siteCode: r.site_code,
+          location: edit.address,
+          preparedBy: u.display_name,
+          sourceMode: "Survey",
+        });
+        data.surveyInputsSavedAt = new Date().toISOString();
+        data.surveyInputsSavedBy = actor;
+        if (reviewing) {
+          data.surveyInputChanges = [
+            ...(data.surveyInputChanges ?? []),
+            {
+              before: previousInputs,
+              after: data.surveyInputs,
+              reviewedBy: actor,
+              at: data.surveyInputsSavedAt,
+            },
+          ];
+          data.reviewDocumentId = null;
+          data.technicalVerifiedAt = null;
+        }
+        if (combinedUbl && !reviewing) {
+          const saved = await saveCustomerSurveyForm(
+            c,
+            { ...r, data },
+            actor,
+            input.customerForm,
+          );
+          data.customerSurveyForms = {
+            ...(data.customerSurveyForms ?? {}),
+            [saved.templateKey]: saved,
+          };
+          if (data.customerSurveyDrafts)
+            delete data.customerSurveyDrafts[saved.templateKey];
+          if (input.date)
+            data.actualSurveyDate = z.iso.date().parse(input.date);
+          if (input.notes)
+            data.submissionRemarks = z
+              .string()
+              .trim()
+              .max(4000)
+              .parse(input.notes);
+          if (input.completeSubmission === true) {
+            const date = z.iso.date().parse(input.date);
+            const submissionNote = note(input.notes);
+            const files = (
+              await c.query(
+                "SELECT kind FROM project_workflow_files WHERE record_id=$1 AND kind IN('Survey report','Survey photo') UNION SELECT kind FROM ubl_workflow_attachments WHERE request_id=$2 AND kind IN('Survey report','Survey photo')",
+                [id, r.legacy_type === "ubl" ? r.legacy_id : null],
+              )
+            ).rows;
+            if (!files.some((file: any) => file.kind === "Survey report"))
+              throw new HttpError(
+                422,
+                "Attach the completed survey report before completing submission.",
+              );
+            if (!files.some((file: any) => file.kind === "Survey photo") && !data.sitePictureFolder?.url)
+              throw new HttpError(
+                422,
+                "Save the site pictures folder link before completing submission.",
+              );
+            data.actualSurveyDate = date;
+            data.submissionRemarks = submissionNote;
+            data.reportSubmittedAt = new Date().toISOString();
+            data.surveyInProgress = false;
+            stage = "report_received";
+          }
+        }
+        reason = reviewing
+          ? "Survey BOQ inputs corrected during technical review; previous review retained in history and must be verified again."
+          : input.completeSubmission === true
+            ? "Complete survey and BOQ saved and submitted for technical review."
+            : "Standard BOQ survey inputs saved for technical review; no commercial approval or costing change.";
+      } else if (v.action === "import-survey-reading") {
+        this.requireRole(u, ["Design"]);
+        requireStage(["survey_scheduled"]);
+        const reading = z
+          .object({
+            method: z.string().min(1).max(200),
+            sourceFileIds: z.array(z.uuid()).min(1).max(10),
+            standardInputs: z.record(z.string(), z.unknown()),
+            customerFormValues: z.record(z.string(), z.unknown()),
+            flags: z.array(z.string().max(2000)).max(50),
+          })
+          .strict()
+          .parse(input);
+        for (const file of reading.sourceFileIds)
+          await this.requireFile(c, r, file, "Survey report");
+        const blankQuantity = z.union([
+          z.string().regex(/^\d{1,8}(\.\d{1,4})?$/),
+          z.literal(""),
+        ]);
+        const partial = surveyDraftSchema.extend(
+          Object.fromEntries(
+            [
+              "dcMetres",
+              "acInverter16",
+              "acInverter25",
+              "acPanel16",
+              "acPanel25",
+              "earth25",
+              "earth6",
+              "earth10",
+              "spInverterTerminationMetres",
+              "spLoadPanelRunMetres",
+            ].map((key) => [key, blankQuantity.optional()]),
+          ),
+        );
+        data.surveyReading = {
+          ...reading,
+          standardInputs: partial.parse(reading.standardInputs),
+          readAt: new Date().toISOString(),
+          readBy: actor,
+          reviewed: false,
+        };
+        reason =
+          "Attached survey reports read into an unapproved review draft; no master, costing or approval changes.";
+      } else if (v.action === "save-customer-survey-draft") {
+        this.requireRole(u, ["Design"]);
+        requireStage(["survey_scheduled"]);
+        const saved = await saveCustomerSurveyForm(c, r, actor, input, true);
+        data.customerSurveyDrafts = {
+          ...(data.customerSurveyDrafts ?? {}),
+          [saved.templateKey]: saved,
+        };
+        reason =
+          "Customer survey draft prepared for review; not accepted or submitted.";
+      } else if (v.action === "save-customer-survey") {
+        this.requireRole(u, ["Design"]);
+        requireStage(["survey_scheduled"]);
+        if (!data.surveyDispatchId)
+          throw new HttpError(
+            422,
+            "Approve the survey dispatch before preparing the completion report.",
+          );
+        const saved = await saveCustomerSurveyForm(c, r, actor, input);
+        data.customerSurveyForms = {
+          ...(data.customerSurveyForms ?? {}),
+          [saved.templateKey]: saved,
+        };
+        reason =
+          "Customer survey details saved for Solution Engineer review; connected load remains manually reported.";
+      } else if (v.action === "report") {
+        this.requireRole(u, ["Design"]);
+        requireStage(["survey_scheduled", "technical_revision"]);
+        if (
+          !(
+            await c.query(
+              "SELECT 1 FROM project_workflow_files WHERE record_id=$1 AND kind='Survey report' UNION SELECT 1 FROM ubl_workflow_attachments WHERE request_id=$2 AND kind='Survey report'",
+              [id, r.legacy_type === "ubl" ? r.legacy_id : null],
+            )
+          ).rowCount
+        )
+          throw new HttpError(
+            422,
+            "Attach the completed survey report before submitting it.",
+          );
+        if (
+          !(
+            await c.query(
+              "SELECT 1 FROM project_workflow_files WHERE record_id=$1 AND kind='Survey photo' UNION SELECT 1 FROM ubl_workflow_attachments WHERE request_id=$2 AND kind='Survey photo'",
+              [id, r.legacy_type === "ubl" ? r.legacy_id : null],
+            )
+          ).rowCount && !data.sitePictureFolder?.url
+        )
+          throw new HttpError(
+            422,
+            "Save the site pictures folder link before submitting the survey report.",
+          );
+        const reportCustomer = (
+          await c.query("SELECT short_code FROM customers WHERE id=$1", [
+            r.customer_id,
+          ])
+        ).rows[0];
+        if (
+          r.route === "survey-framework" &&
+          reportCustomer?.short_code?.toUpperCase() === "UBL" &&
+          !data.surveyInputsSavedAt
+        )
+          throw new HttpError(
+            422,
+            "Save the manually entered standard BOQ before submitting the UBL survey for technical review.",
+          );
+        if (
+          r.route === "survey-framework" &&
+          reportCustomer?.short_code?.toUpperCase() === "UBL" && data.basis?.boq?.survey?.family!=="bess-only"
+        ) {
+          const template = (await customerSurveyTemplates(c)).find(
+            (t: any) => t.key === "ubl-solar-survey",
+          );
+          const form = data.customerSurveyForms?.["ubl-solar-survey"];
+          if (
+            !template ||
+            !form ||
+            form.templateVersion !== template.version ||
+            template.payload.fields.some(
+              (field: any) =>
+                !field.shared &&
+                String(form.values[field.key] ?? "").trim() === "",
+            )
+          )
+            throw new HttpError(
+              422,
+              "Complete and save the current UBL survey form before submitting for technical review.",
+            );
+        }
+        data.actualSurveyDate = z.iso.date().parse(input.date);
+        data.reportSubmittedAt = new Date().toISOString();
+        data.surveyInProgress = false;
+        stage = "report_received";
+        reason = note(input.notes);
+      } else if (v.action === "begin-review") {
+        this.requireRole(u, ["Design"]);
+        requireStage(["report_received", "technical_revision"]);
+        if (input.technicalOwnerId) {
+          if (
+            r.planning_owner_id !== actor &&
+            !management(u.role) &&
+            u.role !== "Design"
+          )
+            throw new HttpError(
+              403,
+              "The survey planner assigns the Solution Engineer.",
+            );
+          r.technical_owner_id = await this.person(
+            c,
+            uuid(input.technicalOwnerId),
+            "Design",
+          );
+        }
+        if (!r.technical_owner_id)
+          throw new HttpError(
+            422,
+            "Assign the technical review to an active Design account.",
+          );
+        stage = "technical_review";
+        reason = note(input.notes);
+      } else if (
+        ["review", "handoff", "submit-technical-review"].includes(v.action)
+      ) {
+        if (v.action !== "handoff") {
+          data.noFeasibleSolution = null;
+          this.requireRole(u, ["Design"]);
+          requireStage(
+            v.action === "submit-technical-review"
+              ? ["report_received", "technical_review", "technical_revision"]
+              : ["technical_review", "technical_revision"],
+          );
+          if (v.action === "submit-technical-review")
+            r.technical_owner_id = actor;
+          if (
+            r.technical_owner_id !== actor &&
+            !management(u.role) &&
+            u.role !== "Design"
+          )
+            throw new HttpError(
+              403,
+              "The assigned Solution Engineer verifies this design.",
+            );
+          const reviewed = designReviewSchema
+            .extend({ survey: designReviewSchema.shape.survey.optional() })
+            .parse(input);
+          let boq: any;
+          if (r.route.endsWith("framework")) {
+            const basis = await frameworkBasis(
+              this.pool,
+              c,
+              r,
+              uuid(input.frameworkId ?? r.framework_id),
+            );
+            boq = basis.boq;
+            data.basis = basis;
+            r.framework_id = basis.source.id;
+            for (const line of boq.lines) {
+              const itemId = reviewed.itemSelections[line.key];
+              if (itemId && itemId !== line.itemId)
+                throw new HttpError(
+                  422,
+                  "A framework recommendation must retain the approved configuration Item IDs. Create an approved framework revision for a scope change.",
+                );
+            }
+          } else {
+            if (!reviewed.survey)
+              throw new HttpError(422, "Enter the technical survey inputs.");
+            const calculated = await designCalculation(
+              c,
+              r,
+              reviewed,
+              u.display_name,
+            );
+            boq = calculated.boq;
+          }
+          const hidden = boq.lines
+            .filter(
+              (l: any) => l.phase === "BESS" || /^(CH-CNI-|CH-C&I)/.test(l.key),
+            )
             .map((l: any) => l.key);
           if (
             !u.restricted_cost_access &&
