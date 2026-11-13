@@ -9,9 +9,11 @@ test('stock drilldown reads historical totals, filters directions and enforces w
  const db=await testDatabase();try{
  const f=await materialStockFixture(db.pool);
  await db.pool.query(`INSERT INTO inventory_warehouse_source_events(source_sha256,event_id,payload) VALUES
- ($1,'historical-do',$2),($1,'shared-ipo-do',$3)`,[f.stockSha,
+ ($1,'historical-do',$2),($1,'shared-ipo-do',$3),($1,'historical-named-do',$4),($1,'historical-multi-site-do',$5)`,[f.stockSha,
   {warehouse:'Lahore warehouse',itemId:'FINAL',unit:'m',out:1,ipo:'CHP-346',doNumber:'DO801-01'},
-  {warehouse:'Lahore warehouse',itemId:'FINAL',unit:'m',out:1,ipo:'CHP-163(142/250)',doNumber:'DO794-01'}]);
+  {warehouse:'Lahore warehouse',itemId:'FINAL',unit:'m',out:1,ipo:'CHP-163(142/250)',doNumber:'DO794-01'},
+  {warehouse:'Lahore warehouse',itemId:'FINAL',unit:'m',out:1,ipo:'CHP-343',document:'DO750-01',site:'New Garden town LHR'},
+  {warehouse:'Lahore warehouse',itemId:'FINAL',unit:'m',out:1,document:'DO763-01',site:'BAFL Shabqadar + UBL Badaber — allocation pending'}]);
  for(const [id,ipo,name] of [['lal-pull','CHP-346','Lal Pull, Lahore'],['choot','CHP-163 · 142/250','Choot Dheeran'],['other','CHP-163 · 143/250','Another site']]){
   await db.pool.query('INSERT INTO operations_board_sites(id,created_by) VALUES($1,$2)',[id,f.owner]);
   await db.pool.query("INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,1,$2,'import','Fixture',$3,$4)",[id,{ipo,name,customer:'United Bank Limited'},randomUUID(),f.owner]);
@@ -20,9 +22,11 @@ test('stock drilldown reads historical totals, filters directions and enforces w
  const stock=new MaterialStockRepository(db.pool);const overview=await stock.overview(f.reviewer);assert.deepEqual(Object.keys(overview.positions),['Lahore warehouse']);assert.deepEqual(overview.positions['Lahore warehouse'].map(position=>{assert.ok(position&&typeof position==='object'&&!Array.isArray(position));assert.ok('openingStatus' in position);const {openingStatus,...core}=position;assert.equal(openingStatus,'Reviewed source');return core;}),(await stock.positions(f.reviewer,'Lahore warehouse')).positions);
  const before=await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements');
  const all=await stockLedger(db.pool,f.reviewer,{warehouse:'Lahore warehouse',itemId:'FINAL',unit:'m'});
- assert.equal(all.total,4);assert.equal(all.events.reduce((n:number,e:any)=>n+Number(e.incoming),0),5);assert.equal(all.events.reduce((n:number,e:any)=>n+Number(e.outgoing),0),10);
+ assert.equal(all.total,6);assert.equal(all.events.reduce((n:number,e:any)=>n+Number(e.incoming),0),5);assert.equal(all.events.reduce((n:number,e:any)=>n+Number(e.outgoing),0),12);
  assert.deepEqual(all.events.find((e:any)=>e.reference==='DO801-01').sites,[{siteName:'Lal Pull, Lahore',customer:'United Bank Limited'}]);
  assert.deepEqual(all.events.find((e:any)=>e.reference==='DO794-01').sites,[{siteName:'Choot Dheeran',customer:'United Bank Limited'}]);
+ assert.deepEqual(all.events.find((e:any)=>e.reference==='DO750-01').sites,[{siteName:'New Garden town LHR',customer:null}]);
+ assert.deepEqual(all.events.find((e:any)=>e.reference==='DO763-01').sites,[{siteName:'BAFL Shabqadar + UBL Badaber — allocation pending',customer:null}]);
  assert.equal((await stockLedger(db.pool,f.reviewer,{direction:'in'})).total,1);
  assert.ok((await stockLedger(db.pool,f.reviewer,{direction:'out'})).events.some((e:any)=>e.outgoing==='8'));
  assert.equal((await stockLedger(db.pool,f.owner,{offset:100})).events.length,0);
