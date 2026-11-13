@@ -2,6 +2,7 @@ import {createConfigurationBatch,configurationBatchPreview,confirmConfigurationB
 import {saveHeadsup,submitHeadsup} from './headsup.js';
 import {customerSendEvidence,attachCustomerSendEvidence,removeCustomerSendEvidence,sendPackageToCustomer} from "./ubl-customer-send.js";
 import { buildIpoPdf, buildPeachtreePdf } from "../orders/document-renderers.js";
+import type { IpoRevisionRepository } from "./ipo-revisions.js";
 import {
   drawReportLogo,
   drawReportFooter,
@@ -18,6 +19,7 @@ import { surveyDispatchPdf } from "./survey-dispatch-pdf.js";
 export function projectWorkflowHttp(
   repo: ProjectWorkflowRepository,
   session: RequestHandler,
+  ipoRevisions?: IpoRevisionRepository,
 ) {
   const r = Router();
   r.use(session);
@@ -31,6 +33,15 @@ export function projectWorkflowHttp(
   });
   const actor = (req: any) => req.authSession.user.id,
     id = (req: any) => z.uuid().parse(req.params.id);
+  // IPO revision (phase 1): request, prepare the revised IPO, Management decision.
+  if(ipoRevisions){
+   r.get('/ipo-revisions/pending',async(req,res)=>res.json(await ipoRevisions.pending(actor(req))));
+   r.post('/ipo-revisions/:id/prepare',async(req,res)=>res.json(await ipoRevisions.prepare(actor(req),id(req),req.body)));
+   r.get('/ipo-revisions/proposals/:id/ipo.pdf',async(req,res)=>{const p=await ipoRevisions.proposalDocument(actor(req),id(req));res.type('application/pdf').set('Content-Disposition','inline; filename="'+p.number.replace(/[^A-Za-z0-9 ()._-]/g,'_')+'-proposed.pdf"').send(buildIpoPdf(p.snapshot,p.number+' (PROPOSED - NOT ISSUED)',p.snapshot.peachtree));});
+   r.post('/ipo-revisions/proposals/:id/decision',async(req,res)=>res.json(await ipoRevisions.decide(actor(req),id(req),req.body)));
+   r.get('/:id/ipo-revisions',async(req,res)=>res.json(await ipoRevisions.status(actor(req),id(req))));
+   r.post('/:id/ipo-revisions',async(req,res)=>res.json(await ipoRevisions.start(actor(req),id(req),req.body)));
+  }
   r.get('/framework-reference-attachments/:id',async(req,res)=>{
     const file=await repo.frameworkReferenceAttachment(actor(req),id(req));
     res.set('Content-Type',file.mime).set('Content-Disposition',`inline; filename="${file.filename.replace(/["\r\n\\]/g,'_')}"`).set('Cache-Control','private, no-store').send(file.content);

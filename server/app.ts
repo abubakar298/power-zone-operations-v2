@@ -6,6 +6,7 @@ import {GatePassRepository} from './inventory/gate-passes.js';
 import {OperationsBoardRepository} from './operations-board/repository.js';
 import {operationsBoardHttp} from './operations-board/http.js';
 import { projectWorkflowHttp } from "./project-workflow/http.js";
+import { IpoRevisionRepository } from "./project-workflow/ipo-revisions.js";
 import { ProjectWorkflowRepository } from "./project-workflow/repository.js";
 import { ublWorkflowHttp } from "./ubl/workflow-http.js";
 import { UblWorkflowRepository } from "./ubl/workflow-repository.js";
@@ -178,6 +179,7 @@ export function createApp(
     projectWorkflowHttp(
       new ProjectWorkflowRepository(pool),
       sessionForWorkspace,
+      new IpoRevisionRepository(pool),
     ),
   );
   const boqs = new BoqRepository(pool);
