@@ -5,8 +5,8 @@ import {Button} from '../ui/Button.js';
 import {Field} from '../ui/Field.js';
 
 export function UpsDataRequired({customer,onSaved}:{customer:'UBL'|'MBL',onSaved:()=>Promise<void>}){
- const [data,setData]=useState<any>(),[search,setSearch]=useState(''),[editing,setEditing]=useState<any>(),[values,setValues]=useState<any>(),[notes,setNotes]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[saving,setSaving]=useState(false),[loading,setLoading]=useState(false);
- async function load(){setLoading(true);try{setData(await api(`/director/ups-data-review?customer=${customer}`));}catch(e){setError((e as Error).message);}finally{setLoading(false);}}
+ const [data,setData]=useState<any>(),[search,setSearch]=useState(''),[editing,setEditing]=useState<any>(),[values,setValues]=useState<any>(),[notes,setNotes]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[saving,setSaving]=useState(false);
+ async function load(){try{setData(await api(`/director/ups-data-review?customer=${customer}`));}catch(e){setError((e as Error).message);}}
  useEffect(()=>{setData(undefined);setEditing(undefined);setError('');setNotice('');void load();},[customer]);
  function edit(row:any){setEditing(row);setValues({...row.values});setNotes(row.notes);setError('');setNotice('');}
  function change(key:string,value:string|null){setValues((old:any)=>({...old,[key]:value}));}
@@ -21,7 +21,7 @@ export function UpsDataRequired({customer,onSaved}:{customer:'UBL'|'MBL',onSaved
  if(data?.total===0)return null;
  const rows=(data?.rows??[]).map((r:any,i:number)=>({...r,sr:i+1})).filter((r:any)=>[r.siteName,r.orderNumber,r.status,...r.missing].join(' ').toLowerCase().includes(search.toLowerCase()));
  return <section className="pz-panel pz-stack" aria-label="UPS Data Required">
-  <div className="pz-action-row"><h3>Data Required · {data?.required??'—'} Sites</h3><Button variant="neutral" loading={loading} loadingLabel="Refreshing…" disabled={saving} onClick={()=>void load()}>Refresh</Button></div>
+  <div className="pz-action-row"><h3>Data Required · {data?.required??'—'} Sites</h3></div>
   <label className="pz-field">Search sites<input type="search" placeholder="Site name, order number or missing detail" value={search} onChange={e=>setSearch(e.target.value)}/></label>
   {notice&&<p role="status">{notice}</p>}
   {!editing&&error&&<p className="form-error" role="alert">{error}</p>}

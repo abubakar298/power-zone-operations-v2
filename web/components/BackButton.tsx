@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 import {canGoBack,goBack,onBackStepsChange} from '../navigation/back-steps.js';
 import './back-button.css';
 
-/** Back arrow in every portal's top bar: one step back, like the browser key, without reloading. */
+/** Back arrow above each page's title (below the top bar): one step back, like the browser key, without reloading. */
 export function BackButton(){
  const [available,setAvailable]=useState(canGoBack);
  useEffect(()=>{setAvailable(canGoBack());return onBackStepsChange(()=>setAvailable(canGoBack()));},[]);

@@ -2888,13 +2888,6 @@ function RecordEditor({
     <div className="pz-stack">
       <div className="pz-action-row">
         <Button onClick={onBack}>Back to workspace</Button>
-        <Button
-          onClick={() => {
-            if (confirmLeaveWorkspace()) void refresh();
-          }}
-        >
-          Refresh record
-        </Button>
       </div>
       {!requestReview && (
         <section className="pz-panel">

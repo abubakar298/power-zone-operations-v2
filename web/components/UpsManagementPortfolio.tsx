@@ -32,7 +32,7 @@ export function UpsManagementPortfolio({customer}:{customer:'MBL'|'UBL'}){
   </section>}
   </UpsActiveSites>}
   <UpsDataRequired key={customer} customer={customer} onSaved={load}/>
-  <div className="pz-ups-toolbar"><label className="pz-field">Search confirmed UPS orders<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="IPO, branch, code, configuration or order number"/></label><Button variant="neutral" loading={loading} loadingLabel="Refreshing…" onClick={()=>void load()}>Refresh</Button></div>
+  <div className="pz-ups-toolbar"><label className="pz-field">Search confirmed UPS orders<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="IPO, branch, code, configuration or order number"/></label></div>
   {error&&<p className="form-error" role="alert">{error}</p>}
   {!data&&loading&&<p role="status">Loading confirmed UPS orders…</p>}
   {data&&<><p className="pz-caption">{rows.length} of {data.rows.length} confirmed orders</p><div className="pz-table-scroll"><table className="pz-ups-orders"><thead><tr>{['Site / branch code','IPO / order','Configuration','Approval date','Payable incl. GST','Budgeted cost excl. GST','Budgeted profit excl. GST','Markup','Next actions'].map(h=><th key={h}>{h}</th>)}</tr></thead><PagedTableBody label="sites and documents">

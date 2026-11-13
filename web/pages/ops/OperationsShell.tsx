@@ -130,7 +130,6 @@ export function OperationsShell({ session, onLogout, viewingAs, onReturn }: {
           <span className="mark"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg></span>
           <span>Power Zone<small>Operations</small></span>
         </button>
-        <BackButton />
         <GlobalSearch session={session} onOpenSite={openSite} onOpenHeadsUp={openHeadsUp} />
         <div className="ops-hdr-r">
           <NotificationCenter session={session} onOpen={(target) => { if (typeof target === "string" && (VIEWS as string[]).includes(target)) go(target as View); }} />
@@ -167,7 +166,7 @@ export function OperationsShell({ session, onLogout, viewingAs, onReturn }: {
           </nav>
           <div className="ops-side-foot">Operations · Power Zone V2</div>
         </aside>
-        <main className="ops-main">
+        <main className="ops-main"><div className="pz-page-back"><BackButton/></div>
           {error && <p className="ops-feedback" role="alert">{error}</p>}
           {view !== "dashboard" && (
             <div className="ops-page-head"><div><h2>{PAGE[view].title}</h2><p>{PAGE[view].note}{region ? ` Showing ${region} only.` : ""}</p></div></div>
