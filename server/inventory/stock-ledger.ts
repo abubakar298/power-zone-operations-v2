@@ -30,9 +30,19 @@ export async function stockLedger(pool:Pool,actor:string,input:unknown){
  SELECT 'history:'||e.event_id id,coalesce(e.payload->>'date','') date,e.payload->>'itemId' "itemId",e.payload->>'description' description,e.payload->>'warehouse' warehouse,e.payload->>'unit' unit,
  coalesce(e.payload->>'in','0') incoming,coalesce(e.payload->>'out','0') outgoing,coalesce(e.payload->>'doNumber',e.payload->>'document',e.payload->>'reference','') reference,coalesce(e.payload->>'ipo','') ipo,
  coalesce(e.payload->>'movement','Historical stock evidence') kind,coalesce(e.payload->>'notes',e.payload->>'remarks','') note,
- coalesce(h.sites,'[]'::jsonb) sites
+ CASE WHEN recorded.site_name IS NOT NULL OR recorded.customer IS NOT NULL THEN
+   jsonb_build_array(jsonb_build_object(
+     'siteName',coalesce(recorded.site_name,h.sites->0->>'siteName'),
+     'customer',coalesce(recorded.customer,CASE
+       WHEN recorded.site_name IS NULL OR lower(recorded.site_name)=lower(h.sites->0->>'siteName')
+       THEN h.sites->0->>'customer' END)))
+ ELSE coalesce(h.sites,'[]'::jsonb) END sites
  FROM inventory_warehouse_source_events e JOIN scope s ON s.source_sha256=e.source_sha256 AND s.warehouse=e.payload->>'warehouse'
  LEFT JOIN historical_sites h ON h.ipo_key=regexp_replace(upper(e.payload->>'ipo'),'[[:space:]·()]','','g')
+ CROSS JOIN LATERAL (
+ SELECT nullif(trim(e.payload->>'site'),'') site_name,
+        nullif(trim(e.payload->>'customer'),'') customer
+ ) recorded
  WHERE ($2::text IS NULL OR e.payload->>'itemId'=$2) AND ($3::text IS NULL OR e.payload->>'unit'=$3)
  UNION ALL
  SELECT 'correction:'||c.case_id,c.created_at::text,b.payload->>'itemId',b.payload->>'description',b.payload->>'warehouse',b.payload->>'unit',c.in_delta::text,'0',c.case_id,'','Approved return correction','','[]'::jsonb
