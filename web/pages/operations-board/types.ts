@@ -1,7 +1,7 @@
 import {operationsSiteBucket} from '../../../shared/operations-delivery-ready.js';
 import type {WorkflowSite,FileReference} from '../../../server/operations-board/workflow.js';
 export type Site=WorkflowSite&{version:number};
-export type Access={qcDelegated?:boolean;kind:'owner'|'head'|'lead'|'qc';team:'central'|'south'|null;name:string};
+export type Access={qcDelegated?:boolean;boqViewer?:boolean;kind:'owner'|'head'|'lead'|'qc';team:'central'|'south'|null;name:string};
 export type Board={sites:Site[];access:Access};
 export type Vendor={deleted?:boolean;id:string;version:number;name:string;phone:string;roles:string[];active:boolean;team?:'central'|'south'|null;kind?:'vendor'|'member'|'vehicle';internal?:boolean};
 export type Evidence=FileReference;
