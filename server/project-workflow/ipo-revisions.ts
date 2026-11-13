@@ -79,7 +79,8 @@ export class IpoRevisionRepository{
   const quotationSource=current.snapshot?.approvedCommercialSource?.type==='quotation';
   const blockers={commercial:await this.blockers(this.pool,chain.map(i=>i.id),'commercial'),technical:await this.blockers(this.pool,chain.map(i=>i.id),'technical')};
   const canRevise=(u.role==='Coordinator'&&r.coordinator_id===actor)||management(u.role);
-  return {original:{id:chain[0].id,number:chain[0].number},current:{id:current.id,number:current.number,amount:amount(current.snapshot)},revisedIpos:chain.slice(1).map(i=>({id:i.id,number:i.number})),
+  const orderNumber=String(current.snapshot?.input?.orderNumber??'').trim()||null;
+  return {original:{id:chain[0].id,number:chain[0].number},current:{id:current.id,number:current.number,orderNumber,amount:amount(current.snapshot)},revisedIpos:chain.slice(1).map(i=>({id:i.id,number:i.number})),
    canStart:canRevise&&quotationSource&&!open,quotationSource,blockers,
    revisions:rows.map(x=>({id:x.id,sequence:x.sequence,route:x.route,reason:x.reason,requestedBy:x.requested_by_name,createdAt:x.created_at,baseNumber:x.base_number,status:IpoRevisionRepository.status(x),draftId:x.draft_id,quotationRevisionRequestId:x.quotation_revision_request_id,sourceBoqRevisionId:x.source_boq_revision_id,
     revisedQuotation:x.revised_quotation_id?{id:x.revised_quotation_id,number:x.revised_quotation_number,status:x.revised_quotation_status}:null,
