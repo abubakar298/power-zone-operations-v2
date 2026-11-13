@@ -42,7 +42,7 @@ export function IposSharedList({ records, onPreview }: { records: any[]; onPrevi
       <PagedTableBody label="sites and documents">{recentFirst(records).map((record) => <tr key={record.id}>
         <td>{record.customerCode || record.customer}</td>
         <td>{record.site}<br/><span className="pz-caption">{record.siteCode || "Not entered"}</span></td>
-        <td>{record.data.ipoNumber || "Not available"}<DocumentListDetails record={record}/>{record.data.historicalDelivered&&<small className="pz-caption" style={{display:"block"}}>Historical · already delivered</small>}</td>
+        <td>{record.data.ipoNumber || "Not available"}{record.data.sharedOrderNumber&&<div className="pz-caption">Order {record.data.sharedOrderNumber}</div>}<DocumentListDetails record={record}/>{record.data.historicalDelivered&&<small className="pz-caption" style={{display:"block"}}>Historical · already delivered</small>}</td>
         <td>{record.data.sharedPoReference || "Not entered"}<br/><span className="pz-caption">{record.data.sharedPoDate ? String(record.data.sharedPoDate).slice(0,10) : "Not entered"}</span></td>
         <td><div className="pz-action-row pz-ipo-list-actions"><Button variant="secondary" onClick={() => onPreview(record.id)}>Preview</Button><DownloadIpo record={record}/></div>
         </td>
