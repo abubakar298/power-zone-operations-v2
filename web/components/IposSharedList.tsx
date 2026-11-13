@@ -54,10 +54,12 @@ export function IposSharedList({ records, onPreview }: { records: any[]; onPrevi
 
 export function IpoSharedPreview({ record, onBack, session, onOpen }: { record: any; onBack: () => void; session?: Session; onOpen?: (task: any) => void }) {
   const revisions = useIpoRevisionStatus(record.id), ipoId = revisions.status?.current.id ?? record.data.ipoId, number = revisions.status?.current.number ?? record.data.ipoNumber;
+  const orderNumber = revisions.status?.current.orderNumber ?? record.data.sharedOrderNumber;
   return <div className="pz-stack">
     <div><Button variant="neutral" onClick={onBack}>Back to IPOs Shared</Button></div>
     <section className="pz-panel pz-stack">
       <h2>{number || "IPO"} · {record.customerCode} · {record.site} ({record.siteCode})</h2>
+      {orderNumber && <p>Order number {orderNumber}</p>}
       <p>PO reference: {record.data.sharedPoReference || "Not entered"} · PO date: {record.data.sharedPoDate ? String(record.data.sharedPoDate).slice(0,10) : "Not entered"}</p>
       {record.data.historicalDelivered&&<p className="pz-caption">Historical entry prepared by M. Rafiq · already delivered</p>}
       <DocumentPreview key={ipoId} url={`/api/orders/${ipoId}/ipo.pdf`} title="IPO and PT Breakup"/>

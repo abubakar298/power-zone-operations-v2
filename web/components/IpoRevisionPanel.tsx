@@ -5,7 +5,7 @@ import {Field} from '../ui/Field.js';
 import {StatusBadge} from '../ui/StatusBadge.js';
 import {DocumentPreview} from './DocumentPreview.js';
 
-export type IpoRevisionStatus={original:{id:string;number:string};current:{id:string;number:string;amount:string|null};revisedIpos:{id:string;number:string}[];canStart:boolean;quotationSource:boolean;
+export type IpoRevisionStatus={original:{id:string;number:string};current:{id:string;number:string;orderNumber?:string|null;amount:string|null};revisedIpos:{id:string;number:string}[];canStart:boolean;quotationSource:boolean;
  blockers:{commercial:string[];technical:string[]};
  revisions:{id:string;sequence:number;route:'commercial'|'technical';reason:string;requestedBy:string;createdAt:string;baseNumber:string;status:string;draftId:string|null;quotationRevisionRequestId:string;sourceBoqRevisionId:string;
   revisedQuotation:{id:string;number:string;status:string|null}|null;proposal:{id:string;version:number;number:string;createdAt:string;amount:string|null}|null;
