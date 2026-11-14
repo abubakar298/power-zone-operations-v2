@@ -1,3 +1,5 @@
+import {readDispatchSiteRemovals} from './dispatch-site-removals.js';
+import {MaterialUsageRepository} from './material-usage.js';
 import {reviewedWarehouseReference} from "./warehouse-reference.js";
 import {dispatchReconciliationEligibleSql} from './dispatch-reconciliation-eligibility.js';
 import {siteAcknowledgementModels,issuedPanelLinesBySite} from '../../shared/site-acknowledgement.js';
@@ -77,7 +79,9 @@ export class MaterialStockRepository{
  }
  async dispatch(actor:string,id:string){
   const row=(await this.pool.query('SELECT id,number,draft_id,draft_version,warehouse,snapshot,created_at FROM inventory_material_dispatches_active WHERE id=$1',[id])).rows[0];
-  if(!row)throw new HttpError(404,'Issued material dispatch not found.');await this.scope(actor,row.warehouse,this.pool,true);const posted=await dispatchPosted(this.pool,'dispatch',id);return {...row,stockPosted:posted,snapshot:{...row.snapshot,stockPosting:posted,sites:row.snapshot.sites.map(({items,...site}:any)=>site)}};
+  if(!row)throw new HttpError(404,'Issued material dispatch not found.');await this.scope(actor,row.warehouse,this.pool,true);const posted=await dispatchPosted(this.pool,'dispatch',id);
+  const siteRemovals=await readDispatchSiteRemovals(this.pool,[id]);
+  return {...row,siteRemovals,stockPosted:posted,snapshot:{...row.snapshot,stockPosting:posted,sites:row.snapshot.sites.map(({items,...site}:any)=>site)}};
  }
  async acknowledgements(actor:string,id:string){
   const record=await this.dispatch(actor,id); // Existing signed-in user and warehouse scope first.
@@ -134,7 +138,12 @@ export class MaterialStockRepository{
    const sent=(await c.query(`SELECT l.*,d.created_at,d.warehouse,(coalesce((SELECT sum(r.quantity) FROM inventory_material_receipt_lines r WHERE r.dispatch_id=l.dispatch_id AND r.line_key=l.line_key),0)${faultyReturned})::text returned FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE ${materialDispatchDraftLink} AND l.line_key=ANY($2::uuid[]) AND ${dispatchReconciliationEligibleSql} ORDER BY d.created_at,d.id,l.line_key`,[input.draftId,input.lines.map(r=>r.lineKey)])).rows;
    if(input.qcUsageVersions){
     const reports=(await c.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM inventory_material_site_usage_versions WHERE draft_id=$1 ORDER BY site_id,version DESC',[originalInput.draftId])).rows;
-    if(!reports.some(r=>r.snapshot.workflowVersion===2&&r.snapshot.state==='signed'))throw new HttpError(409,'QC must save material usage before this return is verified.');
+    if(!reports.some(r=>r.snapshot.workflowVersion===2&&r.snapshot.state==='signed')){
+     const {reconciliation}=await new MaterialUsageRepository(this.pool).read(actor,originalInput.draftId,c);
+     const allRemoved=input.lines.every(({lineKey})=>reconciliation?.rows.some(row=>
+      row.key===lineKey&&row.sites.every(siteId=>row.removedSiteIds.includes(siteId))));
+     if(!allRemoved)throw new HttpError(409,'QC must save material usage before this return is verified.');
+    }
     if(input.qcUsageVersions.length!==reports.length||reports.some(r=>!input.qcUsageVersions!.some(v=>v.siteId===r.site_id&&v.version===r.version)))throw new HttpError(409,'QC usage changed. Refresh the ledger before verifying this return.');
     for(const request of input.lines){const out=sent.filter(r=>r.line_key===request.lineKey).reduce((n,r)=>n.plus(r.quantity),new Decimal(0)),returned=sent.filter(r=>r.line_key===request.lineKey).reduce((n,r)=>n.plus(r.returned),new Decimal(0)),used=reports.reduce((n,r)=>n.plus(r.snapshot.lines.find((l:any)=>l.lineKey===request.lineKey)?.used??0),new Decimal(0));
      if(used.plus(returned).plus(request.quantity).gt(out))throw new HttpError(422,'Counted return exceeds issued material less QC use and previous returns. Correct QC usage or send the discrepancy to Management.');

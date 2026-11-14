@@ -60,3 +60,46 @@ test('QC saved usage after VSO upload moves only that Parent site to ready on au
  await page.route('**/api/material-dispatches/document-status',r=>r.fulfill({json:{rows:[{...base,sites:[{siteId:'a',usageReady:recorded,name:'Uploaded site',customer:'UBL',ipo:'CHP-163',documents:[{label:'Variable Items Sign Off',...(uploaded?{fileId:'vso-a',source:'qc'}:{})},{label:'Acknowledgment'}]},{siteId:'b',name:'Other partial site',customer:'UBL',ipo:'CHP-163',documents:[{label:'Variable Items Sign Off'}]}]}]}}));
  await page.goto('/inventory');const buckets=page.locator('.inventory-dashboard-buckets');const waiting=buckets.getByRole('button').filter({hasText:'Dispatched — Awaiting QC'}),ready=buckets.getByRole('button').filter({hasText:'Material Returns & Reconciliation'});await expect(waiting.locator('strong')).toHaveText('2');await expect(ready.locator('strong')).toHaveText('0');uploaded=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(waiting.locator('strong')).toHaveText('2');await expect(ready.locator('strong')).toHaveText('0');recorded=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(waiting.locator('strong')).toHaveText('1');await expect(ready.locator('strong')).toHaveText('1');await ready.click();await expect(page.locator('.dispatch-document-list')).toContainText('Uploaded site');await expect(page.locator('.dispatch-document-list')).not.toContainText('Other partial site');await expect(page.locator('.dispatch-document-list')).not.toContainText('Acknowledgment');
 });
+
+test('removed trips show on both DOs and reach Inventory returns with primary cells top aligned',async({page})=>{
+ await actors(page.request);await login(page.request);
+ const note='Removed by Operations · reschedule for a later trip';
+ const cancelled={siteId:'cancelled',name:'Postponed site',customer:'UBL',ipo:'CHP-A',usageReady:false,removedByOperations:true,usageNote:note,documents:[]};
+ const other={siteId:'other',name:'Delivered site',customer:'UBL',ipo:'CHP-B',usageReady:true,documents:[]};
+ const dispatch={id:'individual',number:'DO-TRIP',draftId:'individual-draft',warehouse:'Lahore warehouse',createdAt:'2026-11-02T08:00:00Z',parent:false,status:'ready',sites:[cancelled]};
+ const parent={...dispatch,id:'parent',number:'PDO-TRIP',draftId:'parent-draft',parent:true,sites:[cancelled,other]};
+ await page.route('**/api/material-dispatches/access',r=>r.fulfill({json:{kind:'management'}}));
+ await page.route('**/api/material-dispatches/intake',r=>r.fulfill({json:{warehouses:['Lahore warehouse'],sources:[]}}));
+ await page.route('**/api/procurement/store',r=>r.fulfill({json:{toReceive:[]}}));
+ await page.route('**/api/inventory-reviews',r=>r.fulfill({json:{rows:[]}}));
+ await page.route('**/api/material-dispatches/document-status',r=>r.fulfill({json:{rows:[dispatch,parent]}}));
+ const getLedger=(isParent:boolean)=>({
+  draft:{id:isParent?parent.draftId:dispatch.draftId,version:1,snapshot:{parent:isParent,warehouse:dispatch.warehouse,sites:[{siteId:'cancelled',siteName:'Postponed site'}]}},
+  references:[isParent?parent.number:dispatch.number],state:{version:0,status:'waiting'},reports:[],dispatch:{receipts:[]},
+  siteRemovals:[{dispatchId:isParent?parent.id:dispatch.id,number:isParent?parent.number:dispatch.number,siteId:'cancelled',batchNumber:'TEST-BATCH'}],
+  reconciliation:{ready:false,rows:[{key:'cable',itemId:'CH-CBL-TEST',description:'Cable',unit:'m',warehouseOut:'8',used:'2',removedSiteIds:['cancelled'],expectedReturn:'6',verifiedWarehouseReturn:'0',remaining:'6',status:'Unused quantity needs accounting'}]},
+ });
+ await page.route('**/api/material-dispatches/drafts/individual-draft/return-ledger',r=>r.fulfill({json:getLedger(false)}));
+ await page.route('**/api/material-dispatches/drafts/parent-draft/return-ledger',r=>r.fulfill({json:getLedger(true)}));
+ await page.goto('/inventory');
+ const buckets=page.locator('.inventory-dashboard-buckets');
+ await expect(buckets.getByRole('button',{name:/Dispatched — Awaiting QC/}).locator('strong')).toHaveText('0');
+ await buckets.getByRole('button',{name:/Material Returns & Reconciliation/}).click();
+ const table=page.locator('.dispatch-document-list table');
+ const delayed=table.getByRole('row',{name:/Postponed site/});
+ const delivered=table.getByRole('row',{name:/Delivered site/});
+ await expect(delayed.getByText(note,{exact:true})).toHaveCount(2);
+ await expect(delivered.getByText(note,{exact:true})).toHaveCount(0);
+ for(const row of [delayed,delivered]){
+  const name=await row.locator('td').nth(1).locator('strong').boundingBox();
+  const reference=await row.locator('td').nth(2).locator('strong').first().boundingBox();
+  expect(Math.abs(name!.y-reference!.y)).toBeLessThan(2);
+ }
+ await delayed.getByRole('button',{name:'View return ledger'}).click();
+ const ledger=page.getByRole('dialog');
+ await expect(ledger.getByText(note+' · TEST-BATCH',{exact:true})).toBeVisible();
+ await ledger.getByLabel('Issued material ledger').selectOption(parent.draftId);
+ await expect(ledger.getByRole('heading',{name:'PDO-TRIP'})).toBeVisible();
+ await expect(ledger.getByText('This site: Removed from trip')).toBeVisible();
+ await expect(ledger.getByRole('button',{name:'Close Parent DO'})).toBeDisabled();
+});
