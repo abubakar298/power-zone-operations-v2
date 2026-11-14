@@ -62,10 +62,14 @@ export function validateMaterialDispatch(input:unknown):MaterialDispatch{
  return dispatch;
 }
 
-export function reconcileMaterialDispatch(input:unknown){
+export function reconcileMaterialDispatch(input:unknown,removedByLine:ReadonlyMap<string,string[]>=new Map()){
  const dispatch=validateMaterialDispatch(input);
  const rows=dispatch.lines.map(row=>{
-  const applicable=row.sites.map(siteId=>dispatch.usage.find(u=>u.siteId===siteId&&u.lineKey===row.key));
+  const removed=removedByLine.get(row.key)??[];
+  const applicable=row.sites.flatMap(siteId=>{
+   const entry=dispatch.usage.find(u=>u.siteId===siteId&&u.lineKey===row.key);
+   return entry||!removed.includes(siteId)?[entry]:[];
+  });
   const usageComplete=applicable.every(u=>u&&u.used!==null&&u.used!=='');
   const knownUsed=applicable.reduce((sum,u)=>u&&u.used!==null&&u.used!==''?sum.plus(u.used):sum,new Decimal(0));
   const used=usageComplete?applicable.reduce((sum,u)=>sum.plus(u!.used!),new Decimal(0)):null;

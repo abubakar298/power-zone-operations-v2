@@ -1,3 +1,4 @@
+import type {DispatchSiteRemoval} from './dispatch-site-removals.js';
 import {savedSiteIssueSchema} from './site-material-issuance.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import closingReviewed from './closing-reviewed-source.json' with {type:'json'};
@@ -82,7 +83,13 @@ export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:Re
   r.get('/issued/:id/document.pdf',async(req,res)=>{
    const record=await stock.dispatch(req.authSession!.user.id,uuid(req.params.id)),model=issuedDispatchPrintModel(record);
    model.acknowledgements=await stock.acknowledgements(req.authSession!.user.id,record.id);
-   if(req.query.format==='model'){res.json(model);return;}
+   if(req.query.format==='model'){
+    const removedSites=record.siteRemovals.map((removal:DispatchSiteRemoval)=>({
+     siteName:record.snapshot.sites.find((site:any)=>site.siteId===removal.siteId)?.siteName,
+     batchNumber:removal.batchNumber,
+    }));
+    res.json({...model,removedSites});return;
+   }
    res.locals.downloadContext={documentType:model.title,identity:`material-dispatch:${record.id}`,revision:1,site:model.sites.map(s=>s.name).join(' - ')};
    res.type('pdf').set('Content-Disposition',`inline; filename="${record.number}.pdf"`).send(deliveryOrderPdf(model,model.parentDispatch?parentDoCopies:undefined));
   });
