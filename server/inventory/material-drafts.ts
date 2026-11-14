@@ -96,7 +96,9 @@ export class MaterialDraftRepository{
   const reviewedIds=new Set<string>();
   if(source){
    for(const {payload:r} of (await c.query('SELECT payload FROM inventory_warehouse_source_balances WHERE source_sha256=$1 ORDER BY ledger_key',[source.source_sha256])).rows){
-    if(r.origin!=='temporary-inward-opening'&&r.origin!=='operational-unreviewed')reviewedIds.add(r.itemId);
+    // The Noorkot import opened a provisional Cat 6 position outside the reviewed source.
+    const importedCat6=r.origin==='owner-confirmed historical issue'&&r.itemId==='CH-CBL-CAT6'&&r.warehouse==='Lahore warehouse';
+    if(!importedCat6&&r.origin!=='temporary-inward-opening'&&r.origin!=='operational-unreviewed')reviewedIds.add(r.itemId);
     const old=map.get(r.itemId);map.set(r.itemId,{itemId:r.itemId,description:old?.description??r.description,units:[...new Set([...(old?.units??[]),r.unit])]});warehouses.add(r.warehouse);
    }
    if(reviewedIds.size!==Number(source.metadata.canonicalIds))throw new HttpError(409,'The reviewed stock catalogue is incomplete. Verify its source before selecting item IDs.');
