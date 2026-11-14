@@ -4,7 +4,7 @@ export type RegisteredMaterialSite={id:string;ipo:string;name:string;customerPo?
 export type IssuedMaterialIdentity={id:string;number:string;orderNumber:string;poNumber:string;siteName:string};
 export type MaterialLinkCheck={status:'eligible'|'not-pending'|'missing-ipo'|'ambiguous-ipo'|'missing-po'|'po-mismatch'|'site-name-review';ipoId?:string};
 const text=(value:string|undefined)=>(value??'').trim().replace(/\s+/g,' ').toLowerCase();
-export function checkMaterialSourceLink(site:RegisteredMaterialSite,ipos:IssuedMaterialIdentity[],continuingInstallation:boolean|'historical-delivered'=false):MaterialLinkCheck{
+export function checkMaterialSourceLink(site:RegisteredMaterialSite,ipos:IssuedMaterialIdentity[],continuingInstallation:boolean|'historical-delivered'=false,exactLiveHandoff=false):MaterialLinkCheck{
  const historical=continuingInstallation==='historical-delivered';
  if(site.sample||site.completed&&!historical||site.cancelled||site.transferred||site.archived||site.superseded||!(historical?['delivered','completed'].includes(site.stage):['received','awaiting'].includes(site.stage)||(continuingInstallation&&site.stage==='delivered')))return {status:'not-pending'};
  const [number,...rest]=site.ipo.split(' · '),order=rest.join(' · ');
@@ -12,7 +12,7 @@ export function checkMaterialSourceLink(site:RegisteredMaterialSite,ipos:IssuedM
  if(!hits.length)return {status:'missing-ipo'};
  if(hits.length!==1)return {status:'ambiguous-ipo'};
  const ipo=hits[0],base={ipoId:ipo.id};
- if(!text(site.customerPo)||!text(ipo.poNumber))return {...base,status:'missing-po'};
+ if((!text(site.customerPo)||!text(ipo.poNumber))&&!(exactLiveHandoff&&!text(site.customerPo)&&!text(ipo.poNumber)))return {...base,status:'missing-po'};
  if(text(site.customerPo)!==text(ipo.poNumber))return {...base,status:'po-mismatch'};
  if(!text(site.name)||text(site.name)!==text(ipo.siteName))return {...base,status:'site-name-review'};
  return {...base,status:'eligible'};
