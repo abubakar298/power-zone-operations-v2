@@ -44,7 +44,7 @@ export async function approvedMaterialIdentities(c:Pool|PoolClient,ipoIds:string
  return result;
 }
 type SourceLinkInput=z.infer<typeof materialSourceLinkSchema>;
-async function writeMaterialSource(c:PoolClient,actor:string,input:SourceLinkInput){
+async function writeMaterialSource(c:PoolClient,actor:string,input:SourceLinkInput,exactLiveHandoff=false){
   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('material.source.links',0))");
   const replay=(await c.query('SELECT * FROM inventory_material_source_links WHERE request_key=$1',[input.requestKey])).rows[0];
   if(replay){if(replay.created_by!==actor||replay.request_sha256!==sha(input))throw new HttpError(409,'This request key belongs to another source link.');return {id:replay.id,unchanged:true};}
@@ -52,7 +52,7 @@ async function writeMaterialSource(c:PoolClient,actor:string,input:SourceLinkInp
   const board=(await c.query('SELECT version,snapshot FROM operations_board_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1',[input.boardSiteId])).rows[0];
   if(!board||board.version!==input.boardVersion)throw new HttpError(409,'The imported site changed. Review its latest positioning first.');
   const ipo=await approvedMaterialIdentity(c,input.ipoId),s=ipo.snapshot;
-  const check=checkMaterialSourceLink({...board.snapshot,id:input.boardSiteId},[{id:ipo.id,number:ipo.number,orderNumber:s.input?.orderNumber??'',poNumber:s.input?.poNumber??'',siteName:s.siteName??''}],s.historicalImport?.deliveredBoardSiteId===input.boardSiteId?'historical-delivered':false);
+  const check=checkMaterialSourceLink({...board.snapshot,id:input.boardSiteId},[{id:ipo.id,number:ipo.number,orderNumber:s.input?.orderNumber??'',poNumber:s.input?.poNumber??'',siteName:s.siteName??''}],s.historicalImport?.deliveredBoardSiteId===input.boardSiteId?'historical-delivered':false,exactLiveHandoff);
   if(check.status!=='eligible')throw new HttpError(409,'Imported IPO identity needs review: '+check.status+'. No source link was created.');
   const boq=(await c.query('SELECT id,snapshot FROM boq_revisions WHERE id=$1',[s.boqRevisionId])).rows[0];
   if(!boq||!Array.isArray(boq.snapshot.lines))throw new HttpError(409,'This IPO has no saved approved BOQ basis.');
@@ -77,7 +77,7 @@ export type CreatedMaterialSourceResult={status:'linked'|'retained';id:string}|{
 export async function linkCreatedOperationsMaterialSource(c:PoolClient,actor:string,raw:{boardSiteId:string;ipoId:string;operationsIssuanceId:string}):Promise<CreatedMaterialSourceResult>{
  const input=z.object({boardSiteId:z.string().min(1).max(160),ipoId:z.uuid(),operationsIssuanceId:z.uuid()}).strict().parse(raw);
  const user=await lockActiveActor(c,actor);
- const handoff=(await c.query('SELECT o.created_by,o.snapshot AS operations_snapshot,i.snapshot AS ipo_snapshot FROM operations_boq_issuances o JOIN internal_purchase_orders i ON i.id=o.ipo_id WHERE o.id=$1 AND o.ipo_id=$2',[input.operationsIssuanceId,input.ipoId])).rows[0];
+ const handoff=(await c.query('SELECT o.created_by,o.boq_revision_id,o.snapshot AS operations_snapshot,i.snapshot AS ipo_snapshot FROM operations_boq_issuances o JOIN internal_purchase_orders i ON i.id=o.ipo_id WHERE o.id=$1 AND o.ipo_id=$2',[input.operationsIssuanceId,input.ipoId])).rows[0];
  if(!handoff)return {status:'held',reason:'The exact saved Operations handoff is unavailable.'};
  if(!['Admin','Management'].includes(user.role)&&handoff.created_by!==actor)throw new HttpError(403,'Only the authenticated handoff issuer can link this saved Operations source.');
  if(handoff.operations_snapshot?.bulkHistoricalImport===true||handoff.ipo_snapshot?.historicalImport)return {status:'held',reason:'Historical handoffs require their reviewed immutable source link.'};
@@ -91,7 +91,8 @@ export async function linkCreatedOperationsMaterialSource(c:PoolClient,actor:str
   const ipo=await approvedMaterialIdentity(c,input.ipoId),basis=(await c.query('SELECT id,snapshot FROM boq_revisions WHERE id=$1',[ipo.snapshot.boqRevisionId])).rows[0];
   const existing=(await c.query('SELECT * FROM inventory_material_source_links WHERE board_site_id=$1 OR ipo_id=$2',[input.boardSiteId,input.ipoId])).rows;
   if(existing.length){const link=existing[0];if(existing.length!==1||link.board_site_id!==input.boardSiteId||link.ipo_id!==input.ipoId||!basis||link.boq_revision_id!==basis.id||link.ipo_sha256!==sha(ipo.snapshot)||link.boq_sha256!==sha(basis.snapshot))return {status:'held',reason:'The saved material source identity or approved BOQ basis differs; review its immutable link.'};return {status:'retained',id:link.id};}
-  const result=await writeMaterialSource(c,actor,{boardSiteId:input.boardSiteId,boardVersion:board.version,ipoId:input.ipoId,reason:'Exact approved IPO and Operations handoff continued to Inventory; no stock or Store document posted.',requestKey:randomUUID()});
+  if(!ipo.snapshot.input?.poNumber?.trim()&&(!basis||basis.id!==handoff.boq_revision_id))return {status:'held',reason:'The saved Operations handoff does not match the approved BOQ.'};
+  const result=await writeMaterialSource(c,actor,{boardSiteId:input.boardSiteId,boardVersion:board.version,ipoId:input.ipoId,reason:'Exact approved IPO and Operations handoff continued to Inventory; no stock or Store document posted.',requestKey:randomUUID()},true);
   return {status:result.unchanged?'retained':'linked',id:result.id};
  }catch(error){
   if(error instanceof HttpError&&error.status===409&&[/^The approved IPO is unavailable\./,/^This IPO is archived\./,/^Approved IPO identity needs review: po-mismatch/, /^The imported site changed\./,/^Imported IPO identity needs review:/,/^This IPO has no saved approved BOQ basis\./,/^This site or IPO already has an immutable source link\./].some(pattern=>pattern.test(error.message)))return {status:'held',reason:error.message};

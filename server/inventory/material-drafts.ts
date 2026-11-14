@@ -81,7 +81,7 @@ export class MaterialDraftRepository{
    link.board=registered.find(r=>r.site_id===link.board_site_id)?.snapshot??link.board;
    const ipo=approvedIpos.get(link.ipo_id);if(!ipo||ipo instanceof HttpError){heldIpos.add(link.ipo_id);continue;}
    const s=ipo.snapshot;
-   const identity=checkMaterialSourceLink({...link.board,id:link.board_site_id},[{id:ipo.id,number:ipo.number,orderNumber:s.input?.orderNumber??'',poNumber:s.input?.poNumber??'',siteName:s.siteName??''}],(continuations.has(ipo.id)||installationOnlyBoards.has(link.board_site_id))&&link.board.installation===true);
+   const identity=checkMaterialSourceLink({...link.board,id:link.board_site_id},[{id:ipo.id,number:ipo.number,orderNumber:s.input?.orderNumber??'',poNumber:s.input?.poNumber??'',siteName:s.siteName??''}],(continuations.has(ipo.id)||installationOnlyBoards.has(link.board_site_id))&&link.board.installation===true,link.board.origin?.kind==='live-ipo-handoff'&&link.board.origin.ipoId===ipo.id);
    if(identity.status!=='eligible'||hash(s)!==link.ipo_sha256||hash(link.boq)!==link.boq_sha256){heldIpos.add(ipo.id);continue;}
    const existing=confirmed.find(r=>r.ipo_id===ipo.id);
    if(existing)heldIpos.add(ipo.id); // Preserve the stable link basis when a later Store handoff arrives.

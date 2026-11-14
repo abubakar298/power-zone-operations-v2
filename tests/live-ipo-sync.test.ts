@@ -68,7 +68,7 @@ test('explicit live IPO sync is duplicate-safe, retains reviewed decisions and n
   assert.equal((await sync.sync(manager,{ipoIds:[emailApproval.ipoId]})).created.length,1);
   const approvalBoard=(await db.pool.query('SELECT snapshot FROM operations_board_versions WHERE site_id=$1',['live-ipo:'+emailApproval.ipoId])).rows[0].snapshot;
   assert.equal(approvalBoard.customerPo,'','An email approval reference never becomes a customer PO');
-  assert.ok(approvalBoard.reviewFlags.some((flag:string)=>flag.includes('Customer PO is missing')));
+  assert.ok(!approvalBoard.reviewFlags.some((flag:string)=>flag.includes('Customer PO is missing')));
   const trusted=await issuance();
   const connection=await db.pool.connect();try{
    await connection.query('BEGIN');
