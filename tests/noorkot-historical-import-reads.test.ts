@@ -4,6 +4,7 @@ import {test} from 'node:test';
 import {GatePassRepository} from '../server/inventory/gate-passes.js';
 import {MaterialDraftRepository} from '../server/inventory/material-drafts.js';
 import {materialStockFixture} from './material-stock-fixture.js';
+import {warehouseLedgerKey} from '../server/inventory/warehouse-source.js';
 import {testDatabase} from './database.js';
 
 test('historical Noorkot dispatches and the separate Cat 6 opening do not block Inventory', async () => {
@@ -28,7 +29,7 @@ test('historical Noorkot dispatches and the separate Cat 6 opening do not block 
       VALUES($1,'CPZ-DO-816',$2,1,$3,$4,$5,$6,$3,$7)`,
     [dispatch,draft,fixture.stockSha,warehouse,snapshot,randomUUID(),fixture.owner]);
     await pool.query(`INSERT INTO inventory_warehouse_source_balances(source_sha256,ledger_key,payload)
-      VALUES($1,'rehearsal-cat6',$2)`, [fixture.stockSha,{
+      VALUES($1,$2,$3)`, [fixture.stockSha,warehouseLedgerKey('CH-CBL-CAT6',warehouse,'m'),{
       origin:'owner-confirmed historical issue', itemId:'CH-CBL-CAT6', description:'Cat 6', warehouse, unit:'m',
     }]);
     const catalogue = await new MaterialDraftRepository(pool).catalogue(fixture.owner);
