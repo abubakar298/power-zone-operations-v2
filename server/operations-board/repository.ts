@@ -1,3 +1,4 @@
+import {sitesAwaitingQcUsage} from '../inventory/qc-usage-pending.js';
 import {isBoqViewer,siteBoqDetails} from './site-boq.js';
 import {readLocalPurchases,saveLocalPurchases,requireLocalPurchaseSite} from './local-purchases.js';
 import {siteDispatchChoices} from '../inventory/dispatch-document-status.js';
@@ -52,7 +53,11 @@ export class OperationsBoardRepository{
  async sites(actor:string){
   const access=await this.access(actor);if(access.kind==='accounts')throw new HttpError(403,'Accounts can view document tracking only.');
   const rows=await withInventoryReceiving(this.pool,(await this.pool.query(latest)).rows);
-  return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>({...r.snapshot,version:r.version,updatedAt:r.created_at})),access};
+  const scoped=rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team));
+  const qc=access.kind==='qc'||access.qcDelegated===true;
+  const completed=qc?scoped.filter(r=>r.snapshot.installation===true&&!r.snapshot.cancelled&&siteBucketForBatch(r.snapshot)==='completed'):[];
+  const pending=await sitesAwaitingQcUsage(this.pool,completed.map(r=>({id:r.site_id,ipo:r.snapshot.ipo??''})));
+  return {sites:scoped.map(r=>({...r.snapshot,version:r.version,updatedAt:r.created_at,qcUsagePending:pending.has(r.site_id)})),access};
  }
  /** Physical Documents: originals Accounts has confirmed receiving (every original in the document batch). Read only. */
  async accountsReceipts(actor:string){

@@ -1,3 +1,4 @@
+import {sitesAwaitingQcUsage} from '../server/inventory/qc-usage-pending.js';
 import {MaterialUsageRepository} from '../server/inventory/material-usage.js';
 import {GatePassRepository} from '../server/inventory/gate-passes.js';
 import {directMaterialDatabase} from './direct-material-database.js';
@@ -63,6 +64,10 @@ test('saved site quantities create one replay-safe DO without a second quantity 
   await assert.rejects(drafts.issueSaved(f.reviewer,parent.id,{...parentCommand,quantities:{fake:'999'}},stock));
   assert.equal((await stock.dispatch(f.reviewer,parentIssue.id)).snapshot.lines[0].out,'1');
   assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'5','Saving a Parent DO must not post material stock.');
+  const qcSite={id:basis.registeredSiteId!,ipo:basis.ipo!};
+  const noIssue={id:'no-issued-material',ipo:'CHP-FIXTURE'};
+  const pending=()=>sitesAwaitingQcUsage(db.pool,[qcSite,noIssue]);
+  assert.deepEqual(await pending(),new Set([qcSite.id]),'The combined DO still needs fixed and variable use.');
   const receipt=await stock.uploadEvidence(f.reviewer,{warehouse:'Lahore warehouse',filename:'counted-return.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7 ISOLATED RETURN').toString('base64')});
   await stock.receive(f.reviewer,{draftId:modules.variable!.id,sourceSha256:f.stockSha,authorityVersion:1,evidenceId:receipt.id,reason:'One cable unit physically returned',requestKey:randomUUID(),lines:[{lineKey:modules.variable!.snapshot.lines[0].key,quantity:'1',ledgerRevision:1}]});
   assert.equal((await warehousePosition(db.pool,f.stockSha,f.key))?.currentClosing,'6');assert.equal((await stock.movements(f.reviewer,modules.variable!.id)).lines[0].returned,'1');
@@ -74,6 +79,12 @@ test('saved site quantities create one replay-safe DO without a second quantity 
   const fixedBeforeVariable=await drafts.returnLedger(f.reviewer,modules.fixed.id);assert.equal(fixedBeforeVariable.reconciliation?.ready,true);assert.equal(fixedBeforeVariable.linkedReconciliationReady,false);
   await assert.rejects(drafts.changeReturnReconciliation(f.reviewer,{id:modules.fixed.id,version:0,draftVersion:modules.fixed.version,action:'close',reason:'Do not close while variable use is pending.',requestKey:randomUUID()}),/still unresolved/);
   await usageRepo.save(f.reviewer,{...useCommon,requestKey:randomUUID(),draftId:modules.variable!.id,customerEvidenceId:evidence.id,lines:[{lineKey:variableLine.key,issued:'2',used:'1',returned:null}]});
+  assert.deepEqual(await pending(),new Set(),'The unposted Parent DO does not require a report yet.');
+  await signDispatch(db.pool,keeper,'dispatch',parentIssue.id);
+  assert.deepEqual(await pending(),new Set([qcSite.id]),'An issued Parent DO requires its own usage.');
+  const parentLine=(await stock.dispatch(f.reviewer,parentIssue.id)).snapshot.lines[0];
+  await usageRepo.save(f.reviewer,{...useCommon,requestKey:randomUUID(),draftId:parent.id,customerEvidenceId:evidence.id,lines:[{lineKey:parentLine.key,issued:'0',used:'0',returned:null}]});
+  assert.deepEqual(await pending(),new Set(),'Explicit measured zero completes the Parent DO entry.');
   assert.equal((await usageRepo.read(f.reviewer,modules.fixed.id)).dispatch.receipts.length,0,'A variable return never appears as a fixed-item receipt.');
   assert.equal((await usageRepo.read(f.reviewer,modules.variable!.id)).reconciliation?.rows[0].verifiedWarehouseReturn,'1');
   const combinedReady=await drafts.returnLedger(f.reviewer,modules.fixed.id);assert.equal(combinedReady.linkedReconciliationReady,true);

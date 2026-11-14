@@ -38,3 +38,14 @@
 
 /* Delete batch confirmation, shown in place under the batch heading. */
 .ob-batch-delete{padding:16px;border:1px solid var(--pz-danger-border,#e7b7b0);border-radius:var(--pz-radius-control,8px);background:var(--pz-danger-bg,#fdf4f3)}.ob-batch-delete p{margin:0}.ob-batch-delete textarea{width:100%;min-height:72px;box-sizing:border-box}
+
+.ob-bucket.pz-button.ob-bucket-usage-due {
+ border-color: var(--pz-primary);
+ animation: ob-usage-border 2.4s ease-in-out infinite;
+}
+@keyframes ob-usage-border {
+ 50% { border-color: var(--pz-border); }
+}
+@media (prefers-reduced-motion: reduce) {
+ .ob-bucket.pz-button.ob-bucket-usage-due { animation: none; }
+}

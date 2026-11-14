@@ -13,7 +13,7 @@ type Line={key:string;itemId:string;description:string;unit:string;issued:string
 type Row={lineKey:string;issued:string|null;used:string|null;returned:null};
 type Root={draftId:string;siteId:string;parent:boolean;kind:string;warehouse:string;references:string[];report:{version:number;snapshot:{date:string;state:string;customerEvidenceId:string|null;internalEvidenceId:string|null;lines:Row[]}}|null;lines:Line[]};
 type Data={records:Root[];evidence:{signedDos:Evidence[];variableSignoff:Evidence|null;noVariableItemsUsed:boolean}};
-export function QcMaterialUsage({boardId,session}:{boardId:string;session:Session}){
+export function QcMaterialUsage({boardId,session,onSaved}:{boardId:string;session:Session;onSaved:()=>void}){
  const [open,setOpen]=useState(false),[data,setData]=useState<Data>(),[error,setError]=useState(''),[rootId,setRootId]=useState(''),[notice,setNotice]=useState('');
  async function load(){setError('');try{const next=await api<Data>('/material-dispatches/qc/sites/'+encodeURIComponent(boardId)+'/material-usage');setData(next);setRootId(v=>next.records.some(r=>r.draftId===v)?v:next.records[0]?.draftId??'');}catch(e){setError((e as Error).message);}}
  useEffect(()=>{setData(undefined);if(open)void load();},[open,boardId]);
@@ -21,9 +21,9 @@ export function QcMaterialUsage({boardId,session}:{boardId:string;session:Sessio
  return <Section title="Material Usage" action={!open?<Button variant="secondary" onClick={()=>setOpen(true)}>Open material usage</Button>:undefined}>
   {!open?<p>Record Operations-confirmed quantities against the signed DO and VSO. Inventory uses the saved figures for its return ledger.</p>:<>
    {notice&&<p role="status" className="ob-success">{notice}</p>}{error&&<><p role="alert" className="form-error">{error}</p><Button variant="neutral" onClick={()=>void load()}>Try again</Button></>}
-   {!data?(!error&&<p role="status">Loading issued materials…</p>):!root?<HistoricalQcUsage boardId={boardId} session={session} evidence={[...data.evidence.signedDos,...data.evidence.variableSignoff?[data.evidence.variableSignoff]:[]]}/>:<>
+   {!data?(!error&&<p role="status">Loading issued materials…</p>):!root?<HistoricalQcUsage onSaved={onSaved} boardId={boardId} session={session} evidence={[...data.evidence.signedDos,...data.evidence.variableSignoff?[data.evidence.variableSignoff]:[]]}/>:<>
     <label>Material dispatch<select value={rootId} onChange={e=>{if(confirmLeaveWorkspace()){setNotice('');setRootId(e.target.value);}}}>{data.records.map(r=><option key={r.draftId} value={r.draftId}>{r.references.join(', ')||'Approved work'} · {r.parent?'Parent DO pool':r.kind==='fixed'?'Individual DO · fixed':'Individual DO · variable'} · {r.warehouse}</option>)}</select></label>
-    <UsageForm key={boardId+':'+root.draftId+':'+(root.report?.version??0)} root={root} evidence={data.evidence} boardId={boardId} session={session} onCancel={()=>setOpen(false)} onSaved={()=>{setNotice('Material usage saved for Inventory reconciliation. Warehouse stock is unchanged.');void load();}}/>
+    <UsageForm key={boardId+':'+root.draftId+':'+(root.report?.version??0)} root={root} evidence={data.evidence} boardId={boardId} session={session} onCancel={()=>setOpen(false)} onSaved={()=>{setNotice('Material usage saved for Inventory reconciliation. Warehouse stock is unchanged.');onSaved();void load();}}/>
    </>}
    <QcLocalPurchases key={boardId} boardId={boardId} session={session}/>
   </>}
