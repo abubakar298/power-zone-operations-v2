@@ -3,7 +3,7 @@ import {z} from 'zod';
 import {HttpError} from '../http/errors.js';
 import {MaterialDraftRepository} from './material-drafts.js';
 
-const filterSchema=z.object({warehouse:z.string().max(200).optional(),itemId:z.string().max(200).optional(),unit:z.string().max(40).optional(),direction:z.enum(['all','in','out']).default('all'),offset:z.coerce.number().int().min(0).max(100000).default(0)}).strict();
+const filterSchema=z.object({warehouse:z.string().max(200).optional(),itemId:z.string().max(200).optional(),unit:z.string().max(40).optional(),direction:z.enum(['all','in','out']).default('all'),search:z.string().trim().max(200).optional(),offset:z.coerce.number().int().min(0).max(100000).default(0)}).strict();
 /** A scoped, paginated read of original evidence and actual posted movements. */
 export async function stockLedger(pool:Pool,actor:string,input:unknown){
  const parsed=filterSchema.safeParse(input);if(!parsed.success)throw new HttpError(422,'Check the stock ledger filters.');const f=parsed.data;
@@ -36,7 +36,8 @@ export async function stockLedger(pool:Pool,actor:string,input:unknown){
      'customer',coalesce(recorded.customer,CASE
        WHEN recorded.site_name IS NULL OR lower(recorded.site_name)=lower(h.sites->0->>'siteName')
        THEN h.sites->0->>'customer' END)))
- ELSE coalesce(h.sites,'[]'::jsonb) END sites
+ ELSE coalesce(h.sites,'[]'::jsonb) END sites, NULL::text as case_key,
+ CASE WHEN concat_ws(' ',e.payload->>'movement',e.payload->>'notes',e.payload->>'remarks') ~* 'faulty' AND coalesce(e.payload->>'in','0')::numeric>0 THEN true ELSE false END AS faulty_return
  FROM inventory_warehouse_source_events e JOIN scope s ON s.source_sha256=e.source_sha256 AND s.warehouse=e.payload->>'warehouse'
  LEFT JOIN historical_sites h ON h.ipo_key=regexp_replace(upper(e.payload->>'ipo'),'[[:space:]·()]','','g')
  CROSS JOIN LATERAL (
@@ -45,12 +46,12 @@ export async function stockLedger(pool:Pool,actor:string,input:unknown){
  ) recorded
  WHERE ($2::text IS NULL OR e.payload->>'itemId'=$2) AND ($3::text IS NULL OR e.payload->>'unit'=$3)
  UNION ALL
- SELECT 'correction:'||c.case_id,c.created_at::text,b.payload->>'itemId',b.payload->>'description',b.payload->>'warehouse',b.payload->>'unit',c.in_delta::text,'0',c.case_id,'','Approved return correction','','[]'::jsonb
+ SELECT 'correction:'||c.case_id,c.created_at::text,b.payload->>'itemId',b.payload->>'description',b.payload->>'warehouse',b.payload->>'unit',c.in_delta::text,'0',c.case_id,'','Approved return correction','','[]'::jsonb,NULL,false
  FROM inventory_warehouse_return_corrections c JOIN balances b USING(source_sha256,ledger_key)
  UNION ALL
  SELECT 'posted:'||m.id::text,coalesce(i.snapshot->>'receivedOn',m.created_at::text),b.payload->>'itemId',b.payload->>'description',b.payload->>'warehouse',b.payload->>'unit',m.in_delta::text,m.out_delta::text,
  coalesce(i.snapshot->>'number',rd.number,rr.number,t.number,p.number,r.number,d.number,''),coalesce(linked.ipo,''),
- CASE WHEN i.document_id IS NOT NULL THEN 'Inventory inward' ELSE m.kind END,coalesce(i.external_reference,''),coalesce(linked.sites,'[]'::jsonb)
+ CASE WHEN i.document_id IS NOT NULL THEN 'Inventory inward' ELSE m.kind END,coalesce(i.external_reference,''),coalesce(linked.sites,'[]'::jsonb),coalesce(rd.case_id,rr.case_id)::text,false
  FROM inventory_warehouse_operational_movements m JOIN balances b USING(source_sha256,ledger_key)
  LEFT JOIN inventory_temporary_inward_postings i ON i.document_id=m.temporary_inward_id
  LEFT JOIN inventory_material_dispatches_active d ON d.id=m.dispatch_id
@@ -67,7 +68,57 @@ export async function stockLedger(pool:Pool,actor:string,input:unknown){
  FILTER (WHERE nullif(site->>'siteName','') IS NOT NULL OR nullif(site->>'customer','') IS NOT NULL) sites
  FROM jsonb_array_elements(coalesce(rd.snapshot->'sites',rc.snapshot->'sites',d.snapshot->'sites','[]'::jsonb)) site
  ) linked ON true
- ), filtered AS (SELECT * FROM events WHERE $4='all' OR ($4='in' AND incoming::numeric<>0) OR ($4='out' AND outgoing::numeric<>0))
- SELECT (SELECT count(*)::int FROM filtered) total,coalesce((SELECT jsonb_agg(row_to_json(page)) FROM (SELECT * FROM filtered ORDER BY date DESC,id DESC LIMIT 100 OFFSET $5) page),'[]'::jsonb) events`,[warehouses,f.itemId||null,f.unit||null,f.direction,f.offset]);
+ UNION ALL
+ SELECT 'faulty:'||r.id,coalesce(r.snapshot->>'date',''),c.item_id,c.snapshot->'original'->>'description',
+ r.warehouse,c.unit,r.quantity::text,'0',r.number,
+ coalesce((SELECT string_agg(DISTINCT nullif(concat_ws(' · ',s->>'ipo',s->>'orderNumber'),''),' / ')
+   FROM jsonb_array_elements(coalesce(c.snapshot->'sites','[]')) s),''),
+ 'Faulty return (held)', 'Held stock · no usable stock IN',
+ coalesce((SELECT jsonb_agg(jsonb_build_object('siteName',s->>'siteName','customer',s->>'customer') ORDER BY s->>'siteName')
+   FROM jsonb_array_elements(coalesce(c.snapshot->'sites','[]')) s),'[]'),
+ r.case_id::text,true
+ FROM inventory_material_replacement_returns r
+ JOIN inventory_material_replacement_cases c ON c.id=r.case_id
+ WHERE NOT EXISTS (
+   SELECT 1 FROM inventory_signed_dispatch_pending q WHERE q.document_kind='replacement-in' AND q.document_id=r.id
+   AND NOT EXISTS (SELECT 1 FROM inventory_signed_dispatch_postings signed
+     WHERE signed.document_kind=q.document_kind AND signed.document_id=q.document_id)
+ )
+ AND r.warehouse=ANY($1::text[]) AND ($2::text IS NULL OR c.item_id=$2) AND ($3::text IS NULL OR c.unit=$3)
+ ), grouped AS (
+ SELECT min(id) id,coalesce(max(nullif(date,'')),'') date,"itemId",warehouse,unit,reference,ipo,kind,sites,case_key,faulty_return,
+ sum(incoming::numeric)::text incoming,sum(outgoing::numeric)::text outgoing,
+ string_agg(DISTINCT nullif(description,''),' / ' ORDER BY nullif(description,'')) description,
+ string_agg(DISTINCT nullif(note,''),' · ' ORDER BY nullif(note,'')) note
+ FROM events
+ GROUP BY "itemId",warehouse,unit,reference,ipo,kind,sites,case_key,faulty_return,
+  (incoming::numeric<>0),(outgoing::numeric<>0),
+  CASE WHEN reference='' THEN id END,
+  CASE WHEN id LIKE 'history:%' THEN 'history' ELSE 'operational' END
+ ), paired AS (
+ SELECT g.*, CASE WHEN opposite.candidates=1 THEN opposite.partner END AS partner
+ FROM grouped g
+ LEFT JOIN LATERAL (
+  SELECT count(*) AS candidates,min(o.id) AS partner
+  FROM grouped o
+  WHERE o."itemId"=g."itemId" AND o.warehouse=g.warehouse AND o.unit=g.unit
+   AND ((g.faulty_return AND o.outgoing::numeric>0) OR (o.faulty_return AND g.outgoing::numeric>0))
+   AND (g.case_key=o.case_key OR (
+     g.case_key IS NULL AND o.case_key IS NULL AND g.ipo<>'' AND g.ipo=o.ipo AND
+     g.sites=o.sites AND jsonb_array_length(g.sites)=1
+   ))
+ ) opposite ON true
+ ), dated AS (
+ SELECT e.*, CASE WHEN p.id IS NOT NULL AND e.date='' AND p.date<>'' THEN p.date ELSE e.date END AS "displayDate",
+  p.id IS NOT NULL AND e.date='' AND p.date<>'' AS "relatedDate",
+  greatest(e.date,coalesce(p.date,'')) AS sort_date,least(e.id,coalesce(p.id,e.id)) AS pair_key
+ FROM paired e LEFT JOIN paired p ON p.id=e.partner AND p.partner=e.id
+ ), filtered AS (
+ SELECT * FROM dated
+ WHERE ($4='all' OR ($4='in' AND incoming::numeric<>0) OR ($4='out' AND outgoing::numeric<>0))
+ AND NOT EXISTS (SELECT 1 FROM regexp_split_to_table(lower(coalesce($6::text,'')), '[[:space:]]+') AS terms(term)
+  WHERE term<>'' AND strpos(lower(concat_ws(' ',date,"displayDate","itemId",description,warehouse,unit,reference,ipo,kind,note,sites::text,incoming,outgoing)),term)=0)
+ )
+ SELECT (SELECT count(*)::int FROM filtered) total,coalesce((SELECT jsonb_agg(row_to_json(page)) FROM (SELECT * FROM filtered ORDER BY sort_date DESC,pair_key DESC, CASE WHEN outgoing::numeric<>0 THEN 0 ELSE 1 END,id DESC LIMIT 100 OFFSET $5) page),'[]'::jsonb) events`,[warehouses,f.itemId||null,f.unit||null,f.direction,f.offset,f.search||null]);
  return {events:result.rows[0].events,total:result.rows[0].total,offset:f.offset,limit:100};
 }
