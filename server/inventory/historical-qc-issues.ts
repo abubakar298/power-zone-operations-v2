@@ -1,4 +1,5 @@
 import ledger from './approved-site-ledger.json' with {type:'json'};
+import {historicalIssueQuantity} from './historical-issue-quantity.js';
 import {reviewedStockLogQcIssue} from './reviewed-stock-log-qc-issues.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 
@@ -171,9 +172,13 @@ export function historicalQcIssues(boardId: string, ipo: string) {
   if(!link.orders.every(order=>events.some(event=>event.document===order)))return null;
   const lines=events.map(event=>({
     key:event.id,itemId:event.itemId,description:event.description,unit:event.unit,
-    issued:event.quantity,reference:event.document,variable:materialDocumentPolicy(event).variableDispatch,
+    issued:historicalIssueQuantity(event),reference:event.document,variable:materialDocumentPolicy(event).variableDispatch,
   }));
   for(const delivery of link.signedDeliveries??[])lines.push(...signedDoLines(boardId,delivery));
   const signature=JSON.stringify(lines.map(line=>[line.key,line.issued]));
-  return {lines,signature,review:link.review};
+  // A correction keeps the same issue line keys. Retain entered actuals from
+  // the old quantity snapshot while requiring verification of the new one.
+  const originalQuantities=new Map(events.map(event=>[event.id,event.quantity]));
+  const originalSignature=JSON.stringify(lines.map(line=>[line.key,originalQuantities.get(line.key)??line.issued]));
+  return {lines,signature,originalSignature,review:link.review};
 }

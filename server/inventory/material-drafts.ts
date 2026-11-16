@@ -10,6 +10,7 @@ import approvedParentLedger from './approved-parent-ledger.json' with {type:'jso
 import {requireOpenParent} from './parent-open.js';
 import {labelElahiLedgerCustomer} from './ledger-customer-labels.js';
 import approvedSiteLedger from './approved-site-ledger.json' with {type:'json'};
+import {historicalIssueQuantity} from './historical-issue-quantity.js';
 import {inventoryOperationsBatches} from './operations-batches.js';
 import {plannedInventoryDelivery,plannedInventoryInstallation} from '../operations-board/batch-delivery.js';
 import {MinimumStockRepository} from './minimum-stock.js';
@@ -122,6 +123,7 @@ export class MaterialDraftRepository{
  async reviewedPools(actor:string){const access=await this.access(actor);return {version:approvedParentLedger.version,preparedAt:approvedParentLedger.preparedAt,groups:approvedParentLedger.groups.filter(g=>access.owner||access.warehouses.includes(g.warehouse+' warehouse'))};}
  async siteLedger(actor:string){
   const access=await this.access(actor),data=structuredClone(approvedSiteLedger) as any;
+  for(const event of data.events)event.quantity=historicalIssueQuantity(event);
   const normal=(w:string)=>w.toLowerCase().replace(/ warehouse$/,'');
   const warehouses=new Set(access.warehouses.map(normal));
   if(!access.owner){const sites=new Set(data.events.filter((e:any)=>warehouses.has(normal(e.warehouse))).map((e:any)=>e.siteId));data.events=data.events.filter((e:any)=>warehouses.has(normal(e.warehouse))||sites.has(e.siteId)&&e.kind==='local_purchase');data.unmappedReturns=data.unmappedReturns.filter((e:any)=>warehouses.has(normal(e.warehouse)));data.sites=data.sites.filter((s:any)=>sites.has(s.id));}
