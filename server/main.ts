@@ -10,6 +10,8 @@ import { createPool } from "./db/pool.js";
 import { createApp } from "./app.js";
 import { AuthRepository } from "./auth/repository.js";
 import { runRequestedDashboardSamples } from "./coordinator/samples.js";
+import { R2Store } from "./documents/r2-store.js";
+import { newUploadCopier } from "./documents/object-copies.js";
 
 const config = readConfig();
 const pool = createPool(config);
@@ -58,6 +60,19 @@ const ipoEmails=new IpoEmailWorker(pool);
 const processIpoEmails=notificationWorker(()=>ipoEmails.deliverOne(delivery),()=>console.error('IPO document email processing interrupted.'));
 const ipoEmailTimer=setInterval(()=>{void processIpoEmails();},30000);
 ipoEmailTimer.unref();
+// Cloudflare R2, step 1 (off unless DOCUMENT_STORAGE=r2): uploads still save to
+// the database as before; this copies new ones to R2 shortly after, read back
+// and checked. Nothing in the database is changed or removed.
+if (config.documentStorageProblem)
+  console.error(JSON.stringify({event:'document_storage.disabled',reason:config.documentStorageProblem}));
+let documentCopyTimer: NodeJS.Timeout | undefined;
+if (config.r2) {
+  const copyNewUploads = newUploadCopier(pool, new R2Store(config.r2), (line) =>
+    (line.event === 'document_storage.copied' ? console.log : console.error)(JSON.stringify(line)));
+  documentCopyTimer = setInterval(() => { void copyNewUploads(); }, 30000);
+  documentCopyTimer.unref();
+  console.log(JSON.stringify({event:'document_storage.r2_copy_enabled'}));
+}
 // Owner paused stock-shortage alerts; retain the stock-watch page and saved history.
 let delivering = false;
 const emails = setInterval(() => {
@@ -80,6 +95,7 @@ function shutdown() {
   clearInterval(emails);
   clearInterval(notificationTimer);
   clearInterval(ipoEmailTimer);
+  if (documentCopyTimer) clearInterval(documentCopyTimer);
   const timeout = setTimeout(() => {
     console.error("Shutdown timed out.");
     process.exit(1);
