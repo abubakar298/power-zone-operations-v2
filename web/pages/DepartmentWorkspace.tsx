@@ -287,7 +287,7 @@ export function DepartmentWorkspace({
   // save or action the list is always requested fresh, so it never shows the state before the change.
   async function load(share = false) {
     const r = share
-      ? await sharedDepartmentList<any>(department, scope)
+      ? await sharedDepartmentList<any>(department, scope, {takeLeft: true})
       : await api<any>(`/project-workflow?department=${department}&scope=${scope}`);
     setRows(r.records);
     setLegacy(r.legacyTasks);
