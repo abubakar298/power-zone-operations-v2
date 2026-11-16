@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/Button.js";
 import {downloadName,filenameFromDisposition} from '../../shared/download-name.js';
 import pdfWorker from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+import {showPdfPages,type PdfPagesView} from "./document-page-drawing.js";
 
 /** Read-only authenticated document preview. Existing endpoints enforce access. */
 export function DocumentPreview({
@@ -26,11 +27,15 @@ export function DocumentPreview({
   const [retry, setRetry] = useState(0);
   const [zoom, setZoom] = useState(100);
   const [status, setStatus] = useState("Loading document…");
+  // The file this preview loaded, so Download can reuse it instead of fetching it again.
+  const [loaded, setLoaded] = useState<{blob: Blob; filename?: string}>();
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
     let task: any;
+    let pages: PdfPagesView | undefined;
     host.current?.replaceChildren();
+    setLoaded(undefined);
     setStatus("Loading document…");
     void (async () => {
       try {
@@ -46,6 +51,8 @@ export function DocumentPreview({
               "Unable to load this document. Use the download link or try again.",
             );
           blob = await response.blob();
+          if (cancelled) return;
+          setLoaded({blob, filename: filenameFromDisposition(response.headers.get('Content-Disposition'))});
         }
         if (blob.type.includes('spreadsheetml') || /\.xlsx$/i.test(downloadFilename??title)) {
           const {workbookPreview}=await import('./workbook-preview.js');const view=workbookPreview(new Uint8Array(await blob.arrayBuffer()));if(cancelled)return;host.current?.replaceChildren(view);
@@ -67,24 +74,12 @@ export function DocumentPreview({
           pdf.GlobalWorkerOptions.workerSrc = pdfWorker;
           task = pdf.getDocument({ data: await blob.arrayBuffer() });
           const doc = await task.promise;
-          for (let n = 1; n <= doc.numPages; n++) {
-            if (cancelled) return;
-            const page = await doc.getPage(n),
-              viewport = page.getViewport({ scale: 1.25 });
-            const canvas = document.createElement("canvas");
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            await page.render({
-              canvas,
-              canvasContext: canvas.getContext("2d")!,
-              viewport,
-            }).promise;
-            if (cancelled) return;
-            const image = document.createElement("img");
-            image.alt = `${title} · page ${n}`;
-            image.src = canvas.toDataURL("image/png");
-            host.current?.append(image);
-          }
+          if (cancelled || !host.current) return;
+          // Page 1 first, later pages as they are scrolled to. Callers waiting for the whole document
+          // (onReady, e.g. Survey Dispatch printing the drawn pages) still get every page drawn.
+          pages = await showPdfPages(doc, host.current, title, {drawAll: Boolean(onReady)});
+          if (cancelled) return pages.stop();
+          await pages.ready;
         }
         if (!cancelled) {setStatus("");onReady?.();}
       } catch (e) {
@@ -97,6 +92,7 @@ export function DocumentPreview({
     return () => {
       cancelled = true;
       controller.abort();
+      pages?.stop();
       void task?.destroy();
     };
   }, [url, title, mime, data, retry]);
@@ -104,7 +100,7 @@ export function DocumentPreview({
     <section className="ipo-document-preview" aria-label={title}>
       <div className="ipo-preview-heading">
         <h4>{title}</h4>
-        <DocumentDownload url={url} title={title} data={data} downloadFilename={downloadFilename}/>
+        <DocumentDownload url={url} title={title} data={data ?? loaded?.blob} downloadFilename={loaded?.filename ?? downloadFilename}/>
       </div>
       {compactControls ? <div className="ipo-preview-toolbar" role="group" aria-label={title + " zoom controls"}>
         <div className="ipo-preview-zoom-group">
