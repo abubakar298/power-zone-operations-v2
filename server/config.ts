@@ -32,6 +32,14 @@ const schema = z.object({
     .string()
     .regex(/^[a-fA-F0-9]{64}$/)
     .optional(),
+  // Cloudflare R2 copies of stored files. "database" (default) = unchanged.
+  // "r2" = new uploads are also copied to R2 shortly after they are saved.
+  // Kept as free text so a typo can never stop the site from starting.
+  DOCUMENT_STORAGE: z.string().optional(),
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_BUCKET: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
 });
 
 export interface Config {
@@ -54,6 +62,37 @@ export interface Config {
   emailReplyTo?: string;
   emailFromName?: string;
   emailEncryptionKey?: string;
+  documentStorage?: "database" | "r2";
+  r2?: R2Config;
+  /** Set when DOCUMENT_STORAGE=r2 but the R2 settings are invalid: the site still starts, without R2. */
+  documentStorageProblem?: string;
+}
+
+export interface R2Config {
+  accountId: string;
+  bucket: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
+/** R2 settings, checked only when DOCUMENT_STORAGE=r2. Reports names, never values. */
+export function readR2Config(env: NodeJS.ProcessEnv): R2Config {
+  const value = (name: string) => (env[name] ?? "").trim();
+  const r2 = {
+    accountId: value("R2_ACCOUNT_ID"),
+    bucket: value("R2_BUCKET"),
+    accessKeyId: value("R2_ACCESS_KEY_ID"),
+    secretAccessKey: value("R2_SECRET_ACCESS_KEY"),
+  };
+  const bad = [
+    !/^[a-f0-9]{32}$/i.test(r2.accountId) && "R2_ACCOUNT_ID",
+    !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(r2.bucket) && "R2_BUCKET",
+    !/^[A-Za-z0-9]{16,128}$/.test(r2.accessKeyId) && "R2_ACCESS_KEY_ID",
+    !/^[A-Za-z0-9/+=]{16,256}$/.test(r2.secretAccessKey) && "R2_SECRET_ACCESS_KEY",
+  ].filter(Boolean);
+  if (bad.length)
+    throw new Error(`DOCUMENT_STORAGE=r2 needs valid ${bad.join(", ")}`);
+  return r2;
 }
 
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -65,6 +104,17 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     );
   }
   const e = result.data;
+  let r2: R2Config | undefined, documentStorageProblem: string | undefined;
+  const storage = (e.DOCUMENT_STORAGE ?? "").trim().toLowerCase();
+  if (storage && storage !== "database" && storage !== "r2")
+    documentStorageProblem = 'DOCUMENT_STORAGE must be "database" or "r2"';
+  if (storage === "r2") {
+    try {
+      r2 = readR2Config(env);
+    } catch (error) {
+      documentStorageProblem = (error as Error).message;
+    }
+  }
   const url = new URL(e.APP_ORIGIN);
   if (url.origin !== e.APP_ORIGIN || url.username || url.password)
     throw new Error(
@@ -94,5 +144,8 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     emailReplyTo: e.EMAIL_REPLY_TO,
     emailFromName: e.EMAIL_FROM_NAME,
     emailEncryptionKey: e.EMAIL_TOKEN_ENCRYPTION_KEY,
+    documentStorage: r2 ? "r2" : "database",
+    r2,
+    documentStorageProblem,
   };
 }
