@@ -33,10 +33,23 @@ test('other web files keep the one-hour cache and the page itself is never cache
   try{
     const logo=await request(app).get('/brand/logo.svg').expect(200);
     assert.equal(logo.headers['cache-control'],'public, max-age=3600');
-    for(const path of ['/','/dashboard','/assets/missing-file.js']){
+    for(const path of ['/','/dashboard']){
       const page=await request(app).get(path).expect(200);
       assert.equal(page.headers['cache-control'],'no-store',path);
       assert.match(page.text,/<title>Power Zone<\/title>/,path);
+    }
+  }finally{await close();}
+});
+
+// After a release the previous build's files are gone. An open tab asking for one must get
+// "not found", not the page itself, so the browser reports a failed load the app can recover from.
+test('a missing build file in /assets is not found and never answered with the page',async()=>{
+  const {app,close}=await webApp();
+  try{
+    for(const path of ['/assets/missing-file.js','/assets/App-oldbuild.css','/assets/nested/missing.js']){
+      const response=await request(app).get(path).expect(404);
+      assert.equal(response.headers['cache-control'],'no-store',path);
+      assert.doesNotMatch(response.text,/<title>Power Zone<\/title>/,path);
     }
   }finally{await close();}
 });

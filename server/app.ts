@@ -312,6 +312,11 @@ export function createApp(
     // Vite names every file in /assets after its content (e.g. App-DRZ4ujdI.js), so a new
     // release always uses new names: browsers can keep these for a year without going stale.
     app.use("/assets", express.static(resolve(webDirectory, "assets"), { index: false, maxAge: "1y", immutable: true }));
+    // A file from an earlier release is gone after a deploy. Answer "not found" instead of the page,
+    // so an open tab sees a failed screen load and reloads itself (web/navigation/release-reload.ts).
+    app.use("/assets", (_req, res) => {
+      res.status(404).set("Cache-Control", "no-store").type("text/plain").send("Not found");
+    });
     app.use(express.static(webDirectory, { index: false, maxAge: "1h" }));
     app.get("/{*path}", (_req, res) => {
       res

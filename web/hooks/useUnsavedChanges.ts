@@ -11,6 +11,13 @@ export function confirmLeaveWorkspace() {
   );
 }
 
+// True when any mounted editor has unsaved changes; asks nothing.
+export function hasUnsavedChanges() {
+  const event = new Event(navigationEvent, { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
 export function useUnsavedChanges(dirty: boolean, protectReload=true) {
   useEffect(() => {
     if (!dirty) return;
