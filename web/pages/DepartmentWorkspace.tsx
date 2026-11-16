@@ -2,6 +2,7 @@ import { defaultIpoInvoiceTerms, type IpoInvoiceTerms } from "../../shared/ipo-i
 import { IpoInvoiceTermsField } from "../components/IpoInvoiceTermsField.js";
 import {ApprovedConfigurationBatch} from '../components/ApprovedConfigurationBatch.js';
 import {useBackStep} from '../navigation/useBackStep.js';
+import {sharedDepartmentList,workflowReferences} from '../workspaces/workflow-list-reuse.js';
 import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {CustomerSiteRegister} from '../components/CustomerSiteRegister.js';
@@ -282,10 +283,12 @@ export function DepartmentWorkspace({
       department === "design" ? designBuckets : visibleCoordinationBuckets,
     scopeDefault = manager ? "team" : "mine";
   const [scope, setScope] = useState(scopeDefault);
-  async function load() {
-    const r = await api<any>(
-      `/project-workflow?department=${department}&scope=${scope}`,
-    );
+  // `share` only when the page opens: it may join the sidebar's request already on its way. After any
+  // save or action the list is always requested fresh, so it never shows the state before the change.
+  async function load(share = false) {
+    const r = share
+      ? await sharedDepartmentList<any>(department, scope)
+      : await api<any>(`/project-workflow?department=${department}&scope=${scope}`);
     setRows(r.records);
     setLegacy(r.legacyTasks);
     window.dispatchEvent(
@@ -406,7 +409,7 @@ export function DepartmentWorkspace({
     }
   }
   useEffect(() => {
-    void Promise.all([api("/project-workflow/references"), load()])
+    void Promise.all([workflowReferences(session.user.id), load(true)])
       .then(async ([r]) => {
         setRefs(r);
         const pending = sessionStorage.getItem("pz:workflow-open");
@@ -422,7 +425,7 @@ export function DepartmentWorkspace({
       sessionStorage.removeItem("pz:department-page");
     }
     const reload = () => {
-      void Promise.all([api("/project-workflow/references"), load()])
+      void Promise.all([workflowReferences(session.user.id), load(true)])
         .then(([r]) => setRefs(r))
         .catch((e) => setError(e.message));
     };
@@ -594,7 +597,7 @@ export function DepartmentWorkspace({
     setDispatchPlanning(false);
     setFilters({ ...emptyWorkspaceFilters, period: "all" });
     setNotice("Dispatch approved. This bucket is refreshed.");
-    setRefs(await api("/project-workflow/references"));
+    setRefs(await workflowReferences(session.user.id,{fresh:true}));
   }
   if (creating === 'Approved survey batch') return <ApprovedConfigurationBatch refs={refs} session={session} route="survey-framework" onCancel={()=>setCreating(undefined)} onOpen={async(id:string)=>{await load();await open(id,false);}}/>;
   if (department === "coordination" && page === directPoPage && !detail)
@@ -657,7 +660,7 @@ export function DepartmentWorkspace({
         onBack={() => setSelectedDispatch(undefined)}
       />
     );
-  if(showUblSummary && department==='design') return <UblTechnicalReviewSummary session={session} records={rows} onBatchSaved={load} onBack={()=>setShowUblSummary(false)} onOpen={id=>{setShowUblSummary(false);void open(id).catch(e=>setError(e.message));}}/>;
+  if(showUblSummary && department==='design') return <UblTechnicalReviewSummary session={session} records={rows} onBatchSaved={()=>load()} onBack={()=>setShowUblSummary(false)} onOpen={id=>{setShowUblSummary(false);void open(id).catch(e=>setError(e.message));}}/>;
   if (detail)
     return (
       <RecordEditor
@@ -679,7 +682,7 @@ export function DepartmentWorkspace({
         onScheduled={async () => {
           const [saved, updatedRefs] = await Promise.all([
             api(`/project-workflow/${detail.record.id}`),
-            api("/project-workflow/references"),
+            workflowReferences(session.user.id,{fresh:true}),
             load(),
           ]);
           setDetail(saved);
@@ -781,7 +784,7 @@ export function DepartmentWorkspace({
         <FrameworkEditor
           {...{ session, refs }}
           onSaved={async () => {
-            setRefs(await api("/project-workflow/references"));
+            setRefs(await workflowReferences(session.user.id,{fresh:true}));
           }}
         />
       )}
@@ -892,8 +895,8 @@ export function DepartmentWorkspace({
           )}
           {department === "coordination" && page === "Customer & Site Search" && <section className="pz-panel pz-stack">
             <h3>Master customer and site register</h3>
-            {customerEditId!==undefined&&<EditCustomer key={customerEditId} customerId={customerEditId} session={session} onCancel={()=>setCustomerEditId(undefined)} onSaved={async()=>{setRefs(await api<any>('/project-workflow/references'));await load();setCustomerEditId(undefined);}}/>}
-            {siteCodeTarget&&<SiteCodeUpdate site={siteCodeTarget} session={session} onCancel={()=>setSiteCodeTarget(undefined)} onSaved={async()=>{setRefs(await api<any>('/project-workflow/references'));await load();setSiteCodeTarget(undefined);}}/>}
+            {customerEditId!==undefined&&<EditCustomer key={customerEditId} customerId={customerEditId} session={session} onCancel={()=>setCustomerEditId(undefined)} onSaved={async()=>{setRefs(await workflowReferences(session.user.id,{fresh:true}));await load();setCustomerEditId(undefined);}}/>}
+            {siteCodeTarget&&<SiteCodeUpdate site={siteCodeTarget} session={session} onCancel={()=>setSiteCodeTarget(undefined)} onSaved={async()=>{setRefs(await workflowReferences(session.user.id,{fresh:true}));await load();setSiteCodeTarget(undefined);}}/>}
             <CustomerSiteRegister session={session} customers={refs.customers} sites={refs.sites} records={rows} onEditCustomer={setCustomerEditId} onEditSite={setSiteCodeTarget} onWorkflow={(site,record)=>{if(record)void open(record.id).catch(e=>setError(e.message));else{setSelectedSite(site);setCreating("Create survey request");}}}/>
           </section>}
 
@@ -2104,7 +2107,7 @@ function CreateRecord({
           onClose={() => setAddingCustomer(false)}
           onLogout={() => window.location.reload()}
           onCreated={async (id: string) => {
-            const updated = await api<any>("/project-workflow/references");
+            const updated = await workflowReferences(session.user.id,{fresh:true});
             setCustomers(updated.customers);
             setCustomer(String(id));
             setAddedCustomerId(String(id));
