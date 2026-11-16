@@ -1,6 +1,7 @@
 import type {Pool} from 'pg';
 import {z} from 'zod';
 import {HttpError} from '../http/errors.js';
+import {elahiCustomerAliases,elahiCustomerName,elahiSiteAliases} from './ledger-customer-labels.js';
 import {MaterialDraftRepository} from './material-drafts.js';
 
 const filterSchema=z.object({warehouse:z.string().max(200).optional(),itemId:z.string().max(200).optional(),unit:z.string().max(40).optional(),direction:z.enum(['all','in','out']).default('all'),search:z.string().trim().max(200).optional(),offset:z.coerce.number().int().min(0).max(100000).default(0)}).strict();
@@ -113,12 +114,27 @@ export async function stockLedger(pool:Pool,actor:string,input:unknown){
   p.id IS NOT NULL AND e.date='' AND p.date<>'' AS "relatedDate",
   greatest(e.date,coalesce(p.date,'')) AS sort_date,least(e.id,coalesce(p.id,e.id)) AS pair_key
  FROM paired e LEFT JOIN paired p ON p.id=e.partner AND p.partner=e.id
+ ), labeled AS (
+ SELECT d.*,coalesce(labels.sites,'[]'::jsonb) AS display_sites
+ FROM dated d
+ LEFT JOIN LATERAL (
+  SELECT jsonb_agg(
+    CASE WHEN normalized_identity.customer_name=ANY($7::text[]) OR (normalized_identity.customer_name='' AND normalized_identity.site_name=ANY($8::text[]))
+      THEN jsonb_set(raw.site,'{customer}',to_jsonb($9::text),true) ELSE raw.site END
+    ORDER BY raw.ordinal
+  ) sites
+  FROM jsonb_array_elements(d.sites) WITH ORDINALITY AS raw(site,ordinal)
+  CROSS JOIN LATERAL (
+   SELECT trim(regexp_replace(lower(coalesce(raw.site->>'customer','')),'[^a-z0-9]+',' ','g')) customer_name,
+          trim(regexp_replace(lower(coalesce(raw.site->>'siteName','')),'[^a-z0-9]+',' ','g')) site_name
+  ) normalized_identity
+ ) labels ON true
  ), filtered AS (
- SELECT * FROM dated
+ SELECT * FROM labeled
  WHERE ($4='all' OR ($4='in' AND incoming::numeric<>0) OR ($4='out' AND outgoing::numeric<>0))
  AND NOT EXISTS (SELECT 1 FROM regexp_split_to_table(lower(coalesce($6::text,'')), '[[:space:]]+') AS terms(term)
-  WHERE term<>'' AND strpos(lower(concat_ws(' ',date,"displayDate","itemId",description,warehouse,unit,reference,ipo,kind,note,sites::text,incoming,outgoing)),term)=0)
+  WHERE term<>'' AND strpos(lower(concat_ws(' ',date,"displayDate","itemId",description,warehouse,unit,reference,ipo,kind,note,sites::text,display_sites::text,incoming,outgoing)),term)=0)
  )
- SELECT (SELECT count(*)::int FROM filtered) total,coalesce((SELECT jsonb_agg(row_to_json(page)) FROM (SELECT * FROM filtered ORDER BY sort_date DESC,pair_key DESC, CASE WHEN outgoing::numeric<>0 THEN 0 ELSE 1 END,id DESC LIMIT 100 OFFSET $5) page),'[]'::jsonb) events`,[warehouses,f.itemId||null,f.unit||null,f.direction,f.offset,f.search||null]);
+ SELECT (SELECT count(*)::int FROM filtered) total,coalesce((SELECT jsonb_agg((to_jsonb(page)-'display_sites')||jsonb_build_object('sites',page.display_sites)) FROM (SELECT * FROM filtered ORDER BY sort_date DESC,pair_key DESC, CASE WHEN outgoing::numeric<>0 THEN 0 ELSE 1 END,id DESC LIMIT 100 OFFSET $5) page),'[]'::jsonb) events`,[warehouses,f.itemId||null,f.unit||null,f.direction,f.offset,f.search||null,elahiCustomerAliases,elahiSiteAliases,elahiCustomerName]);
  return {events:result.rows[0].events,total:result.rows[0].total,offset:f.offset,limit:100};
 }
