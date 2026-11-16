@@ -25,7 +25,13 @@ test('independent Accounts pages avoid work queues and load queues only when ope
 
 test('management refresh skips hidden pages and coalesces focus while requests are pending',async({page})=>{
  await actors(page.request);await login(page.request,'management-release@example.test');
+ // Option B (16 Nov 2026): returning to the tab refreshes only when the last check is a minute old, and the
+ // full coordination list (/api/project-workflow) is fetched again at most every 5 minutes. The page clock
+ // moves Date.now() forward without firing the 2-minute timers.
+ const start=Date.now();await page.clock.install({time:start});
  const paths=['/api/director/received-pos','/api/ubl/sites','/api/project-checkpoints','/api/accounts-workspace/closure-queue','/api/project-workflow/ubl-survey-packages','/api/project-workflow','/api/boqs/reviews'];
+ const coordination='/api/project-workflow',others=paths.filter(path=>path!==coordination);
+ const expected=(other:number,list:number)=>Object.fromEntries(paths.map(path=>[path,path===coordination?list:other]));
  const counts=new Map(paths.map(path=>[path,0]));
  const completed=new Map(paths.map(path=>[path,0]));
  page.on('requestfinished',request=>{const path=new URL(request.url()).pathname;if(completed.has(path))completed.set(path,completed.get(path)!+1);});
@@ -35,14 +41,22 @@ test('management refresh skips hidden pages and coalesces focus while requests a
  await page.waitForLoadState('networkidle');for(const path of paths)expect(counts.get(path),`hidden ${path}`).toBe(1);
  let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});
  await page.route('**/api/**',async route=>{if(paths.includes(new URL(route.request().url()).pathname))await held;await route.continue();});
+ // Back on the tab a minute later: every list refreshes except the coordination list (still under 5 minutes old).
+ await page.clock.setSystemTime(start+61_000);
  await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});document.dispatchEvent(new Event('visibilitychange'));});
- await expect.poll(()=>paths.every(path=>counts.get(path)===2)).toBe(true);
+ await expect.poll(()=>others.every(path=>counts.get(path)===2)).toBe(true);
  await page.evaluate(()=>{for(let i=0;i<5;i++)window.dispatchEvent(new Event('focus'));});
- for(const path of paths)expect(counts.get(path),`overlapping ${path}`).toBe(2);
- release();await expect.poll(()=>Object.fromEntries(completed)).toEqual(Object.fromEntries(paths.map(path=>[path,2])));
+ expect(Object.fromEntries(counts),'overlapping focus').toEqual(expected(2,1));
+ release();await expect.poll(()=>Object.fromEntries(completed)).toEqual(expected(2,1));
  // A previous networkidle load state can already be satisfied while routed requests are held.
  // Wait for actual response bodies, then let the hooks consume their promises.
  await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+ // Returning again within a minute does not repeat the dashboard lists.
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
- await expect.poll(()=>Object.fromEntries(counts)).toEqual(Object.fromEntries(paths.map(path=>[path,3])));
+ await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+ expect(Object.fromEntries(counts),'focus within a minute').toEqual(expected(2,1));
+ // Five minutes after the first load, returning refreshes everything, including the coordination list.
+ await page.clock.setSystemTime(start+6*60_000);
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await expect.poll(()=>Object.fromEntries(counts)).toEqual(expected(3,2));
 });
