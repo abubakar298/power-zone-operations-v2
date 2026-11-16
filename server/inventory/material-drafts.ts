@@ -8,6 +8,7 @@ import {warehouseNumber} from './warehouse-access.js';
 import {ParentReconciliationRepository} from './parent-reconciliation.js';
 import approvedParentLedger from './approved-parent-ledger.json' with {type:'json'};
 import {requireOpenParent} from './parent-open.js';
+import {labelElahiLedgerCustomer} from './ledger-customer-labels.js';
 import approvedSiteLedger from './approved-site-ledger.json' with {type:'json'};
 import {inventoryOperationsBatches} from './operations-batches.js';
 import {plannedInventoryDelivery,plannedInventoryInstallation} from '../operations-board/batch-delivery.js';
@@ -129,6 +130,10 @@ export class MaterialDraftRepository{
   const receipts=(await this.pool.query(`SELECT r.id,r.number,r.snapshot->>'warehouse' AS warehouse,r.created_at,r.snapshot,v.snapshot AS preparation FROM inventory_material_receipts r JOIN LATERAL(SELECT snapshot FROM inventory_material_draft_versions WHERE draft_id=r.draft_id ORDER BY version DESC LIMIT 1)v ON true ORDER BY r.created_at`)).rows;
   for(const r of receipts){if(!access.owner&&!access.warehouses.includes(r.warehouse))continue;const sites=r.preparation.sites??[];if(sites.length!==1)continue;const site=sites[0];for(const [i,line]of(r.snapshot.lines??[]).entries()){if(data.events.some((e:any)=>e.document===r.number&&e.itemId===line.itemId&&e.warehouse===r.warehouse))continue;data.events.push({id:r.id+':'+i,siteId:site.siteId,site:site.siteName,customer:site.customer,ipo:[site.ipo,site.orderNumber].filter(Boolean).join(' · '),itemId:line.itemId,description:line.itemId,unit:line.unit,date:new Date(r.created_at).toISOString().slice(0,10),document:r.number,documentType:'IGP',kind:'return',quantity:line.quantity,warehouse:r.warehouse,reference:'',notes:r.snapshot.reason,condition:'',evidence:'/api/material-dispatches/evidence/'+r.snapshot.evidence.id,sourceSheet:'',sourceType:'Verified warehouse return',status:'Credited',replacement:false,faulty:false});}}
   data.nativeSites=(await this.pool.query(`${latest} ORDER BY v.created_at DESC`)).rows.filter((r:any)=>access.owner||access.warehouses.includes(r.snapshot.warehouse)).flatMap((r:any)=>r.snapshot.sites.map((s:any)=>({id:s.siteId,site:s.siteName,customer:s.customer,ipo:s.ipo??'',draftId:r.id,parent:r.snapshot.parent})));
+  data.events=data.events.map(labelElahiLedgerCustomer);
+  data.unmappedReturns=data.unmappedReturns.map(labelElahiLedgerCustomer);
+  data.sites=data.sites.map(labelElahiLedgerCustomer);
+  data.nativeSites=data.nativeSites.map(labelElahiLedgerCustomer);
   data.coverage.importedEvents=data.events.length;return data;
  }
  async transportChoices(actor:string,warehouse:string){
