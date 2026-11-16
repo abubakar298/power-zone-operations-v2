@@ -1,13 +1,7 @@
 import {BackButton} from '../components/BackButton.js';
 import {staffNavigationIcon} from '../components/staff-navigation-icons.js';
-import {ProgrammeDashboard} from '../components/ProgrammeDashboard.js';
-import {AccountsBilling} from './AccountsBilling.js';
 import {accountsPageName} from '../../shared/accounts-navigation.js';
 import {notificationPath} from '../../shared/notification-target.js';
-import {UpsAlerts} from '../components/UpsAlerts.js';
-import {MaterialCorrectionAlerts} from '../components/MaterialCorrectionAlerts.js';
-import {ManagementDashboard} from "../components/ManagementDashboard.js";
-import {UpsManagementPortfolio} from "../components/UpsManagementPortfolio.js";
 import {DepartmentViewSwitcher} from "../components/DepartmentViewSwitcher.js";
 import {OperationsAreaSwitcher,ProcurementWorkspace,type OperationsArea} from "../components/OperationsAreaSwitcher.js";
 import {canViewDepartments,managementDepartment,managementDepartments,type ManagementDepartment} from "../workspaces/management-departments.js";
@@ -19,13 +13,8 @@ import {
   designBuckets as sharedDesignBuckets,
   coordinationBuckets as sharedCoordinationBuckets,
 } from "../workspaces/project-routes.js";
-import { UblWorkflow } from "./UblWorkflow.js";
-import { AccountsWorkspace } from "./AccountsWorkspace.js";
-import { InventoryWorkspace } from "./InventoryWorkspace.js";
 import { confirmLeaveWorkspace } from "../hooks/useUnsavedChanges.js";
 import { Button } from "../ui/Button.js";
-import { CoordinatorLibrary } from "./CoordinatorLibrary.js";
-import { NotificationAdmin } from "../components/NotificationAdmin.js";
 import { NotificationCenter } from "../components/NotificationCenter.js";
 import { GlobalSearch } from "../components/GlobalSearch.js";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -104,6 +93,20 @@ const UblConfigurations = lazy(() =>
 const Masters = lazy(() =>
   import("./Masters.js").then((module) => ({ default: module.Masters })),
 );
+
+// Department screens load only when opened (fix 4, 16 Nov 2026), so every user's first download stays small.
+// All of them render inside the workspace <Suspense> ("Opening workspace…") further down.
+const ProgrammeDashboard = lazy(() => import("../components/ProgrammeDashboard.js").then(m => ({default:m.ProgrammeDashboard})));
+const AccountsBilling = lazy(() => import("./AccountsBilling.js").then(m => ({default:m.AccountsBilling})));
+const UpsAlerts = lazy(() => import("../components/UpsAlerts.js").then(m => ({default:m.UpsAlerts})));
+const MaterialCorrectionAlerts = lazy(() => import("../components/MaterialCorrectionAlerts.js").then(m => ({default:m.MaterialCorrectionAlerts})));
+const ManagementDashboard = lazy(() => import("../components/ManagementDashboard.js").then(m => ({default:m.ManagementDashboard})));
+const UpsManagementPortfolio = lazy(() => import("../components/UpsManagementPortfolio.js").then(m => ({default:m.UpsManagementPortfolio})));
+const UblWorkflow = lazy(() => import("./UblWorkflow.js").then(m => ({default:m.UblWorkflow})));
+const AccountsWorkspace = lazy(() => import("./AccountsWorkspace.js").then(m => ({default:m.AccountsWorkspace})));
+const InventoryWorkspace = lazy(() => import("./InventoryWorkspace.js").then(m => ({default:m.InventoryWorkspace})));
+const CoordinatorLibrary = lazy(() => import("./CoordinatorLibrary.js").then(m => ({default:m.CoordinatorLibrary})));
+const NotificationAdmin = lazy(() => import("../components/NotificationAdmin.js").then(m => ({default:m.NotificationAdmin})));
 
 const CurrentProcurementShell = lazy(() => import("./procurement/ProcurementShell.js").then(m => ({default:m.ProcurementShell})));
 
