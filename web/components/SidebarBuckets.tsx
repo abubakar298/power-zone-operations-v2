@@ -11,7 +11,7 @@ export function SidebarBuckets({department,page,onSelect}:{department:'design'|'
  const [error,setError]=useState(false);
  useEffect(()=>{
   let active=true,sequence=0,inFlight=false,lastLoadedAt:number|undefined;
-  const refresh=async()=>{if(!shouldRefreshSidebar({hidden:document.visibilityState==='hidden',inFlight,lastLoadedAt,now:Date.now()}))return;inFlight=true;const current=++sequence;try{const result=await sharedDepartmentList<{records:any[];legacyTasks:any[]}>(department,'mine');if(active&&current===sequence){lastLoadedAt=Date.now();setCounts(bucketCounts(department,result.records,result.legacyTasks));setError(false);}}catch{if(active)setError(true);}finally{inFlight=false;}};
+  const refresh=async()=>{if(!shouldRefreshSidebar({hidden:document.visibilityState==='hidden',inFlight,lastLoadedAt,now:Date.now()}))return;inFlight=true;const current=++sequence;try{const result=await sharedDepartmentList<{records:any[];legacyTasks:any[]}>(department,'mine',{leaveForPage:true});if(active&&current===sequence){lastLoadedAt=Date.now();setCounts(bucketCounts(department,result.records,result.legacyTasks));setError(false);}}catch{if(active)setError(true);}finally{inFlight=false;}};
   const supplied=(event:Event)=>{const detail=(event as CustomEvent).detail;if(detail?.department===department&&detail.scope==='mine'){++sequence;lastLoadedAt=Date.now();setCounts(bucketCounts(department,detail.records,detail.legacyTasks));setError(false);}};
   void refresh();const timer=setInterval(refresh,sidebarRefreshIntervalMs);
   window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);window.addEventListener('pz:bucket-records',supplied);
