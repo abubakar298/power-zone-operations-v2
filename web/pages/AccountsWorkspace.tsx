@@ -30,6 +30,7 @@ import { Button } from "../ui/Button.js";
 import { Field } from "../ui/Field.js";
 import { decimalDisplay, wholeMoney as money } from "../numbers.js";
 import { InventoryWorkspace } from "./InventoryWorkspace.js";
+import {accountsReturnCheckDue} from "../workspaces/accounts-refresh.js";
 const Departments = lazy(() =>
   import("./Departments.js").then((module) => ({ default: module.Departments })),
 );
@@ -185,16 +186,17 @@ export function AccountsWorkspace({
   currentActor.current = actorContext;
   useEffect(()=>{
     if(tab!=='My Workspace')return;
-    let active=true,generation=0;
+    let active=true,generation=0,lastStartedAt:number|undefined;
     setInvoiceQueueCount(null);setPaymentQueueCount(null);setQueueCountError(false);
-    const refresh=()=>{const request=++generation;void api<{invoicesToSubmit:number;paymentsToRecord:number}>('/accounts-workspace/work-queues').then(result=>{
+    const refresh=()=>{const request=++generation;lastStartedAt=Date.now();void api<{invoicesToSubmit:number;paymentsToRecord:number}>('/accounts-workspace/work-queues').then(result=>{
       if(active&&request===generation){setInvoiceQueueCount(result.invoicesToSubmit);setPaymentQueueCount(result.paymentsToRecord);setQueueCountError(false);}
     }).catch(()=>{if(active&&request===generation){setInvoiceQueueCount(null);setPaymentQueueCount(null);setQueueCountError(true);}});};
-    const visible=()=>{if(document.visibilityState==='visible')refresh();};
-    refresh();window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',visible);
-    return()=>{active=false;generation++;window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',visible);};
+    // Coming back to the window checks again only when the last check is a minute old.
+    const returned=()=>{if(document.visibilityState==='visible'&&accountsReturnCheckDue(lastStartedAt,Date.now()))refresh();};
+    refresh();window.addEventListener('focus',returned);document.addEventListener('visibilitychange',returned);
+    return()=>{active=false;generation++;window.removeEventListener('focus',returned);document.removeEventListener('visibilitychange',returned);};
   },[tab,actorContext]);
-  useEffect(()=>{if(tab!=='My Workspace')return;let active=true,request=0;const refresh=()=>{const current=++request;void api<{count:number}>('/accounts-workspace/material-costing?summary=1').then(v=>{if(active&&current===request)setApprovedDocumentCount(v.count);}).catch(()=>{if(active&&current===request)setApprovedDocumentCount(null);});};setApprovedDocumentCount(null);refresh();window.addEventListener('focus',refresh);return()=>{active=false;window.removeEventListener('focus',refresh);};},[tab,actorContext]);
+  useEffect(()=>{if(tab!=='My Workspace')return;let active=true,request=0,lastStartedAt:number|undefined;const refresh=()=>{const current=++request;lastStartedAt=Date.now();void api<{count:number}>('/accounts-workspace/material-costing?summary=1').then(v=>{if(active&&current===request)setApprovedDocumentCount(v.count);}).catch(()=>{if(active&&current===request)setApprovedDocumentCount(null);});};setApprovedDocumentCount(null);refresh();const returned=()=>{if(accountsReturnCheckDue(lastStartedAt,Date.now()))refresh();};window.addEventListener('focus',returned);return()=>{active=false;window.removeEventListener('focus',returned);};},[tab,actorContext]);
   async function load() {
     if (!workspaceNeeded && !reportsNeeded) return;
     const generation = ++loadGeneration.current;
