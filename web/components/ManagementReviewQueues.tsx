@@ -9,21 +9,26 @@ import {jobLabel} from './job-label.js';
 import {DocumentPreview} from './DocumentPreview.js';
 import {confirmRevision} from '../confirm.js';
 import {awaitingClosures,pendingTechnicalPackages,pendingBoqReviews} from '../workspaces/management-reviews.js';
+import {coordinationListDue,dashboardCheckDue,dashboardRefreshIntervalMs,dashboardReturnGapMs} from '../workspaces/dashboard-refresh.js';
 
 export function useManagementReviews(userId:string){
  const [closures,setClosures]=useState<any[]>(),[technical,setTechnical]=useState<{packages:any[];boqs:any[]}>(),[closureError,setClosureError]=useState(''),[technicalError,setTechnicalError]=useState(''),[refresh,setRefresh]=useState(0);
  const reload=useCallback(()=>setRefresh(n=>n+1),[]);
  useEffect(()=>{
-  let active=true,generation=0,inFlight=false;
-  async function load(){if(inFlight||document.visibilityState==='hidden')return;inFlight=true;const n=++generation;
+  let active=true,generation=0,inFlight=false,lastStartedAt:number|undefined,coordination:{records:any[]}|undefined,coordinationAt:number|undefined;
+  // Background checks every 2 minutes, never from a hidden tab. The full coordination list is one of the
+  // heaviest requests, so it is fetched again at most every 5 minutes unless the dashboard is (re)opened.
+  async function load(force:boolean,minGapMs:number){if(!dashboardCheckDue({hidden:document.visibilityState==='hidden',inFlight,lastStartedAt,now:Date.now(),minGapMs}))return;inFlight=true;const n=++generation,started=Date.now();lastStartedAt=started;
+   const records=coordinationListDue({force,loadedAt:coordinationAt,now:started})||!coordination?api<any>('/project-workflow?department=coordination&scope=team').then(r=>{coordination=r;coordinationAt=started;return r;}):Promise.resolve(coordination);
    await Promise.allSettled([
     api<any>('/accounts-workspace/closure-queue').then(d=>{if(active&&n===generation){setClosures(awaitingClosures(d.closures));setClosureError('');}}).catch(e=>{if(active&&n===generation)setClosureError(e.message);}),
-    Promise.all([api<any>('/project-workflow/ubl-survey-packages'),api<any>('/project-workflow?department=coordination&scope=team'),api<any>('/boqs/reviews')]).then(([p,r,b])=>{if(active&&n===generation){setTechnical({packages:pendingTechnicalPackages(p.packages,r.records),boqs:pendingBoqReviews(b.reviews)});setTechnicalError('');}}).catch(e=>{if(active&&n===generation)setTechnicalError(e.message);})
+    Promise.all([api<any>('/project-workflow/ubl-survey-packages'),records,api<any>('/boqs/reviews')]).then(([p,r,b])=>{if(active&&n===generation){setTechnical({packages:pendingTechnicalPackages(p.packages,r.records),boqs:pendingBoqReviews(b.reviews)});setTechnicalError('');}}).catch(e=>{if(active&&n===generation)setTechnicalError(e.message);})
    ]);
    inFlight=false;
   }
-  void load();const timer=setInterval(load,30000);window.addEventListener('focus',load);document.addEventListener('visibilitychange',load);window.addEventListener('pz:workspace-open',load);
-  return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);document.removeEventListener('visibilitychange',load);window.removeEventListener('pz:workspace-open',load);};
+  const opened=()=>void load(true,0),returned=()=>void load(false,dashboardReturnGapMs);
+  opened();const timer=setInterval(returned,dashboardRefreshIntervalMs);window.addEventListener('focus',returned);document.addEventListener('visibilitychange',returned);window.addEventListener('pz:workspace-open',opened);
+  return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',returned);document.removeEventListener('visibilitychange',returned);window.removeEventListener('pz:workspace-open',opened);};
  },[userId,refresh]);
  return {closures,technical,closureError,technicalError,reload};
 }
