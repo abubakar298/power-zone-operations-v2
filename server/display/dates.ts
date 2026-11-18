@@ -38,13 +38,3 @@ export function displayDateTime(
     return dateFormat.format(date);
   return `${dateFormat.format(date)} · ${timeFormat.format(date)}`;
 }
-export function businessDateInput(now = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: businessTimeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const part = (type: string) => parts.find((p) => p.type === type)!.value;
-  return `${part("year")}-${part("month")}-${part("day")}`;
-}

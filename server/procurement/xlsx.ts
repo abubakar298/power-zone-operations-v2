@@ -39,4 +39,3 @@ export function xlsxBook(sheets: Sheet[]) {
   });
   return Buffer.from(zipSync(files, { level: 6 }));
 }
-export const xlsxColumn = col;
