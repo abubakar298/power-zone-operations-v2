@@ -45,7 +45,6 @@ export const WORKFLOW_STAGES: Record<string, string> = {
   approved_dispatch: "Ready to send", customer_tracking: "Customer follow-up", advance_pending: "Advance planning", po_receipt: "PO receipt",
   order_exception: "Order exception", issued: "Issued", deferred: "Deferred", declined: "Declined",
 };
-export const stageText = (s: string | null) => (s ? WORKFLOW_STAGES[s] ?? s.replace(/_/g, " ") : "—");
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 export const shiftDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
