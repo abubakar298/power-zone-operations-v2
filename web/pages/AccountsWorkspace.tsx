@@ -41,7 +41,6 @@ import { orderCustomerScopeLines } from "../../server/commercial/customer-scope.
 import { DocumentPreview } from "../components/AccountsDocumentPreview.js";
 import {
   ClosureCostTables,
-  ClosureIndicators,
   installationDays,
 } from "../components/ClosurePerformance.js";
 import { Decimal } from "decimal.js";

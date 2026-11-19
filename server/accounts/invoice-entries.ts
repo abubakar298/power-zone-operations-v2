@@ -237,7 +237,7 @@ export async function recordInvoiceSubmission(pool:Pool,actor:string,raw:unknown
    throw new HttpError(409,'Request key already used for another submission.');}
   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('accounts.source-register',0))");
   if(input.sourceKind==='Operations')await c.query('SELECT id FROM operations_board_sites WHERE id=$1 FOR UPDATE',[input.siteKey]);
-  const {rows,imported,alreadyIssued}=await candidates(c),entries=(await c.query('SELECT *,entry_date::text AS entry_date,amount::text AS amount FROM accounts_invoice_entries')).rows;
+  const {rows,alreadyIssued}=await candidates(c),entries=(await c.query('SELECT *,entry_date::text AS entry_date,amount::text AS amount FROM accounts_invoice_entries')).rows;
   const existing=await invoiceSubmissions(c),updates=await latestInvoiceUpdates(c);
   const candidate=invoiceSubmissionRows(rows,alreadyIssued,entries,existing,updates).find(r=>r.sourceKind===input.sourceKind&&r.key===input.siteKey&&r.milestone===input.milestone);
   if(!candidate||candidate.sourceVersion!==input.sourceVersion)throw new HttpError(409,'Invoice or site evidence changed. Refresh and review before marking submitted.');

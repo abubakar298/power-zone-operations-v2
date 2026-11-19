@@ -9,7 +9,6 @@ import {AccountsRepository} from './repository.js';
 type Db=Pool|PoolClient;
 type Row=Record<string,any>;
 export const invoiceStages=['advance-delivery','balance-completion','delivery-only','extra-cable','internet'] as const;
-export const invoiceStageLabels:Record<(typeof invoiceStages)[number],string>={'advance-delivery':'Advance / delivery','balance-completion':'Balance / completion','delivery-only':'Delivery only','extra-cable':'Extra cable','internet':'Internet'};
 export const delayReasons=['qc-pictures','physical-originals','customer-clarification','other'] as const;
 export const delayReasonLabels:Record<(typeof delayReasons)[number],string>={'qc-pictures':'Awaiting QC pictures','physical-originals':'Awaiting physical originals','customer-clarification':'Customer clarification','other':'Other'};
 /** PKR as written in PT: thousands commas are accepted (450,000); any other malformed
