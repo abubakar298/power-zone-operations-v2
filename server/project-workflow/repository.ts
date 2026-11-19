@@ -2584,13 +2584,14 @@ export class ProjectWorkflowRepository {
           const quote = current.quotation;
           if (!quote || !["Approved", "PO received"].includes(quote.status))
             throw new HttpError(409, "Choose the exact approved quotation.");
+          // The dispatch table only allows Customer or Salesperson; the typed person's name goes in the notes.
           await c.query(
             "INSERT INTO quotation_dispatch_records(id,quotation_id,recipient,notes,created_by) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
             [
               randomUUID(),
               quote.id,
-              recipient,
-              `${via} handoff; evidence ${evidenceId}; ${note(input.notes)}`,
+              via === "Customer" ? "Customer" : "Salesperson",
+              `${via} handoff to ${recipient}; evidence ${evidenceId}; ${note(input.notes)}`,
               actor,
             ],
           );
