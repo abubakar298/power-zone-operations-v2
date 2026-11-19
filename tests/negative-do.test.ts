@@ -1,6 +1,5 @@
 import {temporaryNegativeDoBalanceAllowed,negativeDoWindowStartsAt,negativeDoWindowEndsAt} from '../server/inventory/do-negative-balance.js';
 import {UnsignedDoRepository} from '../server/inventory/unsigned-do.js';
-import {MaterialUsageRepository} from '../server/inventory/material-usage.js';
 import {GatePassRepository} from '../server/inventory/gate-passes.js';
 import {directMaterialDatabase} from './direct-material-database.js';
 import {test} from 'node:test';

@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import pg from 'pg';
 import {Decimal} from 'decimal.js';
-import {actors,login,seedQuote,survey,openSavedQuote,password,origin} from './release-fixtures.js';
+import {actors,login,seedQuote,openSavedQuote,password} from './release-fixtures.js';
 import {openWorkspaceSection,signOut} from './navigation.js';
 test.beforeEach(async({page})=>{page.on('dialog',async dialog=>{if(['confirm','beforeunload'].includes(dialog.type()))await dialog.accept();});});
 test("setup, invalid login, dashboard, reload, process restart, logout, relogin, mobile", async ({

@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {projectInventoryReceiving,type InventoryReceiving} from '../server/operations-board/inventory-delivery.js';
-import {workflowSiteSchema,completeUpsJob} from '../server/operations-board/workflow.js';
+import {workflowSiteSchema} from '../server/operations-board/workflow.js';
 import {validateBatch} from '../server/operations-board/batches.js';
 import {batchSchema} from '../server/operations-board/schema.js';
 const row=(id='site-1',extra:any={})=>({site_id:id,version:1,snapshot:{id,ipo:'CHP-SHARED',name:id,stage:'received',installation:true,projectType:'ups',operationsTeam:'central',origin:{ipoId:'ipo-1'},...extra}});

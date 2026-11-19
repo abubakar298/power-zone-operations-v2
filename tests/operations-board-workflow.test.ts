@@ -5,7 +5,7 @@ import request from 'supertest';
 import {testDatabase} from './database.js';
 import {workflowSiteSchema} from '../server/operations-board/workflow.js';
 import {OperationsBoardRepository} from '../server/operations-board/repository.js';
-import {commandSchema,targetStageIds,type BoardCommand} from '../server/operations-board/schema.js';
+import {commandSchema,targetStageIds} from '../server/operations-board/schema.js';
 import {createApp} from '../server/app.js';
 import {readConfig} from '../server/config.js';
 import {digest} from '../server/auth/crypto.js';
