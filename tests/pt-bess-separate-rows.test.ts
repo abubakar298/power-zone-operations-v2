@@ -30,23 +30,27 @@ test('item-discount quotations (current pricing): BESS-only PT has separate inve
  assert.deepEqual(names(peachtreeDivision(withRack,{...bessOnly,lines:[...boqLines,{key:'BESS Rack',phase:'BESS',qty:'1',unit:'No.'}]},pricing)).map((r:any)=>r[0]),['Inverter','Batteries','BMS','BESS','EPC']);
 });
 
-test('older quotations (legacy pricing): BESS-only lines named "<brand> <specification>" land on their own rows',()=>{
+// Older pricing: peachtree.ts is a finalized (frozen) format; the separate rows are applied when a new IPO is built (ptDetail).
+const newIpo=(allocation:any,boq:any)=>ptDetail({allocation,peachtree:peachtreeDivision(allocation,boq,pricing)},boq);
+test('older quotations (legacy pricing): BESS-only lines named "<brand> <specification>" land on their own rows in a new IPO',()=>{
  const line=(description:string,group:string,total:string)=>({description,group,qty:'1',unit:'No.',beforeTax:total,taxRate:'0',tax:'0.00',total});
  const allocation:any={policy:'proportional',subtotal:'1596000.00',tax:'0.00',total:'1596000.00',lines:[
   line('Chint Power Inverter Hybrid PCS-3P 20-KW','bess','400000.00'),line('Chint Power Inverter Battery HV WO BMS 5 kWh','bess','600000.00'),line('Chint Power BMS-High Voltage','bess','185673.56'),
   line('Earthing Bore','earthing','32450.00'),line('Installation and balance of system','balance','377876.44')]};
- const d=peachtreeDivision(allocation,bessOnly,pricing);
+ assert.deepEqual(names(peachtreeDivision(allocation,bessOnly,pricing)),[['BESS','1185673.56'],['EPC','410326.44']],'the frozen older calculation is unchanged');
+ const d=newIpo(allocation,bessOnly);
  assert.deepEqual(names(d),[['Inverter','400000.00'],['Batteries','600000.00'],['BMS','185673.56'],['EPC','410326.44']]);
+ assert.deepEqual(names(newIpo(allocation,bessOnly)),names(ptDetail({allocation,peachtree:d},bessOnly)),'applying it twice changes nothing');
  // A line that matches no BOQ item stays in a "BESS" row, so the total always reconciles.
  const unknown:any={...allocation,lines:allocation.lines.map((l:any,i:number)=>i===0?{...l,description:'Unrecognised BESS package'}:l)};
- assert.deepEqual(names(peachtreeDivision(unknown,bessOnly,pricing)),[['Inverter','0.00'],['Batteries','600000.00'],['BMS','185673.56'],['BESS','400000.00'],['EPC','410326.44']]);
+ assert.deepEqual(names(newIpo(unknown,bessOnly)),[['Inverter','0.00'],['Batteries','600000.00'],['BMS','185673.56'],['BESS','400000.00'],['EPC','410326.44']]);
 });
 
 test('direct product sale (legacy pricing): CHINT CH-PCS- and CH-BAT- items go to Inverter and Batteries, not EPC',()=>{
  const direct:any={survey:{family:'direct-product'},lines:boqLines.slice(0,3)};
  const line=(description:string,total:string)=>({description,group:'other',qty:'1',unit:'No.',beforeTax:total,taxRate:'0',tax:'0.00',total});
  const allocation:any={policy:'proportional',subtotal:'1185673.56',tax:'0.00',total:'1185673.56',lines:[line('CH-PCS-HYB-3P-020','400000.00'),line('CH-BAT-HV-05 KW','600000.00'),line('CH-BMS-HV','185673.56')]};
- const d=peachtreeDivision(allocation,direct,pricing);
+ const d=newIpo(allocation,direct);
  assert.deepEqual(names(d).filter((r:any)=>r[1]!=='0.00'),[['Inverter','400000.00'],['Batteries','600000.00'],['BMS','185673.56']]);
 });
 

@@ -4,7 +4,6 @@ import type { BoqSnapshot } from "../boq/engine.js";
 import type { PricingSnapshot } from "../commercial/engine.js";
 import type { allocateDiscount } from "./allocation.js";
 import { HttpError } from "../http/errors.js";
-import { bessPtPhases, ptPhaseOf } from "./pt-detail.js";
 const names = [
   "Solar Panels",
   "Structure",
@@ -26,28 +25,18 @@ export function peachtreeDivision(
   const taxMode = included?"Tax Included":"Show Sales Tax Separately";
   const field = included ? "total" : "beforeTax";
   const target = D(included ? allocation.total : allocation.subtotal);
-  // Allocation lines carry the saved BOQ item's key or description, or the quotation text "<brand> <specification>";
-  // find the item to know its PT row (exact match first, then the longest specification the text ends with).
-  const spec=(l:any)=>String(l.specification??"");
-  const sourceOf=(line:{description:string})=>boq.lines.find(l=>l.key===line.description)??boq.lines.find(l=>l.description===line.description)??boq.lines.find(l=>spec(l)===line.description)??
-    boq.lines.filter(l=>spec(l).length>0&&line.description.endsWith(" "+spec(l))).sort((a,b)=>spec(b).length-spec(a).length)[0];
   if(boq.survey.family === "direct-product") {
-    // Inverters, batteries and BMS (including CHINT CH-PCS-/CH-BAT- items) always get their own PT rows.
     const phases=names.map(name=>({name,amount:money(allocation.lines.filter(line=>{
-      const source=sourceOf(line);
-      const phase=source?ptPhaseOf(source):"EPC";
-      const category=phase === "BESS" ? "EPC" : phase;
+      const source=boq.lines.find(l=>l.key===line.description);
+      const category=source?.phase === "Solar Panels" ? "Solar Panels" : source?.phase === "Structure" ? "Structure" : /^HYB-/.test(source?.key ?? "") ? "Inverter" : /^BAT-/.test(source?.key ?? "") ? "Batteries" : /^(CH-BMS-|BMS-)/.test(source?.key ?? "") ? "BMS" : "EPC";
       return category === name;
     }).reduce((sum,line)=>sum.add(line[field]),D("0")))}));
     if(!phases.reduce((sum,p)=>sum.add(p.amount),D("0")).eq(target))throw new HttpError(422,"Product classifications do not reconcile with the IPO.");
     return {version:2,saleType:pricing.input.saleType,cashGstTreatment:pricing.input.cashGstTreatment,policy:"exact-accepted-quotation-v2",presentation:pricing.input.presentation,taxMode,basis:included?"Tax-inclusive selling values":"Selling values excluding tax",effectivePooledMarkup:null,phases,phaseTotal:money(target),ipoBeforeTax:allocation.subtotal,ipoTax:allocation.tax,ipoPayable:allocation.total};
   }
   if(boq.survey.family === "bess-only"){
-    // Inverter, batteries and BMS each get their own PT row; "BESS" keeps any other BESS item only.
-    const bess=allocation.lines.filter(l=>l.group==="bess");
-    const bessPhase=(line:{description:string})=>{const source=sourceOf(line);const phase=source?ptPhaseOf(source):"BESS";return ["Inverter","Batteries","BMS"].includes(phase)?phase:"BESS";};
-    const phases=[...bessPtPhases.map(name=>({name,members:bess.filter(l=>bessPhase(l)===name)})).filter(p=>p.name!=="BESS"||p.members.length>0).map(p=>({name:p.name,amount:money(p.members.reduce((v,l)=>v.add(l[field]),D("0")))})),{name:"EPC",amount:money(allocation.lines.filter(l=>l.group!=="bess").reduce((v,l)=>v.add(l[field]),D("0")))}];
-    if(!phases.reduce((v,p)=>v.add(p.amount),D("0")).eq(target))throw new HttpError(422,"BESS/EPC totals do not reconcile with the IPO.");
+    const phases=[{name:"BESS",amount:money(allocation.lines.filter(l=>l.group==="bess").reduce((v,l)=>v.add(l[field]),D("0")))},{name:"EPC",amount:money(allocation.lines.filter(l=>l.group!=="bess").reduce((v,l)=>v.add(l[field]),D("0")))}];
+    if(!D(phases[0].amount).add(phases[1].amount).eq(target))throw new HttpError(422,"BESS/EPC totals do not reconcile with the IPO.");
     return {version:2,saleType:pricing.input.saleType,cashGstTreatment:pricing.input.cashGstTreatment,policy:"exact-accepted-quotation-v2",presentation:pricing.input.presentation,taxMode,basis:included?"Tax-inclusive selling values":"Selling values excluding tax",effectivePooledMarkup:null,phases,phaseTotal:money(target),ipoBeforeTax:allocation.subtotal,ipoTax:allocation.tax,ipoPayable:allocation.total};
   }
   const amounts = names.map((_, phase) =>
