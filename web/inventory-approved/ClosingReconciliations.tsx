@@ -1,5 +1,5 @@
 import {PagedTableBody} from '../ui/PagedTableBody.js';
-import React,{useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useState} from 'react';
 import {Button} from '../ui/Button.js';
 import {api} from '../api.js';
 const draftItemId=(id:string,_description?:string)=>['CH-CBL-CAT6','CH-CBL-CNT-1.5MM/10C','CH-CBL-CNT-1.5MM/2C','CH-CBL-FLEX-1.5MM/4C'].includes(id)?'CH-CBL-COM':id;

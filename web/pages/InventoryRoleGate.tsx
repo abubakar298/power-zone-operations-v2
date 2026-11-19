@@ -13,7 +13,6 @@ import {Button} from '../ui/Button.js';
 import {InventoryHome} from './InventoryHome.js';
 import {ParentDos} from './ParentDos.js';
 import {SiteMaterials} from './SiteMaterials.js';
-import {InventoryReviews} from './InventoryReviews.js';
 import {WarehouseTransfers} from './WarehouseTransfers.js';
 import {MaterialReplacements} from './MaterialReplacements.js';
 import {GatePasses} from './GatePasses.js';

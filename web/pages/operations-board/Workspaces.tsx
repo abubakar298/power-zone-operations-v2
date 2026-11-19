@@ -1,9 +1,8 @@
 import {useEffect,useState} from 'react';
 import {api,type Session} from '../../api.js';
 import {Button} from '../../ui/Button.js';
-import {Field} from '../../ui/Field.js';
 import {Editor,Section,useSave} from './forms.js';
-import {day,type Access,type Vendor} from './types.js';
+import {day,type Access} from './types.js';
 import {targetStageIds,targetLabels} from '../../../shared/operations-stages.js';
 type TargetsData={version:number;values:Partial<Record<typeof targetStageIds[number],{amount:number;unit:'hours'|'days'}|null>>};
 export function Targets({session,access}:{session:Session;access:Access}){
