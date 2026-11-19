@@ -74,8 +74,10 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  if(presentation!=='No Breakup')assert.equal(new Decimal(q.lines.reduce((v,l)=>v.add(l.amount??0),new Decimal(0))).toFixed(2),taxMode==='Tax Included'?p.total:p.subtotal);
  const detailed=quote({...p,input:{...p.input,presentation:'Full Breakup',taxMode:'Show Sales Tax Separately'}},b,{pricingId:randomUUID(),quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture',discount:'11800'});
  const allocation=allocateDiscount(detailed.lines.map(l=>({description:l.description,qty:l.qty,unit:l.unit,group:l.group,beforeTax:l.amount!,taxRate:'18'})),p.subtotal,p.solarTax,p.otherTax,'11800',q.footer.at(-1)!.amount);
- const pt=peachtreeDivision(allocation,b,p);assert.deepEqual(pt.phases.map(x=>x.name),['BESS','EPC']);assert.equal(new Decimal(pt.phases[0].amount).add(pt.phases[1].amount).toFixed(2),pt.phaseTotal);assert.equal(pt.ipoPayable,q.footer.at(-1)!.amount);
- assert.ok(buildQuotationPdf(q,'UPS-R0-V1').length>1000);
+ // Accounts rule: inverter, batteries and BMS are separate PT rows for every quotation type.
+ const pt=peachtreeDivision(allocation,b,p);assert.deepEqual(pt.phases.map(x=>x.name).filter(n=>n!=='BESS'),['Inverter','Batteries','BMS','EPC'],pt.phases.map(x=>x.name).join());
+ for(const name of ['Inverter','Batteries'])assert.ok(new Decimal(pt.phases.find(x=>x.name===name)!.amount).gt(0),name);
+ assert.equal(pt.phases.reduce((v,x)=>v.add(x.amount),new Decimal(0)).toFixed(2),pt.phaseTotal);assert.equal(pt.ipoPayable,q.footer.at(-1)!.amount); assert.ok(buildQuotationPdf(q,'UPS-R0-V1').length>1000);
  }
  }
  }finally{await db.close();}

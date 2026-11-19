@@ -2,7 +2,11 @@ import {Decimal} from 'decimal.js';
 import {DISCOUNT_POLICY} from '../commercial/discount-strategy.js';
 const categories=['Installation Cost','Earthing Cost','Electrical Labour','Deliveries'];
 const categoryOf=(l:any)=>/^(electrical labour|labour)$/i.test(l.key??'')?'Electrical Labour':/^(delivery\/logistics|delivery|deliveries)$/i.test(l.key??'')?'Deliveries':categories.includes(l.epc)?l.epc:'Installation Cost';
-function phaseOf(l:any){return l.phase==='Solar Panels'?'Solar Panels':l.phase==='Structure'?'Structure':/^(HYB-|CH-PCS-)/.test(l.key)?'Inverter':/^(BAT-|CH-BAT-)/.test(l.key)?'Batteries':/^(BMS-|CH-BMS-)/.test(l.key)?'BMS':l.phase==='BESS'?'BESS':'EPC';}
+/** PT phase of a saved BOQ line. Inverter, batteries and BMS always get their own PT rows (Accounts rule). */
+export function ptPhaseOf(l:any){return l.phase==='Solar Panels'?'Solar Panels':l.phase==='Structure'?'Structure':/^(HYB-|CH-PCS-)/.test(l.key)?'Inverter':/^(BAT-|CH-BAT-)/.test(l.key)?'Batteries':/^(BMS-|CH-BMS-)/.test(l.key)?'BMS':l.phase==='BESS'?'BESS':'EPC';}
+const phaseOf=ptPhaseOf;
+/** The BESS-only PT rows: inverter, batteries and BMS separately; "BESS" keeps only other BESS items, if any. */
+export const bessPtPhases=['Inverter','Batteries','BMS','BESS'] as const;
 /** Detail of a frozen accepted phase, never a fresh costing or commercial calculation. */
 export function ptDetail(snapshot:any,boq:any,approvedPanelQty=boq.survey?.panelQty){
  const d=structuredClone(snapshot.peachtree);if(!d)return undefined;
@@ -16,7 +20,9 @@ export function ptDetail(snapshot:any,boq:any,approvedPanelQty=boq.survey?.panel
  d.phases=d.phases.map((p:any)=>{
    if(p.name==='EPC')return {...p,itemId:'CH-EPC',description:'Installations'};
    if(p.name==='Solar Panels')return {...p,itemId:'CH-Solar Panels-General',description:'Solar Panels - Revise at IRR stage.'};
-   const source=lines.filter((l:any)=>phaseOf(l)===p.name||(p.name==='BESS'&&['Inverter','Batteries','BMS','BESS'].includes(phaseOf(l))));
+   // A combined "BESS" row (older splits) lists every BESS item; next to separate rows it lists only the rest.
+   const combined=p.name==='BESS'&&!d.phases.some((x:any)=>['Inverter','Batteries','BMS'].includes(x.name));
+   const source=lines.filter((l:any)=>phaseOf(l)===p.name||(combined&&['Inverter','Batteries','BMS','BESS'].includes(phaseOf(l))));
    return {...p,itemId:[...new Set(source.map((l:any)=>l.itemId??l.key))].join('\n'),description:source.map((l:any)=>`${l.qty} ${l.unit} x ${l.specification||l.description||l.key}`).join('\n')||p.description};
  });
  if(snapshot.allocation?.policy==='ubl-bess-approved-proportional-v1'){if(d.epcBreakup?.reduce((s:Decimal,p:any)=>s.add(p.amount),new Decimal(0)).toFixed(2)!==new Decimal(d.phases.find((p:any)=>p.name==='EPC')?.amount??0).toFixed(2))throw Error('Approved BESS EPC detail does not reconcile.');return d;}
