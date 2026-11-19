@@ -6,7 +6,9 @@ import {FinancialValue} from '../ui/FinancialValue.js';
 import {DocumentPreview} from './DocumentPreview.js';
 
 type Footer={label:string;amount:string|null};
-export type PendingIpoRevision={id:string;number:string;route:'commercial'|'technical';reason:string;recordId:string;site:string;customer:string;requestedBy:string;createdAt:string;quotationNumber:string;
+/** kind 'quotation': the revised quotation still waits for approval; one approval approves it and issues the IPO.
+ * kind 'prepared': the revised quotation was approved earlier and the Coordinator prepared the IPO. */
+export type PendingIpoRevision={kind:'quotation'|'prepared';id:string;number:string;route:'commercial'|'technical';reason:string;recordId:string;site:string;customer:string;requestedBy:string;createdAt:string;quotationId:string|null;quotationNumber:string;previewError:string|null;
  before:{id:string;number:string;amount:string|null;footer:Footer[]};after:{amount:string|null;footer:Footer[]}};
 
 /** Management queue: revised IPOs waiting for a decision. Loaded once and after each decision. */
@@ -20,7 +22,7 @@ export function IpoRevisionBucket({count,selected,onSelect}:{count?:number;selec
 }
 export function IpoRevisionQueue({session,rows,error,onDecided}:{session:Session;rows?:PendingIpoRevision[];error:string;onDecided:()=>void}){
  const [open,setOpen]=useState(''),[note,setNote]=useState(''),[busy,setBusy]=useState(false),[failure,setFailure]=useState(''),[notice,setNotice]=useState('');
- async function decide(row:PendingIpoRevision,decision:'Approved'|'Returned'){if(busy)return;setBusy(true);setFailure('');try{await api(`/project-workflow/ipo-revisions/proposals/${row.id}/decision`,{csrf:session.csrfToken,body:{decision,note:note.trim(),requestKey:crypto.randomUUID()}});setNotice(decision==='Approved'?`${row.number} approved: issued and sent to Accounts. ${row.before.number} stays unchanged.`:`${row.number} returned to ${row.requestedBy} with your note.`);setOpen('');setNote('');onDecided();}catch(e){setFailure((e as Error).message);}finally{setBusy(false);}}
+ async function decide(row:PendingIpoRevision,decision:'Approved'|'Returned'){if(busy)return;setBusy(true);setFailure('');try{await api(`/project-workflow/ipo-revisions/${row.kind==='quotation'?'requests':'proposals'}/${row.id}/decision`,{csrf:session.csrfToken,body:{decision,note:note.trim(),requestKey:crypto.randomUUID()}});setNotice(decision==='Approved'?`${row.kind==='quotation'?`Revised quotation ${row.quotationNumber} and `:''}${row.number} approved: issued and sent to Accounts. ${row.before.number} stays unchanged.`:`${row.number} returned to ${row.requestedBy} with your note.`);setOpen('');setNote('');onDecided();}catch(e){setFailure((e as Error).message);}finally{setBusy(false);}}
  return <section id="management-ipo-revisions" className="pz-panel pz-stack" aria-label="IPO revisions awaiting approval">
   <h2>IPO revisions awaiting approval</h2>
   {notice&&<p role="status" className="ob-success">{notice}</p>}{error&&<p role="alert" className="form-error">{error}</p>}
@@ -32,10 +34,13 @@ export function IpoRevisionQueue({session,rows,error,onDecided}:{session:Session
      {[...new Set([...row.before.footer,...row.after.footer].map(f=>f.label))].map(label=><tr key={label}><td>{label}</td><td className="num">{row.before.footer.find(f=>f.label===label)?.amount!=null?<FinancialValue value={row.before.footer.find(f=>f.label===label)!.amount!}/>:'—'}</td><td className="num">{row.after.footer.find(f=>f.label===label)?.amount!=null?<FinancialValue value={row.after.footer.find(f=>f.label===label)!.amount!}/>:'—'}</td></tr>)}
      {!row.before.footer.length&&<tr><td>Total</td><td className="num">{row.before.amount?<FinancialValue value={row.before.amount}/>:'—'}</td><td className="num">{row.after.amount?<FinancialValue value={row.after.amount}/>:'—'}</td></tr>}
     </tbody></table></div>
-    <div className="pz-form-grid"><DocumentPreview url={`/api/orders/${row.before.id}/ipo.pdf`} title={`Current ${row.before.number}`}/><DocumentPreview url={`/api/project-workflow/ipo-revisions/proposals/${row.id}/ipo.pdf`} title={`Proposed ${row.number}`}/></div>
+    {row.previewError&&<p role="alert" className="form-error">The revised IPO cannot be built yet: {row.previewError} Return it to {row.requestedBy} with a note.</p>}
+    <div className="pz-form-grid"><DocumentPreview url={`/api/orders/${row.before.id}/ipo.pdf`} title={`Current ${row.before.number}`}/>{!row.previewError&&<DocumentPreview url={`/api/project-workflow/ipo-revisions/${row.kind==='quotation'?'requests':'proposals'}/${row.id}/ipo.pdf`} title={`Proposed ${row.number}`}/>}</div>
+    {row.kind==='quotation'&&row.quotationId&&<DocumentPreview url={`/api/commercial/quotations/${row.quotationId}/quotation.pdf`} title={`Revised quotation ${row.quotationNumber}`}/>}
+    {row.kind==='quotation'&&<p className="pz-caption">One approval: approving here also approves revised quotation {row.quotationNumber}. Returning sends the quotation back to {row.requestedBy} as "Changes requested".</p>}
     <Field id={'ipo-revision-note-'+row.id} label="Note (required to return)"><textarea id={'ipo-revision-note-'+row.id} maxLength={2000} value={note} disabled={busy} onChange={e=>setNote(e.target.value)}/></Field>
     {failure&&<p role="alert" className="form-error">{failure}</p>}
-    <div className="ob-actions"><Button variant="neutral" disabled={busy} onClick={()=>setOpen('')}>Close</Button><Button variant="warning" disabled={busy||note.trim().length<3} onClick={()=>void decide(row,'Returned')}>Return to Coordination</Button><Button variant="success" loading={busy} onClick={()=>void decide(row,'Approved')}>Approve revised IPO</Button></div>
+    <div className="ob-actions"><Button variant="neutral" disabled={busy} onClick={()=>setOpen('')}>Close</Button><Button variant="warning" disabled={busy||note.trim().length<3} onClick={()=>void decide(row,'Returned')}>Return to Coordination</Button><Button variant="success" loading={busy} disabled={!!row.previewError} onClick={()=>void decide(row,'Approved')}>{row.kind==='quotation'?'Approve quotation and revised IPO':'Approve revised IPO'}</Button></div>
    </>}
   </article>)}
  </section>;

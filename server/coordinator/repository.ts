@@ -111,6 +111,10 @@ export class CoordinatorRepository {
       )
     ).rows[0];
     result.tasks = result.tasks.filter((t:any)=>![t.id,t.draft_id,t.boq_revision_id,t.ipo_id].some(id=>archived.has(id)));
+    // A revised quotation made for an open IPO revision is approved with that IPO revision (one approval on
+    // Management's IPO revisions card), so the task is marked and the Quotations card leaves it out.
+    const ipoRevisionQuotes=new Set((await this.pool.query("SELECT l.quotation_id FROM ipo_revision_requests q JOIN quotation_revision_links l ON l.request_id=q.quotation_revision_request_id WHERE NOT EXISTS(SELECT 1 FROM ipo_revision_proposals p WHERE p.request_id=q.id)")).rows.map((x:any)=>x.quotation_id));
+    for(const t of result.tasks)if(t.kind==='Sale confirmation'&&ipoRevisionQuotes.has(t.id))t.ipoRevision=true;
     result.total = result.tasks.length;
     result.counts = {};
     for(const task of result.tasks) result.counts[task.kind]=(result.counts[task.kind]??0)+1;
