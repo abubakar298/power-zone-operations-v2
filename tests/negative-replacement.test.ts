@@ -1,25 +1,12 @@
-import {signDispatch,receiveSigned} from './signed-dispatch-fixture.js';
+import {signDispatch} from './signed-dispatch-fixture.js';
 import {test} from 'node:test';
-import request from 'supertest';
-import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
-import {createApp} from '../server/app.js';
-import {readConfig} from '../server/config.js';
-import {digest} from '../server/auth/crypto.js';
-import {replacementCommittedPrintRecord,replacementDocumentPdf} from '../server/inventory/material-replacement-documents.js';
 import assert from 'node:assert/strict';
-import {randomUUID,randomBytes} from 'node:crypto';
-import {readFile,readdir,mkdtemp,copyFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {migrate} from '../server/db/migrate.js';
+import {randomUUID} from 'node:crypto';
 import {testDatabase} from './database.js';
 import {materialStockFixture} from './material-stock-fixture.js';
-import {warehouseLedgerKey} from '../server/inventory/warehouse-source.js';
 import {WarehouseAuthorityRepository,warehousePosition} from '../server/inventory/warehouse-ledger.js';
-import {MaterialStockRepository} from '../server/inventory/material-stock.js';
-import {MaterialReplacementsRepository,replacementIssueInputSchema,replacementUsableInputSchema} from '../server/inventory/material-replacements.js';
+import {MaterialReplacementsRepository} from '../server/inventory/material-replacements.js';
 
-async function staged(pool:any){for(const [table,file]of [['inventory_warehouse_transfers','131_inventory_warehouse_transfers.sql'],['inventory_material_replacement_cases','132_inventory_material_replacements.sql'],['inventory_temporary_documents','140_inventory_temporary_documents.sql'],['inventory_signed_dispatch_pending','142_inventory_signed_dispatch_posting.sql']])if(!(await pool.query('SELECT to_regclass($1) AS table',[table])).rows[0].table)await pool.query(await readFile('migrations/'+file,'utf8'));await pool.query(await readFile('migrations/135_inventory_replacement_gate_copies.sql','utf8'));}
 async function originalDispatch(pool:any,f:any,quantity='2',unit='m',warehouse='Lahore warehouse',siteCount=1){
  const draftId=randomUUID(),id=randomUUID(),lineKey=randomUUID(),siteId=randomUUID(),snapshot={kind:'fixed',parent:false,warehouse,sites:[{siteId,ipo:'FICTIONAL-COMPLETED-IPO',siteName:'Fictional completed site',installation:true,status:'Completed',items:[{privateCost:'Must not be copied into replacement context'}]}],lines:[{key:lineKey,itemId:'FINAL',unit,description:'Fictional original cable',out:quantity,sites:[siteId]}],transport:{issuedTo:'Fictional engineer',driver:'Driver',vehicle:'TEST',driverIdentity:''}};
  if(siteCount>1){const extra=randomUUID();snapshot.sites.push({...snapshot.sites[0],siteId:extra,siteName:'Fictional second parent site'});snapshot.lines[0].sites.push(extra);}

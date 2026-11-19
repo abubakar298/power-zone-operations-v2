@@ -1,7 +1,6 @@
 import {readWorkflowSite} from './operations-snapshot.js';
 import {OperationsBoardRepository} from '../server/operations-board/repository.js';
 import {materialBoardFixture} from './approved-material-ipo-fixture.js';
-import {MaterialUsageRepository} from '../server/inventory/material-usage.js';
 import {GatePassRepository} from '../server/inventory/gate-passes.js';
 import {directMaterialDatabase} from './direct-material-database.js';
 import {test} from 'node:test';
