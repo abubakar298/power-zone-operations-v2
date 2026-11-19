@@ -19,7 +19,7 @@ import {Button} from '../../ui/Button.js';
 import {StatusBadge} from '../../ui/StatusBadge.js';
 import {Field} from '../../ui/Field.js';
 import {confirmLeaveWorkspace} from '../../hooks/useUnsavedChanges.js';
-import {normalise,bucket,stageNames,teamName,day,sitePath,type Site,type Board,type Access} from './types.js';
+import {normalise,bucket,stageNames,teamName,day,sitePath,type Site,type Board} from './types.js';
 import {SiteDetail} from './SiteDetail.js';
 import {Targets,Alerts} from './Workspaces.js';
 import {Batches} from './Batches.js';

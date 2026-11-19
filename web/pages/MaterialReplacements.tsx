@@ -8,7 +8,6 @@ import {temporaryNegativeDoBalanceAllowed} from '../../shared/stock-reconciliati
 import {WorkspaceAccountMenu} from '../components/WorkspaceAccountMenu.js';
 import {ManagementHeaderSwitcher} from '../components/ManagementHeaderSwitcher.js';
 import {SignedTransferCopy} from '../inventory-approved/SignedTransferCopy.js';
-import {navigateInventory} from '../inventory-approved/navigation.js';
 import {InventoryNavigation} from '../components/InventoryNavigation.js';
 import {useEffect,useRef,useState} from 'react';
 import {Decimal} from 'decimal.js';
@@ -17,7 +16,6 @@ import {Button} from '../ui/Button.js';
 import {Field} from '../ui/Field.js';
 import {FileUpload} from '../ui/FileUpload.js';
 import {Brand} from '../components/Brand.js';
-import {Icon} from '../components/Icon.js';
 import {DocumentPreview} from '../components/DocumentPreview.js';
 import {decimalDisplay} from '../numbers.js';
 import {confirmLeaveWorkspace,useUnsavedChanges} from '../hooks/useUnsavedChanges.js';
