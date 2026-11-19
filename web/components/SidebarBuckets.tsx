@@ -5,7 +5,7 @@ import {useEffect,useState} from 'react';
 import {sharedDepartmentList} from '../workspaces/workflow-list-reuse.js';
 import {bucketCounts} from '../workspaces/bucket-counts.js';
 import {shouldRefreshSidebar,sidebarRefreshIntervalMs} from '../workspaces/sidebar-refresh.js';
-import {bucketLabel,designBuckets,coordinationBuckets,visibleCoordinationBuckets} from '../workspaces/project-routes.js';
+import {bucketLabel,designBuckets,visibleCoordinationBuckets} from '../workspaces/project-routes.js';
 export function SidebarBuckets({department,page,onSelect}:{department:'design'|'coordination';page:string;onSelect:(bucket:string)=>void}){
  const [counts,setCounts]=useState<Record<string,number>|null>(null);
  const [error,setError]=useState(false);

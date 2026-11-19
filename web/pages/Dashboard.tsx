@@ -3,14 +3,13 @@ import {staffNavigationIcon} from '../components/staff-navigation-icons.js';
 import {accountsPageName} from '../../shared/accounts-navigation.js';
 import {notificationPath} from '../../shared/notification-target.js';
 import {DepartmentViewSwitcher} from "../components/DepartmentViewSwitcher.js";
-import {OperationsAreaSwitcher,ProcurementWorkspace,type OperationsArea} from "../components/OperationsAreaSwitcher.js";
+import {OperationsAreaSwitcher,type OperationsArea} from "../components/OperationsAreaSwitcher.js";
 import {canViewDepartments,managementDepartment,managementDepartments,type ManagementDepartment} from "../workspaces/management-departments.js";
 import {savedDepartmentUser,saveDepartmentUser,clearDepartmentUser} from '../department-view.js';
 import {SidebarBuckets} from "../components/SidebarBuckets.js";
 import {workflowReferences} from "../workspaces/workflow-list-reuse.js";
 import {
   bucketLabel,
-  designBuckets as sharedDesignBuckets,
   coordinationBuckets as sharedCoordinationBuckets,
 } from "../workspaces/project-routes.js";
 import { confirmLeaveWorkspace } from "../hooks/useUnsavedChanges.js";

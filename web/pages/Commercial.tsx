@@ -20,7 +20,7 @@ import type { CommercialPolicy } from "../../server/commercial/active-policy.js"
 import { money } from "../numbers.js";
 import { SharePdf } from "../components/SharePdf.js";
 import { QuotationWorkflow } from "./QuotationWorkflow.js";
-import { confirmTransition, confirmRevision } from "../confirm.js";
+import { confirmRevision } from "../confirm.js";
 import { createPortal } from "react-dom";
 const pdfWorker='/api/commercial/pdf-worker.mjs';
 import { Decimal } from "decimal.js";

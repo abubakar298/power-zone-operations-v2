@@ -55,7 +55,6 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
   const [orderedFramework,setOrderedFramework]=useState(r.frameworkId??''),[poConfigurationChoices,setPoConfigurationChoices]=useState<any[]>([]),[configurationChangeReason,setConfigurationChangeReason]=useState('');
   const configurationChanged=allowPoConfiguration&&orderedFramework!==r.frameworkId;
   useEffect(()=>{if(allowPoConfiguration)void api<any>(`/project-workflow/${r.id}/po-configurations`).then(v=>setPoConfigurationChoices(v.choices)).catch(e=>setError(e.message));},[r.id]);
-  const preAgreedUbl = framework && String(r.customerCode ?? c.short_code).toUpperCase() === "UBL";
   const [input, setInput] = useState<Record<string, string>>({
       evidenceType: initialDirectPo?.evidenceType??savedDirectPo?.evidenceType??"",
       orderDate: draftValues.approvalDate||initialDirectPo?.amounts.orderDate||today(),
