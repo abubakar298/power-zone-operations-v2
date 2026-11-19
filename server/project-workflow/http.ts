@@ -39,6 +39,9 @@ export function projectWorkflowHttp(
    r.post('/ipo-revisions/:id/prepare',async(req,res)=>res.json(await ipoRevisions.prepare(actor(req),id(req),req.body)));
    r.get('/ipo-revisions/proposals/:id/ipo.pdf',async(req,res)=>{const p=await ipoRevisions.proposalDocument(actor(req),id(req));res.type('application/pdf').set('Content-Disposition','inline; filename="'+p.number.replace(/[^A-Za-z0-9 ()._-]/g,'_')+'-proposed.pdf"').send(buildIpoPdf(p.snapshot,p.number+' (PROPOSED - NOT ISSUED)',p.snapshot.peachtree));});
    r.post('/ipo-revisions/proposals/:id/decision',async(req,res)=>res.json(await ipoRevisions.decide(actor(req),id(req),req.body)));
+   // One approval: a submitted revised quotation and its IPO revision, decided together.
+   r.get('/ipo-revisions/requests/:id/ipo.pdf',async(req,res)=>{const p=await ipoRevisions.submittedDocument(actor(req),id(req));res.type('application/pdf').set('Content-Disposition','inline; filename="'+p.number.replace(/[^A-Za-z0-9 ()._-]/g,'_')+'-proposed.pdf"').send(buildIpoPdf(p.snapshot,p.number+' (PROPOSED - NOT ISSUED)',p.snapshot.peachtree));});
+   r.post('/ipo-revisions/requests/:id/decision',async(req,res)=>res.json(await ipoRevisions.decideSubmitted(actor(req),id(req),req.body)));
    r.get('/:id/ipo-revisions',async(req,res)=>res.json(await ipoRevisions.status(actor(req),id(req))));
    r.post('/:id/ipo-revisions',async(req,res)=>res.json(await ipoRevisions.start(actor(req),id(req),req.body)));
   }

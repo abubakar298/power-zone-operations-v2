@@ -18,12 +18,12 @@ export function ManagementApprovals({session,onOpen,additionalBuckets,children}:
  useEffect(()=>{
   let active=true,inFlight=false;
   // Every 30 seconds as before, but never from a hidden tab; returning to the tab refreshes at once.
-  const load=async()=>{if(inFlight||document.visibilityState==='hidden')return;inFlight=true;try{const data=await api<any>('/coordinator?scope=team&includeTraining=false');if(active){setQuotes(data.tasks.filter((t:any)=>t.stage==='Quotation approval'&&t.status==='Awaiting quotation approval'));setLoaded(true);setError('');}}catch(e){if(active)setError((e as Error).message);}finally{inFlight=false;}};
+  const load=async()=>{if(inFlight||document.visibilityState==='hidden')return;inFlight=true;try{const data=await api<any>('/coordinator?scope=team&includeTraining=false');if(active){setQuotes(data.tasks.filter((t:any)=>t.stage==='Quotation approval'&&t.status==='Awaiting quotation approval'&&!t.ipoRevision));setLoaded(true);setError('');}}catch(e){if(active)setError((e as Error).message);}finally{inFlight=false;}};
   const reset=()=>{setSelected(undefined);setExpanded(false);setSearch('');void load();};
   void load();window.addEventListener('focus',load);document.addEventListener('visibilitychange',load);window.addEventListener('pz:workspace-open',reset);const timer=setInterval(load,approvalsRefreshIntervalMs);
   return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);document.removeEventListener('visibilitychange',load);window.removeEventListener('pz:workspace-open',reset);};
  },[session.user.id]);
- async function approved(){setSelected(undefined);try{const data=await api<any>('/coordinator?scope=team&includeTraining=false');setQuotes(data.tasks.filter((t:any)=>t.stage==='Quotation approval'&&t.status==='Awaiting quotation approval'));setError('');}catch(e){setError((e as Error).message);}}
+ async function approved(){setSelected(undefined);try{const data=await api<any>('/coordinator?scope=team&includeTraining=false');setQuotes(data.tasks.filter((t:any)=>t.stage==='Quotation approval'&&t.status==='Awaiting quotation approval'&&!t.ipoRevision));setError('');}catch(e){setError((e as Error).message);}}
  async function approve(task:any){
   if(approving)return;
   setApproving(task.id);setFailure(undefined);setNotice('');

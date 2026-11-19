@@ -48,3 +48,22 @@ test('Management reviews an IPO revision with its reason and returns it with a n
  await expect(queue).toContainText('CHP-351-R1 returned to Atif with your note.');await expect(queue).toContainText('No IPO revisions are waiting');
  expect(decided).toMatchObject({decision:'Returned',note:'Keep the agreed GST treatment.'});
 });
+
+test('Management approves a submitted revised quotation and its revised IPO with one click',async({page})=>{
+ await actors(page.request);await login(page.request,'management-release@example.test');
+ const requestId='77777777-7777-4777-8777-777777777777',quotationId='88888888-8888-4888-8888-888888888888';
+ const waiting={kind:'quotation',id:requestId,number:'CHP-351-R1',route:'commercial',reason:'Accounts needs separate amounts to be shown.',recordId,site:'Faisalabad',customer:'ELEN',requestedBy:'Atif',createdAt:'2026-11-19T10:00:00Z',quotationId,quotationNumber:'QT-REV-2',previewError:null,
+  before:{id:ipoId,number:'CHP-351',amount:'3860000.00',footer:[{label:'Net Total',amount:'3860000.00'}]},after:{amount:'3860000.00',footer:[{label:'Net Total',amount:'3860000.00'}]}};
+ let rows=[waiting],decided:any;
+ await page.route('**/api/project-workflow/ipo-revisions/pending',r=>r.fulfill({json:{revisions:rows}}));
+ await page.route(`**/api/project-workflow/ipo-revisions/requests/${requestId}/decision`,r=>{decided=r.request().postDataJSON();rows=[];return r.fulfill({json:{decision:'Approved',revisedIpoId:'99999999-9999-4999-8999-999999999999'}});});
+ await page.route('**/*.pdf',r=>r.fulfill({status:404,body:''}));
+ await page.goto('/dashboard');
+ const card=page.getByRole('button',{name:/^IPO revisions/});await expect(card).toContainText('1');await card.click();
+ const queue=page.getByRole('region',{name:'IPO revisions awaiting approval'});
+ await queue.getByRole('button',{name:'Review',exact:true}).click();
+ await expect(queue).toContainText('approving here also approves revised quotation QT-REV-2');
+ await queue.getByRole('button',{name:'Approve quotation and revised IPO',exact:true}).click();
+ await expect(queue).toContainText('Revised quotation QT-REV-2 and CHP-351-R1 approved: issued and sent to Accounts.');
+ expect(decided).toMatchObject({decision:'Approved'});
+});
