@@ -14,7 +14,6 @@ import { ownedCondition, resourceOwnership } from "../http/permissions.js";
 import { workflowHistory } from "../boq/workflow-history.js";
 import { Decimal } from "decimal.js";
 import {managementReviewV5} from './management-review-v5.js';
-import { allocateDiscount } from "../orders/allocation.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { transaction } from "../db/transaction.js";

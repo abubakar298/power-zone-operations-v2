@@ -18,7 +18,6 @@ import {QuotationApproval} from "../components/QuotationApproval.js";
 import {SiteCodeUpdate} from "../components/SiteCodeUpdate.js";
 import {EditCustomer} from '../components/EditCustomer.js';
 import {InformationalTechnicalReport} from '../components/InformationalTechnicalReport.js';
-import {CustomerSearchSelect} from '../components/CustomerSearchSelect.js';
 import {CoordinatorQuotationReview} from "../components/CoordinatorQuotationReview.js";
 import { CustomerFollowupList } from "../components/CustomerFollowupList.js";
 import { ConfirmSaleForm } from "../components/ConfirmSaleForm.js";
@@ -2600,98 +2599,6 @@ function UblSurveyPackageActions({ session, record, onSaved }: any) {
     </section>
   );
 }
-function CoordinationCommercialSummary({ session, detail }: any) {
-  const [summary, setSummary] = useState<any>();
-  const [error, setError] = useState("");
-  useEffect(() => {
-    let active = true;
-    setSummary(undefined);
-    setError("");
-    void api<any>(`/project-workflow/${detail.record.id}/preview`, {
-      csrf: session.csrfToken,
-      body: { kind: "commercial-summary" },
-    })
-      .then((result) => {
-        if (active) setSummary(result);
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, [detail.record.id, detail.record.version]);
-  const table = (
-    rows: any[],
-    total: string,
-    perWatt: any,
-    totalLabel: string,
-  ) => (
-    <div className="pz-scroll-x"><table className="pz-table">
-      <thead>
-        <tr>
-          <th>Costing Phase</th>
-          <th className="numeric">Cost (PKR)</th>
-          <th className="numeric">Cost/Watt (PKR/W)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row: any) => (
-          <tr key={row.name}>
-            <td>{row.name}</td>
-            <td className="numeric">
-              {row.restricted
-                ? "Restricted"
-                : row.cost == null
-                  ? "Not available"
-                  : money(row.cost)}
-            </td>
-            <td className="numeric">
-              {row.restricted
-                ? "Restricted"
-                : row.perWatt == null
-                  ? "N/A"
-                  : money(row.perWatt)}
-            </td>
-          </tr>
-        ))}
-        <tr>
-          <th>{totalLabel}</th>
-          <th className="numeric">{money(total)}</th>
-          <th className="numeric">
-            {perWatt == null ? "N/A" : money(perWatt)}
-          </th>
-        </tr>
-      </tbody>
-    </table></div>
-  );
-  return (
-    <section className="pz-panel">
-      <h2>Commercial Review</h2>
-      <ErrorText error={error} />
-      {!summary && !error && <p>Loading saved project costing…</p>}
-      {summary?.pending && <p>{summary.pending}</p>}
-      {summary?.rows && (
-        <>
-          <p>Saved BOQ costing · {summary.number}</p>
-          {table(
-            summary.rows,
-            summary.nonBessTotal,
-            summary.nonBessPerWatt,
-            "Total Non-BESS Cost",
-          )}
-          <h3>EPC Costing Breakup</h3>
-          {table(
-            summary.epc ?? [],
-            summary.epcTotal ?? "0",
-            summary.epcTotalPerWatt,
-            "Total EPC Cost",
-          )}
-        </>
-      )}
-    </section>
-  );
-}
 function RecordEditor({
   page,
   saleReview,
@@ -4609,16 +4516,6 @@ function StandardSurveyBoqInputs({
   const [inverter, setInverter] = useState(
     initial.inverter ?? (manual ? "" : "10 kW"),
   );
-  const quantityKeys = [
-    "dcMetres",
-    "acInverter16",
-    "acInverter25",
-    "acPanel16",
-    "acPanel25",
-    "earth25",
-    "earth6",
-    "earth10",
-  ];
   return (
     <Action
       formId={`standard-boq-form-${r.id}`}
@@ -5040,12 +4937,9 @@ function UblSurveyComparison({
 function TechnicalReview({ session, refs, detail, action }: any) {
   const r = detail.record,
     s = detail.review?.survey ?? detail.record.data.surveyInputs ?? {},
-    [preview, setPreview] = useState<any>(detail.review?.costing),
     [selections, setSelections] = useState<Record<string, string>>(
       detail.review?.itemSelections ?? {},
-    ),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
+    );
   const [selectedFramework, setSelectedFramework] = useState(
     r.frameworkId ?? "",
   );
@@ -5262,87 +5156,6 @@ function TechnicalReview({ session, refs, detail, action }: any) {
         {!noFeasible && standardsFlag?.needsReview && <p className="pz-survey-difference" role="status"><strong>Needs Review — UBL standards deviation</strong><br />This flag is retained when the review is submitted to Atif.</p>}
       </label>
     </Action>
-  );
-}
-function CostingTable({ preview, refs, selections, setSelections }: any) {
-  return (
-    <>
-      <div className="pz-table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Item / rule selection</th>
-              <th>PT Item ID</th>
-              <th>Qty / unit</th>
-              <th>Buying rate</th>
-              <th>Cost</th>
-              <th>Permitted markup %</th>
-            </tr>
-          </thead>
-          <tbody>
-            {preview.lines.map((l: any) => (
-              <tr key={l.key}>
-                <td>
-                  {l.description}
-                  <br />
-                  {l.brand} · {l.specification}
-                </td>
-                <td>
-                  <select
-                    aria-label={`Item ID for ${l.description}`}
-                    value={selections[l.key] ?? l.itemId ?? ""}
-                    onChange={(e) =>
-                      setSelections({ ...selections, [l.key]: e.target.value })
-                    }
-                  >
-                    <option value="">Unconfirmed — requires review</option>
-                    {refs.catalogue
-                      .filter(
-                        (i: any) =>
-                          i.item_id === l.itemId || i.rate_key === l.key,
-                      )
-                      .map((i: any) => (
-                        <option key={i.item_id} value={i.item_id}>
-                          {i.item_id} · {i.payload.brandCategory}
-                        </option>
-                      ))}
-                  </select>
-                </td>
-                <td>
-                  {l.qty} {l.unit}
-                </td>
-                <td>{l.restricted ? "Restricted" : money(l.rate)}</td>
-                <td>{l.restricted ? "Restricted" : money(l.cost)}</td>
-                <td>
-                  {l.restricted ? (
-                    "Restricted"
-                  ) : (
-                    <input
-                      name={`markup:${l.key}`}
-                      defaultValue={l.markup ?? "0"}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      aria-label={`Markup for ${l.description}`}
-                    />
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p>
-        <strong>
-          {preview.totalLabel}: PKR {money(preview.total)}
-        </strong>
-      </p>
-      {preview.warnings?.map((w: string, i: number) => (
-        <p key={i} className="muted-label">
-          {w}
-        </p>
-      ))}
-    </>
   );
 }
 function DifferenceTable({ differences }: any) {

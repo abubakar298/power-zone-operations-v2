@@ -8,7 +8,7 @@ import {syncCreatedOperationsHandoff} from '../operations-board/live-ipo-sync.js
 import {SiteWorkflowRepository} from '../site-workflow/repository.js';
 import {loadDocumentListMetadata,snapshotListMetadata} from '../documents/list-metadata.js';
 import {directPoFields,directPoSiteMatches,directPoChanges,validOrderPosition,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
-import {manualIpoAvailable,ipoNumberConflict,requireDirectUps,requireEditableIpoRoute} from "../documents/manual-ipo.js";
+import {manualIpoAvailable,ipoNumberConflict,requireEditableIpoRoute} from "../documents/manual-ipo.js";
 import {approvedMaterialView} from './advance-material-view.js';
 import {ptDetail} from '../orders/pt-detail.js';
 import {ipoReference} from '../documents/historical-ipo.js';
@@ -59,7 +59,6 @@ import {
   allocateReference,
   revisedReference,
 } from "../documents/references.js";
-import { OrdersRepository } from "../orders/repository.js";
 import { ownedCondition } from "../http/permissions.js";
 import {
   safeCosting,
@@ -67,7 +66,6 @@ import {
   bucketFor,
   routeNames,
   compareBasis,
-  commercialComparison,
 } from "./policy.js";
 import {
   createSchema,
