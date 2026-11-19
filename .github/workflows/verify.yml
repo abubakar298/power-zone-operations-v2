@@ -41,6 +41,8 @@ jobs:
         run: pnpm build
       - name: Type check tests and operator tools
         run: pnpm typecheck:tools
+      - name: No new unused code
+        run: pnpm check:unused
 
   tests:
     # The same test files as before, split across machines that run at the same time.

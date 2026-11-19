@@ -1,0 +1,79 @@
+{
+  "server/inventory/material-replacement-documents.ts": [
+    "reportBottomMargin"
+  ],
+  "server/inventory/repository.ts": [
+    "role"
+  ],
+  "server/orders/peachtree-report-v4.ts": [
+    "Decimal"
+  ],
+  "server/project-workflow/headsup.ts": [
+    "input"
+  ],
+  "tests/accounts-invoice-repair.test.ts": [
+    "paidId"
+  ],
+  "tests/browser/direct-product.spec.ts": [
+    "price"
+  ],
+  "tests/browser/ipo-tax-defaults.spec.ts": [
+    "file",
+    "values"
+  ],
+  "tests/browser/ubl-bess-agreements.spec.ts": [
+    "key",
+    "refs"
+  ],
+  "tests/material-drafts.test.ts": [
+    "handoff"
+  ],
+  "tests/material-stock.test.ts": [
+    "handoff",
+    "other"
+  ],
+  "tests/negative-transfer.test.ts": [
+    "original",
+    "stock"
+  ],
+  "tests/site-material-plans.test.ts": [
+    "handoff"
+  ],
+  "tests/unscheduled-inventory-delivery.test.ts": [
+    "record"
+  ],
+  "tests/unsigned-do.test.ts": [
+    "current"
+  ],
+  "web/App.tsx": [
+    "GatePasses",
+    "InventoryReviews",
+    "MaterialReplacements",
+    "ParentDos",
+    "SiteMaterials",
+    "WarehouseTransfers"
+  ],
+  "web/inventory-approved/SiteIssueDocument.tsx": [
+    "FinancialValue",
+    "idDropdownOpen",
+    "issueLinesForRow",
+    "solarSpec"
+  ],
+  "web/pages/Boqs.tsx": [
+    "pvInput"
+  ],
+  "web/pages/Dashboard.tsx": [
+    "Departments",
+    "currentProjectKey",
+    "verified"
+  ],
+  "web/pages/DepartmentWorkspace.tsx": [
+    "setSelections"
+  ],
+  "web/pages/ParentDos.tsx": [
+    "drafts"
+  ],
+  "web/pages/QuotationWorkflow.tsx": [
+    "snapshot"
+  ]
+}
