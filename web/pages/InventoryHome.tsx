@@ -71,7 +71,7 @@ export function InventoryHome({session,onLogout,assignedKind}:{session:Session;o
    .filter(s=>!continuingSiteIds.has(s.siteId)&&!continuingSiteIds.has(s.registeredSiteId??s.siteId)),
   ...continuingProjects,
  ]:undefined;
- const dispatchProgress=(source:Source)=>{if(source.planId)return 'partial';const matches=documents?.flatMap(d=>d.sites.filter(s=>s.siteId===source.siteId||!!source.registeredSiteId&&s.registeredSiteId===source.registeredSiteId));return matches?.some(s=>s.dispatchComplete)?'complete':matches?.length?'partial':undefined;};
+ const dispatchProgress=(source:Source)=>{if(source.planId)return 'partial';const matches=documents?.flatMap(d=>d.sites.filter(s=>!s.removedByOperations&&(s.siteId===source.siteId||!!source.registeredSiteId&&s.registeredSiteId===source.registeredSiteId)));return matches?.some(s=>s.dispatchComplete)?'complete':matches?.length?'partial':undefined;};
  const uniqueIpos=ipoRows?[...new Map(ipoRows.filter(s=>dispatchProgress(s)!=='complete').map(s=>[s.registeredSiteId??s.siteId,s])).values()]:undefined;
  const documentSites=documents?groupDispatchDocumentSites(documents):undefined;
  const pendingReports=documentSites?.filter(r=>r.status==='awaiting'),receivedReports=documentSites?.filter(r=>r.status==='ready');

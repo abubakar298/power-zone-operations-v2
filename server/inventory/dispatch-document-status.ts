@@ -1,3 +1,5 @@
+import {readDispatchSiteRemovals,type DispatchSiteRemoval} from './dispatch-site-removals.js';
+import {dispatchSiteRemovalLabel} from '../../shared/dispatch-document-status.js';
 import {parentPoolLines} from '../../shared/parent-material-pool.js';
 import {completionEvidence} from '../../shared/qc-completion-evidence.js';
 import {dispatchReconciliationEligibleSql} from './dispatch-reconciliation-eligibility.js';
@@ -17,7 +19,7 @@ export function dispatchBoard(site:any,boards:Board[]){
  const matches=boards.filter(b=>site.registeredSiteId?b.site_id===site.registeredSiteId:b.snapshot.origin?.ipoId===site.siteId);
  return matches.length===1?matches[0]:undefined;
 }
-export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies:Copy[],files:File[],usage:Usage[],closed:Set<string>=new Set()):DispatchDocumentRow[]{
+export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies:Copy[],files:File[],usage:Usage[],closed:Set<string>=new Set(),removals:DispatchSiteRemoval[]=[]):DispatchDocumentRow[]{
  const siteDispatches=new Map<string,Dispatch[]>();
  for(const d of dispatches)if(!d.snapshot.parent)for(const s of d.snapshot.sites??[]){const key=s.siteId;siteDispatches.set(key,[...(siteDispatches.get(key)??[]),d]);}
  const signature=(d:Dispatch)=>JSON.stringify([d.warehouse,(d.snapshot.sites??[]).map((s:any)=>s.registeredSiteId??s.siteId).sort(),(d.snapshot.lines??[]).filter((l:any)=>Number(l.out??l.quantity)>0).map((l:any)=>[l.itemId,l.unit,String(l.out??l.quantity)]).sort((a:any,b:any)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))]);
@@ -26,6 +28,7 @@ export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies
   const lines=parentPoolLines({...d.snapshot,lines:d.snapshot.lines??[]}).filter((l:any)=>Number(l.out??l.quantity)>0);
   const sites=(d.snapshot.sites??[]).filter((s:any)=>lines.some((l:any)=>l.sites?.includes(s.siteId))).map((s:any)=>{
    const board=dispatchBoard(s,boards),b=board?.snapshot;
+   const removal=removals.find(r=>r.dispatchId===d.id&&r.siteId===s.siteId);
    const qcFile=(ref:any,fresh=false)=>ref?.id&&files.some(f=>f.id===ref.id&&f.site_id===board?.site_id&&(!fresh||d.retrospective||instant(f.created_at)>=instant(d.created_at)))?{fileId:ref.id as string,source:'qc' as const,boardId:board!.site_id}:undefined;
    const copy=(kind:string)=>copies.find(c=>c.document_id===d.id&&c.copy_kind===kind&&(kind!=='customer-signoff'||c.source_site_id===s.siteId));
    const documents:DispatchDocument[]=[];
@@ -50,7 +53,7 @@ export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies
    }
    const preparationIds=[d.draft_id,d.snapshot.combinedPlan?.fixedDraftId,d.snapshot.combinedPlan?.variableDraftId].filter(Boolean);
    const usageReady=s.installation===false||lines.filter((l:any)=>l.sites?.includes(s.siteId)).every((l:any)=>usage.some(u=>preparationIds.includes(u.draft_id)&&u.site_id===s.siteId&&u.snapshot.workflowVersion===2&&u.snapshot.state==='signed'&&(d.retrospective||instant(u.created_at)>=instant(d.created_at))&&u.snapshot.lines?.some((v:any)=>v.lineKey===l.key&&v.used!==null)));
-   return {siteId:s.siteId,installation:s.installation,usageReady,usageNote:usageReady?'QC usage recorded':'Awaiting QC material usage',registeredSiteId:board?.site_id??s.registeredSiteId,dispatchComplete:!d.snapshot.parent&&d.snapshot.kind==='fixed'&&d.snapshot.partialDelivery===false,name:s.siteName,customer:s.customer,ipo:[s.ipo,s.orderNumber].filter(Boolean).join(' · '),documents};
+   return {siteId:s.siteId,installation:s.installation,removedByOperations:!!removal,usageReady,usageNote:removal?dispatchSiteRemovalLabel:usageReady?'QC usage recorded':'Awaiting QC material usage',registeredSiteId:board?.site_id??s.registeredSiteId,dispatchComplete:!removal&&!d.snapshot.parent&&d.snapshot.kind==='fixed'&&d.snapshot.partialDelivery===false,name:s.siteName,customer:s.customer,ipo:[s.ipo,s.orderNumber].filter(Boolean).join(' · '),documents:removal?documents.filter(doc=>doc.fileId):documents};
   });
   return {id:d.id,number:d.number,draftId:d.draft_id,preparationIds:[...new Set((d.snapshot.combinedPlan?[d.snapshot.combinedPlan.fixedDraftId,d.snapshot.combinedPlan.variableDraftId]:[d.draft_id]).filter(Boolean))],preparationKinds:Object.fromEntries([[d.draft_id,d.snapshot.kind],[d.snapshot.combinedPlan?.fixedDraftId,'fixed'],[d.snapshot.combinedPlan?.variableDraftId,'variable']].filter(([id])=>id)),warehouse:d.warehouse,createdAt:new Date(d.created_at).toISOString(),parent:!!d.snapshot.parent,retrospective:!!d.retrospective,...(!d.snapshot.parent&&(sameMaterials.get(signature(d))?.length??0)>1?{reviewNote:'Possible duplicate: same site, warehouse and quantities also appear on '+sameMaterials.get(signature(d))!.filter(other=>other.id!==d.id).map(other=>other.number).join(', ')+'. Verify whether these were separate deliveries.'}:{}),sites,status:sites.length&&sites.every((s:any)=>s.documents.every((v:DispatchDocument)=>v.fileId))?'ready' as const:'awaiting' as const,reconciliationStatus:d.retrospective?'Retrospective DO: gate copy waived; usage and returns require reconciliation':'Usage and any returns require reconciliation'};
  });
@@ -62,15 +65,16 @@ export async function readDispatchDocuments(db:Db,warehouses:string[]|null){
  const dispatches=(await db.query(postedDispatchSql,[warehouses])).rows as Dispatch[];
  if(!dispatches.length)return {rows:[] as DispatchDocumentRow[]};
  const ids=dispatches.map(d=>d.id),draftIds=[...new Set(dispatches.flatMap(d=>[d.draft_id,d.snapshot.combinedPlan?.variableDraftId,d.snapshot.combinedPlan?.fixedDraftId]).filter(Boolean))],sites=dispatches.flatMap(d=>d.snapshot.sites??[]),boardIds=sites.map(s=>s.registeredSiteId).filter(Boolean),ipoIds=sites.map(s=>s.siteId);
- const [boardResult,copyResult,usageResult,closedResult]=await Promise.all([
+ const [boardResult,copyResult,usageResult,closedResult,removals]=await Promise.all([
   db.query(`SELECT DISTINCT ON(site_id) site_id,jsonb_build_object('origin',snapshot->'origin','installation',snapshot->'installation','deliveries',snapshot->'deliveries','qcJob',snapshot->'qcJob','qc',jsonb_build_object('signoff',snapshot#>'{qc,signoff}','handover',snapshot#>'{qc,handover}'),'documents',snapshot->'documents') snapshot FROM (SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC) latest WHERE site_id=ANY($1::text[]) OR snapshot#>>'{origin,ipoId}'=ANY($2::text[]) ORDER BY site_id,version DESC`,[boardIds,ipoIds]),
   db.query(`SELECT g.document_id,g.source_site_id,g.copy_kind,g.evidence_id FROM inventory_gate_pass_copies g JOIN inventory_material_evidence e ON e.id=g.evidence_id AND e.warehouse=g.warehouse WHERE g.document_kind='dispatch' AND g.document_id=ANY($1::uuid[]) AND g.copy_kind IN ('signed-customer','customer-signoff')`,[ids]),
   db.query(`SELECT DISTINCT ON(u.draft_id,u.site_id) u.draft_id,u.site_id,u.created_at,u.snapshot,e.warehouse evidence_warehouse FROM inventory_material_site_usage_versions u LEFT JOIN inventory_material_evidence e ON e.id::text=u.snapshot->>'customerEvidenceId' WHERE u.draft_id=ANY($1::uuid[]) ORDER BY u.draft_id,u.site_id,u.version DESC`,[draftIds]),
-  db.query('SELECT DISTINCT ON(draft_id) draft_id,status FROM inventory_parent_reconciliation_versions WHERE draft_id=ANY($1::uuid[]) ORDER BY draft_id,version DESC',[draftIds])
+  db.query('SELECT DISTINCT ON(draft_id) draft_id,status FROM inventory_parent_reconciliation_versions WHERE draft_id=ANY($1::uuid[]) ORDER BY draft_id,version DESC',[draftIds]),
+  readDispatchSiteRemovals(db,ids),
  ]);
  const boards=boardResult.rows as Board[];
  const files=(await db.query('SELECT id,site_id,created_at FROM operations_board_files WHERE site_id=ANY($1::text[])',[boards.map(b=>b.site_id)])).rows as File[];
- return {rows:dispatchDocumentRows(dispatches,boards,copyResult.rows,files,usageResult.rows,new Set(closedResult.rows.filter(r=>r.status==='closed').map(r=>r.draft_id)))};
+ return {rows:dispatchDocumentRows(dispatches,boards,copyResult.rows,files,usageResult.rows,new Set(closedResult.rows.filter(r=>r.status==='closed').map(r=>r.draft_id)),removals)};
 }
 export async function dispatchDocumentEvidence(db:Db,rows:DispatchDocumentRow[],dispatchId:string,fileId:string){
  const row=rows.find(r=>r.id===dispatchId),doc=row?.sites.flatMap(s=>s.documents).find(d=>d.fileId===fileId);
