@@ -7,6 +7,7 @@ import {randomUUID} from 'node:crypto';
 import {testDatabase} from './database.js';
 import {createDashboardSamples} from '../server/coordinator/samples.js';
 import {CoordinatorRepository} from '../server/coordinator/repository.js';
+import {projectFileStages} from '../server/coordinator/project-file.js';
 import request from 'supertest';
 import {createApp} from '../server/app.js';
 import {readConfig} from '../server/config.js';
@@ -23,6 +24,8 @@ test('project metadata/history preserves ownership, exact versions, chronologica
  for(let i=1;i<project.events.length;i++)assert.ok(new Date(project.events[i].at).getTime()>=new Date(project.events[i-1].at).getTime());
  assert.ok(project.documents.every(d=>!d.pdf_url||d.pdf_url.includes(d.resource==='cni'?d.proposal_id:d.id)));
  assert.doesNotMatch(JSON.stringify(project),/internal_cost_snapshot|private_boq|budgeted_cost|profitPercent|itemPricing|batteryRate|inverterRate|markup|unitCostBeforeTax/);
+ // Project file: the standard stages, the IPO listed, and no invoices for a Coordinator (the privacy check above covers it too).
+ assert.deepEqual(project.file.map((s:any)=>s.stage),[...projectFileStages]);assert.ok(project.file.find((s:any)=>s.stage==='IPO')!.items.length>0);assert.equal(project.file.find((s:any)=>s.stage==='Invoice')!.items.length,0);
  await assert.rejects(repo.project(other,first.project_key),/unavailable/);
  const app=createApp(db.pool,readConfig({NODE_ENV:'test',APP_ORIGIN:'http://localhost:3000',DATABASE_URL:db.url,ADMIN_SETUP_TOKEN:'project-test-setup-token-123456789012345678'}));
  await request(app).get('/api/coordinator/projects').expect(401);
