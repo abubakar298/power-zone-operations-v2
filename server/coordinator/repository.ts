@@ -4,6 +4,7 @@ import {finalizeCustomerBoq} from '../boq/lifecycle.js';
 import {archivedDocumentIds} from '../maintenance/archived-documents.js';
 import { Decimal } from "decimal.js";
 import { projectCatalog, projectContext } from "./projects.js";
+import { projectFile, projectFileTrail } from "./project-file.js";
 import { resourceOwnership, ownedCondition } from "../http/permissions.js";
 import {
   validateExternal,
@@ -30,8 +31,15 @@ export class CoordinatorRepository {
     const ids = new Set(
       context.documents.flatMap((d) => [d.id, d.proposal_id].filter(Boolean)),
     );
+    // Project file: the same documents plus the site's DOs, Operations record and (owners only) invoices.
+    const owner = ["Admin", "Management"].includes(role);
+    const trail = await projectFileTrail(
+      this.pool,
+      context.documents.filter((d) => d.resource === "ipo").map((d) => d.id),
+    );
     return {
       ...context,
+      file: projectFile(context.documents, context.attachments, trail, owner),
       tasks: view.tasks.filter((t: any) =>
         [t.id, t.boq_revision_id, t.ipo_id, t.draft_id].some((id) =>
           ids.has(id),
