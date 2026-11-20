@@ -492,6 +492,7 @@ export class ProjectWorkflowRepository {
         historicalDelivered: Boolean(data.historicalImport?.deliveredBoardSiteId),
         ipoNumber: shared?.ipo_number ?? data.ipoNumber ?? null,
         sharedOrderNumber: shared?.order_number ?? null,
+        ipoSalesPerson: shared?.sales_person ?? null,
         sharedPoReference: shared?.reference ?? null,
         sharedPoDate: shared?.po_date ?? null,
         sharedAt: shared?.created_at ?? null,

@@ -1,4 +1,4 @@
-import { sortSharedIpos } from "../../shared/shared-ipo-order.js";
+import { sharedOrderLabel, sortSharedIpos } from "../../shared/shared-ipo-order.js";
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {departmentFetch} from '../department-view.js';
 import {DocumentListDetails} from './DocumentListDetails.js';
@@ -43,7 +43,7 @@ export function IposSharedList({ records, onPreview }: { records: any[]; onPrevi
         <td>{index + 1}</td>
         <td>{record.customerCode || record.customer}</td>
         <td>{record.site}<br/><span className="pz-caption">{record.siteCode || "Not entered"}</span></td>
-        <td>{record.data.ipoNumber || "Not available"}{record.data.sharedOrderNumber&&<div className="pz-caption">Order {record.data.sharedOrderNumber}</div>}<DocumentListDetails record={record}/>{record.data.historicalDelivered&&<small className="pz-caption" style={{display:"block"}}>Historical · already delivered</small>}</td>
+        <td>{record.data.ipoNumber || "Not available"}{record.data.sharedOrderNumber&&<div className="pz-caption">{sharedOrderLabel(record.data.sharedOrderNumber)}</div>}{record.data.ipoSalesPerson&&<div className="pz-caption">Salesperson: {record.data.ipoSalesPerson}</div>}<DocumentListDetails record={record}/>{record.data.historicalDelivered&&<small className="pz-caption" style={{display:"block"}}>Historical · already delivered</small>}</td>
         <td>{record.data.sharedPoReference || "Not entered"}<br/><span className="pz-caption">{record.data.sharedPoDate ? String(record.data.sharedPoDate).slice(0,10) : "Not entered"}</span></td>
         <td><div className="pz-action-row pz-ipo-list-actions"><Button variant="secondary" onClick={() => onPreview(record.id)}>Preview</Button><DownloadIpo record={record}/></div>
         </td>
@@ -60,7 +60,8 @@ export function IpoSharedPreview({ record, onBack, session, onOpen }: { record: 
     <div><Button variant="neutral" onClick={onBack}>Back to IPOs Shared</Button></div>
     <section className="pz-panel pz-stack">
       <h2>{number || "IPO"} · {record.customerCode} · {record.site} ({record.siteCode})</h2>
-      {orderNumber && <p>Order number {orderNumber}</p>}
+      {orderNumber && <p>{sharedOrderLabel(orderNumber)}</p>}
+      {record.data.ipoSalesPerson && <p>Salesperson: {record.data.ipoSalesPerson}</p>}
       <p>PO reference: {record.data.sharedPoReference || "Not entered"} · PO date: {record.data.sharedPoDate ? String(record.data.sharedPoDate).slice(0,10) : "Not entered"}</p>
       {record.data.historicalDelivered&&<p className="pz-caption">Historical entry prepared by M. Rafiq · already delivered</p>}
       <DocumentPreview key={ipoId} url={`/api/orders/${ipoId}/ipo.pdf`} title="IPO and PT Breakup"/>
