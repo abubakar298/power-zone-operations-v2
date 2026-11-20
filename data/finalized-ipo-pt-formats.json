@@ -1,13 +1,16 @@
 {
-  "version": 3,
-  "documentLayoutVersion": 4,
+  "version": 4,
+  "documentLayoutVersion": 5,
   "bessPolicy": "ubl-bess-approved-proportional-v1",
-  "fingerprint": "3a12fc6226bebe725fd0b42922d3e75444d2cba9cfb11cc9662b8a37717249d6",
+  "fingerprint": "d38360cad84e18ad37c8cf701bbfce998297cb8b25c52549e7eb7f3ae9164107",
   "files": {
     "server/orders/report-v4.ts": "381d4eafbec4a3d60473449d9412b04fd2750a65cc65b7b7bfc75a0a5e537df1",
+    "server/orders/report-v5.ts": "b980b4c95089f6a67a3296164657b267e4baa8fb4e980db57e74db755d2a3881",
     "server/orders/peachtree-report-v4.ts": "720a5f7e287d4487fa878aad9a941ea979158d02b438d86598feca232bb8a460",
-    "server/orders/document-renderers.ts": "94c479e66fb8e0d8b75169b6ed2c2cc0642e0e290ad32e84db7c56f08847aa0a",
+    "server/orders/document-renderers.ts": "e3b240640737f5ec609bbfd91c047d5f9060edd227688867533b9cf247c98564",
     "server/orders/report-ubl-bess.ts": "f03ccf8507f2dc7ac1d0e4e5999ef49d013efc13054d2bfd3c26f58b4e8c818a",
     "server/orders/peachtree-report-ubl-bess.ts": "3fcbc1e047762b1961f8f69ac86ee8d937eeaf317f8d1582535790270af6e6bc"
-  }
+  },
+  "previousVersionManifest": "data/finalized-ipo-pt-formats-v3.json",
+  "change": "Owner (Abu Bakar) approved on 20 Nov 2026 a Salesperson row on the IPO page for new IPOs: layout v5 (server/orders/report-v5.ts = v4 plus that row). Issued IPOs keep their saved layout version and renderer (v4 and older are unchanged)."
 }
