@@ -351,7 +351,7 @@ export function DepartmentWorkspace({
     matchesWorkspace(
       {
         ...r,
-        reference: [r.siteCode, r.id, r.data.ipoNumber, r.data.sharedPoReference, ...(r.references ?? []), r.location].join(
+        reference: [r.siteCode, r.id, r.data.ipoNumber, r.data.sharedPoReference, r.data.sharedOrderNumber, r.data.ipoSalesPerson, ...(r.references ?? []), r.location].join(
           " ",
         ),
         site: `${r.site} ${r.siteCode}`,
@@ -704,7 +704,7 @@ export function DepartmentWorkspace({
             showTaskModes={page === "Workspace"}
             searchLabel={
               page === iposSharedBucket
-                ? "Search IPOs — customer, site, branch code or reference"
+                ? "Search IPOs — customer, site, branch code, reference, order no. or salesperson"
                 : department === "coordination" && page === coordinationBuckets[5]
                 ? "Search customer follow-up"
                 : department === "design"
