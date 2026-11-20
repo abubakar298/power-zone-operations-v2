@@ -15,7 +15,10 @@ type SourceRow=Record<string,any>;
 export type ProgrammeMetric={sites:number;siteKeys:string[];amount:string|null;knownSites:number;missingSites:number;receivedSites:number;receivedAmount:string|null};
 export type ProgrammeRow={key:string;sourceKey:string;recordKey:string|null;customer:'UBL'|'MBL';program:string;ipo:string;orderNumber:string;site:string;siteCode:string;po:string;configuration:string;active:boolean;cancelled:boolean;transferred:boolean;delivered:boolean;partialDelivery:boolean;scheduled?:boolean;installationRequired?:boolean;installed:boolean;deliveryDate:string|null;installationDate:string|null;invoiceSubmitted:boolean;paymentReceived:boolean|null;invoiceReferences:string[];accountsReferences:string[];grossContract:string|null;remainingPayable:string|null;advanceReceived:string|null;flags:string[];mappingStatus:string;sources:SourceRow[];cancellationOutcome:string|null};
 export type ProgrammeMilestone={submitted:ProgrammeMetric;received:ProgrammeMetric;pending:ProgrammeMetric;toSubmit:ProgrammeMetric;future:ProgrammeMetric};
-export type ManagementProgramme={key:string;label:string;capacity:number;rows:ProgrammeRow[];cancelled:ProgrammeRow[];transferred:ProgrammeRow[];summary:Record<'active'|'installed'|'pendingDelivery'|'partialDelivery'|'installationPending'|'invoicePending'|'paymentPending'|'advanceReceived',ProgrammeMetric>;milestones?:{advance:ProgrammeMilestone;completion:ProgrammeMilestone}};
+/** Order counts (Atif's documentation standard): the target, the running count of every order received and the
+ * valid orders are different numbers; cancelled and transferred orders stay counted, never reused or hidden. */
+export type ProgrammeOrders={target:number;issued:number;cancelled:number;transferred:number;valid:number;completed:number;pending:number;remaining:number};
+export type ManagementProgramme={key:string;label:string;capacity:number;orders:ProgrammeOrders;rows:ProgrammeRow[];cancelled:ProgrammeRow[];transferred:ProgrammeRow[];summary:Record<'active'|'installed'|'pendingDelivery'|'partialDelivery'|'installationPending'|'invoicePending'|'paymentPending'|'advanceReceived',ProgrammeMetric>;milestones?:{advance:ProgrammeMilestone;completion:ProgrammeMilestone}};
 export type ManagementProgrammes={sourceDate:string;sourceVersion:number;readOnly:true;operationsAsOf?:string;programmes:ManagementProgramme[];issues:string[]};
 const money=(value:unknown):string|null=>{if(value===null||value===undefined||value==='')return null;try{const n=new Decimal(String(value));return n.isFinite()&&n.gte(0)?n.toFixed(2):null;}catch{return null;}};
 const fraction=(value:unknown,fallback:string)=>{try{const n=new Decimal(value==null?fallback:String(value));return n.isFinite()&&n.gte(0)&&n.lte(1)?n:null;}catch{return null;}};
@@ -75,7 +78,9 @@ export function projectManagementProgrammes(snapshot:SourceRow,sourceDate:string
     return{submitted:metric(rows.filter(r=>s(r)?.submitted===true&&(stage==='advance'||r.installed)),actual),received:metric(rows.filter(received),r=>money(s(r)?.receivedAmount??s(r)?.invoiceAmount)),pending:metric(rows.filter(r=>s(r)?.submitted===true&&(stage==='advance'||r.installed)&&!received(r)),r=>money(s(r)?.outstandingAmount??s(r)?.invoiceAmount)),toSubmit:metric(rows.filter(r=>ready(r)&&s(r)?.submitted!==true),r=>received(r)?'0.00':actual(r)??expected(r)),future:metric(rows.filter(r=>!ready(r)),r=>received(r)?'0.00':expected(r))};
    };milestones={advance:build('advance'),completion:build('completion')};
   }
-  return{key,label,capacity,rows,cancelled:scoped.filter(r=>r.cancelled),transferred:scoped.filter(r=>r.transferred),summary,...(milestones?{milestones}:{})};
+  const cancelledRows=scoped.filter(r=>r.cancelled),transferredRows=scoped.filter(r=>r.transferred),completed=rows.filter(r=>r.installed).length;
+  const orders:ProgrammeOrders={target:capacity,issued:scoped.length,cancelled:cancelledRows.length,transferred:transferredRows.length,valid:rows.length,completed,pending:rows.length-completed,remaining:Math.max(capacity-rows.length,0)};
+  return{key,label,capacity,orders,rows,cancelled:cancelledRows,transferred:transferredRows,summary,...(milestones?{milestones}:{})};
  });
  return{sourceDate,sourceVersion,readOnly:true,programmes,issues};
 }
