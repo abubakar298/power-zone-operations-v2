@@ -67,7 +67,7 @@
     "currentProjectKey",
     "verified"
   ],
-  "web/pages/DepartmentWorkspace.tsx": [
+  "web/pages/department-workspace/TechnicalReview.tsx": [
     "setSelections"
   ],
   "web/pages/ParentDos.tsx": [
