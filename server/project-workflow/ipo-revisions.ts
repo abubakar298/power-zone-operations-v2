@@ -129,7 +129,7 @@ export class IpoRevisionRepository{
   const input={...basis.order.input,...(beforeInput.invoiceTerms?{invoiceTerms:beforeInput.invoiceTerms}:{}),poNumber:beforeInput.poNumber??'',approvalReference:beforeInput.approvalReference,evidenceType:beforeInput.evidenceType,orderDate:beforeInput.orderDate,evidenceNotes:beforeInput.evidenceNotes};
   const snapshot={...structuredClone(basis.order),directPoApproval:before.directPoApproval??null,siteName:before.siteName??r.site_name,siteCode:before.siteCode??site.site_code,input,
    boqRevisionId:basis.boqRevisionId,boqNumber:basis.order.boqNumber??before.boqNumber,preparedBy:r.coordinator,checkedBy:r.coordinator,workflowRecordId:r.id,approvedCommercialSource:basis.source,
-   orderDecisionId:before.orderDecisionId,approvalChannel:'Approved IPO revision',documentLayoutVersion:4,approvedPanelQty:panels,peachtree:ptDetail(basis.order,basis.boq,panels),
+   orderDecisionId:before.orderDecisionId,approvalChannel:'Approved IPO revision',documentLayoutVersion:5,approvedPanelQty:panels,peachtree:ptDetail(basis.order,basis.boq,panels),
    ipoRevision:{revision:approvedCount+1,requestId:request.id,route:request.route,reason:request.reason,originalIpoId:chain[0].id,originalNumber:chain[0].number,revisesIpoId:current.id,revisesNumber:current.number}};
   return {number,snapshot};
  }

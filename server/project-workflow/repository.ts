@@ -3365,7 +3365,7 @@ export class ProjectWorkflowRepository {
       ...(configurationBatch?{sharedConfigurationBatchId:configurationBatch.id}:{}),
       orderDecisionId: decisionId,
       approvalChannel: "Exact approved commercial basis",
-      documentLayoutVersion: 4,
+      documentLayoutVersion: 5,
       approvedPanelQty: await this.approvedPanelQuantity(r,c),
       peachtree: ptDetail(basis.order,basis.boq,await this.approvedPanelQuantity(r,c)),
     };
@@ -3649,7 +3649,7 @@ export class ProjectWorkflowRepository {
       siteCode: r.canonical_site_code ?? r.site_code,
       preparedBy: r.coordinator,
       checkedBy: r.coordinator,
-      documentLayoutVersion: 4,
+      documentLayoutVersion: 5,
       approvedPanelQty: await this.approvedPanelQuantity(r),
       peachtree: ptDetail(basis.order,basis.boq,await this.approvedPanelQuantity(r)),
     };

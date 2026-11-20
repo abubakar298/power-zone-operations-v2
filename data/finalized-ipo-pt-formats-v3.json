@@ -1,0 +1,13 @@
+{
+  "version": 3,
+  "documentLayoutVersion": 4,
+  "bessPolicy": "ubl-bess-approved-proportional-v1",
+  "fingerprint": "3a12fc6226bebe725fd0b42922d3e75444d2cba9cfb11cc9662b8a37717249d6",
+  "files": {
+    "server/orders/report-v4.ts": "381d4eafbec4a3d60473449d9412b04fd2750a65cc65b7b7bfc75a0a5e537df1",
+    "server/orders/peachtree-report-v4.ts": "720a5f7e287d4487fa878aad9a941ea979158d02b438d86598feca232bb8a460",
+    "server/orders/document-renderers.ts": "94c479e66fb8e0d8b75169b6ed2c2cc0642e0e290ad32e84db7c56f08847aa0a",
+    "server/orders/report-ubl-bess.ts": "f03ccf8507f2dc7ac1d0e4e5999ef49d013efc13054d2bfd3c26f58b4e8c818a",
+    "server/orders/peachtree-report-ubl-bess.ts": "3fcbc1e047762b1961f8f69ac86ee8d937eeaf317f8d1582535790270af6e6bc"
+  }
+}
