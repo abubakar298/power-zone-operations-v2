@@ -332,7 +332,7 @@ test("revision reasons, identities and latest-base checks preserve immutable R0/
     }).expect(200)
   ).body.saved;
   assert.equal(r1.boq_id, r0.boq_id);
-  assert.match(r1.number, /^CPZ-PBQ-\d{2}-\d{3}-0003-\d{3} \(BAFL-REV001\)$/);
+  assert.match(r1.number, /^BOQ-\d+-R1$/, "a BOQ revision keeps its family number instead of taking a new one");
   assert.equal(r1.revision_reason, "Updated DC routing");
   await post(manager, `/reviews/${b.s.id}/decision`, {
     outcome: "Approved",

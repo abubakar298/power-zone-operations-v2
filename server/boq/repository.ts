@@ -2,7 +2,7 @@ import {editableDraftCondition} from './draft-access.js';
 import {assertPreparationEditable,lockBoqPreparation,preparationState,workingPreparationState} from './preparation.js';
 import {sentSurveyAwaitingDesign} from '../../shared/sent-survey-requests.js';
 import {frameworkCosting} from './framework-costing.js';
-import { allocateReference } from "../documents/references.js";
+import { allocateReference, familyReference, isShortReference, revisedReference } from "../documents/references.js";
 import { ownedCondition } from "../http/permissions.js";
 import { ReviewRepository } from "./reviews.js";
 import type { Pool, PoolClient } from "pg";
@@ -301,8 +301,11 @@ export class BoqRepository {
         throw new HttpError(400, "Revision identity cannot change.");
       boq = base.boq_id;
       revision = base.revision + 1;
-      number = await allocateReference(c,'PBQ',randomUUID(),s.customerId,s.siteCode);
-    } else {
+      // Short numbers: a BOQ revision keeps its family number (BOQ-1003-R1) instead of taking a new one.
+      const familyNumber = await familyReference(c,'PBQ',base.boq_id);
+      number = familyNumber && isShortReference(familyNumber)
+        ? revisedReference(familyNumber, revision)
+        : await allocateReference(c,'PBQ',randomUUID(),s.customerId,s.siteCode);    } else {
       const existingSite = (
         await c.query(
           "SELECT id,status FROM sites WHERE customer_id=$1 AND lower(code)=lower($2) FOR UPDATE",

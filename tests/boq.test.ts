@@ -217,7 +217,7 @@ test("survey authentication, validation, persisted drafts and concurrent save is
     [200, 200],
   );
   assert.equal(responses[0].body.id, responses[1].body.id);
-  assert.match(responses[0].body.number, /^CPZ-PBQ-\d{2}-001-0003-003 \(BAFL-05850\)$/);
+  assert.match(responses[0].body.number, /^BOQ-\d+$/);
   assert.equal(
     (
       await db.pool.query("SELECT code FROM sites WHERE id=$1", [

@@ -387,7 +387,7 @@ test("saved quotation versions retain pricing, customer descriptions and PDF aft
   issued = saved[0].body;
   await post("/quotations/preview", input).expect(409);
   assert.equal(issued.id, saved[1].body.id);
-  assert.match(issued.number, /^CPZ-QT-\d{2}-001-0003-\d{3}-R1 \(BAFL-05850\)$/);
+  assert.match(issued.number, /^QT-\d+$/, "a new quotation gets a short running number; its first version has no -R suffix");
   await get(`/quotations/${issued.id}/quotation.pdf`, true).expect(403);
   await get(`/quotations/${issued.id}/copy`, true).expect(403);
   await post(
@@ -540,7 +540,8 @@ test("Full Breakup additional cost, markup and tax reconcile and stay internal a
     [
       independentBoq,
       independentRoot,
-      revisedReference(boq.number,1),
+      // Its own number: with short BOQ numbers, revision 1 of the real BOQ is legitimately "<number>-R1".
+      `${boq.number}-INDEPENDENT`,
       boq.snapshot,
       adminId,
     ],

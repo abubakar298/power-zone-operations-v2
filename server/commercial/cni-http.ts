@@ -6,7 +6,10 @@ import {
 } from "../approvals/external.js";
 import {
   allocateReference,
+  isPortalReference,
+  isShortReference,
   revisedReference,
+  versionReference,
 } from "../documents/references.js";
 import { snapshotCniCost, reviewCni } from "./cni-costing.js";
 import { Router, type RequestHandler } from "express";
@@ -165,9 +168,9 @@ export function cniHttp(pool: Pool, requireSession: RequestHandler) {
         throw new HttpError(400, "Revision site identity cannot change.");
       const versionId = randomUUID(),
         number =
-          prior && !prior.number.startsWith("CPZ-")
+          prior && !isPortalReference(prior.number)
             ? `CNI-${id.slice(0, 8).toUpperCase()}-V${version}`
-            : revisedReference(
+            : versionReference(
                 await allocateReference(
                   client,
                   "QT",
@@ -416,7 +419,9 @@ export function cniHttp(pool: Pool, requireSession: RequestHandler) {
           };
         const nextId = randomUUID(),
           version = prior.version + 1,
-          number = prior.number.startsWith("CPZ-")
+          number = isShortReference(prior.number)
+            ? versionReference(prior.number, version)
+            : prior.number.startsWith("CPZ-")
             ? revisedReference(prior.number, version)
             : prior.number.replace(/-V\d+$/, `-V${version}`);
         await client.query(
