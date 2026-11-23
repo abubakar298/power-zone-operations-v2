@@ -91,7 +91,7 @@ test("Requests for quotation: one RFQ to many vendors, quotations entered in bul
     const pdfRes = await request(app).get(`/api/procurement/rfqs/${f.id}/vendors/${powerline.id}/pdf`).set("Cookie", buyer);
     assert.equal(pdfRes.status, 200);
     assert.match(String(pdfRes.headers["content-type"]), /application\/pdf/);
-    assert.match(String(pdfRes.headers["content-disposition"]), /Powerline - Procurement - Request for Quotation - .+\.pdf/);
+    assert.match(String(pdfRes.headers["content-disposition"]), /Request for Quotation - Powerline - Procurement\.pdf/);
     assert.equal((await request(app).get(`/api/procurement/rfqs/${f.id}/all.zip`).set("Cookie", buyer)).status, 200);
     assert.equal((await request(app).get(`/api/procurement/requests/${pr.id}/comparison.xlsx`).set("Cookie", approver)).status, 200);
     assert.equal((await request(app).get(`/api/procurement/rfqs/${f.id}/vendors/${f.vendors[0].id}/pdf`).set("Cookie", store)).status, 403);

@@ -12,6 +12,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {attachHistoricalEvidence} from './historical-evidence.js';
 import {validateBatch,type BatchSnapshot} from './batches.js';
 import {activeSiteAlerts} from './delays.js';
+import {boardFileDownloadContext} from './file-download-name.js';
 import {siteCancellationBlockers,cancelSite,requireNotCancelled} from './site-cancellation.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -144,7 +145,8 @@ export class OperationsBoardRepository{
   }
   const file=(await this.pool.query('SELECT filename,media_type,content FROM operations_board_files WHERE site_id=$1 AND id=$2',[id,fileId])).rows[0]??(site.snapshot.inventoryReceiving?.evidenceId===fileId?(await this.pool.query('SELECT original_name AS filename,media_type,content FROM inventory_material_evidence WHERE id=$1',[fileId])).rows[0]:undefined);
   if(!file)throw new HttpError(404,'Document file not found.');
-  await this.pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'operations.board.download:'+fileId]);return file;
+  await this.pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'operations.board.download:'+fileId]);
+  return {...file,downloadContext:await boardFileDownloadContext(this.pool,site.snapshot,fileId)};
  }
  async moveDocument(actor:string,id:string,input:z.infer<typeof movementSchema>){
   const v=movementSchema.parse(input);

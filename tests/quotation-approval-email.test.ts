@@ -8,6 +8,7 @@ import {NotificationsRepository} from '../server/notifications/repository.js';
 import {quotationApprovalAttachments} from '../server/notifications/quotation-attachment.js';
 import {priceCni} from '../server/commercial/cni-policy.js';
 import type {Message} from '../server/email/delivery.js';
+import {cleanDocumentNumber} from '../shared/download-name.js';
 async function pdfText(content:string){const task=getDocument({data:new Uint8Array(Buffer.from(content,'base64')),useSystemFonts:true});const pdf=await task.promise;let text='';try{for(let i=1;i<=pdf.numPages;i++)text+=(await(await pdf.getPage(i)).getTextContent()).items.map((x:any)=>x.str??'').join(' ');return text;}finally{await task.destroy();}}
 
 test('approval email attaches exact submitted quotation PDF, freezes retry bytes and does not expose financial internals',async()=>{
@@ -29,7 +30,8 @@ test('approval email attaches exact submitted quotation PDF, freezes retry bytes
  let first:Message|undefined,key='';
  await repo.deliverOne({configured:true,send:async(m,id)=>{first=m;key=id;throw Error('provider rejected');}},'https://example.test');
  assert.equal(first?.attachments?.length,1);assert.equal(key,n.id);
- const name=first!.attachments![0].filename;assert.ok(name.startsWith(q.snapshot.customer.shortCode||q.snapshot.customer.name));assert.ok(name.includes('Quotation'));assert.ok(name.endsWith(`-R${q.version}.pdf`));
+ const name=first!.attachments![0].filename;// One name structure (23 Nov 2026): "<quotation number> - <customer name> - <site name> - <site code>.pdf".
+ assert.ok(name.startsWith(`${cleanDocumentNumber(q.number)} - ${q.snapshot.customer.name} - `),name);assert.ok(!name.includes(' - Quotation - '));assert.ok(name.endsWith('.pdf'));
  const text=await pdfText(first!.attachments![0].content);assert.ok(text.includes(q.number));assert.ok(!text.includes('WRONG LATER SITE'));assert.ok(!/Budgeted cost|Internal cost|Markup on cost|internal_cost_snapshot/i.test(text));
  const saved=(await c.query('SELECT * FROM notification_email_attachments WHERE notification_id=$1',[n.id])).rows[0];
  assert.equal(saved.sha256,createHash('sha256').update(Buffer.from(first!.attachments![0].content,'base64')).digest('hex'));
@@ -57,7 +59,7 @@ test('C&I approval uses the action version, keeps its saved format and never att
  const c=await pool.connect();try{
  const row={id:n.id,event_source_key:'cni:'+event,event_kind:'Approval requested',audience:'management',role:'Management'};
  assert.deepEqual(await quotationApprovalAttachments(c,{...row,role:'Coordinator'}),[]);
- const files=await quotationApprovalAttachments(c,row);assert.equal(files.length,1);assert.match(files[0].filename,/^CNI Customer - FIRST SITE - Quotation DRAFT - .+-R1.pdf$/);
+ const files=await quotationApprovalAttachments(c,row);assert.equal(files.length,1);assert.match(files[0].filename,/^\S+ DRAFT - CNI Customer - FIRST SITE\.pdf$/);
  const text=await pdfText(files[0].content);assert.ok(text.includes('CNI-R1'));assert.ok(!text.includes('CNI-R2'));assert.ok(!text.includes('PRIVATE-COST-DO-NOT-SEND'));assert.match(text,/AWAITING MANAGEMENT APPROVAL/);
  }finally{c.release();}
  }finally{await db.close();}

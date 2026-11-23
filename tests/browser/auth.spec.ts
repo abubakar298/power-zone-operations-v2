@@ -241,7 +241,7 @@ test('external approval requires exact saved quotation evidence and does not exp
 
 test('new BOQ draft keeps its measured quantities after saving and reopening on mobile',async({page})=>{
  await actors(page.request);await login(page.request);await page.goto('/dashboard');await openWorkspaceSection(page,'Survey & BOQ');await page.getByRole('button',{name:'New BOQ',exact:true}).click();
- await page.getByLabel('Customer',{exact:true}).fill('Alfalah');await page.getByRole('option',{name:/Alfalah/}).click();await page.getByLabel('New site name',{exact:true}).fill('Draft preservation 22301');
+ await page.getByLabel('Customer',{exact:true}).fill('Alfalah');await page.getByRole('option',{name:/Alfalah/}).click();await page.getByLabel('New site name',{exact:true}).fill('Draft preservation 22301');await page.getByLabel('Site code',{exact:true}).fill('22301');
  await page.locator('summary').filter({hasText:'2 · Survey Quantities & Solution'}).click();await page.getByLabel('Panel quantity',{exact:true}).fill('60');await page.getByLabel('Panel wattage (W)',{exact:true}).fill('645');
  await page.getByRole('button',{name:'Save BOQ Draft',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'Survey draft saved'})).toBeVisible();await expect(page.getByLabel('Panel quantity',{exact:true})).toHaveValue('60');
  await page.getByRole('button',{name:'Back to BOQs',exact:true}).click();await page.getByRole('button',{name:/Draft preservation 22301/}).click();await expect(page.getByLabel('Panel quantity',{exact:true})).toHaveValue('60');

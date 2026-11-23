@@ -60,8 +60,8 @@ test("Reviewed UBL batch imports once, retains survey stage and exposes evidence
   ).toBeVisible();
   const download = page.waitForEvent("download");
   await page.getByRole("link", { name: "Survey intake · version 1" }).click();
-  expect((await download).suggestedFilename()).toContain(
-    "UBL - Ameen Wilayatabad, Multan 2496 - Report",
+  expect((await download).suggestedFilename()).toMatch(
+    / - Ameen Wilayatabad, Multan.* - 2496\.\w+$/,
   );
   await page
     .getByRole("button", { name: "Back to UBL workflow", exact: false })

@@ -42,7 +42,7 @@ test("a revision opens site name and location but keeps customer and site code c
   assert.match(control(html, 'name="siteCode"'), /value="000"/);
 });
 
-test("typing a site name keeps a revision's site code but still resets a new BOQ's code", () => {
+test("typing a site name keeps a revision's code and Atif's typed code, and clears only a known site's code", () => {
   const site = { name: "Original name", code: "000", location: "Original location" };
   const known = [{ id: 7, name: "Known site", code: "K7", location: "Known location" }];
   assert.deepEqual(siteAfterNameChange(site, "Known site", known, true), {
@@ -53,8 +53,20 @@ test("typing a site name keeps a revision's site code but still resets a new BOQ
     siteId: "7",
     site: { name: "Known site", code: "K7", location: "Known location" },
   });
-  assert.deepEqual(siteAfterNameChange(site, "Typed site", known, false), {
+  // The code came from a selected known site: a new name clears it.
+  assert.deepEqual(siteAfterNameChange(site, "Typed site", known, false, true), {
     siteId: "",
     site: { name: "Typed site", code: "", location: "Original location" },
   });
+  // Atif typed the code himself: changing the name keeps it (no code is ever filled in for him).
+  assert.deepEqual(siteAfterNameChange(site, "Typed site", known, false), {
+    siteId: "",
+    site: { name: "Typed site", code: "000", location: "Original location" },
+  });
+});
+
+test("a new site starts with an empty site code box: nothing is filled in from the site name", async () => {
+  const html = renderToStaticMarkup(<CustomerSiteFields masters={masters} initial={{ customerId: 3, siteName: "Johar Town" }} revision={false} />);
+  assert.match(control(html, 'name="siteCode"'), /value=""/);
+  assert.match(html, /Type the site or branch code/);
 });

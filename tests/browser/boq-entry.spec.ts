@@ -30,7 +30,7 @@ test('BOQ entry: provisional rates, unified customer search, automatic terminati
   await page.getByRole('option',{name:/Alfalah/}).click();
   await expect(page.locator('input[name="customerId"]')).toHaveValue('3');
   await expect(page.getByRole('button',{name:'Add Customer',exact:true})).toBeVisible();
-  await page.getByLabel('New site name',{exact:true}).fill('Entry regression 88001');
+  await page.getByLabel('New site name',{exact:true}).fill('Entry regression 88001');await page.getByLabel('Site code',{exact:true}).fill('88001');
   await openBoqSection(page,2);
   await page.getByLabel('Panel quantity',{exact:true}).fill('60');
   await page.getByLabel('Panel wattage (W)',{exact:true}).fill('645');
