@@ -73,6 +73,7 @@ export function accountsHttp(
   r.get('/sites/:id/evidence',async(req,res)=>res.json(await siteEvidence(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id))));
   r.get('/sites/:id/evidence/:fileId',async(req,res)=>{
    const file=await siteEvidenceFile(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id),parse(z.uuid(),req.params.fileId));
+   res.locals.downloadContext=file.downloadContext;
    res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);
   });
   r.post('/sites/:id/original-receipts',async(req,res)=>res.status(201).json(await confirmOriginalReceipt(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id),parse(originalReceiptSchema,req.body))));

@@ -8,6 +8,7 @@ import{downloadName,numberedDownloadName,cleanDocumentNumber,filenameFromDisposi
 import{exportContext,friendlyExportNames}from'../server/documents/download-http.js';
 import{registeredDownloadName}from'../server/documents/download-name.js';
 import{printDownloadDetails}from'../server/inventory/print-download-name.js';
+import{boardFileDownloadContext}from'../server/operations-board/file-download-name.js';
 
 // One file name structure for every download (user request, 23 Nov 2026): "<number> - <customer> - <site name> - <site code>".
 test('number first, customer always, site name and site code only when recorded',()=>{
@@ -93,4 +94,14 @@ test('download header: short code becomes the full customer name, numbered files
  const pdf=await request(app).get('/api/orders/x/peachtree.pdf').buffer(true).parse((res,cb)=>{const chunks:Buffer[]=[];res.on('data',c=>chunks.push(c));res.on('end',()=>cb(null,Buffer.concat(chunks)))}).expect(200);
  assert.equal(filenameFromDisposition(pdf.headers['content-disposition']),'IPO-163 PT Breakup - Vigilant Pharma - Johar Town - JOHART.pdf');
  assert.equal(createHash('sha256').update(pdf.body).digest('hex'),createHash('sha256').update(original).digest('hex'));
+});
+
+test('Operations-board site files (Accounts site documents too) use label, customer, site and the linked IPO site code',async()=>{
+ const ipoId=randomUUID(),file=randomUUID(),received=randomUUID();
+ const pool={query:async(sql:string,params:any[])=>{if(/FROM internal_purchase_orders WHERE id=\$1/.test(sql))return{rows:params[0]===ipoId?[{code:'JOHART'}]:[]};throw Error('Unexpected query: '+sql);}} as unknown as Pool;
+ const snapshot={name:'Johar Town',customer:'Vigilant Pharma',origin:{ipoId},documents:[{id:'d1',label:'Signed DO.pdf',evidence:[{id:file}]}],inventoryReceiving:{evidenceId:received,number:'DO-55'}};
+ assert.equal(downloadName({...await boardFileDownloadContext(pool,snapshot,file),alias:'SAB12CD34'}),'Signed DO SAB12CD34 - Vigilant Pharma - Johar Town - JOHART.pdf');
+ assert.equal(downloadName(await boardFileDownloadContext(pool,snapshot,received)),'DO-55 Signed DO - Vigilant Pharma - Johar Town - JOHART.pdf');
+ // No linked IPO and no customer: nothing is made up.
+ assert.equal(downloadName({...await boardFileDownloadContext(pool,{name:'Delivered invoice fixture',documents:[]},file),alias:'SAB12CD34'}),'Site document SAB12CD34 - Customer not recorded - Delivered invoice fixture.pdf');
 });
