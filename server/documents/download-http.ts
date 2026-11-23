@@ -1,11 +1,11 @@
 import type{Request,RequestHandler}from'express';
 import type{Pool}from'pg';
-import{registeredDownloadName}from'./download-name.js';
+import{customerFullName,registeredDownloadName}from'./download-name.js';
 import{filenameFromDisposition,type DownloadName}from'../../shared/download-name.js';
 const uuid=/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 export async function exportContext(pool:Pool,req:Pick<Request,'originalUrl'|'body'|'query'>,extension:string,originalName=''):Promise<DownloadName>{
  const path=req.originalUrl.split('?')[0],ids=[...new Set([...(path.match(uuid)??[]),...[req.body?.quotationId,req.body?.pricingId,req.body?.boqRevisionId,req.body?.previewPricing?.boqRevisionId].filter((v:any)=>typeof v==='string'&&/^[0-9a-f-]{36}$/i.test(v))])];
- const type=/peachtree|\/pt\.pdf/i.test(path)?'PT Breakup':/\/ipo\.pdf|\/pack\.pdf/i.test(path)?'IPO and PT':/\/orders\//.test(path)?'IPO':/quotations/.test(path)?'Quotation':/proposal/.test(path)?'Quotation':/costing/.test(path)?'Costing Review':/boqs/.test(path)?'BOQ':/operations\/store/.test(path)?'Delivery Order':/operations/.test(path)?'Final BOQ':/invoice/i.test(path)?'Invoice':/dispatch/.test(path)?String(req.query?.kind)==='forms'?'Survey Forms':'Survey Dispatch':extension==='xlsx'?'Survey Report':/source\.pdf/.test(path)?'Approved BOQ':/files|uploads|evidence/.test(path)?'Evidence':'Report';
+ const type=/peachtree|\/pt\.pdf/i.test(path)?'PT Breakup':/\/comparison\.pdf$/.test(path)?'Revision Comparison':/\/ipo\.pdf|\/pack\.pdf/i.test(path)?'IPO and PT':/\/orders\//.test(path)?'IPO':/quotations/.test(path)?'Quotation':/proposal/.test(path)?'Quotation':/costing/.test(path)?'Costing Review':/boqs/.test(path)?'BOQ':/operations\/store/.test(path)?'Delivery Order':/operations/.test(path)?'Final BOQ':/invoice/i.test(path)?'Invoice':/dispatch/.test(path)?String(req.query?.kind)==='forms'?'Survey Forms':'Survey Dispatch':extension==='xlsx'?'Survey Report':/source\.pdf/.test(path)?'Approved BOQ':/files|uploads|evidence/.test(path)?'Evidence':'Report';
  const base:DownloadName={documentType:type,identity:path+(req.query?.kind?`:${req.query.kind}`:''),extension};
  if(/DRAFT/i.test(originalName))base.documentType+=' DRAFT';
  else if(/PREVIEW/i.test(originalName))base.documentType+=' Preview';
@@ -53,12 +53,8 @@ export async function exportContext(pool:Pool,req:Pick<Request,'originalUrl'|'bo
     if(linked.length){base.site=linked.length===1?linked[0].name:`Combined ${linked.length} Sites`;base.siteCode=linked.length===1?linked[0].code:undefined;const c=(await pool.query('SELECT short_code FROM customers WHERE id=$1',[linked[0].customer_id])).rows[0];base.customer=c?.short_code;}
     else{const receipt=(await pool.query('SELECT customer_id,snapshot FROM customer_headsup_receipts WHERE evidence_id=$1 ORDER BY created_at LIMIT 1',[entity.id])).rows[0];if(receipt){base.customer=(await pool.query('SELECT short_code FROM customers WHERE id=$1',[receipt.customer_id])).rows[0]?.short_code;base.site='Heads-up Sites';base.documentType='Heads-up Evidence';}}
   }
-  // Saved quotation and final C&I quotation PDFs are named after their own number (Atif, 23 Nov 2026).
-  const quotation=(entity.__download_namespace==='quotation_versions'&&/\/quotation\.pdf$/.test(path))||(entity.__download_namespace==='cni_proposal_versions'&&/\/proposal\.pdf$/.test(path)&&base.documentType==='Quotation');
-  if(quotation&&entity.number){
-   base.format='numbered';
-   base.customerName=customer?.name??(typeof customer==='string'?customer:undefined)??(customerId!==undefined?(await pool.query('SELECT name FROM customers WHERE id=$1',[customerId])).rows[0]?.name:undefined);
-  }
+  // File names use the full customer name (user request, 23 Nov 2026).
+  base.customerName=base.customerName??(typeof customer?.name==='string'?customer.name:undefined)??(customerId!==undefined?(await pool.query('SELECT name FROM customers WHERE id=$1',[customerId])).rows[0]?.name:undefined);
  }
  // Unknown context is explicit; never invent a customer/site from a long internal ID.
  if(!entity&&!ids.length&&originalName)base.identity=path+':'+originalName;
@@ -73,7 +69,8 @@ export function friendlyExportNames(pool:Pool):RequestHandler{return(req,res,nex
   if(!req.authSession||res.statusCode>=400||!Buffer.isBuffer(body)||req.originalUrl.startsWith('/api/backups')||!(/pdf|spreadsheet|excel|csv|wordprocessing|zip|image\/(png|jpeg|webp)/i.test(mime)||/\.(pdf|xlsx?|csv|docx|zip|png|jpe?g|webp)$/i.test(name))){return send(body);}
   const extension=/pdf/i.test(mime)?'pdf':/spreadsheet/.test(mime)?'xlsx':/excel/.test(mime)?'xls':/csv/.test(mime)?'csv':/wordprocessing/.test(mime)?'docx':/zip/.test(mime)?'zip':/image\//.test(mime)?mime.split('/')[1].split(';')[0].replace('jpeg','jpg'):name.split('.').at(-1)||'pdf';
   void (async()=>{
-   const context=res.locals.downloadContext??await exportContext(pool,req,extension,name);
+   const context:DownloadName={...(res.locals.downloadContext??await exportContext(pool,req,extension,name))};
+   if(!context.customerName)context.customerName=await customerFullName(pool,context.customer);
    const filename=await registeredDownloadName(pool,{...context,extension});
    const ascii=filename.replace(/[^\x20-\x7e]/g,'_');
    res.setHeader('Content-Disposition',`${disposition.startsWith('inline')?'inline':'attachment'}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`);

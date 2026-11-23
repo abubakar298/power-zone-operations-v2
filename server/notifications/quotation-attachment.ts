@@ -23,7 +23,7 @@ export async function quotationApprovalAttachments(c:PoolClient,row:{id:string;e
  const s=document.snapshot;
  const pdf=isCni?buildCniPdf(s,document.number,true):buildQuotationPdf(s,document.number);
  if(pdf.subarray(0,5).toString()!=='%PDF-'||pdf.length>25*1024*1024)throw Error('Approval PDF cannot be attached');
- const filename=await registeredDownloadName(c,{customer:s.customer?.shortCode??s.customer?.short_code??s.customer?.name,site:s.siteName,siteCode:s.siteCode,documentType:isCni?'Quotation DRAFT':'Quotation',identity:`${isCni?'cni_proposal_versions':'quotation_versions'}:${document.id}`,reference:document.number,revision:document.version,extension:'pdf'});
+ const filename=await registeredDownloadName(c,{customer:s.customer?.shortCode??s.customer?.short_code??s.customer?.name,customerName:s.customer?.name,site:s.siteName,siteCode:s.siteCode,documentType:isCni?'Quotation DRAFT':'Quotation',identity:`${isCni?'cni_proposal_versions':'quotation_versions'}:${document.id}`,reference:document.number,revision:document.version,extension:'pdf'});
  await c.query("INSERT INTO notification_email_attachments(notification_id,source_key,filename,mime,sha256,content) VALUES($1,$2,$3,'application/pdf',$4,$5)",[row.id,row.event_source_key,filename,createHash('sha256').update(pdf).digest('hex'),pdf]);
  return [{filename,content:pdf.toString('base64')}];
 }

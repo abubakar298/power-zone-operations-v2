@@ -234,7 +234,7 @@ export function ordersHttp(
     const { row: q, division } = await repo.peachtree(
       parse(z.uuid(), req.params.id),
     );
-    res.locals.downloadContext={customer:q.snapshot.customer.shortCode||q.snapshot.customer.name,site:q.snapshot.siteName,siteCode:q.snapshot.siteCode,documentType:'IPO and PT',identity:`internal_purchase_orders:${q.id}`,reference:q.number,extension:'pdf',format:'numbered',customerName:q.snapshot.customer.name};
+    res.locals.downloadContext={customer:q.snapshot.customer.shortCode||q.snapshot.customer.name,site:q.snapshot.siteName,siteCode:q.snapshot.siteCode,documentType:'IPO and PT',identity:`internal_purchase_orders:${q.id}`,reference:q.number,extension:'pdf',customerName:q.snapshot.customer.name};
     res
       .type("application/pdf")
       .set(

@@ -2,14 +2,16 @@ import {recentFirst} from '../../shared/recent-records.js';
 import {ListPagination,paginateRows,useListPage} from '../ui/ListPagination.js';
 import { useEffect, useState } from "react";
 import {Button} from "../ui/Button.js";
-import { recommendSiteCode } from "../../server/boq/schema.js";
 
-/** On a new BOQ a typed name selects a known site or clears the code to be suggested again; a revision keeps its linked code. */
+/** On a new BOQ a typed name selects a known site; otherwise the code Atif typed stays, and a code taken from a
+ * previously selected known site is cleared. A revision keeps its linked code. The app never fills in a site code
+ * itself (user decision, 23 Nov 2026): the box starts empty and Atif types it. */
 export function siteAfterNameChange(
   site: { name: string; code: string; location: string },
   name: string,
   sites: any[],
   keepCode: boolean,
+  codeFromKnownSite = false,
 ) {
   if (keepCode) return { siteId: "", site: { ...site, name } };
   const existing = sites.find((s: any) => s.name === name);
@@ -17,7 +19,7 @@ export function siteAfterNameChange(
     siteId: existing ? String(existing.id) : "",
     site: existing
       ? { name: existing.name, code: existing.code, location: existing.location ?? "" }
-      : { ...site, name, code: "" },
+      : { ...site, name, code: codeFromKnownSite ? "" : site.code },
   };
 }
 
@@ -120,13 +122,9 @@ export function CustomerSiteFields({
           maxLength={200}
           list={revision ? undefined : "boq-site-options"}
           onChange={(e) => {
-            const next = siteAfterNameChange(site, e.target.value, sites, revision);
+            const next = siteAfterNameChange(site, e.target.value, sites, revision, !!siteId);
             setSiteId(next.siteId);
             setSite(next.site);
-          }}
-          onBlur={() => {
-            if (!site.code)
-              setSite({ ...site, code: recommendSiteCode(site.name) });
           }}
         />
       </label>
@@ -144,8 +142,7 @@ export function CustomerSiteFields({
           onChange={(e) => setSite({ ...site, code: e.target.value })}
         />
         <small>
-          Suggested from the site name; you can edit it. Leading zeros are
-          preserved.
+          Type the site or branch code. Leading zeros are preserved.
         </small>
       </label>
       <label>

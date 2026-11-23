@@ -20,7 +20,6 @@ import { BessSelector } from "../components/BessSelector.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, type Session } from "../api.js";
 import { confirmTransition } from "../confirm.js";
-import { recommendSiteCode } from "../../server/boq/schema.js";
 const quantities: Record<string, string> = {
   panelQty: "Panel quantity",
   panelWattage: "Panel wattage (W)",
@@ -552,11 +551,6 @@ export function LegacyDesign({ session }: { session: Session }) {
                     required
                     maxLength={200}
                     defaultValue={initial.siteName ?? ""}
-                    onBlur={(e) => {
-                      const code = form.current?.elements.namedItem("siteCode");
-                      if (code instanceof HTMLInputElement && !code.value)
-                        code.value = recommendSiteCode(e.target.value);
-                    }}
                   />
                 </label>
                 <label>
