@@ -7,6 +7,7 @@ import {z} from 'zod';
 import {HttpError} from '../http/errors.js';
 import {transaction} from '../db/transaction.js';
 import {MaterialDraftRepository,materialDraftInputSchema} from './material-drafts.js';
+import {isSolarStructureItem,solarStructureQuantity} from '../../shared/non-stock-do-items.js';
 
 const shape=materialDraftInputSchema.shape;
 export const siteMaterialPlanInputSchema=z.object({
@@ -55,15 +56,18 @@ export class SiteMaterialPlanRepository{
   * DO's own transaction, as a new preparation version. Each row moves by exactly the change
   * made on the DO, so quantity still to be issued is unchanged; descriptions and delivery
   * details follow the DO. DOs not issued from a site preparation are left alone. */
- async followDoEdit(actor:string,c:PoolClient,dispatch:{number:string;draftId:string|null;combinedPlanId?:string;revision:number;reason:string;requestKey:string},before:{key:string;quantity:string}[],after:{key:string;out:string;description:string}[],transport:{issuedTo:string;vehicle:string;driver:string;driverIdentity:string}){
+ async followDoEdit(actor:string,c:PoolClient,dispatch:{number:string;draftId:string|null;combinedPlanId?:string;revision:number;reason:string;requestKey:string},before:{key:string;quantity:string}[],after:{key:string;out:string;description:string;itemId?:string;unit?:string;sites?:string[]}[],transport:{issuedTo:string;vehicle:string;driver:string;driverIdentity:string}){
   const planId=dispatch.combinedPlanId??(dispatch.draftId?(await c.query('SELECT plan_id FROM inventory_site_material_plan_versions WHERE fixed_draft_id=$1 OR variable_draft_id=$1 ORDER BY created_at DESC,version DESC LIMIT 1',[dispatch.draftId])).rows[0]?.plan_id:undefined);
   if(!planId)return null;
   await c.query('SELECT id FROM inventory_site_material_plans WHERE id=$1 FOR UPDATE',[planId]);
   const existing=await this.read(actor,planId,c),change=new Map<string,Decimal>(),descriptions=new Map(after.map(l=>[l.key,l.description]));
   for(const l of before)change.set(l.key,(change.get(l.key)??new Decimal(0)).minus(l.quantity));
   for(const l of after)change.set(l.key,(change.get(l.key)??new Decimal(0)).plus(l.out));
-  const follow=(lines:any[])=>lines.map(r=>{const delta=change.get(r.key);if(delta&&!delta.isZero()){const out=Decimal.max(0,new Decimal(r.out||0).plus(delta));r={...r,out:out.isZero()?'':out.toString()};}return descriptions.has(r.key)?{...r,description:descriptions.get(r.key)}:r;});
-  const fixedLines=follow(existing.fixed.snapshot.lines),variableLines=follow(existing.variable?.snapshot.lines??[]);
+  const follow=(lines:any[])=>lines.map(r=>{const delta=change.get(r.key);if(delta&&!delta.isZero()){const out=Decimal.max(0,new Decimal(r.out||0).plus(delta));r={...r,out:out.isZero()?'':isSolarStructureItem(r.itemId)?solarStructureQuantity:out.toString()};}return descriptions.has(r.key)?{...r,description:descriptions.get(r.key)}:r;});
+  // A solar structure added in "Edit this DO" joins the site preparation, so the two stay the same (shared/non-stock-do-items.ts).
+  const known=new Set([...existing.fixed.snapshot.lines,...(existing.variable?.snapshot.lines??[])].map((r:any)=>r.key));
+  const addedStructures=after.filter(l=>isSolarStructureItem(l.itemId)&&!known.has(l.key)).map(l=>({key:l.key,itemId:l.itemId!,description:l.description,unit:l.unit!,out:l.out,sites:l.sites!,fixedGroup:'panels' as const}));
+  const fixedLines=[...follow(existing.fixed.snapshot.lines),...addedStructures],variableLines=follow(existing.variable?.snapshot.lines??[]);
   const site=existing.fixed.snapshot.sites[0],source={sourceKind:site.sourceKind,basisId:site.basisId,basisVersion:site.basisVersion,siteId:site.siteId};
   const movedTransport={issuedTo:transport.issuedTo.slice(0,200),vehicle:transport.vehicle.slice(0,100),driver:transport.driver.slice(0,200),driverIdentity:transport.driverIdentity.slice(0,100)};
   const common={warehouse:existing.fixed.snapshot.warehouse,parent:false,sites:[source],transport:movedTransport,revisionReason:`DO ${dispatch.number} revision ${dispatch.revision}: ${dispatch.reason}`.slice(0,2000)};
