@@ -53,6 +53,12 @@ export async function exportContext(pool:Pool,req:Pick<Request,'originalUrl'|'bo
     if(linked.length){base.site=linked.length===1?linked[0].name:`Combined ${linked.length} Sites`;base.siteCode=linked.length===1?linked[0].code:undefined;const c=(await pool.query('SELECT short_code FROM customers WHERE id=$1',[linked[0].customer_id])).rows[0];base.customer=c?.short_code;}
     else{const receipt=(await pool.query('SELECT customer_id,snapshot FROM customer_headsup_receipts WHERE evidence_id=$1 ORDER BY created_at LIMIT 1',[entity.id])).rows[0];if(receipt){base.customer=(await pool.query('SELECT short_code FROM customers WHERE id=$1',[receipt.customer_id])).rows[0]?.short_code;base.site='Heads-up Sites';base.documentType='Heads-up Evidence';}}
   }
+  // Saved quotation and final C&I quotation PDFs are named after their own number (Atif, 23 Nov 2026).
+  const quotation=(entity.__download_namespace==='quotation_versions'&&/\/quotation\.pdf$/.test(path))||(entity.__download_namespace==='cni_proposal_versions'&&/\/proposal\.pdf$/.test(path)&&base.documentType==='Quotation');
+  if(quotation&&entity.number){
+   base.format='numbered';
+   base.customerName=customer?.name??(typeof customer==='string'?customer:undefined)??(customerId!==undefined?(await pool.query('SELECT name FROM customers WHERE id=$1',[customerId])).rows[0]?.name:undefined);
+  }
  }
  // Unknown context is explicit; never invent a customer/site from a long internal ID.
  if(!entity&&!ids.length&&originalName)base.identity=path+':'+originalName;

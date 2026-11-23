@@ -22,7 +22,7 @@ function DownloadIpo({ record, ipoId = record.data.ipoId }: { record: any; ipoId
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = filenameFromDisposition(response.headers.get('Content-Disposition'))??downloadName({customer:record.customer,site:record.site,siteCode:record.siteCode,documentType:'IPO and PT',identity:record.id,reference:record.ipoNumber,extension:'pdf'});
+      link.download = filenameFromDisposition(response.headers.get('Content-Disposition'))??downloadName({customer:record.customer,site:record.site,siteCode:record.siteCode,documentType:'IPO and PT',identity:record.id,reference:record.ipoNumber,extension:'pdf',format:'numbered'});
       document.body.append(link);
       link.click();
       link.remove();

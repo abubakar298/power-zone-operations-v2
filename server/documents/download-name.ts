@@ -2,6 +2,8 @@ import{createHash}from'node:crypto';
 import type{Pool,PoolClient}from'pg';
 import{downloadName,type DownloadName}from'../../shared/download-name.js';
 export async function registeredDownloadName(pool:Pool|PoolClient,input:DownloadName){
+ // Quotation/IPO numbers are unique saved numbers, so these files need no alias.
+ if(input.format==='numbered'&&input.reference?.trim())return downloadName(input);
  let reference=(await pool.query('SELECT reference FROM download_reference_aliases WHERE document_key=$1',[input.identity])).rows[0]?.reference;
  if(!reference){
   for(let attempt=0;attempt<20;attempt++){

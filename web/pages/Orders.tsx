@@ -646,7 +646,7 @@ export function Orders({
                   const u = URL.createObjectURL(await r.blob());
                   const a = window.document.createElement("a");
                   a.href = u;
-                  a.download = filenameFromDisposition(r.headers.get('Content-Disposition'))??downloadName({customer:customerName,documentType:'IPO and PT',identity:input.quotationId??'draft',reference:saved?.number,extension:'pdf'});
+                  a.download = filenameFromDisposition(r.headers.get('Content-Disposition'))??downloadName({customer:customerName,documentType:'IPO and PT',identity:input.quotationId??'draft',reference:saved?.number,extension:'pdf',format:'numbered'});
                   a.click();
                   setTimeout(() => URL.revokeObjectURL(u), 1000);
                 })
