@@ -78,9 +78,11 @@ test('IPO revision, one approval: the submitted revised quotation and the revise
   s=await repo.status(users.owner,recordId);
   assert.equal(s.current.id,issued.id);assert.equal(s.revisions[0].status,'Approved');assert.equal(s.canStart,true);
   // The Management approver creates the revised IPO, yet the site's Coordinator must be able to open its PDF
-  // (IPOs Shared → Preview / Download); another Coordinator still cannot.
+  // (IPOs Shared → Preview / Download). Every Coordinator may open approved revised IPOs (user decision);
+  // the original IPO keeps its existing rule (its creator only).
   await requireOwnedResource(db.pool,users.owner,'ipo',issued.id);
-  await assert.rejects(requireOwnedResource(db.pool,users.other,'ipo',issued.id),/not found|unavailable/i);
+  await requireOwnedResource(db.pool,users.other,'ipo',issued.id);
+  await assert.rejects(requireOwnedResource(db.pool,users.other,'ipo',original.id),/not found|unavailable/i);
   assert.deepEqual((await repo.pending(users.manager)).revisions,[]);
 
   // 5) Return: the quotation goes back to Atif as "Changes requested"; nothing is issued; a new revision can start.

@@ -69,8 +69,8 @@ export function workflowBoundary(pool: Pool): RequestHandler {
 
 /** The coordinator owns a document through its originating BOQ/draft, even
  * when management creates the approved revision. UUIDs are never authority.
- * A revised IPO (-R1 …) is created by the Management approver, so the site's
- * coordinator owns it through its IPO revision's project record. */
+ * A revised IPO (-R1 …) is created by the Management approver; every
+ * Coordinator may open approved revised IPOs (user decision, 23 Nov 2026). */
 export const resourceOwnership = {
   cni: "SELECT 1 FROM cni_proposals WHERE id=$1 AND created_by=$2",
   boq: "SELECT 1 FROM boq_revisions r JOIN boqs b ON b.id=r.boq_id JOIN survey_drafts d ON d.id=b.draft_id WHERE r.id=$1 AND (b.created_by=$2 OR d.owner_id=$2 OR r.created_by=$2)",
@@ -78,7 +78,7 @@ export const resourceOwnership = {
     "SELECT 1 FROM commercial_pricing_versions p JOIN boq_revisions r ON r.id=p.boq_revision_id JOIN boqs b ON b.id=r.boq_id JOIN survey_drafts d ON d.id=b.draft_id WHERE p.id=$1 AND (p.created_by=$2 OR b.created_by=$2 OR d.owner_id=$2)",
   quotation:
     "SELECT 1 FROM quotation_versions q JOIN boq_revisions r ON r.id=q.boq_revision_id JOIN boqs b ON b.id=r.boq_id JOIN survey_drafts d ON d.id=b.draft_id WHERE q.id=$1 AND (q.created_by=$2 OR b.created_by=$2 OR d.owner_id=$2)",
-  ipo: "SELECT 1 FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE i.id=$1 AND (i.created_by=$2 OR s.created_by=$2 OR (i.snapshot#>>'{historicalImport,deliveredBoardSiteId}' IS NOT NULL AND EXISTS(SELECT 1 FROM project_workflow_issuances w JOIN project_workflow_records j ON j.id=w.record_id WHERE w.ipo_id=i.id AND j.coordinator_id=$2)) OR EXISTS(SELECT 1 FROM ipo_revision_decisions d JOIN ipo_revision_proposals p ON p.id=d.proposal_id JOIN ipo_revision_requests q ON q.id=p.request_id JOIN project_workflow_records j ON j.id=q.record_id WHERE d.revised_ipo_id=i.id AND j.coordinator_id=$2))",
+  ipo: "SELECT 1 FROM internal_purchase_orders i LEFT JOIN ipo_submissions s ON s.id=i.submission_id WHERE i.id=$1 AND (i.created_by=$2 OR s.created_by=$2 OR (i.snapshot#>>'{historicalImport,deliveredBoardSiteId}' IS NOT NULL AND EXISTS(SELECT 1 FROM project_workflow_issuances w JOIN project_workflow_records j ON j.id=w.record_id WHERE w.ipo_id=i.id AND j.coordinator_id=$2)) OR EXISTS(SELECT 1 FROM ipo_revision_decisions d WHERE d.revised_ipo_id=i.id))",
   revisionRequest:
     "SELECT 1 FROM quotation_revision_requests req JOIN quotation_versions quote ON quote.id=req.source_quotation_id JOIN boq_revisions rev ON rev.id=quote.boq_revision_id JOIN boqs boq ON boq.id=rev.boq_id JOIN survey_drafts draft ON draft.id=boq.draft_id WHERE req.id=$1 AND (req.created_by=$2 OR quote.created_by=$2 OR boq.created_by=$2 OR draft.owner_id=$2)",
   draft: `SELECT 1 FROM survey_drafts d WHERE id=$1 AND ${editableDraftCondition('d','$2')}`,
