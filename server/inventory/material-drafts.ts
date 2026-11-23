@@ -26,6 +26,7 @@ import {approvedMaterialIdentities} from './source-links.js';
 import {checkMaterialSourceLink} from './source-link-policy.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {approvedEarthingBasis} from '../../shared/material-preparation.js';
+import {isSolarStructureItem,solarStructureItemId,solarStructureKw,solarStructureQuantity,solarStructureRule,solarStructureUnit} from '../../shared/non-stock-do-items.js';
 
 const quantity=z.union([z.literal(''),z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/)]);
 export const materialDraftInputSchema=z.object({
@@ -323,7 +324,10 @@ export class MaterialDraftRepository{
     const policy=materialDocumentPolicy(row);
     if(row.section&&policy.variableDispatch&&(policy.group==='internal-variable'?'internal':'customer')!==row.section)throw new HttpError(422,'Keep the item in its matching variable-material module.');
     if(policy.group==='non-stock')throw new HttpError(422,'Genset synchronisation is not a stock issuance item.');
-    if(policy.approvedQuantityLocked){
+    if(isSolarStructureItem(row.itemId)){
+     // Owner instruction 23 Nov 2026: vendor-bought, not warehouse stock (shared/non-stock-do-items.ts).
+     if(input.kind!=='fixed'||row.itemId!==solarStructureItemId||row.unit!==solarStructureUnit||row.out!==''&&(row.out!==solarStructureQuantity||solarStructureKw(row.description)===null))throw new HttpError(422,solarStructureRule);
+    }else if(policy.approvedQuantityLocked){
      const approved=selected.flatMap(s=>s.items as any[]).filter(approvedEarthingBasis);
      if(input.kind!=='fixed'||selected.length!==1||approved.length!==1||(row.out!==''&&!new Decimal(row.out).equals(approved[0].qty)))throw new HttpError(422,'CH-Earthing must retain its approved BOQ quantity.');
     }else{

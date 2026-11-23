@@ -21,6 +21,16 @@ import {warehouseNumber,requireWarehouseAccess,lockWarehouseAuthority} from './w
 import {warehouseDispatchPosition,warehousePosition,warehousePositions} from './warehouse-ledger.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {approvedEarthingBasis} from '../../shared/material-preparation.js';
+import {isSolarStructureItem} from '../../shared/non-stock-do-items.js';
+
+/** Quantity of non-stock lines (CH-Solar Structure, shared/non-stock-do-items.ts) already on
+ * active DOs of these preparations. Such lines live only in the DO snapshot, never in stock lines. */
+export async function nonStockDispatched(c:Pool|PoolClient,draftIds:string[]){
+ const sent=new Map<string,Decimal>();
+ for(const row of (await c.query("SELECT snapshot->'lines' AS lines FROM inventory_material_dispatches_active WHERE draft_id=ANY($1::uuid[])",[draftIds])).rows)
+  for(const line of (row.lines??[]) as {key:string;itemId:string;out:string}[])if(isSolarStructureItem(line.itemId)&&line.out)sent.set(line.key,(sent.get(line.key)??new Decimal(0)).plus(line.out));
+ return sent;
+}
 
 const quantity=z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/,{abort:true}).refine(v=>new Decimal(v).gt(0),'Enter a positive quantity.').transform(v=>new Decimal(v).toString());
 export const materialIssueInputSchema=z.object({draftId:z.uuid(),version:z.number().int().positive(),requestKey:z.uuid(),sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),authorityVersion:z.number().int().positive(),reason:z.string().trim().min(3).max(2000),transport:materialDraftInputSchema.shape.transport,
@@ -197,10 +207,11 @@ export class MaterialStockRepository{
    });
    if(currentSources.some(source=>source.installationOnly)&&prepared.some(p=>!materialDocumentPolicy(p.row).variableDispatch))throw new HttpError(422,'Installation-only batch sites do not require another fixed-equipment delivery. Issue only the required variable materials.');
    const already=(await c.query(`SELECT l.line_key,sum(l.quantity)::text issued FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE d.draft_id=$1 GROUP BY l.line_key`,[input.draftId])).rows;
-   for(const p of prepared)if(new Decimal(p.request.quantity).plus(already.find(r=>r.line_key===p.row.key)?.issued??0).gt(p.row.out))throw new HttpError(409,'This prepared quantity has already been dispatched, including partial trips. Refresh the remaining quantity.');
+   const nonStock=await nonStockDispatched(c,[input.draftId]),stockPrepared=prepared.filter(p=>!isSolarStructureItem(p.row.itemId));
+   for(const p of prepared)if(new Decimal(p.request.quantity).plus(isSolarStructureItem(p.row.itemId)?nonStock.get(p.row.key)??0:already.find(r=>r.line_key===p.row.key)?.issued??0).gt(p.row.out))throw new HttpError(409,'This prepared quantity has already been dispatched, including partial trips. Refresh the remaining quantity.');
    const positions=new Map<string,NonNullable<Awaited<ReturnType<typeof warehousePosition>>>>();
-   for(const key of [...new Set(prepared.map(p=>p.ledgerKey))].sort()){
-    const matching=prepared.filter(p=>p.ledgerKey===key),identity=matching[0].row;
+   for(const key of [...new Set(stockPrepared.map(p=>p.ledgerKey))].sort()){
+    const matching=stockPrepared.filter(p=>p.ledgerKey===key),identity=matching[0].row;
     const position=await warehouseDispatchPosition(c,input.sourceSha256,key,{itemId:identity.itemId,unit:identity.unit,description:identity.description,warehouse:s.warehouse},actor);
     if(matching.some(p=>p.request.ledgerRevision!==position.ledgerRevision))throw new HttpError(409,'This warehouse balance changed. Refresh before issuing material.');
     const total=matching.reduce((n,p)=>n.plus(p.request.quantity),new Decimal(0));
@@ -210,10 +221,11 @@ export class MaterialStockRepository{
    const id=randomUUID(),reserved=s.parent&&!(await c.query('SELECT 1 FROM inventory_material_dispatches_active WHERE draft_id=$1 LIMIT 1',[input.draftId])).rowCount?(await c.query('SELECT number FROM inventory_parent_preparation_references WHERE draft_id=$1',[input.draftId])).rows[0]?.number:undefined,number=reserved??await warehouseNumber(c,s.parent?'PDO':'DO',id);
    const lines=prepared.map(p=>({...p.row,out:p.request.quantity})),snapshot={...s,lines,transport:input.transport,reason:input.reason,status:'issued',requiresSignedGate:true,allowNegativeBalance:temporaryNegativeDoBalanceAllowed(),sourceSha256:input.sourceSha256,authorityVersion:input.authorityVersion,stockPosting:false};
    await c.query('INSERT INTO inventory_material_dispatches(id,number,draft_id,draft_version,source_sha256,warehouse,snapshot,request_key,request_fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[id,number,input.draftId,input.version,input.sourceSha256,s.warehouse,snapshot,input.requestKey,fingerprint(input),actor]);
-   for(const p of prepared){
+   // Non-stock lines print on the DO (snapshot) but never post warehouse OUT.
+   for(const p of stockPrepared){
     await c.query('INSERT INTO inventory_material_dispatch_lines(dispatch_id,line_key,source_sha256,ledger_key,item_id,unit,description,quantity) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,p.row.key,input.sourceSha256,p.ledgerKey,p.row.itemId,p.row.unit,p.row.description,p.request.quantity]);
    }
-   await deferDispatch(c,actor,'dispatch',id,s.warehouse,input.sourceSha256,input.authorityVersion,prepared.map(p=>({ledgerKey:p.ledgerKey,quantity:p.request.quantity,kind:'dispatch-out',draftId:input.draftId,dispatchId:id,lineKey:p.row.key})));
+   await deferDispatch(c,actor,'dispatch',id,s.warehouse,input.sourceSha256,input.authorityVersion,stockPrepared.map(p=>({ledgerKey:p.ledgerKey,quantity:p.request.quantity,kind:'dispatch-out',draftId:input.draftId,dispatchId:id,lineKey:p.row.key})));
 
    return {id,number,stockPosted:false,awaitingSignedGate:true};
   });
