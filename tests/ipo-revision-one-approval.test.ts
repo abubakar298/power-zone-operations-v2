@@ -8,6 +8,7 @@ import {ProjectWorkflowRepository} from '../server/project-workflow/repository.j
 import {IpoRevisionRepository,revisedIpoNumber} from '../server/project-workflow/ipo-revisions.js';
 import {OrdersRepository} from '../server/orders/repository.js';
 import {buildIpoPdf} from '../server/orders/document-renderers.js';
+import {requireOwnedResource} from '../server/http/permissions.js';
 
 type Db=Awaited<ReturnType<typeof testDatabase>>;
 /** Stand in for the quotation screens: the Coordinator saves the revised quotation and submits it. */
@@ -24,7 +25,7 @@ const status=async(db:Db,quotationId:string)=>(await db.pool.query('SELECT kind 
 test('IPO revision, one approval: the submitted revised quotation and the revised IPO are approved together on the IPO revisions card',async()=>{
  const db=await testDatabase();try{
   const users:Record<string,string>={};
-  for(const [key,role] of [['owner','Coordinator'],['manager','Management']]){users[key]=randomUUID();await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,'isolated-test',$4)",[users[key],key+'@example.test',key==='owner'?'Atif':'Abu Bakar',role]);}
+  for(const [key,role] of [['owner','Coordinator'],['manager','Management'],['other','Coordinator']]){users[key]=randomUUID();await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,'isolated-test',$4)",[users[key],key+'@example.test',key==='owner'?'Atif':'Abu Bakar',role]);}
   const samples=await createDashboardSamples(db.pool,users.owner,users.manager);
   const source=samples.find((r:any)=>r.quotationId&&r.stage===7)!;
   const q=(await db.pool.query('SELECT q.snapshot,b.customer_id FROM quotation_versions q JOIN boq_revisions br ON br.id=q.boq_revision_id JOIN boqs b ON b.id=br.boq_id WHERE q.id=$1',[source.quotationId])).rows[0];
@@ -76,6 +77,12 @@ test('IPO revision, one approval: the submitted revised quotation and the revise
   assert.equal(JSON.stringify((await db.pool.query('SELECT * FROM internal_purchase_orders WHERE id=$1',[original.id])).rows[0]),originalJson,'the original IPO is unchanged');
   s=await repo.status(users.owner,recordId);
   assert.equal(s.current.id,issued.id);assert.equal(s.revisions[0].status,'Approved');assert.equal(s.canStart,true);
+  // The Management approver creates the revised IPO, yet the site's Coordinator must be able to open its PDF
+  // (IPOs Shared → Preview / Download). Every Coordinator may open approved revised IPOs (user decision);
+  // the original IPO keeps its existing rule (its creator only).
+  await requireOwnedResource(db.pool,users.owner,'ipo',issued.id);
+  await requireOwnedResource(db.pool,users.other,'ipo',issued.id);
+  await assert.rejects(requireOwnedResource(db.pool,users.other,'ipo',original.id),/not found|unavailable/i);
   assert.deepEqual((await repo.pending(users.manager)).revisions,[]);
 
   // 5) Return: the quotation goes back to Atif as "Changes requested"; nothing is issued; a new revision can start.
