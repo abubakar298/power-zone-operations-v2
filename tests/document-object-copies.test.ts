@@ -30,7 +30,11 @@ test("stored files are copied to R2, checked, recorded once, and the database co
     await db.pool.query("INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,'r2@example.test','R2 Test','Admin','x')", [user]);
     const photo = Buffer.from("site survey photo"), po = Buffer.from("%PDF customer po"), old = Buffer.from("old survey pdf");
     const photoId = randomUUID(), poId = randomUUID(), oldId = randomUUID();
-    await db.pool.query("INSERT INTO survey_uploads(id,owner_id,filename,mime,size,sha256,content,created_at) VALUES($1,$2,'Photo.JPG','image/jpeg',$3,$4,$5,'2026-11-16T09:00:00Z')", [photoId, user, photo.length, sha(photo), photo]);
+    // A recent upload: one day old, so it always falls inside the copier's 7-day window
+    // (a fixed date here made the test fail from 23 Nov 2026). Its R2 folder follows that date.
+    const photoDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const photoKey = `survey-uploads/${photoDate.getUTCFullYear()}/${String(photoDate.getUTCMonth() + 1).padStart(2, "0")}/${photoId}.jpg`;
+    await db.pool.query("INSERT INTO survey_uploads(id,owner_id,filename,mime,size,sha256,content,created_at) VALUES($1,$2,'Photo.JPG','image/jpeg',$3,$4,$5,$6)", [photoId, user, photo.length, sha(photo), photo, photoDate.toISOString()]);
     await db.pool.query("INSERT INTO survey_uploads(id,owner_id,filename,mime,size,sha256,content,created_at) VALUES($1,$2,'Old.pdf','application/pdf',$3,$4,$5,now()-interval '30 days')", [oldId, user, old.length, sha(old), old]);
     await db.pool.query("INSERT INTO customer_po_documents(id,owner_id,filename,mime,sha256,content) VALUES($1,$2,'PO.pdf','application/pdf',$3,$4)", [poId, user, sha(po), po]);
     await db.pool.query("INSERT INTO ubl_workflow_sources(sha256,filename,content,records) VALUES($1,'Sites.xlsx',$2,'[]')", [sha(Buffer.from("xlsx")), Buffer.from("xlsx")]);
@@ -45,7 +49,7 @@ test("stored files are copied to R2, checked, recorded once, and the database co
     // Rows without an upload date (UBL source workbooks) wait for the backfill script.
     assert.ok(![...store.objects.keys()].some((k) => k.startsWith("ubl/source-documents/")));
     assert.deepEqual(recent.failed, []);
-    assert.equal(store.objects.get(`survey-uploads/2026/11/${photoId}.jpg`)?.type, "image/jpeg");
+    assert.equal(store.objects.get(photoKey)?.type, "image/jpeg");
     assert.ok([...store.objects.keys()].some((k) => k.startsWith("customer-po/") && k.endsWith(`/${poId}.pdf`)));
     assert.ok([...store.objects.keys()].some((k) => k.startsWith("ubl/workflow-sources/") && k.endsWith(".xlsx")));
     assert.ok(![...store.objects.keys()].some((k) => k.includes(oldId)));
@@ -62,7 +66,7 @@ test("stored files are copied to R2, checked, recorded once, and the database co
     const photoCopy = copies.find((c) => c.source_id === photoId);
     assert.deepEqual({ ...photoCopy, size: Number(photoCopy.size) }, {
       source_table: "survey_uploads", source_column: "content", source_id: photoId,
-      object_key: `survey-uploads/2026/11/${photoId}.jpg`, sha256: sha(photo), size: photo.length,
+      object_key: photoKey, sha256: sha(photo), size: photo.length,
     });
     assert.equal((await pendingSummary(db.pool)).reduce((n, r) => n + r.files, 0), 0);
 
