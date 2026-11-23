@@ -391,7 +391,7 @@ test("costing PDF exports require authentication, owned drafts and an unchanged 
     .set("Cookie", cookie)
     .expect(200);
   assert.equal(saved.body.subarray(0, 5).toString(), "%PDF-");
-  assert.match(saved.headers['content-disposition'],/Costing Review .+ - PDF sample - PDF001\.pdf/);
+  assert.match(saved.headers['content-disposition'],/filename="BOQ-\d+(-R\d+)? Costing Review - [^"]+\.pdf"/);
 });
 
 test("general quotations derive exact cable allowances server-side without changing surveyed BOQs", () => {

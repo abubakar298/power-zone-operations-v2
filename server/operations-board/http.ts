@@ -30,6 +30,7 @@ export function operationsBoardHttp(repo:OperationsBoardRepository,requireSessio
  r.post('/sites/:id/files',async(req,_res,next)=>{await repo.site(req.authSession!.user.id,siteId(req.params.id));next();},json({limit:'36mb'}),async(req,res)=>res.status(201).json(await repo.upload(req.authSession!.user.id,siteId(req.params.id),parse(fileSchema,req.body))));
  r.get('/sites/:id/files/:fileId',async(req,res)=>{
   const file=await repo.download(req.authSession!.user.id,siteId(req.params.id),parse(z.uuid(),req.params.fileId));
+  res.locals.downloadContext=file.downloadContext;
   res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);
  });
  r.post('/sites/:id/decisions',json({limit:'128kb'}),async(req,res)=>res.status(201).json(await repo.command(req.authSession!.user.id,siteId(req.params.id),parse(commandSchema,req.body))));

@@ -12,6 +12,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {attachHistoricalEvidence} from './historical-evidence.js';
 import {validateBatch,type BatchSnapshot} from './batches.js';
 import {activeSiteAlerts} from './delays.js';
+import type {DownloadName} from '../../shared/download-name.js';
 import {siteCancellationBlockers,cancelSite,requireNotCancelled} from './site-cancellation.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -144,7 +145,14 @@ export class OperationsBoardRepository{
   }
   const file=(await this.pool.query('SELECT filename,media_type,content FROM operations_board_files WHERE site_id=$1 AND id=$2',[id,fileId])).rows[0]??(site.snapshot.inventoryReceiving?.evidenceId===fileId?(await this.pool.query('SELECT original_name AS filename,media_type,content FROM inventory_material_evidence WHERE id=$1',[fileId])).rows[0]:undefined);
   if(!file)throw new HttpError(404,'Document file not found.');
-  await this.pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'operations.board.download:'+fileId]);return file;
+  await this.pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'operations.board.download:'+fileId]);
+  // Download name (user request, 23 Nov 2026): "<document> - <customer> - <site name> - <site code>"; the site code comes from the linked IPO.
+  const received=site.snapshot.inventoryReceiving?.evidenceId===fileId?site.snapshot.inventoryReceiving:undefined;
+  const documentLabel=(site.snapshot.documents??[]).find((d:any)=>(d.evidence??[]).some((f:any)=>f.id===fileId))?.label;
+  const ipoId=(site.snapshot.origin as {ipoId?:unknown}|undefined)?.ipoId;
+  const siteCode=typeof ipoId==='string'&&/^[0-9a-f-]{36}$/i.test(ipoId)?(await this.pool.query("SELECT snapshot->>'siteCode' AS code FROM internal_purchase_orders WHERE id=$1",[ipoId])).rows[0]?.code??undefined:undefined;
+  const downloadContext:DownloadName={documentType:received?'Signed DO':typeof documentLabel==='string'?documentLabel.replace(/\.(pdf|png|jpe?g|webp|heic|heif)$/i,''):'Site document',...(received?.number?{reference:String(received.number)}:{}),identity:'operations_board_files:'+fileId,customer:typeof site.snapshot.customer==='string'?site.snapshot.customer:undefined,site:site.snapshot.name,siteCode,extension:'pdf'};
+  return {...file,downloadContext};
  }
  async moveDocument(actor:string,id:string,input:z.infer<typeof movementSchema>){
   const v=movementSchema.parse(input);
