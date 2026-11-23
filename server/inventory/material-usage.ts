@@ -18,6 +18,7 @@ import {HttpError} from '../http/errors.js';
 import {MaterialDraftRepository} from './material-drafts.js';
 import {reconcileMaterialDispatch,materialSiteDocuments} from './material-dispatch.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
+import {isSolarStructureItem} from '../../shared/non-stock-do-items.js';
 
 const amount=z.union([z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/).transform(v=>new Decimal(v).toString()),z.null()]);
 export const materialUsageInputSchema=z.object({draftId:z.uuid(),siteId:z.uuid(),version:z.number().int().nonnegative(),requestKey:z.uuid(),date:z.iso.date(),state:z.enum(['reported','signed']),reason:z.string().trim().min(3).max(2000),workflowVersion:z.literal(2).optional(),customerEvidenceId:z.uuid().nullable(),internalEvidenceId:z.uuid().nullable(),lines:z.array(z.object({lineKey:z.uuid(),issued:amount,used:amount,returned:amount}).strict()).max(2000)}).strict();
@@ -85,7 +86,8 @@ export class MaterialUsageRepository{
   const references=(await client.query(`SELECT d.number FROM inventory_material_dispatches_active d WHERE ${materialDispatchDraftLink} ORDER BY d.created_at,d.id`,[draftId])).rows.map(r=>r.number as string);
   const receipts=(await client.query(`SELECT id,number,evidence_id,snapshot FROM inventory_material_receipts WHERE draft_id=$1 OR snapshot->>'originPreparationId'=$1::text ORDER BY created_at,id`,[draftId])).rows;
   const workLines=s.kind==='fixed'?s.lines.filter((r:any)=>r.itemId&&r.unit&&r.out!==''&&materialDocumentPolicy(r).approvedQuantityLocked):[];
-  const sourceLines=s.lines.filter((r:any)=>r.itemId&&r.unit&&!materialDocumentPolicy(r).approvedQuantityLocked);
+  // A non-stock solar structure is listed on the DO only; it has no warehouse issue to reconcile.
+  const sourceLines=s.lines.filter((r:any)=>r.itemId&&r.unit&&!materialDocumentPolicy(r).approvedQuantityLocked&&!isSolarStructureItem(r.itemId));
   const dispatch={id:draftId,reference:'Preparation '+draftId,warehouse:s.warehouse,kind:s.kind,parent:s.parent,sites:s.sites.map((r:any)=>({id:r.siteId,ipo:r.ipo??'',installation:r.installation===true,basisId:r.basisId,basisVersion:r.basisVersion})),lines:sourceLines.map((r:any)=>({...(r.documentPolicyVersion?{documentPolicyVersion:r.documentPolicyVersion}:{}),key:r.key,itemId:r.itemId,description:r.description||r.itemId,unit:r.unit,out:new Decimal(issued.find(v=>v.line_key===r.key)?.out??0).toString(),sites:r.sites})),usage:reports.flatMap(r=>r.snapshot.lines.filter((l:any)=>sourceLines.some((s:any)=>s.key===l.lineKey)).map((l:any)=>({siteId:r.site_id,lineKey:l.lineKey,issued:l.issued,used:l.used,returned:l.returned}))),extraSources:[],receipts:receipts.map(r=>({id:r.id,reference:r.number,dispatchId:draftId,evidenceId:r.evidence_id,status:'verified',lines:r.snapshot.lines.filter((l:any)=>sourceLines.some((v:any)=>v.key===l.lineKey)).reduce((rows:any[],l:any)=>{const old=rows.find(v=>v.lineKey===l.lineKey);if(old)old.quantity=new Decimal(old.quantity).plus(l.quantity).toString();else rows.push({lineKey:l.lineKey,quantity:l.quantity});return rows;},[])})).filter(r=>r.lines.length)};
   const hasOut=issued.some(r=>new Decimal(r.out).gt(0));
   const calculated=hasOut?reconcileMaterialDispatch(dispatch):null;

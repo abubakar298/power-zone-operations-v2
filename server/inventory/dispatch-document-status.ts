@@ -4,6 +4,7 @@ import {dispatchReconciliationEligibleSql} from './dispatch-reconciliation-eligi
 import type {Pool,PoolClient} from 'pg';
 import {HttpError} from '../http/errors.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
+import {isSolarStructureItem} from '../../shared/non-stock-do-items.js';
 import type {DispatchDocument,DispatchDocumentRow} from '../../shared/dispatch-document-status.js';
 type Db=Pool|PoolClient;
 type Dispatch={id:string;number:string;draft_id:string;warehouse:string;created_at:string;snapshot:any;retrospective?:boolean;customer_do_waived?:boolean};
@@ -49,7 +50,7 @@ export function dispatchDocumentRows(dispatches:Dispatch[],boards:Board[],copies
     if(!noUse)documents.push({label:'Variable Items Sign Off',...received});
    }
    const preparationIds=[d.draft_id,d.snapshot.combinedPlan?.fixedDraftId,d.snapshot.combinedPlan?.variableDraftId].filter(Boolean);
-   const usageReady=s.installation===false||lines.filter((l:any)=>l.sites?.includes(s.siteId)).every((l:any)=>usage.some(u=>preparationIds.includes(u.draft_id)&&u.site_id===s.siteId&&u.snapshot.workflowVersion===2&&u.snapshot.state==='signed'&&(d.retrospective||instant(u.created_at)>=instant(d.created_at))&&u.snapshot.lines?.some((v:any)=>v.lineKey===l.key&&v.used!==null)));
+   const usageReady=s.installation===false||lines.filter((l:any)=>l.sites?.includes(s.siteId)&&!isSolarStructureItem(l.itemId)).every((l:any)=>usage.some(u=>preparationIds.includes(u.draft_id)&&u.site_id===s.siteId&&u.snapshot.workflowVersion===2&&u.snapshot.state==='signed'&&(d.retrospective||instant(u.created_at)>=instant(d.created_at))&&u.snapshot.lines?.some((v:any)=>v.lineKey===l.key&&v.used!==null)));
    return {siteId:s.siteId,installation:s.installation,usageReady,usageNote:usageReady?'QC usage recorded':'Awaiting QC material usage',registeredSiteId:board?.site_id??s.registeredSiteId,dispatchComplete:!d.snapshot.parent&&d.snapshot.kind==='fixed'&&d.snapshot.partialDelivery===false,name:s.siteName,customer:s.customer,ipo:[s.ipo,s.orderNumber].filter(Boolean).join(' · '),documents};
   });
   return {id:d.id,number:d.number,draftId:d.draft_id,preparationIds:[...new Set((d.snapshot.combinedPlan?[d.snapshot.combinedPlan.fixedDraftId,d.snapshot.combinedPlan.variableDraftId]:[d.draft_id]).filter(Boolean))],preparationKinds:Object.fromEntries([[d.draft_id,d.snapshot.kind],[d.snapshot.combinedPlan?.fixedDraftId,'fixed'],[d.snapshot.combinedPlan?.variableDraftId,'variable']].filter(([id])=>id)),warehouse:d.warehouse,createdAt:new Date(d.created_at).toISOString(),parent:!!d.snapshot.parent,retrospective:!!d.retrospective,...(!d.snapshot.parent&&(sameMaterials.get(signature(d))?.length??0)>1?{reviewNote:'Possible duplicate: same site, warehouse and quantities also appear on '+sameMaterials.get(signature(d))!.filter(other=>other.id!==d.id).map(other=>other.number).join(', ')+'. Verify whether these were separate deliveries.'}:{}),sites,status:sites.length&&sites.every((s:any)=>s.documents.every((v:DispatchDocument)=>v.fileId))?'ready' as const:'awaiting' as const,reconciliationStatus:d.retrospective?'Retrospective DO: gate copy waived; usage and returns require reconciliation':'Usage and any returns require reconciliation'};

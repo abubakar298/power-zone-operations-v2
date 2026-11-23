@@ -9,7 +9,8 @@ import {HttpError} from '../http/errors.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {fixedPreparationRows} from '../../shared/material-preparation.js';
 import type {SiteMaterialPlanRepository} from './site-material-plans.js';
-import type {MaterialStockRepository} from './material-stock.js';
+import {nonStockDispatched,type MaterialStockRepository} from './material-stock.js';
+import {isSolarStructureItem} from '../../shared/non-stock-do-items.js';
 
 // additional: extra material sent beyond the planned deliveries (for example 100 m more cable); it is its own DO with the project's other DOs.
 export const savedSiteIssueSchema=z.object({version:z.number().int().positive(),requestKey:z.uuid(),partialDelivery:z.boolean(),additional:z.boolean().optional(),note:z.string().trim().min(3).max(2000)}).strict();
@@ -47,7 +48,8 @@ export async function issueSavedSite(pool:Pool,plans:SiteMaterialPlanRepository,
   const previous=(await c.query('SELECT version,snapshot FROM inventory_material_draft_versions WHERE draft_id=$1 ORDER BY version DESC LIMIT 1',[draftId])).rows[0];
   const dispatched=(await c.query('SELECT l.line_key,l.item_id,l.unit,l.description,sum(l.quantity)::text quantity FROM inventory_material_dispatch_lines_active l JOIN inventory_material_dispatches_active d ON d.id=l.dispatch_id WHERE d.draft_id=$1 GROUP BY l.line_key,l.item_id,l.unit,l.description',[draftId])).rows;
   for(const sent of dispatched){const row=rows.find(r=>r.key===sent.line_key);if(!row||row.itemId!==sent.item_id||row.unit!==sent.unit||row.description!==sent.description||new Decimal(row.out).lt(sent.quantity))throw new HttpError(409,'Previously issued rows must retain their item, unit and dispatched quantity. Review the saved DO before revising.');}
-  const lines=rows.filter(r=>new Decimal(r.out).gt(0)).map(r=>{const remaining=new Decimal(r.out).minus(dispatched.find(d=>d.line_key===r.key)?.quantity??0);const balance=position.positions.find(p=>p.itemId===r.itemId&&p.unit===r.unit);if(remaining.gt(0)&&!balance&&!temporaryNegativeDoBalanceAllowed())throw new HttpError(409,'An entered item has no reviewed warehouse balance.');return {lineKey:r.key,quantity:remaining.toString(),ledgerRevision:balance?.ledgerRevision??0};}).filter(r=>new Decimal(r.quantity).gt(0));
+  const nonStock=await nonStockDispatched(c,[draftId]);
+  const lines=rows.filter(r=>new Decimal(r.out).gt(0)).map(r=>{if(isSolarStructureItem(r.itemId))return {lineKey:r.key,quantity:new Decimal(r.out).minus(nonStock.get(r.key)??0).toString(),ledgerRevision:0};const remaining=new Decimal(r.out).minus(dispatched.find(d=>d.line_key===r.key)?.quantity??0);const balance=position.positions.find(p=>p.itemId===r.itemId&&p.unit===r.unit);if(remaining.gt(0)&&!balance&&!temporaryNegativeDoBalanceAllowed())throw new HttpError(409,'An entered item has no reviewed warehouse balance.');return {lineKey:r.key,quantity:remaining.toString(),ledgerRevision:balance?.ledgerRevision??0};}).filter(r=>new Decimal(r.quantity).gt(0));
   if(!lines.length)throw new HttpError(409,'The entered quantities already have a DO. Open Preview Documents to download it.');
   const retry=(await c.query('SELECT version,snapshot FROM inventory_material_draft_versions WHERE draft_id=$1 AND request_key=$2',[draftId,input.requestKey])).rows[0];
   if(retry){if(retry.snapshot.combinedPlan?.requestFingerprint!==requestFingerprint)throw new HttpError(409,'This request belongs to another issuance.');return {version:retry.version,lines,warehouse:fixed.warehouse,transport:fixed.transport};}
