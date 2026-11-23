@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { defaultApiRequestsPerMinute } from "./http/api-rate-limit.js";
 
 const schema = z.object({
   NODE_ENV: z
@@ -16,6 +17,9 @@ const schema = z.object({
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   DATABASE_WORK_MEM: z.string().regex(/^[1-9][0-9]{0,6}(kB|MB|GB)$/).default("4MB"),
   DATABASE_MAX_PARALLEL_WORKERS_PER_GATHER: z.coerce.number().int().min(0).max(8).default(0),
+  // General API limit: requests per minute per signed-in session (or per
+  // computer without one). 0 switches it off. Default 600, off in tests.
+  API_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(0).max(100000).optional(),
   EMAIL_DELIVERY_ENABLED: z.enum(["true", "false"]).default("true"),
   RESEND_WEBHOOK_SECRET: z.string().regex(/^whsec_[A-Za-z0-9+/=]+$/).optional(),
   RESEND_API_KEY: z.string().min(10).optional(),
@@ -54,6 +58,8 @@ export interface Config {
   databasePoolMax: number;
   databaseWorkMem: string;
   databaseParallelWorkersPerGather: number;
+  /** General API requests per minute per session (or per computer without one); 0 = off. */
+  apiRateLimitPerMinute?: number;
   sessionHours: number;
   emailDeliveryEnabled?: boolean;
   emailWebhookSecret?: string;
@@ -136,6 +142,9 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databasePoolMax: e.DATABASE_POOL_MAX,
     databaseWorkMem: e.DATABASE_WORK_MEM,
     databaseParallelWorkersPerGather: e.DATABASE_MAX_PARALLEL_WORKERS_PER_GATHER,
+    // Test suites fire many requests from one session, so the limit is off there unless set.
+    apiRateLimitPerMinute:
+      e.API_RATE_LIMIT_PER_MINUTE ?? (e.NODE_ENV === "test" ? 0 : defaultApiRequestsPerMinute),
     sessionHours: 12,
     emailDeliveryEnabled: e.EMAIL_DELIVERY_ENABLED === "true",
     emailWebhookSecret: e.RESEND_WEBHOOK_SECRET,

@@ -22,9 +22,13 @@ declare global {
   }
 }
 
+/** The sign-in cookie's name (production uses the stricter __Host- form). */
+export const sessionCookieName = (config: Pick<Config, "production">) =>
+  config.production ? "__Host-pz_session" : "pz_session";
+
 export function authHttp(service: AuthService, config: Config) {
   const router = Router();
-  const cookieName = config.production ? "__Host-pz_session" : "pz_session";
+  const cookieName = sessionCookieName(config);
   const options = {
     httpOnly: true,
     secure: config.production,
