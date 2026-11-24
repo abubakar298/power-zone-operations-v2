@@ -39,6 +39,7 @@ import { confirmRevision } from "../confirm.js";
 import { quotationDisplayRows } from "../../server/commercial/quotation-rows.js";
 import { orderCustomerScopeLines } from "../../server/commercial/customer-scope.js";
 import { DocumentPreview } from "../components/AccountsDocumentPreview.js";
+import { CustomerPoStatus } from "../components/LateCustomerPo.js";
 import {
   ClosureCostTables,
   installationDays,
@@ -661,7 +662,7 @@ export function AccountsWorkspace({
                   ...received.map((r:any)=>({kind:'inventory',r})),
                   ...data.closures.filter((r:any)=>r.stage!=='Closed').map((r:any)=>({kind:'closure',r})),
                 ],({r}:any)=>recordedTimestamp(r)).map(({kind,r}:any)=><tr key={kind+':'+r.id}>
-                  <td>{kind==='sample'?`${r.site_name} · UBL ${r.branch_code} · ${r.configuration}`:kind==='ipo'?<>{r.number}<br/>{r.snapshot.siteName}</>:jobLabel(kind==='closure'?r.snapshot:r)}</td>
+                  <td>{kind==='sample'?`${r.site_name} · UBL ${r.branch_code} · ${r.configuration}`:kind==='ipo'?<>{r.number}<br/>{r.snapshot.siteName}<CustomerPoStatus recordId={r.snapshot.workflowRecordId} followUp={r.customerPoFollowUp&&{...r.customerPoFollowUp,approvalEvidenceType:r.snapshot.input?.evidenceType}}/></>:jobLabel(kind==='closure'?r.snapshot:r)}</td>
                   <td>{kind==='sample'?(r.kind==='IPO / PT review sample'?(r.review_decision??'Sample—awaiting Accounts approval'):r.stage):kind==='ipo'?(r.accountsReview?.decision??'IPO received'):kind==='inventory'?'Inventory approved · awaiting PT entry':r.stage}</td>
                   <td>{kind==='sample'?<Button onClick={()=>{setSamplePreview(r);setSelected(undefined);setTab('IPO Review');window.scrollTo(0,0);}}>Review IPO &amp; PT</Button>:kind==='ipo'?<Button onClick={()=>void openIpo(r.id)}>Review IPO</Button>:kind==='inventory'?<Button onClick={()=>navigate('Inventory PT Entries')}>Enter approved documents in PT</Button>:<Button onClick={()=>void openJob(r.job_key)}>{r.stage==='Awaiting Management'?'View submitted closure':'Continue closure'}</Button>}</td>
                 </tr>)}
@@ -738,6 +739,7 @@ export function AccountsWorkspace({
                       {i.number}
                       <br />
                       {i.snapshot.siteName}
+                      <CustomerPoStatus recordId={i.snapshot.workflowRecordId} followUp={i.customerPoFollowUp&&{...i.customerPoFollowUp,approvalEvidenceType:i.snapshot.input?.evidenceType}}/>
                     </td>
                     <td>{i.accountsReview?.decision ?? "Received"}</td>
                     <td>

@@ -75,6 +75,7 @@ import {
 } from "./schema.js";
 import { designCalculation, frameworkBasis, quotationBasis } from "./basis.js";
 import { approvedCabinet, cabinetBasis } from "./cni-basis.js";
+import { attachLateCustomerPo, latePoFileKind, latePoTarget } from "./late-customer-po.js";
 const management = (role: string) => ["Admin", "Management"].includes(role);
 const uuid = (v: any) => z.uuid().parse(v);
 const saleFields = [
@@ -96,8 +97,6 @@ const saleFields = [
   "customerStrn",
 ];
 function saleInput(basis: any, received: any) {
-  if(received.confirmationType==='Email approval'&&!/^MBL-UPS-6-(5|10)$/.test(basis.source?.key??''))
-    throw new HttpError(422,'Email approval is available for Meezan Direct PO agreements only.');
   const sale = received.saleDetails ?? {};
   if(sale.orderNumber&&basis.source.type!=="cni"&&!validOrderPosition(sale.orderNumber))throw new HttpError(422,'Enter the order unit and total, for example 20/60.');
   if (received.saleDetails) {
@@ -498,6 +497,10 @@ export class ProjectWorkflowRepository {
         sharedPoDate: shared?.po_date ?? null,
         sharedAt: shared?.created_at ?? null,
         directPoDetails: data.directPoDetails??null,
+        approvalEvidenceType: data.basis?.order?.input?.evidenceType ?? null,
+        poToFollow: data.poToFollow === true,
+        latePo: data.latePo ?? null,
+        latePoVersions: data.latePoVersions ?? [],
         notes: data.notes ?? "",
         noFeasibleSolution: data.noFeasibleSolution ?? null,
         ublStandardsReview: data.ublStandardsReview ?? null,
@@ -1462,7 +1465,9 @@ export class ProjectWorkflowRepository {
           );
         return { id, version: r.version, repeated: true };
       }
-      await this.requireReceivingDepartment(u, r, c);
+      // An issued site is with Accounts; its coordinator may still attach the customer PO received later
+      // (a new record only; checked in attachLateCustomerPo).
+      if (v.action !== "attach-late-po") await this.requireReceivingDepartment(u, r, c);
       if (r.version !== v.version)
         throw new HttpError(
           409,
@@ -1510,7 +1515,6 @@ export class ProjectWorkflowRepository {
         const fields=z.object(Object.fromEntries(directPoFields.map(([key])=>[key,key==='poNumber'?z.string().trim().max(100).default(''):z.string().trim().max(key==='siteAddress'||key==='billingAddress'?1000:200)]))).strict();
         const saved=z.object({evidenceId:z.uuid(),evidenceType:z.enum(['Customer PO','Email approval','WhatsApp approval']),invoiceTerms:z.enum(ipoInvoiceTerms).optional(),extracted:fields,sourceText:z.string().max(150000).default('').transform(value=>value.replace(/\u0000/g,'').replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,'\uFFFD')),values:fields,notes:z.string().max(2000)}).strict().parse(input);
         await this.requireFile(c,r,saved.evidenceId,'PO / confirmation');
-        if(saved.evidenceType==='Email approval'&&!/^MBL-UPS-/.test(data.basis?.source?.key??''))throw new HttpError(422,'Email approval is available for Meezan Direct PO agreements only.');
         if(saved.values.siteCode!==r.site_code)throw new HttpError(422,'The edited branch code must match this order site. Open a Direct PO for the correct branch.');
         if(!saved.values.siteName)throw new HttpError(422,'Enter the site name.');
         z.iso.date().parse(saved.values.approvalDate);
@@ -1521,6 +1525,12 @@ export class ProjectWorkflowRepository {
         const changes=directPoChanges(previous?.values??saved.extracted,saved.values);
         data.directPoDetails={...saved,invoiceTerms:saved.invoiceTerms??previous?.invoiceTerms,savedAt:new Date().toISOString(),savedBy:actor,history:[...(previous?.history??[]),{actor,actorName:u.display_name,at:new Date().toISOString(),evidenceId:saved.evidenceId,extracted:saved.extracted,changes}]};
         reason='Direct PO evidence details saved'+(changes.length?': '+changes.map(x=>x.label).join(', '):' without corrections');
+      } else if(v.action==='attach-late-po'){
+        this.requireRole(u,['Coordinator']);
+        const saved=await attachLateCustomerPo(c,{actor,actorName:u.display_name,record:r,requestKey:v.requestKey,input});
+        data.latePo=saved;
+        data.latePoVersions=[...(data.latePoVersions??[]),saved];
+        reason=`Customer PO ${saved.poNumber} received later and attached`+(saved.version>1?` (version ${saved.version})`:'')+': '+saved.notes;
       } else if (v.action === "review-survey-handoff") {
         this.requireRole(u, ["Coordinator"]);
         requireStage(["approved_dispatch"]);
@@ -2790,6 +2800,8 @@ export class ProjectWorkflowRepository {
             "The PO already has issued documents. Open its issuance history.",
           );
         const received = receiptSchema.parse(input);
+        if(received.poToFollow&&received.confirmationType==='Customer PO')throw new HttpError(422,'A customer PO is already attached; "PO to follow" is only for email or WhatsApp approval.');
+        if(received.poToFollow)data.poToFollow=true;
         const taxMaster=(await c.query('SELECT ntn,strn FROM customers WHERE id=$1',[r.customer_id])).rows[0];
         received.customerNtn=received.customerNtn?.trim()||taxMaster.ntn||'';received.customerStrn=received.customerStrn?.trim()||taxMaster.strn||'';
         if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);}
@@ -3480,13 +3492,16 @@ export class ProjectWorkflowRepository {
     const execute=async (c:PoolClient) => {
       const { u, r } = await this.record(actor, id, c, true);
       this.requireRole(u, ["Design", "Coordinator"]);
-      await this.requireReceivingDepartment(u, r, c);
+      if (v.kind !== latePoFileKind) await this.requireReceivingDepartment(u, r, c);
       if (u.role === "Design" && v.kind === "Request evidence")
         throw new HttpError(
           422,
           "Original customer request evidence is attached by Coordination. Design uploads the survey report and site photos.",
         );
-      if (r.stage === "issued")
+      if (v.kind === latePoFileKind) {
+        this.requireRole(u, ["Coordinator"]);
+        await latePoTarget(c, r);
+      } else if (r.stage === "issued")
         throw new HttpError(
           409,
           "Issued evidence is preserved; use a controlled return for new evidence.",
