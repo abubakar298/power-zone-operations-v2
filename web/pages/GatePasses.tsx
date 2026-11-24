@@ -13,6 +13,7 @@ import {Brand} from '../components/Brand.js';
 import {InventoryNavigation} from '../components/InventoryNavigation.js';
 import {Button} from '../ui/Button.js';
 import {MaterialDocuments} from '../components/MaterialDocuments.js';
+import {withVso} from '../inventory-approved/do-window.js';
 import './inventory-document-upload.css';
 import './operations-board/operations-board.css';
 import '../components/warehouse-movements.css';
@@ -71,7 +72,7 @@ export function GatePasses({session,onLogout,limitedAccess=false}:{session:Sessi
    setNotice(result.stockPosted?'Warehouse OUT posted for '+selected.number+'.':'Warehouse OUT was already posted for '+selected.number+'.');
   }catch(e){setError((e as Error).message);}finally{setBusy(false);}
  }
- const recordUrl=(r:Record)=>r.signoff?'/api/material-dispatches/issued/'+r.id+'/customer-signoff.pdf?site='+r.siteId:'/api/material-dispatches/gate-passes/'+r.kind+'/'+r.id+'/document.pdf';
+ const recordUrl=(r:Record)=>r.signoff?'/api/material-dispatches/issued/'+r.id+'/customer-signoff.pdf?site='+r.siteId:r.kind==='dispatch'?withVso('/api/material-dispatches/gate-passes/dispatch/'+r.id+'/document.pdf'):'/api/material-dispatches/gate-passes/'+r.kind+'/'+r.id+'/document.pdf';
  const page=<div className={'ob-shell'+(limited?' storekeeper-document-shell':'')}><header className="ob-header"><Brand compact/><div className="ob-header-actions">{limited&&<Button onClick={()=>{if(leave())setTemporary(true);}}>Create Temporary Document</Button>}<ManagementHeaderSwitcher session={session} value="inventory"/><WorkspaceAccountMenu name={session.user.displayName} label={limited?'Storekeeper':session.user.role} disabled={busy} onSignOut={()=>{if(leave())void api('/auth/logout',{csrf:session.csrfToken,body:{}}).then(onLogout).catch(e=>setError(e.message));}}/></div></header>{!limited&&<InventoryNavigation mode="dispatcher" active="gate-passes" onNavigate={path=>{if(leave())navigateInventory(path);}}/>}<main className={limited?'ob-main storekeeper-document-main':'ob-main'}>{limitedAccess&&<div className="pz-page-back"><BackButton/></div>}{temporary?<><Button onClick={()=>{if(leave())setTemporary(false);}}>Back to Documents Upload</Button><TemporaryDocuments session={session} initialCreate/></>:<>
   <div className="ob-page-title storekeeper-summary"><div><h1>Documents Upload</h1><p>Find the site or document, download its issued copy and upload signed evidence.</p>{data&&<p className="inventory-upload-scope-list"><strong>{session.user.displayName}</strong> · Warehouses: {data.warehouses.join(', ')}</p>}</div></div>
   {error&&<p role="alert" className="form-error">{error}</p>}{notice&&<p role="status" className="ob-success">{notice}</p>}
