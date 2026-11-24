@@ -173,7 +173,11 @@ export class ProcurementRepository {
     return (await this.pool.query(
       `SELECT m.key, m.display_name, m.unit,
         (SELECT rate FROM rate_versions v WHERE v.key=m.key AND v.status='Active' ORDER BY version DESC LIMIT 1) AS rate
-       FROM ${PROCUREMENT_ITEMS} m WHERE lower(m.key) LIKE $1 OR lower(m.display_name) LIKE $1 ORDER BY m.display_name LIMIT 40`,
+       FROM ${PROCUREMENT_ITEMS} m WHERE lower(m.key) LIKE $1 OR lower(m.display_name) LIKE $1
+         -- Also the Item ID Database: its stock ID, brand or description finds the linked price-list item.
+         OR m.key IN (SELECT c.rate_key FROM inventory_catalogue_final_current c WHERE c.rate_key IS NOT NULL AND (lower(c.item_id) LIKE $1
+           OR lower(c.payload->>'commercialDescription') LIKE $1 OR lower(c.payload->>'technicalDescription') LIKE $1 OR lower(c.payload->>'stockDescription') LIKE $1))
+       ORDER BY m.display_name LIMIT 40`,
       [text],
     )).rows
       .map((r) => ({ itemKey: r.key as string, name: (r.display_name || r.key) as string, unit: r.unit as string, misc: isMiscItem(r.key), ...(seesPrices(me) ? { rate: r.rate == null ? null : fixed(num(r.rate)) } : {}) }))
