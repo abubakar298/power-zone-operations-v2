@@ -43,7 +43,8 @@ export function canonicalUpsRegister(customer:'UBL'|'MBL',input:any[],programRow
  });
  const unmatchedIssued=issued.filter(r=>!matched.has(r.id));
  for(const item of unmatchedIssued){
-  const possible=all.some(r=>r.ipo===item.number&&r.orderNumber===item.orderNumber||text(r.po)&&text(r.po)===text(item.poReference))||!!item.sourceKey;
+  // A cancelled order's slot is free again (project-workflow/order-slots.ts), so only active orders hold an IPO + order number.
+  const possible=source.some(r=>r.ipo===item.number&&r.orderNumber===item.orderNumber)||all.some(r=>text(r.po)&&text(r.po)===text(item.poReference))||!!item.sourceKey;
   if(possible){reviews.push({ipoId:item.id,orderNumber:item.orderNumber,reason:'Issued document is retained but its canonical source identity needs review.'});continue;}
   // New ordinary sales after the source cutoff stay visible; historical imports
   // require a verified canonical link and cannot become duplicate active sites.

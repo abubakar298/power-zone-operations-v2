@@ -41,7 +41,8 @@ import {
   emptyWorkspaceFilters,
   matchesWorkspace,
 } from "../components/WorkspaceFilters.js";
-import { bucketLabel, designBuckets, coordinationBuckets, visibleCoordinationBuckets, iposSharedBucket } from "../workspaces/project-routes.js";
+import { bucketLabel, designBuckets, coordinationBuckets, visibleCoordinationBuckets, iposSharedBucket, cancelledSitesBucket } from "../workspaces/project-routes.js";
+import { CancelledSitesList } from "../components/CancelledSitesList.js";
 const followupPage = coordinationBuckets[5];
 const oldPoReceiptPage = coordinationBuckets[6];
 const directPoPage = "Direct PO";
@@ -381,7 +382,7 @@ export function DepartmentWorkspace({
     )
     .filter((r) =>
       department === "coordination" && page === iposSharedBucket
-        ? r.stage === "issued" && r.data.ipoShared
+        ? r.stage === "issued" && r.data.ipoShared && !r.data.siteCancelled
         : department === "coordination" && page === coordinationBuckets[0]
           ? surveyRequestInCoordination(r)
           : department === "coordination" && page === followupPage
@@ -692,10 +693,10 @@ export function DepartmentWorkspace({
               }
             </p>
           )}
-          {!(department === "coordination" && page === "Customer & Site Search") && (
+          {!(department === "coordination" && (page === "Customer & Site Search" || page === cancelledSitesBucket)) && (
           <WorkspaceFilters
             key={`${department}-${page}`}
-            rows={page === iposSharedBucket ? rows.filter((r) => r.stage === "issued" && r.data.ipoShared).map((r) => ({...r, site: `${r.site} ${r.siteCode}`})) : page === "Workspace" ? departmentTasks : rows}
+            rows={page === iposSharedBucket ? rows.filter((r) => r.stage === "issued" && r.data.ipoShared && !r.data.siteCancelled).map((r) => ({...r, site: `${r.site} ${r.siteCode}`})) : page === "Workspace" ? departmentTasks : rows}
             value={filters}
             onChange={setFilters}
             compact
@@ -744,8 +745,9 @@ export function DepartmentWorkspace({
           {department === "coordination" && page === followupPage && (
             <SavedHeadsupReports session={session} refresh={headsupRefresh} />
           )}
+          {department === "coordination" && page === cancelledSitesBucket && <CancelledSitesList session={session} onOpenRecord={(id) => void open(id).catch((e) => setError(e.message))} onOpen={(task) => onOpen?.(task)} />}
           {department === "coordination" && page === iposSharedBucket && <IposSharedList records={visible} onPreview={(id) => void open(id).catch((e) => setError(e.message))} />}
-          {page !== "Customer & Site Search" && page !== iposSharedBucket && !readyToSend && !(
+          {page !== "Customer & Site Search" && page !== iposSharedBucket && page !== cancelledSitesBucket && !readyToSend && !(
             department === "coordination" && page === coordinationBuckets[5]
           ) &&
             (department !== "design" || page !== designBuckets[1]) && (

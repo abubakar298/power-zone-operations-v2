@@ -2,8 +2,8 @@ import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
 import {HttpError} from '../http/errors.js';
 import {validOrderPosition} from '../../shared/direct-po-reading.js';
+import {upsKeys,releasedIpoIds} from '../project-workflow/order-slots.js';
 export const manualIpoSchema=z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9 _./()-]*$/,'Use letters, numbers, spaces or reference separators.').transform(value=>/^\d+$/.test(value)?`CHP-${value}`:value.replace(/^CHP[ -]?(\d+)$/i,'CHP-$1'));
-const upsKeys=['MBL-UPS-6-5','MBL-UPS-6-10','UBL-UPS-6-10'];
 type UpsContext={customerId:number;configurationKey:string};
 export const ipoNumberConflict='This IPO number is already in use. For a shared UPS IPO, enter a different order unit with the same batch total; otherwise use a different IPO number.';
 export async function manualIpoAvailable(c:Pool|PoolClient,number:string,recordId?:string,orderNumber?:string,context?:UpsContext){
@@ -15,7 +15,10 @@ export async function manualIpoAvailable(c:Pool|PoolClient,number:string,recordI
  }
  const issued=(await c.query('SELECT i.id,i.snapshot,p.customer_id FROM internal_purchase_orders i JOIN customer_purchase_orders p ON p.id=i.customer_po_id WHERE lower(i.number)=lower($1)',[value])).rows;
  const shared=!!context&&upsKeys.includes(context.configurationKey)&&!!orderNumber&&validOrderPosition(orderNumber);
- if(issued.length&&!issued.every(row=>shared&&row.customer_id===context!.customerId&&upsKeys.includes(row.snapshot.approvedCommercialSource?.key)&&validOrderPosition(row.snapshot.input?.orderNumber??'')&&row.snapshot.input.orderNumber.split('/')[0]!==orderNumber!.split('/')[0]&&row.snapshot.input.orderNumber.split('/')[1]===orderNumber!.split('/')[1]))return false;
+ // A shared UPS IPO may take the slot of an order whose site was cancelled (order-slots.ts); every other row must use another unit.
+ const sameUnit=(row:any)=>validOrderPosition(row.snapshot.input?.orderNumber??'')&&row.snapshot.input.orderNumber.split('/')[0]===orderNumber!.split('/')[0];
+ const released=shared?await releasedIpoIds(c,issued.filter(sameUnit).map(row=>String(row.id))):new Set<string>();
+ if(issued.length&&!issued.every(row=>shared&&row.customer_id===context!.customerId&&upsKeys.includes(row.snapshot.approvedCommercialSource?.key)&&validOrderPosition(row.snapshot.input?.orderNumber??'')&&(row.snapshot.input.orderNumber.split('/')[0]!==orderNumber!.split('/')[0]||released.has(String(row.id)))&&row.snapshot.input.orderNumber.split('/')[1]===orderNumber!.split('/')[1]))return false;
  const roots=(await c.query('SELECT document_type,family_id FROM document_reference_roots WHERE lower(reference)=lower($1)',[value])).rows;
  if(roots.some(root=>root.document_type!=='IPO'||!issued.some(row=>row.id===root.family_id)))return false;
  const reserved=(await c.query(`SELECT 1 FROM historical_ipo_authorizations WHERE lower(number)=lower($1) AND ($2::uuid IS NULL OR record_id<>$2::uuid)

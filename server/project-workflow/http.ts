@@ -1,5 +1,6 @@
 import {createConfigurationBatch,configurationBatchPreview,confirmConfigurationBatch} from './configuration-batches.js';
 import {saveHeadsup,submitHeadsup} from './headsup.js';
+import {cancelledSitesForCoordination} from './order-slots.js';
 import {customerSendEvidence,attachCustomerSendEvidence,removeCustomerSendEvidence,sendPackageToCustomer} from "./ubl-customer-send.js";
 import { buildIpoPdf, buildPeachtreePdf } from "../orders/document-renderers.js";
 import type { IpoRevisionRepository } from "./ipo-revisions.js";
@@ -216,6 +217,7 @@ export function projectWorkflowHttp(
       .set("Content-Disposition", `attachment; filename="${file.name}"`)
       .send(file.content);
   });
+  r.get('/cancelled-sites',async(req,res)=>res.json(await cancelledSitesForCoordination((repo as any).pool,actor(req))));
   r.post('/configuration-batches',async(req,res)=>res.status(201).json(await createConfigurationBatch((repo as any).pool,actor(req),req.body)));
   r.get('/configuration-batches/:id',async(req,res)=>res.json(await configurationBatchPreview((repo as any).pool,actor(req),id(req))));
   r.post('/configuration-batches/:id/preview',async(req,res)=>res.json(await configurationBatchPreview((repo as any).pool,actor(req),id(req),true)));

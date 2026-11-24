@@ -489,6 +489,7 @@ export class ProjectWorkflowRepository {
             ?.receivedSolutionId ?? null,
         advanceBoqSent: headsup?.sent ?? false,
         ipoShared: !!shared,
+        siteCancelled: shared?.site_cancelled === true,
         historicalDelivered: Boolean(data.historicalImport?.deliveredBoardSiteId),
         ipoNumber: shared?.ipo_number ?? data.ipoNumber ?? null,
         sharedOrderNumber: shared?.order_number ?? null,
