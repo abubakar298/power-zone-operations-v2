@@ -4,15 +4,17 @@ import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {SidebarBuckets} from '../web/components/SidebarBuckets.js';
 import {bucketCounts} from '../web/workspaces/bucket-counts.js';
-import {designBuckets,visibleCoordinationBuckets} from '../web/workspaces/project-routes.js';
+import {designBuckets,visibleCoordinationBuckets,cancelledSitesBucket} from '../web/workspaces/project-routes.js';
 import {shouldRefreshSidebar,sidebarMinRefreshGapMs,sidebarRefreshIntervalMs} from '../web/workspaces/sidebar-refresh.js';
 
 test('sidebar still lists every department bucket with a loading count before data arrives',()=>{
   for(const [department,buckets] of [['design',designBuckets],['coordination',visibleCoordinationBuckets]] as const){
     const html=renderToStaticMarkup(createElement(SidebarBuckets,{department,page:'',onSelect:()=>undefined}));
     assert.equal(html.match(/<button/g)?.length,buckets.length);
-    assert.equal(html.match(/aria-label="Loading document count"/g)?.length,buckets.length);
+    // Cancelled Sites shows its own total on its page (it also lists reviewed-register orders), so it has no sidebar count.
+    assert.equal(html.match(/aria-label="Loading document count"/g)?.length,buckets.filter(b=>b!==cancelledSitesBucket).length);
   }
+  assert.ok(visibleCoordinationBuckets.includes(cancelledSitesBucket));
 });
 
 test('sidebar counts are unchanged for an empty workflow list',()=>{

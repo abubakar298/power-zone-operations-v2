@@ -5,7 +5,7 @@ import {useEffect,useState} from 'react';
 import {sharedDepartmentList} from '../workspaces/workflow-list-reuse.js';
 import {bucketCounts} from '../workspaces/bucket-counts.js';
 import {shouldRefreshSidebar,sidebarRefreshIntervalMs} from '../workspaces/sidebar-refresh.js';
-import {bucketLabel,designBuckets,visibleCoordinationBuckets} from '../workspaces/project-routes.js';
+import {bucketLabel,designBuckets,visibleCoordinationBuckets,cancelledSitesBucket} from '../workspaces/project-routes.js';
 export function SidebarBuckets({department,page,onSelect}:{department:'design'|'coordination';page:string;onSelect:(bucket:string)=>void}){
  const [counts,setCounts]=useState<Record<string,number>|null>(null);
  const [error,setError]=useState(false);
@@ -17,5 +17,5 @@ export function SidebarBuckets({department,page,onSelect}:{department:'design'|'
   window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);window.addEventListener('pz:bucket-records',supplied);
   return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);window.removeEventListener('pz:bucket-records',supplied);};
  },[department]);
- return <>{(department==='design'?designBuckets:visibleCoordinationBuckets).map(bucket=><button key={bucket} className={page===bucket?'nav-active':''} aria-current={page===bucket?'page':undefined} onClick={()=>onSelect(bucket)}><Icon name={staffNavigationIcon(bucketLabel(bucket))}/><span className="sidebar-bucket-label">{bucketLabel(bucket)}</span><span className="sidebar-bucket-count" aria-label={error?'Document count unavailable':counts?`${counts[bucket]} documents`:'Loading document count'} title={error?'Unable to refresh count':undefined}>{error?'—':counts?.[bucket]??'…'}</span></button>)}</>;
+ return <>{(department==='design'?designBuckets:visibleCoordinationBuckets).map(bucket=><button key={bucket} className={page===bucket?'nav-active':''} aria-current={page===bucket?'page':undefined} onClick={()=>onSelect(bucket)}><Icon name={staffNavigationIcon(bucketLabel(bucket))}/><span className="sidebar-bucket-label">{bucketLabel(bucket)}</span>{/* Cancelled Sites also lists reviewed-register orders, so the page shows its own total. */}{bucket!==cancelledSitesBucket&&<span className="sidebar-bucket-count" aria-label={error?'Document count unavailable':counts?`${counts[bucket]} documents`:'Loading document count'} title={error?'Unable to refresh count':undefined}>{error?'—':counts?.[bucket]??'…'}</span>}</button>)}</>;
 }
