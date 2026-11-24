@@ -60,7 +60,8 @@ test('Direct UPS PO uses correct LV configuration, four proportional PT phases, 
    }
    const input={reference:'DIRECT-UPS-PO-'+n,date:'2026-10-15',evidenceId:file.id,basisType:'framework',frameworkId:f.id,ipoNumber:'CHP-UPS-TEST-'+n,actual:n===0?undefined:basis.comparison,confirmationType:n===0?'Email approval':'Customer PO',saleDetails:{orderNumber:n===0?'20/60':'',invoiceCompany:'PZES (PVT Ltd)',salesPerson:'Waqas ul Haq',evidenceNotes:'Isolated test'},reviewed:true,notes:'Exact accepted agreement'};
    if(n>0)await assert.rejects(repo.salePreview(actor,record.id,{...input,ipoNumber:"CHP-UPS-TEST-0"}),/already in use/);
-   if(n===2)await assert.rejects(repo.salePreview(actor,record.id,{...input,confirmationType:'Email approval',actual:undefined}),/Meezan Direct PO/);
+   // Email approval is open to every agreement (user request, 24 Nov 2026), including UBL UPS.
+   if(n===2)assert.equal((await repo.salePreview(actor,record.id,{...input,confirmationType:'Email approval',actual:undefined})).input.evidenceType,'Email approval');
    if(n===1){const emailDraft=await repo.salePreview(actor,record.id,{...input,confirmationType:'Email approval',actual:undefined});assert.equal(emailDraft.input.evidenceType,'Email approval');assert.equal(emailDraft.input.poNumber,'');assert.equal(emailDraft.allocation.total,gross);}
    const draft=await repo.salePreview(actor,record.id,input);
    assert.equal(draft.input.evidenceType,input.confirmationType);if(n===0){assert.equal(draft.input.orderNumber,'20/60');assert.equal(draft.siteName,'Corrected branch');}

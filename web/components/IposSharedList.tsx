@@ -7,6 +7,7 @@ import{downloadName,filenameFromDisposition}from'../../shared/download-name.js';
 import { Button } from "../ui/Button.js";
 import { DocumentPreview } from "./DocumentPreview.js";
 import { IpoRevisionPanel, useIpoRevisionStatus } from "./IpoRevisionPanel.js";
+import { CustomerPoStatus, LateCustomerPoPanel } from "./LateCustomerPo.js";
 import type { Session } from "../api.js";
 
 function DownloadIpo({ record, ipoId = record.data.ipoId }: { record: any; ipoId?: string }) {
@@ -44,7 +45,7 @@ export function IposSharedList({ records, onPreview }: { records: any[]; onPrevi
         <td>{record.customerCode || record.customer}</td>
         <td>{record.site}<br/><span className="pz-caption">{record.siteCode || "Not entered"}</span></td>
         <td>{record.data.ipoNumber || "Not available"}{record.data.sharedOrderNumber&&<div className="pz-caption">{sharedOrderLabel(record.data.sharedOrderNumber)}</div>}{record.data.ipoSalesPerson&&<div className="pz-caption">Salesperson: {record.data.ipoSalesPerson}</div>}<DocumentListDetails record={record}/>{record.data.historicalDelivered&&<small className="pz-caption" style={{display:"block"}}>Historical · already delivered</small>}</td>
-        <td>{record.data.sharedPoReference || "Not entered"}<br/><span className="pz-caption">{record.data.sharedPoDate ? String(record.data.sharedPoDate).slice(0,10) : "Not entered"}</span></td>
+        <td>{record.data.sharedPoReference || "Not entered"}<br/><span className="pz-caption">{record.data.sharedPoDate ? String(record.data.sharedPoDate).slice(0,10) : "Not entered"}</span><CustomerPoStatus followUp={record.data}/></td>
         <td><div className="pz-action-row pz-ipo-list-actions"><Button variant="secondary" onClick={() => onPreview(record.id)}>Preview</Button><DownloadIpo record={record}/></div>
         </td>
       </tr>)}</PagedTableBody>
@@ -67,6 +68,7 @@ export function IpoSharedPreview({ record, onBack, session, onOpen }: { record: 
       <DocumentPreview key={ipoId} url={`/api/orders/${ipoId}/ipo.pdf`} title="IPO and PT Breakup"/>
       <div className="pz-action-row"><DownloadIpo record={record} ipoId={ipoId}/></div>
     </section>
+    <LateCustomerPoPanel session={session} record={record}/>
     {session&&revisions.status&&<IpoRevisionPanel session={session} recordId={record.id} status={revisions.status} onChanged={revisions.reload} onOpen={onOpen}/>}
     {/* Show why the panel cannot load instead of hiding it. */}
     {session&&!revisions.status&&revisions.error&&<section className="pz-panel pz-stack" aria-label="IPO revisions"><h3>IPO revisions</h3><p role="alert" className="form-error">IPO revision is not available for this IPO: {revisions.error}</p><div><Button variant="neutral" onClick={revisions.reload}>Try again</Button></div></section>}

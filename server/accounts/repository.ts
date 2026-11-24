@@ -21,6 +21,7 @@ import { InventoryRepository } from "../inventory/repository.js";
 import { ublIpoSample } from "../ubl/ipo-sample.js";
 import { DepartmentRepository } from "../departments/repository.js";
 import {projectOperationsClosureEvidence,operationsClosureEvidenceFile} from './operations-evidence.js';
+import {customerPoFollowUps} from '../project-workflow/late-customer-po.js';
 export const phases = [
   "Solar Panels",
   "Structure",
@@ -118,6 +119,7 @@ export class AccountsRepository {
       )
     ).rows;
     const identities = await new InventoryRepository(this.pool).jobs(actor);
+    const poFollowUps = await customerPoFollowUps(this.pool, ipo.map((i: any) => i.snapshot?.workflowRecordId));
     return {
       qcMaterialJobs: (await qcMaterialHandoffs(this.pool)).map(r=>({id:'qc:'+r.siteId,job_key:r.jobKey,job_id:r.ipo,site_name:r.siteName,created_at:r.receivedAt,qcMaterialSource:r,ptRecorded:false})),
       reviewSamples: (
@@ -130,6 +132,7 @@ export class AccountsRepository {
       ipos: ipo.map((i) => ({
         ...i,
         accountsReview: reviews.find((r) => r.ipo_id === i.id),
+        customerPoFollowUp: poFollowUps.get((i as any).snapshot?.workflowRecordId) ?? null,
       })),
       closures: closures.map((c) => ({
         ...c,
