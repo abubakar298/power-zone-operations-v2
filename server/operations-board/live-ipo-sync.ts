@@ -9,6 +9,12 @@ import {planLiveIpoBridge,type LiveIpoPosition} from './live-ipo-bridge.js';
 
 const inputSchema=z.object({ipoIds:z.array(z.uuid()).min(1).max(10000).optional()}).strict();
 const normal=(value:unknown)=>typeof value==='string'?value.trim().replace(/\s+/g,' ').toLowerCase():'';
+/** Board sites that may already represent this IPO: same "IPO · order" label, or linked to this exact IPO.
+ * A cancelled site with the same label is not a candidate: its order slot was freed (migration 309, 24 Nov 2026), so a
+ * new order in that slot gets its own board site instead of being held as a possible duplicate (fixed 25 Nov 2026). */
+export function boardCandidates(boards:{site_id:string;snapshot:any}[],label:string,ipoId:string){
+ return boards.filter(b=>b.snapshot?.origin?.ipoId===ipoId||(normal(b.snapshot?.ipo)===label&&b.snapshot?.cancelled!==true)).map(b=>b.site_id);
+}
 const sha=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export function approvedHandoffScope(ipoBoqId:unknown,issuanceBoqId:unknown,basis:{id:string;snapshot:any}|null,legacy:{scope:unknown;siteType:unknown;humanSiteType:boolean}){
  if(legacy.scope!==null||typeof ipoBoqId!=='string'||ipoBoqId!==issuanceBoqId||basis?.id!==ipoBoqId)return null;
@@ -85,7 +91,7 @@ async function syncInClient(c:PoolClient,actor:string,input:z.infer<typeof input
      hold(ipoId,'The deterministic board identity has no matching immutable IPO, issuance and workflow origin.',[deterministic.site_id]);continue;
     }
     const label=normal(ipo.number)+(orderNumber?' · '+normal(orderNumber):'');
-    const candidates=boards.filter(b=>normal(b.snapshot.ipo)===label||b.snapshot.origin?.ipoId===ipoId).map(b=>b.site_id as string);
+    const candidates=boardCandidates(boards,label,ipoId);
     const position:LiveIpoPosition={ipoId,ipoNumber:ipo.number,orderNumber,customerName:row.customer_name,customerId:row.customer_id,siteName:typeof s.siteName==='string'?s.siteName:'',customerPo:typeof s.input?.poNumber==='string'?s.input.poNumber:'',operationsIssuanceId:issuance.id,createdAt:ipo.created_at,
      legacy:{id:w.id,stage:w.stage,stageEnteredAt:w.stage_entered_at,scope,siteType,deliveredOn:w.delivered_on,installationCompletedOn:w.installation_completed_on,handedOverOn:w.handed_over_on,closedAt:w.closed_at,expectedDelivery:w.expected_delivery}};
     const plan=planLiveIpoBridge(position,{verifiedLinks,boardSites:boards.map(b=>({id:b.site_id,originIpoId:b.snapshot.origin?.ipoId})),unverifiedBoardCandidateIds:candidates});
