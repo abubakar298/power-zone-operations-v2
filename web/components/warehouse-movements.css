@@ -24,3 +24,7 @@
 .replacement-items>.pz-button{justify-self:start}
 @media(max-width:1100px){.replacement-item-row{grid-template-columns:28px minmax(0,1fr) minmax(0,1fr)}.replacement-item-sr{grid-column:1;grid-row:1/span 6;padding-top:30px}.replacement-item-row>.pz-field{grid-column:span 1}.replacement-item-row>.pz-field:first-of-type,.replacement-item-remove,.replacement-item-problem{grid-column:2/-1}.replacement-item-remove{padding-top:0}}
 @media(max-width:600px){.replacement-item-row{grid-template-columns:minmax(0,1fr)}.replacement-item-row>.pz-field,.replacement-item-row>.pz-field:first-of-type,.replacement-item-remove,.replacement-item-problem{grid-column:1}.replacement-item-sr{grid-row:auto;grid-column:1;padding-top:0;text-align:left}}
+
+/* Warehouse transfer items: the typeable item picker opens over the rows below on wide screens; its option text keeps the panel's own spacing. */
+@media(min-width:1200px){.pz-table-scroll.warehouse-transfer-items{overflow:visible}}
+.warehouse-movement-table .original-do-results button strong{min-height:0;padding-top:0;line-height:20px}.warehouse-movement-table .original-do-results button small{margin-top:0;overflow-wrap:normal}
