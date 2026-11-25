@@ -45,3 +45,29 @@ test('transfer item can be typed to narrow the list, then picked with its destin
  await page.getByRole('button',{name:'Create transfer DO',exact:true}).click();
  await expect.poll(()=>issued?.lines).toEqual([expect.objectContaining({itemId:'CH-BAT-100AH',sourceLedgerKey:'Karachi warehouse:CH-BAT-100AH:piece',destinationLedgerKey:'Lahore warehouse:CH-BAT-100AH:piece',quantity:'2'})]);
 });
+
+test('during stock reconciliation an item the destination never held gets a new destination line',async({page})=>{
+ await actors(page.request);await login(page.request);
+ const authority=(warehouse:string)=>({warehouse,source_sha256:'a'.repeat(64),version:1,state:'active'});
+ const newKey='f'.repeat(64);let issued:any;
+ await page.route('**/api/warehouse-transfers**',async route=>{
+  const path=new URL(route.request().url()).pathname.replace('/api/warehouse-transfers','');
+  if(path==='/access')return route.fulfill({json:{enabled:true,kind:'dispatcher',warehouses:['Lahore warehouse','Multan warehouse'],readWarehouses:['Lahore warehouse'],sourceWarehouses:['Lahore warehouse'],receiptWarehouses:[]}});
+  if(path==='/intake')return route.fulfill({json:{source:{warehouse:'Lahore warehouse',authority:authority('Lahore warehouse'),positions:[{ledgerKey:'1'.repeat(64),itemId:'CH-Duct Slot 60x60',description:'Duct Slot 60x60',unit:'ft',ledgerRevision:4,reviewedClosing:true,currentClosing:'351',newDestinationLedgerKey:newKey}]},destination:{warehouse:'Multan warehouse',authority:authority('Multan warehouse'),positions:[]}}});
+  if(path==='/issues'){issued=route.request().postDataJSON();return route.fulfill({json:{id:'tr-2',number:'TR-2'}});}
+  if(path==='')return route.fulfill({json:{records:[]}});
+  return route.fulfill({status:404,json:{error:'Not mocked'}});
+ });
+ await page.goto('/inventory/transfers/new');
+ await page.getByLabel('Source warehouse').selectOption('Lahore warehouse');
+ await page.getByLabel('Destination warehouse').selectOption('Multan warehouse');
+ const item=page.getByPlaceholder('Type or select final item');await item.fill('duct');
+ await page.getByRole('listbox',{name:'Type or select final item'}).getByRole('option',{name:/CH-Duct Slot 60x60/}).click();
+ const row=page.getByRole('row').filter({has:item}),unit=row.getByRole('combobox',{name:/^Destination position /});
+ await expect(unit).toHaveValue(newKey);await expect(unit.locator('option:checked')).toHaveText('CH-Duct Slot 60x60 · ft · new line');
+ await expect(row).toContainText('New stock line at Multan warehouse · opening not recorded');await expect(row).not.toContainText('needs review');
+ await row.getByRole('textbox',{name:/^Transfer quantity /}).fill('154');
+ await page.getByLabel('Dispatch note').fill('To avoid local purchase');
+ await page.getByRole('button',{name:'Create transfer DO',exact:true}).click();
+ await expect.poll(()=>issued?.lines).toEqual([expect.objectContaining({itemId:'CH-Duct Slot 60x60',destinationLedgerKey:newKey,destinationLedgerRevision:0,quantity:'154'})]);
+});

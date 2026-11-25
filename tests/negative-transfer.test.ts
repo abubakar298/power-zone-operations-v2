@@ -56,3 +56,41 @@ test('negative-stock window permits transfer DO then signed source OUT below zer
   await signDispatch(db.pool,ids.source,'transfer-out',saved.id,'Lahore warehouse');assert.equal((await warehousePosition(db.pool,sourceSha,fromKey))?.currentClosing,'-1');
  }finally{await db.close();await rm(directory,{recursive:true,force:true});await rm(legacy,{recursive:true,force:true});}
 });
+
+test('reconciliation window lets a transfer start a destination stock line the warehouse never had',async(t)=>{
+ const clock=t.mock.method(Date,'now',()=>Date.parse('2026-11-26T19:00:00.000Z'));
+ const db=await testDatabase();
+ try{
+  const ids=Object.fromEntries(['owner','source','destination'].map(k=>[k,randomUUID()]));
+  for(const [name,id] of Object.entries(ids))await db.pool.query('INSERT INTO users(id,email,display_name,role,password_hash) VALUES($1,$2,$3,$4,$5)',[id,id+'@transfer.invalid',name,name==='owner'?'Admin':'Inventory','isolated']);
+  for(const [user,warehouse] of [[ids.source,'Lahore warehouse'],[ids.destination,'Multan warehouse']])await db.pool.query("INSERT INTO inventory_material_access(user_id,warehouse,capability,granted_by) VALUES($1,$2,'dispatcher',$3)",[user,warehouse,ids.owner]);
+  const item='CH-Duct Slot 60x60',other='CH-Flex Pipe 1',reviewSha='a'.repeat(64),catalogueSha='b'.repeat(64),sourceSha='c'.repeat(64);
+  const catalogue={rows:[{itemId:item},{itemId:other}]},source={groups:[{id:'fictional-new-line',title:'Fictional new destination line',warehouse:'Lahore',rows:[{id:'duct',item:'Duct',itemId:item,unit:'ft',origin:'warehouse_stock',status:'Review needed',dispatch:0,used:0,countedReturn:0,credited:0}]}]};
+  await new InventoryReviewRepository(db.pool).importSource(ids.owner,{sourceSha256:reviewSha,catalogueSha256:catalogueSha,source,catalogue});
+  const balance=(itemId:string,name:string,opening:number)=>({itemId,warehouse:name,unit:'ft',description:'Fictional '+itemId,opening,in:0,out:0,closing:opening,openingStatus:'Reviewed source',review:''});
+  // Multan holds a different item only, so it has no line for the duct slot.
+  await new WarehouseSourceRepository(db.pool).importSource(ids.owner,{sourceSha256:sourceSha,catalogueSha256:catalogueSha,reviewSourceSha256:reviewSha,finalItemIds:[item,other],source:{meta:{fictional:true},balances:[balance(item,'Lahore warehouse',351),balance(other,'Lahore warehouse',5),balance(other,'Multan warehouse',1)],events:[]}});
+  const authority=new WarehouseAuthorityRepository(db.pool);for(const name of ['Lahore warehouse','Multan warehouse'])await authority.command(ids.owner,{warehouse:name,version:0,sourceSha256:sourceSha,state:'active',reason:'Fictional reviewed baseline',requestKey:randomUUID()});
+  const repo=new WarehouseTransferRepository(db.pool),stock=new MaterialStockRepository(db.pool),fromKey=warehouseLedgerKey(item,'Lahore warehouse','ft'),newKey=warehouseLedgerKey(item,'Multan warehouse','ft');
+  const closed=await repo.intake(ids.source,'Lahore warehouse','Multan warehouse');
+  assert.equal(closed.source.positions.find(p=>p.itemId===item)?.newDestinationLedgerKey,undefined,'Outside the window no new destination line is offered.');
+  const input=(destinationLedgerKey:string)=>({requestKey:randomUUID(),source:{warehouse:'Lahore warehouse',sourceSha256:sourceSha,authorityVersion:1},destination:{warehouse:'Multan warehouse',sourceSha256:sourceSha,authorityVersion:1},reason:'Fictional transfer to a new line',transport:{vehicle:'',driver:'',reference:''},lines:[{lineKey:randomUUID(),itemId:item,sourceLedgerKey:fromKey,destinationLedgerKey,quantity:'154',sourceLedgerRevision:0,destinationLedgerRevision:0}]});
+  await assert.rejects(repo.issue(ids.source,input(newKey)),/existing final item/,'Outside the window a missing destination line still blocks the transfer.');
+  clock.mock.mockImplementation(()=>Date.parse('2026-11-25T07:00:00.000Z'));
+  const intake=await repo.intake(ids.source,'Lahore warehouse','Multan warehouse');
+  const duct=intake.source.positions.find(p=>p.itemId===item),pipe=intake.source.positions.find(p=>p.itemId===other);
+  assert.equal(duct?.newDestinationLedgerKey,newKey,'A new destination line is offered while the window is open.');
+  assert.equal(pipe&&'newDestinationLedgerKey' in pipe,false,'An item the destination already holds uses its existing line.');
+  await assert.rejects(repo.issue(ids.source,input(warehouseLedgerKey(item,'Multan warehouse','m'))),/existing final item/,'Only the same item and unit may be started; no unit is guessed.');
+  assert.equal(await warehousePosition(db.pool,sourceSha,newKey),null);
+  const saved=await repo.issue(ids.source,input(newKey));
+  const started=await warehousePosition(db.pool,sourceSha,newKey);
+  assert.equal(started?.baseline.itemId,item);assert.equal(started?.baseline.unit,'ft');assert.equal(started?.currentClosing,null,'The opening is not invented.');assert.equal(started?.baseline.reviewPending,true);
+  await signDispatch(db.pool,ids.source,'transfer-out',saved.id,'Lahore warehouse');
+  assert.equal((await warehousePosition(db.pool,sourceSha,fromKey))?.currentClosing,'197');
+  const evidence=await stock.uploadEvidence(ids.destination,{warehouse:'Multan warehouse',filename:'FICTIONAL-NEW-LINE.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7 FICTIONAL NEW LINE COUNT').toString('base64')});
+  const [line]=(await repo.detail(ids.destination,saved.id)).lines;
+  await repo.receive(ids.destination,{transferId:saved.id,requestKey:randomUUID(),destinationSourceSha256:sourceSha,authorityVersion:1,evidenceId:evidence.id,reason:'Counted fictional receipt',lines:[{lineKey:line.line_key,quantity:'154',ledgerRevision:0}]});
+  const after=await warehousePosition(db.pool,sourceSha,newKey);assert.equal(after?.operationalIn,'154');assert.equal(after?.currentClosing,null,'Received stock waits for the opening to be reconciled.');
+ }finally{await db.close();}
+});
