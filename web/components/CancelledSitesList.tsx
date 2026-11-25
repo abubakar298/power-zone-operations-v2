@@ -6,7 +6,7 @@ import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {slotRanges} from '../../shared/order-slot-ranges.js';
 import {ProjectWorkspace} from '../pages/ProjectWorkspace.js';
 
-export type SlotProgramme={key:string;customer:string;ipo:string;capacity:number;inUse:number;freeCount:number;free:number[]};
+export type SlotProgramme={key:string;customer:string;ipo:string;capacity:number;extra:number;inUse:number;freeCount:number;free:number[]};
 export type CancelledSiteRow={id:string;sr:number;source:'Operations'|'Reviewed register';outcome:'Cancelled'|'Transferred';customer:string;ipo:string;order:string;site:string;siteCode:string;po:string;
  recordId:string|null;projectKey:string|null;cancelledAt:string|null;cancelledBy:string|null;reason:string;slot:'Free'|'In use again';reusedBy:{site:string;siteCode:string}|null};
 export type CancelledSites={programmes:SlotProgramme[];sites:CancelledSiteRow[]};
@@ -18,12 +18,12 @@ export function FreeSlotsPanel({programmes}:{programmes:SlotProgramme[]}){
  if(!programmes.length)return null;
  return <section className="pz-panel pz-stack" aria-label="Free order slots">
   <h3>Free order slots</h3>
-  <p className="pz-caption">When the Operations head cancels a site, its slot (for example 154/250) becomes free here at once. Use a free slot number for the next new or renewed order of the same IPO.</p>
+  <p className="pz-caption">When the Operations head cancels a site, its slot (for example 154/250) becomes free here at once. Use a free slot number for the next new or renewed order of the same IPO. UBL UPS 250 can take extra orders above 250 (251/250, 252/250 …) once no slot is free.</p>
   <div className="pz-table-scroll"><table className="pz-table">
    <thead><tr><th scope="col">Programme</th><th scope="col">Slots</th><th scope="col">In use</th><th scope="col">Free</th><th scope="col">Free slot numbers</th></tr></thead>
    <tbody>{programmes.map(p=><tr key={p.key}>
     <td>{p.ipo}<div className="pz-caption">{p.customer}</div></td>
-    <td>{p.capacity}</td>
+    <td>{p.capacity}{p.extra>0&&<div className="pz-caption">+{p.extra} extra order{p.extra===1?'':'s'} ({p.capacity}+)</div>}</td>
     <td>{p.inUse}</td>
     <td><strong>{p.freeCount}</strong></td>
     <td>{p.freeCount?slotRanges(p.free):'No free slot'}</td>

@@ -1,6 +1,8 @@
 import type {Pool,PoolClient} from 'pg';
 import {HttpError} from '../http/errors.js';
 import {validOrderPosition} from '../../shared/direct-po-reading.js';
+import {growingProgramme,isExtraOrder} from '../../shared/extra-programme-orders.js';
+import {slotRanges} from '../../shared/order-slot-ranges.js';
 
 /** Bank programme order slots (owner request, 24 Nov 2026).
  * A shared UPS IPO such as CHP-163 holds a fixed number of order slots, written on each IPO as "154/250".
@@ -17,17 +19,19 @@ export type SlotIdentity={programme:string;customer:string;ipo:string;total:numb
 export type ActiveSlotOrder=SlotIdentity&{site:string;siteCode:string;ipoId:string|null};
 export type CancelledOrderSite=SlotIdentity&{id:string;source:'Operations'|'Reviewed register';outcome:'Cancelled'|'Transferred';site:string;siteCode:string;po:string;
  ipoId:string|null;recordId:string|null;projectKey:string|null;cancelledAt:string|null;cancelledBy:string|null;reason:string};
-export type SlotProgramme={key:string;customer:string;ipo:string;capacity:number;inUse:number;freeCount:number;free:number[]};
+/** capacity = the programme's target (250); extra = active orders above it (UBL UPS 250 grows, shared/extra-programme-orders.ts). */
+export type SlotProgramme={key:string;customer:string;ipo:string;capacity:number;extra:number;inUse:number;freeCount:number;free:number[]};
 export type CancelledSiteRow=CancelledOrderSite&{sr:number;slot:'Free'|'In use again';reusedBy:{site:string;siteCode:string}|null};
 export type OrderSlotSummary={programmes:SlotProgramme[];sites:CancelledSiteRow[]};
 
 const text=(v:unknown)=>String(v??'').trim();
 const same=(a:unknown,b:unknown)=>text(a).replace(/\s+/g,' ').toLowerCase()===text(b).replace(/\s+/g,' ').toLowerCase();
 
-/** "CHP-163" + "154/250" → programme CHP-163 · 250, slot 154. A revised IPO (-R1) keeps its original's slots. */
+/** "CHP-163" + "154/250" → programme CHP-163 · 250, slot 154. A revised IPO (-R1) keeps its original's slots.
+ * An extra order above the target ("251/250", growing programmes only) is slot 251 of the same programme. */
 export function slotIdentity(customer:unknown,ipo:unknown,order:unknown):SlotIdentity|null{
  const number=text(ipo).toUpperCase().replace(/-R\d+$/,''),position=text(order);
- if(!number||!validOrderPosition(position))return null;
+ if(!number||!(validOrderPosition(position)||isExtraOrder(position)))return null;
  const [unit,total]=position.split('/').map(Number),bank=text(customer).toUpperCase();
  return {programme:`${bank}|${number}|${total}`,customer:bank,ipo:number,total,unit,order:position};
 }
@@ -38,9 +42,9 @@ export function orderSlotSummary(active:ActiveSlotOrder[],cancelled:CancelledOrd
  const groups=new Map<string,SlotIdentity>();
  for(const order of [...active,...cancelled])if(!groups.has(order.programme))groups.set(order.programme,order);
  const programmes=[...groups.values()].map(g=>{
-  const used=new Set(active.filter(a=>a.programme===g.programme&&a.unit<=g.total).map(a=>a.unit));
-  const free=Array.from({length:g.total},(_,i)=>i+1).filter(unit=>!used.has(unit));
-  return {key:g.programme,customer:g.customer,ipo:g.ipo,capacity:g.total,inUse:used.size,freeCount:free.length,free};
+  const used=new Set(active.filter(a=>a.programme===g.programme).map(a=>a.unit)),highest=Math.max(g.total,...used);
+  const free=Array.from({length:highest},(_,i)=>i+1).filter(unit=>!used.has(unit));
+  return {key:g.programme,customer:g.customer,ipo:g.ipo,capacity:g.total,extra:[...used].filter(unit=>unit>g.total).length,inUse:used.size,freeCount:free.length,free};
  }).sort((a,b)=>a.customer.localeCompare(b.customer)||a.ipo.localeCompare(b.ipo,'en',{numeric:true})||a.capacity-b.capacity);
  const sites=[...cancelled].sort((a,b)=>text(a.cancelledAt).localeCompare(text(b.cancelledAt))||a.ipo.localeCompare(b.ipo)||a.unit-b.unit||a.id.localeCompare(b.id)).map((site,index)=>{
   const reuse=active.find(a=>a.programme===site.programme&&a.unit===site.unit);
@@ -105,6 +109,25 @@ export async function loadOrderSlots(c:Db):Promise<{active:ActiveSlotOrder[];can
   active.push({...slot,site:site.site,siteCode:code,ipoId:site.ipoId});
  }
  return {active,cancelled};
+}
+
+/** Pure: the free slots below an extra order ("253/250" → any of 1–252 not held by an active order of the same IPO).
+ * An IPO number with no orders yet has none. Empty for an order inside its target. */
+export function freeSlotsBefore(active:ActiveSlotOrder[],slot:SlotIdentity):number[]{
+ if(slot.unit<=slot.total)return [];
+ const used=new Set(active.filter(a=>a.programme===slot.programme).map(a=>a.unit));
+ return used.size?Array.from({length:slot.unit-1},(_,i)=>i+1).filter(unit=>!used.has(unit)):[];
+}
+
+/** Freed slots first (owner, 25 Nov 2026): an extra order above the target of a growing programme
+ * (shared/extra-programme-orders.ts) is refused while a lower slot of the same IPO is free. This also keeps
+ * extra orders in sequence: 251, then 252, and so on. */
+export async function requireFreedSlotsFirst(c:Db,context:{customerId:number;configurationKey:string}|undefined,ipo:string,order:string|null|undefined){
+ if(!context||!order||!isExtraOrder(order)||!growingProgramme(order,{configurationKey:context.configurationKey}))return;
+ const bank=(await c.query('SELECT short_code FROM customers WHERE id=$1',[context.customerId])).rows[0]?.short_code;
+ const slot=slotIdentity(bank,ipo,order);if(!slot)return;
+ const free=freeSlotsBefore((await loadOrderSlots(c)).active,slot);
+ if(free.length)throw new HttpError(409,`Order slot ${free[0]}/${slot.total} of IPO ${slot.ipo} is free. Use the free slot${free.length>1?'s':''} (${slotRanges(free)}) before order ${slot.order}.`);
 }
 
 /** IPOs whose slot is free again: the same rule the database insert guard uses (migration 309). */
