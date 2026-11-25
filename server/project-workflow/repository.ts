@@ -7,8 +7,9 @@ import {linkCreatedOperationsMaterialSource} from '../inventory/source-links.js'
 import {syncCreatedOperationsHandoff} from '../operations-board/live-ipo-sync.js';
 import {SiteWorkflowRepository} from '../site-workflow/repository.js';
 import {loadDocumentListMetadata,snapshotListMetadata} from '../documents/list-metadata.js';
-import {directPoFields,directPoSiteMatches,directPoChanges,validOrderPosition,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
-import {manualIpoAvailable,ipoNumberConflict,requireEditableIpoRoute} from "../documents/manual-ipo.js";
+import {directPoFields,directPoSiteMatches,directPoChanges,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
+import {validProgrammeOrder} from '../../shared/extra-programme-orders.js';
+import {manualIpoAvailable,ipoNumberConflict,requireEditableIpoRoute,requireFreeSlotsUsedFirst} from "../documents/manual-ipo.js";
 import {approvedMaterialView} from './advance-material-view.js';
 import {ptDetail} from '../orders/pt-detail.js';
 import {ipoReference} from '../documents/historical-ipo.js';
@@ -98,7 +99,7 @@ const saleFields = [
 ];
 function saleInput(basis: any, received: any) {
   const sale = received.saleDetails ?? {};
-  if(sale.orderNumber&&basis.source.type!=="cni"&&!validOrderPosition(sale.orderNumber))throw new HttpError(422,'Enter the order unit and total, for example 20/60.');
+  if(sale.orderNumber&&basis.source.type!=="cni"&&!validProgrammeOrder(sale.orderNumber,{configurationKey:basis.source.key}))throw new HttpError(422,'Enter the order unit and total, for example 20/60.');
   if (received.saleDetails) {
     if (
       !["PZES", "PZES (PVT Ltd)", "Energy Solutions"].includes(
@@ -1518,8 +1519,9 @@ export class ProjectWorkflowRepository {
         if(saved.values.siteCode!==r.site_code)throw new HttpError(422,'The edited branch code must match this order site. Open a Direct PO for the correct branch.');
         if(!saved.values.siteName)throw new HttpError(422,'Enter the site name.');
         z.iso.date().parse(saved.values.approvalDate);
-        if(saved.values.orderNumber&&!validOrderPosition(saved.values.orderNumber))throw new HttpError(422,'Enter the unit number and total, for example 20/60.');
+        if(saved.values.orderNumber&&!validProgrammeOrder(saved.values.orderNumber,{configurationKey:data.basis?.source?.key}))throw new HttpError(422,'Enter the unit number and total, for example 20/60.');
         if(saved.values.ipoNumber&&!await manualIpoAvailable(c,saved.values.ipoNumber,r.id,saved.values.orderNumber))throw new HttpError(409,ipoNumberConflict);
+        if(saved.values.ipoNumber)await requireFreeSlotsUsedFirst(c,saved.values.ipoNumber,r.id,saved.values.orderNumber);
         const capacityIssues=directPoCapacityIssues(saved.sourceText,data.basis?.source?.key??'');if(capacityIssues.length)throw new HttpError(422,capacityIssues.join(' '));
         const previous=data.directPoDetails;
         const changes=directPoChanges(previous?.values??saved.extracted,saved.values);
@@ -2804,7 +2806,7 @@ export class ProjectWorkflowRepository {
         if(received.poToFollow)data.poToFollow=true;
         const taxMaster=(await c.query('SELECT ntn,strn FROM customers WHERE id=$1',[r.customer_id])).rows[0];
         received.customerNtn=received.customerNtn?.trim()||taxMaster.ntn||'';received.customerStrn=received.customerStrn?.trim()||taxMaster.strn||'';
-        if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);}
+        if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);await requireFreeSlotsUsedFirst(c,received.ipoNumber,r.id,received.saleDetails?.orderNumber);}
         await this.requireFile(c, r, received.evidenceId, "PO / confirmation");
         let basis: any;
         if (Boolean(data.cniProposalId) !== (received.basisType === "cni"))
@@ -3616,7 +3618,7 @@ export class ProjectWorkflowRepository {
     const { u, r } = await this.record(actor, id);
     this.requireRole(u, ["Coordinator"]);
     await this.requireReceivingDepartment(u, r);
-    if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(this.pool,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);}
+    if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(this.pool,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);await requireFreeSlotsUsedFirst(this.pool,received.ipoNumber,r.id,received.saleDetails?.orderNumber);}
     const taxMaster=(await this.pool.query('SELECT ntn,strn FROM customers WHERE id=$1',[r.customer_id])).rows[0];
     received.customerNtn=received.customerNtn?.trim()||taxMaster.ntn||'';received.customerStrn=received.customerStrn?.trim()||taxMaster.strn||'';
     const current = await this.decorate(r, u);

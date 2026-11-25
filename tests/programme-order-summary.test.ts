@@ -17,7 +17,7 @@ test('each programme counts target, orders issued, cancelled, valid, completed, 
   ups('13/250'),
  ];
  const p=projectManagementProgrammes(snapshot(rows),'2026-11-20',5).programmes.find(p=>p.key==='ubl-ups-250')!;
- assert.deepEqual(p.orders,{target:250,issued:13,cancelled:2,transferred:0,valid:11,completed:6,pending:5,remaining:239});
+ assert.deepEqual(p.orders,{target:250,issued:13,cancelled:2,transferred:0,valid:11,completed:6,pending:5,remaining:239,extra:0});
  assert.equal(p.orders.issued,p.orders.valid+p.orders.cancelled+p.orders.transferred,'every order received is accounted for');
  assert.equal(p.cancelled.length,2,'cancelled orders stay listed');
 });
@@ -32,8 +32,11 @@ test('the Bank programmes page shows the counts side by side, never as 257/250',
  const React=(await import('react')).default,{renderToStaticMarkup}=await import('react-dom/server'),{registerHooks}=await import('node:module');
  registerHooks({load:(url,context,next)=>(url.endsWith('.css')||url.endsWith('?url'))?{format:'module',source:"export default ''",shortCircuit:true}:next(url,context)});
  const {OrderCounts}=await import('../web/components/ProgrammeDashboard.js');
- const html=renderToStaticMarkup(React.createElement(OrderCounts,{orders:{target:250,issued:257,cancelled:7,transferred:0,valid:250,completed:220,pending:30,remaining:0}}));
+ const html=renderToStaticMarkup(React.createElement(OrderCounts,{orders:{target:250,issued:257,cancelled:7,transferred:0,valid:250,completed:220,pending:30,remaining:0,extra:0}}));
  for(const [label,value] of <[string,number][]>[['Target sites',250],['Orders issued',257],['Cancelled',7],['Valid orders',250],['Completed',220],['Pending',30],['Remaining sites',0]])
   assert.match(html,new RegExp(`<dt>${label}</dt><dd>${value}</dd>`),String(label));
- assert.doesNotMatch(html,/257\/250|Transferred/,'no fraction; Transferred appears only when there are transfers');
+ assert.doesNotMatch(html,/257\/250|Transferred|Extra orders/,'no fraction; Transferred and Extra orders appear only when there are some');
+ // UBL UPS 250 grows (owner, 25 Nov 2026): valid orders above the target are counted as extra orders.
+ const extra=renderToStaticMarkup(React.createElement(OrderCounts,{orders:{target:250,issued:252,cancelled:0,transferred:0,valid:252,completed:0,pending:252,remaining:0,extra:2}}));
+ assert.match(extra,/<dt>Extra orders \(250\+\)<\/dt><dd>2<\/dd>/);
 });

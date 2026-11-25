@@ -89,7 +89,9 @@ test('free slots and the cancelled list: SR# from 1, oldest cancellation first, 
  assert.equal(slotRanges(summary.programmes[0].free),'3, 5–250');
  assert.deepEqual(summary.sites.map(s=>[s.sr,s.order,s.slot]),[[1,'2/250','In use again'],[2,'3/250','Free']]);
  assert.equal(slotIdentity('UBL','CHP-163-R1','5/250')!.programme,slotIdentity('UBL','chp-163','5/250')!.programme,'A revised IPO keeps its slots.');
- assert.equal(slotIdentity('UBL','CHP-163','251/250'),null,'The order stays inside the 250 bracket.');
+ // Owner, 25 Nov 2026: UBL UPS 250 grows past its target, so an extra order 251/250 is slot 251 of the same programme.
+ assert.equal(slotIdentity('UBL','CHP-163','251/250')!.programme,slotIdentity('UBL','CHP-163','1/250')!.programme);
+ assert.equal(summary.programmes[0].extra,0);
 });
 
 test('Management bank programmes: a cancelled order frees its number for a new IPO, which counts as active',()=>{

@@ -9,7 +9,7 @@ import {HttpError} from '../http/errors.js';
 import {ProjectWorkflowRepository} from '../project-workflow/repository.js';
 import {frameworkBasis} from '../project-workflow/basis.js';
 import {linkMaterialSource} from './source-links.js';
-import {validOrderPosition} from '../../shared/direct-po-reading.js';
+import {validProgrammeOrder} from '../../shared/extra-programme-orders.js';
 const schema=z.object({boardSiteId:z.string().min(1).max(160),boardVersion:z.number().int().positive(),sourceVersion:z.number().int().positive(),frameworkId:z.uuid(),requestKey:z.uuid(),reason:z.string().trim().min(1).max(2000),alreadyDelivered:z.literal(true).optional()}).strict();
 const sha=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const normalized=(v:unknown)=>String(v??'').trim().replace(/\s+/g,' ').toLowerCase();
@@ -61,7 +61,7 @@ export async function importPendingIpo(pool:Pool,actor:string,raw:z.infer<typeof
   const po=z.string().trim().min(1).max(200).parse(row.po),poDate=historicalPoDate(row.poDate),number=z.string().trim().regex(/^CHP-\d+$/).parse(row.ipo),order=String(row.orderNumber??'').trim(),isUps=row.kind==='UPS';
   if(delivered&&(!isUps||!(bank==='UBL'&&order.endsWith('/250')||bank==='MBL'&&order.endsWith('/60'))))throw new HttpError(409,'The site is outside the confirmed UPS backfill programmes.');
   if(poDate>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()))throw new HttpError(409,'The source PO date is in the future.');
-  if(isUps&&!validOrderPosition(order))throw new HttpError(409,'A shared UPS IPO requires a valid distinct order number.');
+  if(isUps&&!validProgrammeOrder(order,{customer:bank}))throw new HttpError(409,'A shared UPS IPO requires a valid distinct order number.');
   if(normalized(b.ipo)!==normalized(number+(order?' · '+order:''))||normalized(b.customerPo)!==normalized(po)||normalized(b.name)!==normalized(row.site))throw new HttpError(409,'The source IPO, order, PO and site must agree before import.');
   const previous=(await c.query('SELECT * FROM historical_pending_ipo_imports WHERE board_site_id=$1',[input.boardSiteId])).rows[0];
   if(previous){if(previous.source_sha256!==source.source_sha256||previous.source_key!==row.key||previous.framework_id!==input.frameworkId)throw new HttpError(409,'The existing historical import differs. Use a controlled correction.');return {ipoId:previous.ipo_id,recordId:previous.record_id,unchanged:true};}

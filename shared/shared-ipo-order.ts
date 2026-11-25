@@ -1,4 +1,5 @@
 import { recentFirst } from "./recent-records.js";
+import { extraOrderLabel } from "./extra-programme-orders.js";
 
 const natural = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
@@ -17,12 +18,14 @@ export function splitSharedOrder(order: string | null | undefined): { orderNo: s
   return match ? { orderNo: match[1], target: match[2] ?? null } : null;
 }
 
-/** "Order No. 213 · Target Sites 250"; text that is not a number pair is shown unchanged. */
+/** "Order No. 213 · Target Sites 250"; an order above its target adds "· Extra order (250+)"
+ * (shared/extra-programme-orders.ts). Text that is not a number pair is shown unchanged. */
 export function sharedOrderLabel(order: string | null | undefined): string | null {
   if (!order?.trim()) return null;
   const parts = splitSharedOrder(order);
   if (!parts) return order.trim();
-  return `Order No. ${parts.orderNo}${parts.target ? ` · Target Sites ${parts.target}` : ""}`;
+  const extra = extraOrderLabel(order);
+  return `Order No. ${parts.orderNo}${parts.target ? ` · Target Sites ${parts.target}` : ""}${extra ? ` · ${extra}` : ""}`;
 }
 
 export function sortSharedIpos<T extends SharedIpo>(records: readonly T[]): T[] {

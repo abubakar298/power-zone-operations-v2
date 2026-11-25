@@ -28,7 +28,7 @@ test('Cancelled Sites lists SR# from 1, the slot each site was cancelled from, a
 });
 
 test('free slots show the count and the slot numbers as short ranges',()=>{
- const html=renderToStaticMarkup(React.createElement(FreeSlotsPanel,{programmes:[{key:'UBL|CHP-163|250',customer:'UBL',ipo:'CHP-163',capacity:250,inUse:246,freeCount:4,free:[19,21,22,250]}]}));
+ const html=renderToStaticMarkup(React.createElement(FreeSlotsPanel,{programmes:[{key:'UBL|CHP-163|250',customer:'UBL',ipo:'CHP-163',capacity:250,extra:0,inUse:246,freeCount:4,free:[19,21,22,250]}]}));
  assert.match(html,/Free order slots/);
  assert.match(html,/<td>250<\/td><td>246<\/td><td><strong>4<\/strong><\/td><td>19, 21–22, 250<\/td>/);
  assert.equal(renderToStaticMarkup(React.createElement(FreeSlotsPanel,{programmes:[]})),'');

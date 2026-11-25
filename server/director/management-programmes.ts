@@ -11,6 +11,7 @@ import {canonicalUpsRegister,systemInvoiceReferences} from './ups-canonical-regi
 import {ipoSiteIdentity} from '../orders/site-identity.js';
 import outcomeEvidence from './management-programme-outcomes-v1.json' with {type:'json'};
 import {operationsCancellations} from '../project-workflow/order-slots.js';
+import {isExtraOrder} from '../../shared/extra-programme-orders.js';
 
 type SourceRow=Record<string,any>;
 export type ProgrammeMetric={sites:number;siteKeys:string[];amount:string|null;knownSites:number;missingSites:number;receivedSites:number;receivedAmount:string|null};
@@ -18,7 +19,8 @@ export type ProgrammeRow={key:string;sourceKey:string;recordKey:string|null;cust
 export type ProgrammeMilestone={submitted:ProgrammeMetric;received:ProgrammeMetric;pending:ProgrammeMetric;toSubmit:ProgrammeMetric;future:ProgrammeMetric};
 /** Order counts (Atif's documentation standard): the target, the running count of every order received and the
  * valid orders are different numbers; cancelled and transferred orders stay counted, never reused or hidden. */
-export type ProgrammeOrders={target:number;issued:number;cancelled:number;transferred:number;valid:number;completed:number;pending:number;remaining:number};
+export type ProgrammeOrders={target:number;issued:number;cancelled:number;transferred:number;valid:number;completed:number;pending:number;remaining:number;
+ /** Valid orders above the target, e.g. 251/250 (UBL UPS 250 grows: shared/extra-programme-orders.ts). */extra:number};
 export type ManagementProgramme={key:string;label:string;capacity:number;orders:ProgrammeOrders;rows:ProgrammeRow[];cancelled:ProgrammeRow[];transferred:ProgrammeRow[];summary:Record<'active'|'installed'|'pendingDelivery'|'partialDelivery'|'installationPending'|'invoicePending'|'paymentPending'|'advanceReceived',ProgrammeMetric>;milestones?:{advance:ProgrammeMilestone;completion:ProgrammeMilestone}};
 export type ManagementProgrammes={sourceDate:string;sourceVersion:number;readOnly:true;operationsAsOf?:string;programmes:ManagementProgramme[];issues:string[]};
 const money=(value:unknown):string|null=>{if(value===null||value===undefined||value==='')return null;try{const n=new Decimal(String(value));return n.isFinite()&&n.gte(0)?n.toFixed(2):null;}catch{return null;}};
@@ -80,7 +82,7 @@ export function projectManagementProgrammes(snapshot:SourceRow,sourceDate:string
    };milestones={advance:build('advance'),completion:build('completion')};
   }
   const cancelledRows=scoped.filter(r=>r.cancelled),transferredRows=scoped.filter(r=>r.transferred),completed=rows.filter(r=>r.installed).length;
-  const orders:ProgrammeOrders={target:capacity,issued:scoped.length,cancelled:cancelledRows.length,transferred:transferredRows.length,valid:rows.length,completed,pending:rows.length-completed,remaining:Math.max(capacity-rows.length,0)};
+  const orders:ProgrammeOrders={target:capacity,issued:scoped.length,cancelled:cancelledRows.length,transferred:transferredRows.length,valid:rows.length,completed,pending:rows.length-completed,remaining:Math.max(capacity-rows.length,0),extra:rows.filter(r=>isExtraOrder(r.orderNumber)).length};
   return{key,label,capacity,orders,rows,cancelled:cancelledRows,transferred:transferredRows,summary,...(milestones?{milestones}:{})};
  });
  return{sourceDate,sourceVersion,readOnly:true,programmes,issues};

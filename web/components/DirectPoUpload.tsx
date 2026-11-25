@@ -9,7 +9,8 @@ import {api} from '../api.js';
 import {Button} from '../ui/Button.js';
 import {Field} from '../ui/Field.js';
 import {extractText} from '../ocr.js';
-import {directPoSuggestions,directPoSiteMatches,validOrderPosition,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
+import {directPoSuggestions,directPoSiteMatches,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
+import {validProgrammeOrder} from '../../shared/extra-programme-orders.js';
 import {useUnsavedChanges} from '../hooks/useUnsavedChanges.js';
 import {poSuggestions,ublPoSuggestions} from '../../server/orders/po-extraction.js';
 export function DirectPo({refs,session,records,onPrepared,onCancel}:any){
@@ -51,7 +52,7 @@ export function DirectPo({refs,session,records,onPrepared,onCancel}:any){
    if(capacityIssues.length)throw Error(capacityIssues.join(' '));
    if(!values.siteCode?.trim()||!values.siteName?.trim())throw Error('Enter the branch code and site name read from the evidence.');
    if(!values.approvalDate)throw Error('Enter the approval date.');
-   if(values.orderNumber&&!validOrderPosition(values.orderNumber))throw Error('Use an order number such as 20/60.');
+   if(values.orderNumber&&!validProgrammeOrder(values.orderNumber,{configurationKey:framework.configuration_key}))throw Error('Use an order number such as 20/60.');
    const matches = refs.sites.filter((site: any) => directPoSiteMatches(site, customer.id, values.siteCode, values.siteName, values.siteAddress ?? '', framework.configuration_key === 'UBL-UPS-6-10'));
    if (matches.length > 1) throw Error('More than one saved branch uses this code. Ask Management to check the customer register.');
    const selected = matches[0];

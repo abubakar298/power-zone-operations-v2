@@ -1,24 +1,30 @@
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
 import {HttpError} from '../http/errors.js';
-import {validOrderPosition} from '../../shared/direct-po-reading.js';
-import {upsKeys,releasedIpoIds} from '../project-workflow/order-slots.js';
+import {validProgrammeOrder} from '../../shared/extra-programme-orders.js';
+import {upsKeys,releasedIpoIds,requireFreedSlotsFirst} from '../project-workflow/order-slots.js';
 export const manualIpoSchema=z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9 _./()-]*$/,'Use letters, numbers, spaces or reference separators.').transform(value=>/^\d+$/.test(value)?`CHP-${value}`:value.replace(/^CHP[ -]?(\d+)$/i,'CHP-$1'));
 type UpsContext={customerId:number;configurationKey:string};
 export const ipoNumberConflict='This IPO number is already in use. For a shared UPS IPO, enter a different order unit with the same batch total; otherwise use a different IPO number.';
+async function recordUpsContext(c:Pool|PoolClient,recordId:string){
+ const r=(await c.query('SELECT customer_id,route,data FROM project_workflow_records WHERE id=$1',[recordId])).rows[0];
+ return {context:r?.route==='direct-framework'?{customerId:r.customer_id,configurationKey:r.data?.basis?.source?.key} as UpsContext:undefined,orderNumber:r?.data?.directPoDetails?.values?.orderNumber as string|undefined};
+}
 export async function manualIpoAvailable(c:Pool|PoolClient,number:string,recordId?:string,orderNumber?:string,context?:UpsContext){
  const value=manualIpoSchema.parse(number);
  if(recordId){
-  const r=(await c.query('SELECT customer_id,route,data FROM project_workflow_records WHERE id=$1',[recordId])).rows[0];
-  context=r?.route==='direct-framework'?{customerId:r.customer_id,configurationKey:r.data?.basis?.source?.key}:undefined;
-  orderNumber??=r?.data?.directPoDetails?.values?.orderNumber;
+  const r=await recordUpsContext(c,recordId);
+  context=r.context;
+  orderNumber??=r.orderNumber;
  }
  const issued=(await c.query('SELECT i.id,i.snapshot,p.customer_id FROM internal_purchase_orders i JOIN customer_purchase_orders p ON p.id=i.customer_po_id WHERE lower(i.number)=lower($1)',[value])).rows;
- const shared=!!context&&upsKeys.includes(context.configurationKey)&&!!orderNumber&&validOrderPosition(orderNumber);
+ // An order number is "unit/total"; a growing programme (UBL UPS 250) may also hold extra orders above its total.
+ const validOrder=(order:string,key:unknown)=>validProgrammeOrder(order,{configurationKey:String(key??'')});
+ const shared=!!context&&upsKeys.includes(context.configurationKey)&&!!orderNumber&&validOrder(orderNumber,context.configurationKey);
  // A shared UPS IPO may take the slot of an order whose site was cancelled (order-slots.ts); every other row must use another unit.
- const sameUnit=(row:any)=>validOrderPosition(row.snapshot.input?.orderNumber??'')&&row.snapshot.input.orderNumber.split('/')[0]===orderNumber!.split('/')[0];
+ const sameUnit=(row:any)=>validOrder(row.snapshot.input?.orderNumber??'',row.snapshot.approvedCommercialSource?.key)&&row.snapshot.input.orderNumber.split('/')[0]===orderNumber!.split('/')[0];
  const released=shared?await releasedIpoIds(c,issued.filter(sameUnit).map(row=>String(row.id))):new Set<string>();
- if(issued.length&&!issued.every(row=>shared&&row.customer_id===context!.customerId&&upsKeys.includes(row.snapshot.approvedCommercialSource?.key)&&validOrderPosition(row.snapshot.input?.orderNumber??'')&&(row.snapshot.input.orderNumber.split('/')[0]!==orderNumber!.split('/')[0]||released.has(String(row.id)))&&row.snapshot.input.orderNumber.split('/')[1]===orderNumber!.split('/')[1]))return false;
+ if(issued.length&&!issued.every(row=>shared&&row.customer_id===context!.customerId&&upsKeys.includes(row.snapshot.approvedCommercialSource?.key)&&validOrder(row.snapshot.input?.orderNumber??'',row.snapshot.approvedCommercialSource?.key)&&(row.snapshot.input.orderNumber.split('/')[0]!==orderNumber!.split('/')[0]||released.has(String(row.id)))&&row.snapshot.input.orderNumber.split('/')[1]===orderNumber!.split('/')[1]))return false;
  const roots=(await c.query('SELECT document_type,family_id FROM document_reference_roots WHERE lower(reference)=lower($1)',[value])).rows;
  if(roots.some(root=>root.document_type!=='IPO'||!issued.some(row=>row.id===root.family_id)))return false;
  const reserved=(await c.query(`SELECT 1 FROM historical_ipo_authorizations WHERE lower(number)=lower($1) AND ($2::uuid IS NULL OR record_id<>$2::uuid)
@@ -28,6 +34,12 @@ export async function manualIpoAvailable(c:Pool|PoolClient,number:string,recordI
 export function requireDirectUps(r:any){
  if(r.route!=='direct-framework'||!upsKeys.includes(r.data?.basis?.source?.key))throw new HttpError(422,'Manual IPO numbering is available only for the dedicated Direct PO UPS agreements.');
 }
+/** An extra order above a growing programme's target waits until the IPO's freed slots are used (order-slots.ts). */
+export async function requireFreeSlotsUsedFirst(c:Pool|PoolClient,number:string,recordId?:string,orderNumber?:string){
+ if(!recordId)return;
+ const r=await recordUpsContext(c,recordId);
+ await requireFreedSlotsFirst(c,r.context,manualIpoSchema.parse(number),orderNumber??r.orderNumber);
+}
 export function requireEditableIpoRoute(r:any){
  if(!['survey-quote','quick-quote','survey-framework','direct-framework'].includes(r.route))throw new HttpError(422,'Manual IPO numbering is unavailable for this workflow.');
 }
@@ -35,6 +47,7 @@ export async function allocateEditableIpo(c:PoolClient,familyId:string,number:st
  const value=manualIpoSchema.parse(number);
  await c.query('SELECT pg_advisory_xact_lock(742019040)');
  if(!await manualIpoAvailable(c,value,recordId,orderNumber))throw new HttpError(409,ipoNumberConflict);
+ await requireFreeSlotsUsedFirst(c,value,recordId,orderNumber);
  const existing=(await c.query("SELECT 1 FROM document_reference_roots WHERE document_type='IPO' AND lower(reference)=lower($1)",[value])).rowCount;
  if(existing)await c.query("INSERT INTO document_reference_aliases(document_type,family_id,reference) SELECT 'IPO',$1,reference FROM document_reference_roots WHERE document_type='IPO' AND lower(reference)=lower($2)",[familyId,value]);
  else await c.query("INSERT INTO document_reference_roots(document_type,family_id,reference) VALUES('IPO',$1,$2)",[familyId,value]);
