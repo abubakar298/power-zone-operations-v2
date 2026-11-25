@@ -1,3 +1,4 @@
+import { closeRevisionRequest } from './revision-closures.js';
 import {requireUnarchivedQuotation} from '../commercial/archives.js';
 import {loadDocumentListMetadata} from '../documents/list-metadata.js';
 import {finalizeCustomerBoq} from '../boq/lifecycle.js';
@@ -16,6 +17,9 @@ import { HttpError } from "../http/errors.js";
 import type { Pool } from "pg";
 export class CoordinatorRepository {
   constructor(private pool: Pool) {}
+  closeRevision(actor: string, requestId: string, body: unknown) {
+    return closeRevisionRequest(this.pool, actor, requestId, body);
+  }
   async projects(actor: string) {
     return projectCatalog(this.pool, actor);
   }
