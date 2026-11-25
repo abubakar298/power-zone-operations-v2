@@ -537,6 +537,7 @@ export function DepartmentWorkspace({
     <div className="pz-stack department-workspace">
       <ErrorText error={error} />
       {notice && <p role="status">{notice}</p>}
+      {closeRevision&&<CloseRevisionDialog task={closeRevision} session={session} onClose={()=>setCloseRevision(undefined)} onClosed={async message=>{setCloseRevision(undefined);setNotice(message);await load();}}/>}
       {manager && (
         <div className="pz-action-row">
           <Button
@@ -721,7 +722,6 @@ export function DepartmentWorkspace({
           {department === "coordination" && page === "Customer & Site Search" && <section className="pz-panel pz-stack">
             <h3>Master customer and site register</h3>
             {customerEditId!==undefined&&<EditCustomer key={customerEditId} customerId={customerEditId} session={session} onCancel={()=>setCustomerEditId(undefined)} onSaved={async()=>{setRefs(await workflowReferences(session.user.id,{fresh:true}));await load();setCustomerEditId(undefined);}}/>}
-            {closeRevision&&<CloseRevisionDialog task={closeRevision} session={session} onClose={()=>setCloseRevision(undefined)} onClosed={async message=>{setCloseRevision(undefined);setNotice(message);await load();}}/>}
             {siteCodeTarget&&<SiteCodeUpdate site={siteCodeTarget} session={session} onCancel={()=>setSiteCodeTarget(undefined)} onSaved={async()=>{setRefs(await workflowReferences(session.user.id,{fresh:true}));await load();setSiteCodeTarget(undefined);}}/>}
             <CustomerSiteRegister session={session} customers={refs.customers} sites={refs.sites} records={rows} onEditCustomer={setCustomerEditId} onEditSite={setSiteCodeTarget} onWorkflow={(site,record)=>{if(record)void open(record.id).catch(e=>setError(e.message));else{setSelectedSite(site);setCreating("Create survey request");}}}/>
           </section>}
