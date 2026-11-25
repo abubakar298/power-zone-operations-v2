@@ -109,6 +109,14 @@ export function coordinatorHttp(
       );
     res.status(201).json(await repo.dispatch(req.authSession!.user.id, v.data));
   });
+  // Close a revision resolved outside the portal (user request, 25 Nov 2026); kept in history, never deleted.
+  r.post("/revision-requests/:id/close", async (req, res) => {
+    if (!equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken))
+      throw new HttpError(403, "Refresh and try again.");
+    const id = z.uuid().safeParse(req.params.id);
+    if (!id.success) throw new HttpError(400, "Invalid revision.");
+    res.status(201).json(await repo.closeRevision(req.authSession!.user.id, id.data, req.body));
+  });
   r.post("/events", async (req, res) => {
     if (
       !equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken)

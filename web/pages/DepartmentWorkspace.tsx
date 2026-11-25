@@ -19,6 +19,7 @@ import {DirectPo} from "../components/DirectPoUpload.js";
 import { IposSharedList } from "../components/IposSharedList.js";
 import {QuotationApproval} from "../components/QuotationApproval.js";
 import {SiteCodeUpdate} from "../components/SiteCodeUpdate.js";
+import {CloseRevisionDialog} from "../components/CloseRevisionDialog.js";
 import {EditCustomer} from '../components/EditCustomer.js';
 import {CoordinatorQuotationReview} from "../components/CoordinatorQuotationReview.js";
 import { CustomerFollowupList } from "../components/CustomerFollowupList.js";
@@ -81,6 +82,7 @@ export function DepartmentWorkspace({
   const [approvalTarget,setApprovalTarget]=useState<any>();
   async function approvalRecorded(){setApprovalTarget(undefined);setQuotationReview(undefined);await load();window.dispatchEvent(new CustomEvent("pz:workflow-completed",{detail:{message:"Approval recorded — moved to Ready to Send."}}));}
   const [revisionRecord, setRevisionRecord] = useState<any>();
+  const [closeRevision, setCloseRevision] = useState<any>();
   const [selectedSite, setSelectedSite] = useState<any>();
   const [selectedDispatch, setSelectedDispatch] = useState<string>();
   const [dispatchPlanning, setDispatchPlanning] = useState(false);
@@ -719,6 +721,7 @@ export function DepartmentWorkspace({
           {department === "coordination" && page === "Customer & Site Search" && <section className="pz-panel pz-stack">
             <h3>Master customer and site register</h3>
             {customerEditId!==undefined&&<EditCustomer key={customerEditId} customerId={customerEditId} session={session} onCancel={()=>setCustomerEditId(undefined)} onSaved={async()=>{setRefs(await workflowReferences(session.user.id,{fresh:true}));await load();setCustomerEditId(undefined);}}/>}
+            {closeRevision&&<CloseRevisionDialog task={closeRevision} session={session} onClose={()=>setCloseRevision(undefined)} onClosed={async message=>{setCloseRevision(undefined);setNotice(message);await load();}}/>}
             {siteCodeTarget&&<SiteCodeUpdate site={siteCodeTarget} session={session} onCancel={()=>setSiteCodeTarget(undefined)} onSaved={async()=>{setRefs(await workflowReferences(session.user.id,{fresh:true}));await load();setSiteCodeTarget(undefined);}}/>}
             <CustomerSiteRegister session={session} customers={refs.customers} sites={refs.sites} records={rows} onEditCustomer={setCustomerEditId} onEditSite={setSiteCodeTarget} onWorkflow={(site,record)=>{if(record)void open(record.id).catch(e=>setError(e.message));else{setSelectedSite(site);setCreating("Create survey request");}}}/>
           </section>}
@@ -892,7 +895,7 @@ export function DepartmentWorkspace({
                           ? `${Math.max(0, Math.floor((Date.now() - +new Date(t.started_at)) / 86400000))} days`
                           : "Not recorded"}</td>
                         <td>{t.blocker || "No recorded blocker"}</td>
-                        <td><Button variant="secondary" onClick={() => page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?onOpen?.(t):void openRevision({...t,sourceQuotationId:t.id})) : t.kind === "Sale confirmation" ? setQuotationReview({...t,sourceQuotationId:t.id}) : onOpen?.(t)}>{page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?"Continue Revision":"Create Revision") : "Review"}</Button>{page === coordinationBuckets[2] && ["Sale confirmation","C&I proposal"].includes(t.kind)&&<Button variant="success" onClick={()=>setApprovalTarget({quotationId:t.kind==="Sale confirmation"?t.id:undefined,cniId:t.kind==="C&I proposal"?t.id:undefined,number:t.number})}>Record Approval</Button>}</td>
+                        <td><Button variant="secondary" onClick={() => page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?onOpen?.(t):void openRevision({...t,sourceQuotationId:t.id})) : t.kind === "Sale confirmation" ? setQuotationReview({...t,sourceQuotationId:t.id}) : onOpen?.(t)}>{page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?"Continue Revision":"Create Revision") : "Review"}</Button>{page === coordinationBuckets[3] && t.kind==="Quotation revision" && <Button variant="neutral" onClick={() => { setNotice(""); setCloseRevision(t); }}>Close revision</Button>}{page === coordinationBuckets[2] && ["Sale confirmation","C&I proposal"].includes(t.kind)&&<Button variant="success" onClick={()=>setApprovalTarget({quotationId:t.kind==="Sale confirmation"?t.id:undefined,cniId:t.kind==="C&I proposal"?t.id:undefined,number:t.number})}>Record Approval</Button>}</td>
                       </tr>
                     ))}
                   </PagedTableBody>

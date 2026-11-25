@@ -303,7 +303,7 @@ export class ProjectWorkflowRepository {
       ).rows,
       quotations: (
         await this.pool.query(
-          `SELECT q.id,q.number,q.version,b.customer_id,s.code AS site_code,s.name AS site_name FROM quotation_versions q JOIN boq_revisions br ON br.id=q.boq_revision_id JOIN boqs b ON b.id=br.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("quotation", "q.id", "$1")} AND (SELECT kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) IN('Approved','PO received') AND NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AND NOT EXISTS(SELECT 1 FROM quotation_revision_requests rr WHERE rr.source_quotation_id=q.id) ORDER BY q.created_at DESC`,
+          `SELECT q.id,q.number,q.version,b.customer_id,s.code AS site_code,s.name AS site_name FROM quotation_versions q JOIN boq_revisions br ON br.id=q.boq_revision_id JOIN boqs b ON b.id=br.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("quotation", "q.id", "$1")} AND (SELECT kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) IN('Approved','PO received') AND NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AND NOT EXISTS(SELECT 1 FROM quotation_revision_requests_current rr WHERE rr.source_quotation_id=q.id) ORDER BY q.created_at DESC`,
           [actor],
         )
       ).rows,
