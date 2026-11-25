@@ -173,9 +173,9 @@ export function Masters({
     const customerCorrection=edit.kind==='customers'&&!edit.isNew&&session.user.role==='Coordinator';
     const changeReason=String(form.get('changeReason')??'').trim();
     if(customerCorrection){
-      values.short_code=edit.row.short_code;values.status=edit.row.status;
+      values.status=edit.row.status;
       if(!changeReason){setError('Enter a reason for the customer update.');return;}
-      if(!window.confirm(`Update ${edit.row.name}?\nReason: ${changeReason}\nHistorical documents keep their saved customer details.`)||!window.confirm('Confirm saving these customer details to the database?'))return;
+      if(!window.confirm(`Update ${edit.row.name}?${values.short_code!==edit.row.short_code?`\nShort code: ${edit.row.short_code} → ${values.short_code}`:''}\nReason: ${changeReason}\nHistorical documents keep their saved customer details.`)||!window.confirm('Confirm saving these customer details to the database?'))return;
     }
     setBusy(true);
     setError("");
@@ -512,7 +512,7 @@ export function Masters({
               {fields[edit.kind].map((field, i) => (
                 <label key={field}>
                   {labels[field]}
-                  {edit.kind==='customers'&&!edit.isNew&&session.user.role==='Coordinator'&&['short_code','status'].includes(field)?<input name={field} value={String(edit.row[field]??'')} readOnly/>:field === "status" ? (
+                  {edit.kind==='customers'&&!edit.isNew&&session.user.role==='Coordinator'&&field==='status'?<input name={field} value={String(edit.row[field]??'')} readOnly/>:field === "status" ? (
                     <select
                       aria-label={labels[field]}
                       name={field}

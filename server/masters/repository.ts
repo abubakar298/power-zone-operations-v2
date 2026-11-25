@@ -157,7 +157,10 @@ export class MastersRepository {
         const previousCustomer=kind==='customers'&&id!=='new'?(await c.query('SELECT * FROM customers WHERE id=$1 FOR UPDATE',[id])).rows[0]:undefined;
         if(user.role==='Coordinator'&&previousCustomer){
           if(!changeReason.trim())throw new HttpError(400,'Enter a reason for the customer update.');
-          if(values.short_code!==previousCustomer.short_code||values.status!==previousCustomer.status)throw new HttpError(403,'Customer short code and status can only be changed by Admin.');
+          if(values.status!==previousCustomer.status)throw new HttpError(403,'Customer status can only be changed by Admin.');
+          // Coordinators may correct a short code (user request, 25 Nov 2026), except for customers whose code drives
+          // bank programme settings (framework agreements, UBL configurations): those stay Admin-only.
+          if(values.short_code!==previousCustomer.short_code&&(await c.query('SELECT 1 FROM project_framework_versions WHERE customer_id=$1 UNION ALL SELECT 1 FROM ubl_configurations WHERE customer_id=$1 LIMIT 1',[previousCustomer.id])).rowCount)throw new HttpError(403,'This customer\'s short code is used by bank programme settings, so only Admin can change it.');
         }
         const previousSite = kind === "sites" ? (await c.query("SELECT code,version FROM sites WHERE id=$1 FOR UPDATE", [id])).rows[0] : undefined;
         if (kind === "rates" || kind === "rules" || kind === "items") {
