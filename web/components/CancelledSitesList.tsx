@@ -3,6 +3,7 @@ import {api,type Session} from '../api.js';
 import {Button} from '../ui/Button.js';
 import {StatusBadge} from '../ui/StatusBadge.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
+import {recentFirst} from '../../shared/recent-records.js';
 import {slotRanges} from '../../shared/order-slot-ranges.js';
 import {ProjectWorkspace} from '../pages/ProjectWorkspace.js';
 
@@ -37,8 +38,8 @@ export function CancelledSitesTable({sites,onOpenRecord,onOpenProject}:{sites:Ca
   <p className="pz-caption" role="status">{sites.length} cancelled site{sites.length===1?'':'s'} · kept with all their documents and history</p>
   <div className="pz-table-scroll"><table className="pz-table">
    <thead><tr><th scope="col">SR#</th><th scope="col">Customer</th><th scope="col">Site / Branch code</th><th scope="col">Cancelled from</th><th scope="col">Cancelled on</th><th scope="col">Slot now</th><th scope="col" className="pz-ipo-actions-heading">Documents</th></tr></thead>
-   <PagedTableBody label="cancelled sites">{sites.map(s=><tr key={s.id}>
-    <td>{s.sr}</td>
+   <PagedTableBody label="cancelled sites">{recentFirst(sites).map((s,index)=><tr key={s.id}>
+    <td>{index+1}</td>
     <td>{s.customer}</td>
     <td>{s.site||'Site name not recorded'}<div className="pz-caption">{s.siteCode||'Not entered'}</div></td>
     <td>Cancelled from {s.order}<div className="pz-caption">IPO {s.ipo}{s.po?` · PO ${s.po}`:''}</div></td>

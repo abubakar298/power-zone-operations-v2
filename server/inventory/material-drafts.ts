@@ -1,3 +1,4 @@
+import {latestActivity} from '../../shared/recent-records.js';
 import {reviewedWarehouses} from "./warehouse-reference.js";
 import {postTemporaryInward,previewTemporaryInward} from './temporary-inward-posting.js';
 import {MastersRepository} from '../masters/repository.js';
@@ -38,7 +39,7 @@ export const materialDraftInputSchema=z.object({
  transport:z.object({issuedTo:z.string().trim().max(200),vehicle:z.string().trim().max(100),driver:z.string().trim().max(200),driverIdentity:z.string().trim().max(100)}).strict(),
 }).strict();
 export type MaterialDraftInput=z.infer<typeof materialDraftInputSchema>;
-export type MaterialSource={createdAt?:string;installationOnly?:boolean;sourceKind:'store-boq'|'headsup'|'linked-ipo';registeredSiteId?:string;storeHandoffId?:string;basisId:string;basisVersion:1;siteId:string;ipo:string|null;orderNumber?:string;customerPo?:string;dispatchDate?:string|null;installationDate?:string|null;siteName:string;customer:string;installation:boolean|null;authorization:'approved-store-boq'|'approved-ipo-boq'|'forecast-only';items:unknown[]};
+export type MaterialSource={createdAt?:string;lastActivityAt?:string|null;installationOnly?:boolean;sourceKind:'store-boq'|'headsup'|'linked-ipo';registeredSiteId?:string;storeHandoffId?:string;basisId:string;basisVersion:1;siteId:string;ipo:string|null;orderNumber?:string;customerPo?:string;dispatchDate?:string|null;installationDate?:string|null;siteName:string;customer:string;installation:boolean|null;authorization:'approved-store-boq'|'approved-ipo-boq'|'forecast-only';items:unknown[]};
 type Source=MaterialSource;
 const latest=`SELECT d.id,v.version,v.snapshot,v.created_at,(SELECT number FROM inventory_parent_preparation_references WHERE draft_id=d.id) AS number FROM inventory_material_drafts d JOIN LATERAL(SELECT * FROM inventory_material_draft_versions WHERE draft_id=d.id ORDER BY version DESC LIMIT 1)v ON true`;
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
@@ -205,7 +206,10 @@ export class MaterialDraftRepository{
   // Imported Accounts/Operations positioning is visible without pretending that
   // an IPO label establishes an approved, executable BOQ identity.
   const sources=await this.sources();
-  const boardRows=await withInventoryReceiving(this.pool,(await this.pool.query(`SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC`)).rows);
+  const boardRows=await withInventoryReceiving(this.pool,(await this.pool.query(`SELECT DISTINCT ON(site_id) site_id,version,snapshot,created_at FROM operations_board_versions ORDER BY site_id,version DESC`)).rows);
+  // Newest-first lists: a project's last activity is its own handoff or its latest Operations board change.
+  const boardChanged=new Map(boardRows.map(row=>[row.site_id,row.created_at]));
+  const activity=(source:{createdAt?:string;siteId:string;registeredSiteId?:string})=>latestActivity(source.createdAt,boardChanged.get(source.registeredSiteId??''),boardChanged.get(source.siteId));
   const batches=(await this.pool.query('SELECT DISTINCT ON(batch_id) version,snapshot FROM operations_board_batch_versions ORDER BY batch_id,version DESC')).rows;
   const operationsBatches=inventoryOperationsBatches(batches,boardRows,sources);
   // An issued partial DO can be ahead of gate posting or the Operations board.
@@ -249,7 +253,7 @@ export class MaterialDraftRepository{
   const registeredPending=boardRows
    .filter(r=>!r.snapshot.superseded&&!r.snapshot.completed&&r.snapshot.cancelled!==true&&['received','awaiting'].includes(r.snapshot.stage)&&r.snapshot.sample!==true&&!sources.some(s=>s.registeredSiteId===r.site_id))
    .map(r=>({siteId:r.site_id,ipo:r.snapshot.ipo,siteName:r.snapshot.name,customer:r.snapshot.customer??'',installation:r.snapshot.installation,dispatchDate:plannedInventoryDelivery({...r.snapshot,id:r.site_id}),installationDate:plannedInventoryInstallation(r.snapshot),linkStatus:'approved-boq-link-required' as const,linkReview:r.snapshot.materialLinkReview??null}));
-  return {access,sources,registeredPending,continuingProjects,operationsBatches,catalogue:stock.catalogue,aliases:stock.aliases,warehouses:access.owner?stock.warehouses:access.warehouses,stockPosting:false};
+  return {access,sources:sources.map(s=>({...s,lastActivityAt:activity(s)})),registeredPending:registeredPending.map(s=>({...s,lastActivityAt:activity(s)})),continuingProjects:continuingProjects.map(s=>({...s,lastActivityAt:activity(s)})),operationsBatches,catalogue:stock.catalogue,aliases:stock.aliases,warehouses:access.owner?stock.warehouses:access.warehouses,stockPosting:false};
  }
  /** Issuance revalidates pending source identity while locking the same rows
   * that Operations uses for delivery updates. Draft preparation alone does not. */

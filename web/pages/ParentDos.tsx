@@ -1,4 +1,4 @@
-import {recentFirst} from '../../shared/recent-records.js';
+import {recentFirst,recordedTimestamp} from '../../shared/recent-records.js';
 import {withMatchingVariableSection} from '../../shared/material-preparation.js';
 import {ListPagination,useListPage,paginateRows} from '../ui/ListPagination.js';
 import {scheduledTransport} from '../../shared/operations-transport.js';
@@ -42,7 +42,7 @@ export function ParentDos({session,onLogout}:{session:Session;onLogout:()=>void}
  const sources=recentFirst(intake?.sources??[]).filter(s=>selecting||s.authorization!=='forecast-only').filter(s=>selecting||schedule==='all'||(schedule==='scheduled'?!!s.dispatchDate:!s.dispatchDate)).filter(s=>`${s.ipo??''} ${s.orderNumber??''} ${s.siteName} ${s.customer}`.toLowerCase().includes(search.toLowerCase()));
  const registered=(intake?.registeredPending??[]).filter(s=>`${s.ipo} ${s.siteName} ${s.customer}`.toLowerCase().includes(search.toLowerCase()));
  const [page,setPage]=useListPage(JSON.stringify([search,schedule,selecting]));
- const pagination=paginateRows([...sources.map(source=>({source,unlinked:false as const})),...(selecting?registered.map(source=>({source,unlinked:true as const})):[])],page);
+ const pagination=paginateRows(recentFirst([...sources.map(source=>({source,unlinked:false as const})),...(selecting?registered.map(source=>({source,unlinked:true as const})):[])],row=>recordedTimestamp(row.source)),page);
  const requested=new URLSearchParams(path.split('?')[1]??'').get('sites')?.split(',')??[];
  const batchId=new URLSearchParams(path.split('?')[1]??'').get('operations-batch');
  const activeBatch=intake?.operationsBatches?.find(batch=>batch.id===batchId);
