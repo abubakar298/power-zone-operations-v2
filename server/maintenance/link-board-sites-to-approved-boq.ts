@@ -23,7 +23,12 @@ const asName = asIndex >= 0 ? String(args[asIndex + 1] ?? "").trim() : "";
 const pool = createPool(readConfig(process.env));
 try {
   const actor = (await pool.query("SELECT id,display_name FROM users WHERE active AND role IN('Admin','Management') AND display_name=$1", [asName])).rows;
-  if (actor.length !== 1) throw new Error(`Add --as "<name>": expected one active Admin/Management user named "${asName}", found ${actor.length}.`);
+  if (actor.length !== 1) {
+    const names = (await pool.query("SELECT display_name,role FROM users WHERE active AND role IN('Admin','Management') ORDER BY role,display_name")).rows;
+    console.log(`Add --as "<name>" with one of these active Admin/Management users (copy the name exactly):`);
+    names.forEach(r => console.log(`  ${r.display_name}   (${r.role})`));
+    throw new Error(`No single active Admin/Management user named "${asName}" (found ${actor.length}). Nothing was changed.`);
+  }
   const blocked = async () => (await new MaterialDraftRepository(pool).intake(actor[0].id)).operationsBatches
     .flatMap(batch => batch.stops.filter(stop => stop.status === "approved-boq-required").map(stop => ({ batch: batch.number, ...stop })));
 
