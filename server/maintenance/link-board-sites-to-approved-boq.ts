@@ -10,7 +10,8 @@
 // It also lists every batch site Inventory currently shows as "Approved BOQ link required" (the same list as the
 // screen), before and after, so sites with another cause are not missed. Those are reported only, never changed.
 //
-// Run in Render -> web service -> Shell (the name is an active Admin/Management user, needed to read the batch list):
+// Run in Render -> web service -> Shell. --as is an active Admin/Management user's name or email (email when two
+// accounts share a name), needed to read the batch list:
 //   node dist/server/maintenance/link-board-sites-to-approved-boq.js --as "Name"           dry run: lists, changes nothing
 //   node dist/server/maintenance/link-board-sites-to-approved-boq.js --apply --as "Name"   links them
 import { readConfig } from "../config.js";
@@ -22,8 +23,13 @@ const args = process.argv.slice(2), apply = args.includes("--apply"), asIndex = 
 const asName = asIndex >= 0 ? String(args[asIndex + 1] ?? "").trim() : "";
 const pool = createPool(readConfig(process.env));
 try {
-  const actor = (await pool.query("SELECT id,display_name FROM users WHERE active AND role IN('Admin','Management') AND display_name=$1", [asName])).rows;
-  if (actor.length !== 1) throw new Error(`Add --as "<name>": expected one active Admin/Management user named "${asName}", found ${actor.length}.`);
+  const actor = (await pool.query("SELECT id,display_name FROM users WHERE active AND role IN('Admin','Management') AND (display_name=$1 OR lower(email)=lower($1))", [asName])).rows;
+  if (actor.length !== 1) {
+    const names = (await pool.query("SELECT display_name,email,role FROM users WHERE active AND role IN('Admin','Management') ORDER BY role,display_name")).rows;
+    console.log(`Add --as "<name or email>" with one of these active Admin/Management users (copy it exactly; use the email if two share a name):`);
+    names.forEach(r => console.log(`  ${r.display_name}   ${r.email}   (${r.role})`));
+    throw new Error(`No single active Admin/Management user with name or email "${asName}" (found ${actor.length}). Nothing was changed.`);
+  }
   const blocked = async () => (await new MaterialDraftRepository(pool).intake(actor[0].id)).operationsBatches
     .flatMap(batch => batch.stops.filter(stop => stop.status === "approved-boq-required").map(stop => ({ batch: batch.number, ...stop })));
 
