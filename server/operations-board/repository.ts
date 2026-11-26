@@ -5,7 +5,7 @@ import {siteDispatchChoices} from '../inventory/dispatch-document-status.js';
 import {queueOperationsEmails} from '../ipo-email/queue.js';
 import {withInventoryReceiving} from './inventory-delivery.js';
 import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
-import {regionalQcDelegationSql} from './qc-delegation.js';
+import {accessTeamsSql,regionalQcDelegationSql} from './qc-delegation.js';
 import {recordDeliveryReturn} from './delivery-return.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {isDeepStrictEqual} from 'node:util';
@@ -24,7 +24,8 @@ import {fileSchema,importSchema,movementSchema,commandSchema,vendorSchema,target
 import {workflowSiteSchema,saveDispatchPlan,confirmDelivery,validCompletionDate,completeQcStage,completeUpsJob,currentStage,siteBucket as siteBucketForBatch,qcType as qcTypeForBatch,type WorkflowSite,type FileReference,type Entry} from './workflow.js';
 import type {z} from 'zod';
 
-type Access={qcDelegated?:boolean;name:string;kind:'owner'|'head'|'lead'|'qc'|'accounts';team:'central'|'south'|null};
+type Team='central'|'south';
+type Access={qcDelegated?:boolean;name:string;kind:'owner'|'head'|'lead'|'qc'|'accounts';team:Team|null;teams:Team[]};
 const latest="SELECT b.* FROM (SELECT DISTINCT ON (site_id) site_id,version,created_at,snapshot FROM operations_board_versions ORDER BY site_id,version DESC) b WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND (a.records->'portalOperationSiteIds' ? b.site_id::text))";
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 /** Server-owned records; browser role selectors never authorise access. */
@@ -33,17 +34,17 @@ export class OperationsBoardRepository{
  async localPurchases(actor:string,siteId:string){await requireLocalPurchaseSite(actor,siteId,this.pool);return readLocalPurchases(this.pool,siteId);}
  async saveLocalPurchases(actor:string,siteId:string,raw:unknown){return saveLocalPurchases(this.pool,actor,siteId,raw);}
  private async access(actor:string,c:Pool|PoolClient=this.pool):Promise<Access>{
-  const row=(await c.query(`SELECT u.active,u.role,u.display_name,a.kind,a.team,${regionalQcDelegationSql} AS qc_delegated FROM users u LEFT JOIN operations_board_access a ON a.user_id=u.id WHERE u.id=$1`,[actor])).rows[0];
+  const row=(await c.query(`SELECT u.active,u.role,u.display_name,a.kind,a.team,${accessTeamsSql} AS teams,${regionalQcDelegationSql} AS qc_delegated FROM users u LEFT JOIN operations_board_access a ON a.user_id=u.id WHERE u.id=$1`,[actor])).rows[0];
   if(!row?.active)throw new HttpError(401,'Your access has ended.');
-  if(['Admin','Management'].includes(row.role))return {kind:'owner',team:null,name:row.display_name};
-  if(row.role==='Accounts')return {kind:'accounts',team:null,name:row.display_name};
-  if(row.role==='Operations'&&row.kind)return {kind:row.kind,team:row.team,name:row.display_name,qcDelegated:row.qc_delegated===true};
+  if(['Admin','Management'].includes(row.role))return {kind:'owner',team:null,teams:[],name:row.display_name};
+  if(row.role==='Accounts')return {kind:'accounts',team:null,teams:[],name:row.display_name};
+  if(row.role==='Operations'&&row.kind)return {kind:row.kind,team:row.team,teams:row.teams??[],name:row.display_name,qcDelegated:row.qc_delegated===true};
   throw new HttpError(403,'Operations board access is not assigned.');
  }
  private scope(access:Access,site:BoardSite,documentsOnly=false){
   if(access.kind==='accounts'){if(documentsOnly)return;throw new HttpError(403,'Accounts can view document tracking only.');}
   if(['owner','head'].includes(access.kind))return;
-  if(site.operationsTeam!==access.team)throw new HttpError(404,'Site not found in your assigned team.');
+  if(!access.teams.includes(site.operationsTeam as Team))throw new HttpError(404,'Site not found in your assigned team.');
  }
  private async current(c:Pool|PoolClient,id:string,lock=false){
   if(lock)await c.query('SELECT id FROM operations_board_sites WHERE id=$1 FOR UPDATE',[id]);
@@ -54,7 +55,7 @@ export class OperationsBoardRepository{
  async sites(actor:string){
   const access=await this.access(actor);if(access.kind==='accounts')throw new HttpError(403,'Accounts can view document tracking only.');
   const rows=await withInventoryReceiving(this.pool,(await this.pool.query(latest)).rows);
-  const scoped=rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team));
+  const scoped=rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||access.teams.includes(r.snapshot.operationsTeam)));
   const qc=access.kind==='qc'||access.qcDelegated===true;
   const completed=qc?scoped.filter(r=>r.snapshot.installation===true&&!r.snapshot.cancelled&&siteBucketForBatch(r.snapshot)==='completed'):[];
   const pending=await sitesAwaitingQcUsage(this.pool,completed.map(r=>({id:r.site_id,ipo:r.snapshot.ipo??''})));
@@ -63,7 +64,7 @@ export class OperationsBoardRepository{
  /** Physical Documents: originals Accounts has confirmed receiving (every original in the document batch). Read only. */
  async accountsReceipts(actor:string){
   const access=await this.access(actor);if(access.kind==='accounts')throw new HttpError(403,'Accounts can view document tracking only.');
-  const rows=(await this.pool.query(latest)).rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team));
+  const rows=(await this.pool.query(latest)).rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||access.teams.includes(r.snapshot.operationsTeam)));
   const receipts=(await this.pool.query('SELECT site_id,item_key,received_on::text AS received_on FROM accounts_original_receipts WHERE site_id=ANY($1::text[])',[rows.map(r=>r.site_id)])).rows;
   const documents:{siteId:string;documentId:string;receivedOn:string}[]=[];
   for(const r of rows){
@@ -91,7 +92,7 @@ export class OperationsBoardRepository{
   const access=await this.access(actor),rows=(await this.pool.query(latest)).rows;
   if(!rows.length)throw new HttpError(409,'The reviewed Operations site register has not been imported.');
   // Deliberately project documents, not vendors, blockers or arbitrary snapshot data.
-  return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head','accounts'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>{
+  return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head','accounts'].includes(access.kind)||access.teams.includes(r.snapshot.operationsTeam))).map(r=>{
    const s=r.snapshot;return {id:r.site_id,name:s.name,ipo:s.ipo,completed:s.completed===true,version:r.version,documents:s.documents??[],evidencePending:s.evidencePending===true};
   })};
  }
@@ -177,8 +178,8 @@ export class OperationsBoardRepository{
   const a=await this.access(actor);if(!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Batch planning belongs to the Operations lead.');
   const rows=(await this.pool.query('SELECT DISTINCT ON (batch_id) batch_id,version,snapshot FROM operations_board_batch_versions ORDER BY batch_id,version DESC')).rows;
   const current=(await this.pool.query(latest)).rows,sites=new Map(current.map(r=>[r.site_id,r]));
-  return {batches:rows.filter(r=>!r.snapshot.deleted&&(['owner','head'].includes(a.kind)||r.snapshot.team===a.team)).map(r=>{
-   const snapshot=r.snapshot as BatchSnapshot,stops=snapshot.stops.filter(s=>['owner','head'].includes(a.kind)||sites.get(s.siteId)?.snapshot.operationsTeam===a.team).map(s=>({...s,siteVersion:sites.get(s.siteId)?.version,installationDocumentsAtKarachi:installationDocumentsAtKarachi(s.siteId,sites.get(s.siteId)?.snapshot)}));
+  return {batches:rows.filter(r=>!r.snapshot.deleted&&(['owner','head'].includes(a.kind)||a.teams.includes(r.snapshot.team))).map(r=>{
+   const snapshot=r.snapshot as BatchSnapshot,stops=snapshot.stops.filter(s=>['owner','head'].includes(a.kind)||a.teams.includes(sites.get(s.siteId)?.snapshot.operationsTeam)).map(s=>({...s,siteVersion:sites.get(s.siteId)?.version,installationDocumentsAtKarachi:installationDocumentsAtKarachi(s.siteId,sites.get(s.siteId)?.snapshot)}));
    return {...snapshot,version:r.version,stops,canEdit:stops.length===snapshot.stops.length};
   })};
  }

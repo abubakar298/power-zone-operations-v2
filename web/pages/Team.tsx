@@ -9,7 +9,7 @@ type Person = {
   role: string;
   active: boolean;
   email_verified_at: string | null;
-  operations_access?:{kind:"qc"|"lead"|"head";team:"central"|"south"|null}|null;
+  operations_access?:{kind:"qc"|"lead"|"head";team:"central"|"south"|null;extraTeams?:("central"|"south")[]}|null;
   warehouse_access?:{warehouse:string;capability:"dispatcher"|"storekeeper"}[];
 };
 type Invitation = {
@@ -282,7 +282,7 @@ export function Team({
                     </td>
                     <td style={{verticalAlign:'top'}}>
                       <div>{u.role==='Operations'&&u.operations_access?u.operations_access.kind==='qc'?'QC':u.operations_access.kind==='lead'?'Operations Lead':'Operations Head':u.role==='Inventory'&&u.warehouse_access?.length&&u.warehouse_access.every(w=>w.capability==='storekeeper')?'Storekeeper':u.role}</div>
-                      {u.role==='Operations'&&u.operations_access?.team&&<div className="form-note">{u.operations_access.team==='central'?'Central':'South'}</div>}
+                      {u.role==='Operations'&&u.operations_access?.team&&<div className="form-note">{[u.operations_access.team,...(u.operations_access.extraTeams??[])].map(t=>t==='central'?'Central':'South').join(' + ')}</div>}
                       {u.role==='Inventory'&&!!u.warehouse_access?.length&&<div className="form-note">{u.warehouse_access.map(w=>w.warehouse).join(', ')}</div>}
                     </td>
                     <td>{u.active ? "Active" : "Disabled"}</td>
@@ -318,6 +318,7 @@ export function Team({
                           >
                             {u.active ? "Disable" : "Enable"}
                           </button>
+                          {u.active&&u.role==='Operations'&&u.operations_access?.kind==='qc'&&u.operations_access.team&&(()=>{const other=u.operations_access.team==='central'?'south':'central',name=other==='central'?'Central':'South',has=(u.operations_access.extraTeams??[]).includes(other);return <button onClick={()=>setAction({id:u.id,path:`/accounts/users/${u.id}`,label:`${has?'Remove':'Add'} QC for ${name} ${has?'from':'to'} ${u.display_name}`,body:{qcRegion:{team:other,enabled:!has}}})}>{has?`Remove ${name} QC`:`Add ${name} QC`}</button>;})()}
                           <select
                             aria-label={`Change role for ${u.display_name}`}
                             value={u.role}
