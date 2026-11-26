@@ -17,7 +17,8 @@ const sites=[
 test('Cancelled Sites lists SR# from 1, the slot each site was cancelled from, and keeps its documents reachable',()=>{
  const html=renderToStaticMarkup(React.createElement(CancelledSitesTable,{sites,onOpenRecord:()=>undefined,onOpenProject:()=>undefined}));
  assert.match(html,/<th scope="col">SR#<\/th>/);
- assert.match(html,/<td>1<\/td>[\s\S]*Cancelled from 154\/250[\s\S]*<td>2<\/td>[\s\S]*Cancelled from 19\/250/);
+ // Most recently cancelled first; SR# follows the displayed order.
+ assert.match(html,/<td>1<\/td>[\s\S]*Cancelled from 19\/250[\s\S]*<td>2<\/td>[\s\S]*Cancelled from 154\/250/);
  assert.match(html,/2 cancelled sites/);
  assert.match(html,/Now used by Renewed Naseerabad Branch \(1154\)/);
  assert.match(html,/Cancelled by Moaz · Customer said cancel for now/);
