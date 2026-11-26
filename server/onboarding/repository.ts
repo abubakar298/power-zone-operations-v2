@@ -72,7 +72,7 @@ export class AccountsRepository {
   async list() {
     const users = await this.pool.query(
       `SELECT u.id,u.email,u.display_name,u.role,u.active,u.email_verified_at,u.created_at,
-        (SELECT jsonb_build_object('kind',b.kind,'team',b.team) FROM operations_board_access b WHERE b.user_id=u.id) AS operations_access,
+        (SELECT jsonb_build_object('kind',b.kind,'team',b.team,'extraTeams',COALESCE((SELECT jsonb_agg(q.team ORDER BY q.team) FROM operations_board_qc_regions q WHERE q.user_id=b.user_id AND b.kind='qc' AND q.team<>b.team),'[]'::jsonb)) FROM operations_board_access b WHERE b.user_id=u.id) AS operations_access,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('warehouse',w.warehouse,'capability',w.capability) ORDER BY w.warehouse) FROM inventory_material_access w WHERE w.user_id=u.id),'[]'::jsonb) AS warehouse_access
        FROM users u ORDER BY u.created_at,u.id`,
     );
@@ -274,7 +274,7 @@ export class AccountsRepository {
     actorId: string,
     actorHash: string,
     targetId: string,
-    change: { role?: User["role"]; active?: boolean; revokeSessions?: boolean },
+    change: { role?: User["role"]; active?: boolean; revokeSessions?: boolean; qcRegion?: { team: "central" | "south"; enabled: boolean } },
   ) {
     await transaction(this.pool, async (c) => {
       await this.lock(c);
@@ -314,10 +314,23 @@ export class AccountsRepository {
         "UPDATE users SET role=COALESCE($1,role),active=COALESCE($2,active) WHERE id=$3",
         [change.role ?? null, change.active ?? null, targetId],
       );
+      if (change.qcRegion) {
+        const board = (await c.query("SELECT kind,team FROM operations_board_access WHERE user_id=$1 FOR UPDATE", [targetId])).rows[0];
+        if (!target.active || target.role !== "Operations" || board?.kind !== "qc")
+          throw new HttpError(422, "Extra regions can be given only to an active QC account.");
+        if (board.team === change.qcRegion.team)
+          throw new HttpError(422, "This is already the account's main QC region.");
+        if (change.qcRegion.enabled)
+          await c.query("INSERT INTO operations_board_qc_regions(user_id,team,granted_by) VALUES($1,$2,$3) ON CONFLICT(user_id,team) DO NOTHING", [targetId, change.qcRegion.team, actorId]);
+        else
+          await c.query("DELETE FROM operations_board_qc_regions WHERE user_id=$1 AND team=$2", [targetId, change.qcRegion.team]);
+      }
       // Every access change revokes existing sessions and recovery links, including reactivation.
       await c.query("DELETE FROM auth_sessions WHERE user_id=$1", [targetId]);
       await this.cancelTokens(c, "user_id=$1", [targetId]);
-      const action = change.role
+      const action = change.qcRegion
+        ? `account.qc_region.${change.qcRegion.enabled ? "added" : "removed"}:${change.qcRegion.team}`
+        : change.role
         ? "account.role.changed"
         : change.active !== undefined
           ? change.active

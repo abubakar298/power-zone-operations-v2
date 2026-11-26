@@ -19,3 +19,5 @@ export async function setRegionalQcDelegation(pool:Pool,actor:string,input:{emai
   return {email:input.email,team:input.team,qc:input.enabled,leadRetained:true};
  });
 }
+/** Every Operations region a board user covers: the main region plus extra QC regions (QC accounts only). Needs aliases u (users) and a (operations_board_access). */
+export const accessTeamsSql="(CASE WHEN a.team IS NULL THEN ARRAY[]::text[] ELSE ARRAY[a.team]||COALESCE((SELECT array_agg(r.team ORDER BY r.team) FROM operations_board_qc_regions r WHERE r.user_id=u.id AND a.kind='qc' AND r.team<>a.team),ARRAY[]::text[]) END)";

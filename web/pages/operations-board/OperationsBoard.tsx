@@ -19,7 +19,7 @@ import {Button} from '../../ui/Button.js';
 import {StatusBadge} from '../../ui/StatusBadge.js';
 import {Field} from '../../ui/Field.js';
 import {confirmLeaveWorkspace} from '../../hooks/useUnsavedChanges.js';
-import {normalise,bucket,stageNames,teamName,day,sitePath,type Site,type Board} from './types.js';
+import {normalise,bucket,stageNames,teamName,accessTeamsName,day,sitePath,type Site,type Board} from './types.js';
 import {SiteDetail} from './SiteDetail.js';
 import {Targets,Alerts} from './Workspaces.js';
 import {Batches} from './Batches.js';
@@ -71,7 +71,7 @@ export function OperationsBoard({session,onLogout}:{session:Session;onLogout:()=
    {loading&&!data?<p role="status">Loading assigned sites…</p>:error?<section className="pz-panel pz-stack"><h1>Operations</h1><p className="form-error" role="alert">{error}</p><Button variant="primary" onClick={()=>void load()}>Try again</Button></section>:data&&<>
     {restricted?<section className="pz-panel pz-stack"><h1>Page unavailable</h1><p>This page is managed by your Operations lead.</p><Button variant="primary" onClick={()=>go('/operations/sites')}>Open assigned sites</Button></section>:where.id?<SiteDetail key={where.id} site={selected} siteId={where.id} access={data.access} session={session} onSaved={value=>{saved(value);if(qcView)void load();}} onMaterialUsageSaved={()=>void load()} onBack={()=>go('/operations/sites')} onBatches={()=>go('/operations/batches')}/>:
     where.page==='sites'?<>
-     <div className="ob-page-title"><div><h1>Site updates</h1><p>{supervisor?'Plan dispatches and follow site progress.':`${teamName(access?.team)} · assigned sites`}</p></div></div>
+     <div className="ob-page-title"><div><h1>Site updates</h1><p>{supervisor?'Plan dispatches and follow site progress.':`${accessTeamsName(access)} · assigned sites`}</p></div></div>
      <div className="ob-type-filters" aria-label="Project type">{[['solar','Solar'],['ups','UPS'],['delivery','Delivery-Only']].map(([id,label])=><Button variant="neutral" key={id} aria-pressed={type===id} className={type===id?'selected':''} onClick={()=>setType(type===id?'':id)}>{label}</Button>)}</div>
      <section className="ob-buckets" aria-label="Site stages">
       {Object.entries(labels).map(([id,label])=>{
