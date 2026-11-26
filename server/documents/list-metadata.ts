@@ -1,9 +1,10 @@
 import type {Pool,PoolClient} from 'pg';
+import {quotationPayable} from '../../shared/quotation-payable.js';
 export type DocumentListMetadata={documentAmount:string|null;solutionType:string};
 const labels:Record<string,string>={'solar-hybrid':'Solar Hybrid','bess-only':'BESS Only','direct-product':'Direct Sale',cni:'C&I'};
 /** Only public saved payable and family are projected; no repricing or costs. */
 export function snapshotListMetadata(snapshot:any,family?:string|null):DocumentListMetadata{
- const amount=snapshot?.footer?.find((row:any)=>row.label==='Net Total')?.amount??snapshot?.allocation?.total??snapshot?.pricing?.payable??snapshot?.netTotal;
+ const amount=quotationPayable(snapshot)??snapshot?.allocation?.total??snapshot?.pricing?.payable??snapshot?.netTotal;
  const savedFamily=family??snapshot?.survey?.family??snapshot?.boqFamily??(snapshot?.source==='C&I proposal'?'cni':undefined);
  return {documentAmount:typeof amount==='string'&&/^\d+(?:\.\d+)?$/.test(amount)?amount:null,solutionType:labels[savedFamily]??'Not recorded'};
 }
