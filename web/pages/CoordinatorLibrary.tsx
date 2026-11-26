@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {ListPagination,useListPage,paginateRows} from '../ui/ListPagination.js';
 import './coordinator-library.css';
 import {ProjectDocumentActions} from '../components/ProjectDocumentActions.js';
@@ -34,7 +35,7 @@ export function CoordinatorLibrary({mode,onOpen,active,initialProjectKey,initial
  const projectGroups=[...new Map([...catalog].filter(matches).reverse().map(d=>[d.project_key,d])).values()].sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime());
  const hasProjectFilters=Boolean(query.trim()||customer||site||type);
  const pagination=paginateRows(projectGroups,page),shownProjects=pagination.rows;
- const visible=records.filter(matches);
+ const visible=recentFirst(records).filter(matches);
  if(projectKey)return <ProjectWorkspace projectKey={projectKey} onBack={()=>setProjectKey(undefined)} onOpen={onOpen} session={session}/>;
  if(preview&&!(session.user.role==='Coordinator'&&catalog.find(d=>d.id===preview.record.id)?.resource!=='boq'))return <LibraryDocumentPreview document={preview.record} stage={preview.stage} onBack={()=>setPreview(undefined)}/>;
  return <section className="pz-panel pz-stack coordinator-library" aria-busy={loading}>

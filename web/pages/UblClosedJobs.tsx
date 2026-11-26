@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {useEffect,useState} from 'react';
 import {api} from '../api.js';
 import {decimalDisplay} from '../numbers.js';
@@ -13,7 +14,7 @@ export function UblClosedJobs(){
  useEffect(()=>setPage(1),[search,configuration,from,to]);
  const size=10;
  const invalid=Boolean(from&&to&&from>to);
- const filtered=(jobs??[]).filter(j=>(!configuration||j.configuration===configuration)&&(!from||j.closedDate>=from)&&(!to||j.closedDate<=to)&&[ublSiteName(j.siteName),j.branchCode,j.ipoNumber].join(' ').toLowerCase().includes(search.trim().toLowerCase())).sort((a,b)=>b.closedDate.localeCompare(a.closedDate)||a.id.localeCompare(b.id));
+ const filtered=recentFirst(jobs??[]).filter(j=>(!configuration||j.configuration===configuration)&&(!from||j.closedDate>=from)&&(!to||j.closedDate<=to)&&[ublSiteName(j.siteName),j.branchCode,j.ipoNumber].join(' ').toLowerCase().includes(search.trim().toLowerCase())).sort((a,b)=>b.closedDate.localeCompare(a.closedDate)||a.id.localeCompare(b.id));
  const pages=Math.max(1,Math.ceil(filtered.length/size)),current=Math.min(page,pages),visible=invalid?[]:filtered.slice((current-1)*size,current*size);
  const amount=(v:string)=>decimalDisplay(v,0),percent=(v:string)=>`${decimalDisplay(v,0)}%`;
  return <section className="ubl-closed-jobs pz-stack" aria-labelledby="ubl-closed-heading"><div><h3 id="ubl-closed-heading">Closed Jobs</h3><p className="pz-caption">Approved closures · Latest first · PKR excluding GST</p></div>

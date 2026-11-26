@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {EvidencePreview} from '../components/EvidencePreview.js';
 import { DocumentDownload } from "../components/DocumentPreview.js";
@@ -192,7 +193,7 @@ export function Departments({
             </tr>
           </thead>
           <PagedTableBody label="records">
-            {records
+            {recentFirst(records)
               .filter((r) => r.stage === bucket)
               .map((r) => (
                 <tr key={r.id}>

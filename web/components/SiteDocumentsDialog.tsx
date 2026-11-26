@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import './site-documents.css';
 import {useEffect,useState} from 'react';
 import {api} from '../api.js';
@@ -29,7 +30,7 @@ export function SiteDocumentsDialog({siteId,title,reference,onClose}:{siteId:str
  </AccountsRecordDialog>;
 }
 function DocumentList({heading,files,empty}:{heading:string;files:FileRow[];empty:string}){
- return <section className="accounts-record-section"><h3>{heading}</h3>{files.length?<div className="pz-table-scroll"><table className="site-documents-table"><thead><tr><th>SR#</th><th>Document</th><th>Date</th><th>Action</th></tr></thead><tbody>{files.map((f,i)=><tr key={f.id}><td>{i+1}</td><td><strong>{f.label??f.name}</strong><small>{f.name}</small></td><td>{displayDate(f.date)}</td><td><FileActions file={f} compact/></td></tr>)}</tbody></table></div>:<p>{empty}</p>}</section>;
+ return <section className="accounts-record-section"><h3>{heading}</h3>{files.length?<div className="pz-table-scroll"><table className="site-documents-table"><thead><tr><th>SR#</th><th>Document</th><th>Date</th><th>Action</th></tr></thead><tbody>{recentFirst(files).map((f,i)=><tr key={f.id}><td>{i+1}</td><td><strong>{f.label??f.name}</strong><small>{f.name}</small></td><td>{displayDate(f.date)}</td><td><FileActions file={f} compact/></td></tr>)}</tbody></table></div>:<p>{empty}</p>}</section>;
 }
 function FileActions({file,compact}:{file:FileRow;compact?:boolean}){
  const [error,setError]=useState('');

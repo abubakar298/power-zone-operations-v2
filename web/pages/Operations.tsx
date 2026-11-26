@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {AdvanceBoqInbox,AdvanceStockReview} from '../components/AdvanceBoqInbox.js';
 import {AdvanceBoqSearch} from '../components/AdvanceBoqSearch.js';
@@ -345,7 +346,7 @@ export function Operations({
                   </tr>
                 </thead>
                 <PagedTableBody label="sites and documents">
-                  {portalData?.ipos.map((i: any) => (
+                  {recentFirst<any>(portalData?.ipos ?? []).map((i: any) => (
                     <tr key={i.id}>
                       <td>
                         {i.number}

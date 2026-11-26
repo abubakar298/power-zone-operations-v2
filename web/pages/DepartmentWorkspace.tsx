@@ -8,7 +8,7 @@ import { FrameworkEditor } from "./department-workspace/PoEntry.js";
 import {ApprovedConfigurationBatch} from '../components/ApprovedConfigurationBatch.js';
 import {useBackStep} from '../navigation/useBackStep.js';
 import {sharedDepartmentList,workflowReferences} from '../workspaces/workflow-list-reuse.js';
-import {recentFirst} from '../../shared/recent-records.js';
+import {recentFirst,recordedTimestamp} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {CustomerSiteRegister} from '../components/CustomerSiteRegister.js';
 import './department-lists.css';
@@ -414,6 +414,21 @@ export function DepartmentWorkspace({
   );
   const readyToSend = department === "coordination" && page === coordinationBuckets[4];
   const readyIndividuals = visible.filter(r => !r.data.readySendGrouped);
+  const legacyRow = (t: any) => (
+                      <tr key={`commercial-${t.id}`}>
+                        <td>
+                          <strong>{t.customer || "Customer not recorded"} · {t.site}</strong>
+                          <br />{t.number ?? t.reference ?? ""}<DocumentListDetails record={t}/>
+                        </td>
+                        <td>{t.status ?? t.stage}<br />{t.route ?? "Quick BOQ → quotation"}</td>
+                        <td>{t.person ?? t.responsibility ?? "Management"}</td>
+                        <td>{Number.isFinite(+new Date(t.started_at))
+                          ? `${Math.max(0, Math.floor((Date.now() - +new Date(t.started_at)) / 86400000))} days`
+                          : "Not recorded"}</td>
+                        <td>{t.blocker || "No recorded blocker"}</td>
+                        <td><Button variant="secondary" onClick={() => page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?onOpen?.(t):void openRevision({...t,sourceQuotationId:t.id})) : t.kind === "Sale confirmation" ? setQuotationReview({...t,sourceQuotationId:t.id}) : onOpen?.(t)}>{page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?"Continue Revision":"Create Revision") : "Review"}</Button>{page === coordinationBuckets[3] && t.kind==="Quotation revision" && <Button variant="neutral" onClick={() => { setNotice(""); setCloseRevision(t); }}>Close revision</Button>}{page === coordinationBuckets[2] && ["Sale confirmation","C&I proposal"].includes(t.kind)&&<Button variant="success" onClick={()=>setApprovalTarget({quotationId:t.kind==="Sale confirmation"?t.id:undefined,cniId:t.kind==="C&I proposal"?t.id:undefined,number:t.number})}>Record Approval</Button>}</td>
+                      </tr>
+  );
   async function schedulingSaved() {
     await load();
     setDetail(undefined);
@@ -767,16 +782,19 @@ export function DepartmentWorkspace({
                     </tr>
                   </thead>
                   <PagedTableBody label="sites and documents">
-                    {visible
-                      .filter(
+                    {/* One newest-first list: workflow sites and older commercial tasks are interleaved by latest activity. */}
+                    {recentFirst<any>([
+                      ...visible.filter(
                         (r) =>
                           !(
                             department === "design" &&
                             r.stage === "survey_scheduled" &&
                             r.data.surveyDispatchId
                           ),
-                      )
-                      .map((r) => (
+                      ),
+                      ...(department === "coordination" ? visibleLegacy.map((t: any) => ({ legacyTask: t })) : []),
+                    ], (e: any) => recordedTimestamp(e.legacyTask ?? e))
+                      .map((r: any) => r.legacyTask ? legacyRow(r.legacyTask) : (
                         <tr key={r.id}>
                           <td>
                             <strong>
@@ -883,21 +901,6 @@ export function DepartmentWorkspace({
                           </td>
                         </tr>
                       ))}
-                    {department === "coordination" && recentFirst(visibleLegacy).map((t: any) => (
-                      <tr key={`commercial-${t.id}`}>
-                        <td>
-                          <strong>{t.customer || "Customer not recorded"} · {t.site}</strong>
-                          <br />{t.number ?? t.reference ?? ""}<DocumentListDetails record={t}/>
-                        </td>
-                        <td>{t.status ?? t.stage}<br />{t.route ?? "Quick BOQ → quotation"}</td>
-                        <td>{t.person ?? t.responsibility ?? "Management"}</td>
-                        <td>{Number.isFinite(+new Date(t.started_at))
-                          ? `${Math.max(0, Math.floor((Date.now() - +new Date(t.started_at)) / 86400000))} days`
-                          : "Not recorded"}</td>
-                        <td>{t.blocker || "No recorded blocker"}</td>
-                        <td><Button variant="secondary" onClick={() => page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?onOpen?.(t):void openRevision({...t,sourceQuotationId:t.id})) : t.kind === "Sale confirmation" ? setQuotationReview({...t,sourceQuotationId:t.id}) : onOpen?.(t)}>{page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?"Continue Revision":"Create Revision") : "Review"}</Button>{page === coordinationBuckets[3] && t.kind==="Quotation revision" && <Button variant="neutral" onClick={() => { setNotice(""); setCloseRevision(t); }}>Close revision</Button>}{page === coordinationBuckets[2] && ["Sale confirmation","C&I proposal"].includes(t.kind)&&<Button variant="success" onClick={()=>setApprovalTarget({quotationId:t.kind==="Sale confirmation"?t.id:undefined,cniId:t.kind==="C&I proposal"?t.id:undefined,number:t.number})}>Record Approval</Button>}</td>
-                      </tr>
-                    ))}
                   </PagedTableBody>
                 </table>
                 {!visible.length && !(department === "coordination" && visibleLegacy.length) && <p>No sites match these filters.</p>}

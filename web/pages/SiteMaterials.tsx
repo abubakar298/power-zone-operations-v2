@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {withMatchingVariableSection} from '../../shared/material-preparation.js';
 import {ApprovedMaterialPreview} from '../inventory-approved/ApprovedMaterialPreview.js';
 import {reviewIssueRows} from '../inventory-approved/site-issue-review.js';
@@ -40,7 +41,7 @@ type ProjectDo={id:string;number:string;createdAt:string;partialDelivery?:boolea
 const doDate=(value:string)=>{const d=new Date(value);return Number.isNaN(d.getTime())?'':new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Karachi'}).format(d);};
 /** Every DO already issued for this project, each with its own items. */
 function ProjectDoList({dos}:{dos:ProjectDo[]}){
- return <section className="pz-panel pz-stack" aria-label="DOs for this project"><h2>DOs for this project · {dos.length}</h2><div className="pz-table-scroll"><table className="ob-table"><thead><tr><th>DO</th><th>Date</th><th>Kind</th><th>Items on this DO</th></tr></thead><tbody>{dos.map(d=><tr key={d.id}><td><strong>{d.number}</strong></td><td>{doDate(d.createdAt)}</td><td>{d.additional?'Additional (extra material)':d.partialDelivery?'Partial delivery':'Delivery'}</td><td>{(d.lines??[]).filter(l=>Number(l.quantity)>0).map(l=>`${l.itemId??''} ${l.quantity} ${l.unit??''}`.trim()).join(' · ')||'—'}</td></tr>)}</tbody></table></div></section>;
+ return <section className="pz-panel pz-stack" aria-label="DOs for this project"><h2>DOs for this project · {dos.length}</h2><div className="pz-table-scroll"><table className="ob-table"><thead><tr><th>DO</th><th>Date</th><th>Kind</th><th>Items on this DO</th></tr></thead><tbody>{recentFirst(dos).map(d=><tr key={d.id}><td><strong>{d.number}</strong></td><td>{doDate(d.createdAt)}</td><td>{d.additional?'Additional (extra material)':d.partialDelivery?'Partial delivery':'Delivery'}</td><td>{(d.lines??[]).filter(l=>Number(l.quantity)>0).map(l=>`${l.itemId??''} ${l.quantity} ${l.unit??''}`.trim()).join(' · ')||'—'}</td></tr>)}</tbody></table></div></section>;
 }
 export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>void}){
  const initialId=location.pathname.split('/')[3]??'new';

@@ -1,3 +1,4 @@
+import {recentFirst} from '../../../shared/recent-records.js';
 import {PagedTableBody} from '../../ui/PagedTableBody.js';
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type Session } from "../../api.js";
@@ -56,7 +57,7 @@ export function SiteReport({ session, regionScope = "" }: { session: Session; re
           <table className="pz-table sw-table sw-table--compact">
             <thead><tr><th>Site</th><th>Customer</th><th>Region</th><th>Stage</th><th>Scope</th><th>Expected delivery</th><th>Delivered</th><th>Started</th><th>Commissioned</th><th>Handed over</th><th>Submitted</th><th>Closed</th></tr></thead>
             <PagedTableBody label="records">
-              {!report ? <tr><td colSpan={12}>Loading…</td></tr> : sites.length === 0 ? <tr><td colSpan={12}>No sites.</td></tr> : sites.map((s) => (
+              {!report ? <tr><td colSpan={12}>Loading…</td></tr> : sites.length === 0 ? <tr><td colSpan={12}>No sites.</td></tr> : recentFirst(sites).map((s) => (
                 <tr key={s.id}>
                   <td><strong>{label(s)}</strong></td><td>{s.customer ?? "—"}</td><td>{s.region ?? "—"}</td>
                   <td><span className="sw-stage-tag" style={{ background: STAGE_COLOURS[s.stage], color: stageInk(s.stage) }}>{STAGE_LABELS[s.stage]}</span></td>

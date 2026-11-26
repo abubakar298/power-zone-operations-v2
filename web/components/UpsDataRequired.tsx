@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {Fragment,useEffect,useState,type FormEvent} from 'react';
 import {api,type Session} from '../api.js';
@@ -19,7 +20,7 @@ export function UpsDataRequired({customer,onSaved}:{customer:'UBL'|'MBL',onSaved
  const select=(key:string,label:string,options:string[])=><Field key={key} id={`ups-review-${key}`} label={label}><select id={`ups-review-${key}`} value={values?.[key]} onChange={e=>change(key,e.target.value)}>{options.map(option=><option key={option}>{option}</option>)}</select></Field>;
  if(!data&&!error)return null;
  if(data?.total===0)return null;
- const rows=(data?.rows??[]).map((r:any,i:number)=>({...r,sr:i+1})).filter((r:any)=>[r.siteName,r.orderNumber,r.status,...r.missing].join(' ').toLowerCase().includes(search.toLowerCase()));
+ const rows=recentFirst<any>(data?.rows??[]).filter((r:any)=>[r.siteName,r.orderNumber,r.status,...r.missing].join(' ').toLowerCase().includes(search.toLowerCase())).map((r:any,i:number)=>({...r,sr:i+1}));
  return <section className="pz-panel pz-stack" aria-label="UPS Data Required">
   <div className="pz-action-row"><h3>Data Required · {data?.required??'—'} Sites</h3></div>
   <label className="pz-field">Search sites<input type="search" placeholder="Site name, order number or missing detail" value={search} onChange={e=>setSearch(e.target.value)}/></label>
