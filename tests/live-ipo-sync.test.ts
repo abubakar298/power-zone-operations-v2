@@ -56,6 +56,10 @@ test('explicit live IPO sync is duplicate-safe, retains reviewed decisions and n
   await db.pool.query("INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES('cancelled-same-slot',1,$1,'Source imported','SIMULATION source',$2,$3)",[{id:'cancelled-same-slot',ipo:reused.number+' · '+reused.order,name:'Cancelled branch',stage:'received',installation:null,scopePending:true,cancelled:true},randomUUID(),manager]);
   const placed=await sync.sync(manager,{ipoIds:[reused.ipoId]});
   assert.equal(placed.held.length,0,JSON.stringify(placed.held));assert.equal(placed.created.length,1);assert.notEqual(placed.created[0].boardSiteId,'cancelled-same-slot');
+  // The sync also links the placed site to its approved BOQ, as a normal IPO handoff does, so Inventory can open its materials (26 Nov 2026).
+  assert.deepEqual(placed.inventoryLinks.map(l=>[l.boardSiteId,l.status]),[[placed.created[0].boardSiteId,'linked']],JSON.stringify(placed.inventoryLinks));
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_material_source_links WHERE board_site_id=$1 AND ipo_id=$2',[placed.created[0].boardSiteId,reused.ipoId])).rows[0].n,1);
+  const again=await sync.sync(manager,{ipoIds:[reused.ipoId]});assert.deepEqual(again.inventoryLinks.map(l=>l.status),['retained']);
   assert.deepEqual(boardCandidates([{site_id:'a',snapshot:{ipo:'CHP-163 · 154/250',cancelled:true}},{site_id:'b',snapshot:{ipo:'chp-163 ·  154/250'}},{site_id:'c',snapshot:{ipo:'X',cancelled:true,origin:{ipoId:'me'}}}],'chp-163 · 154/250','me'),['b','c']);
   const wrongOrigin=await issuance(),wrongId='live-ipo:'+wrongOrigin.ipoId;
   await db.pool.query('INSERT INTO operations_board_sites(id,created_by) VALUES($1,$2)',[wrongId,manager]);
