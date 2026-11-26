@@ -3,11 +3,14 @@ import {HttpError} from '../http/errors.js';
 import {validOrderPosition} from '../../shared/direct-po-reading.js';
 import {growingProgramme,isExtraOrder} from '../../shared/extra-programme-orders.js';
 import {slotRanges} from '../../shared/order-slot-ranges.js';
+import {correctedOrderNumber} from './order-number-corrections.js';
 
 /** Bank programme order slots (owner request, 24 Nov 2026).
  * A shared UPS IPO such as CHP-163 holds a fixed number of order slots, written on each IPO as "154/250".
  * A slot is free again when its site is cancelled: by the Operations head (Cancel site, with the customer's
- * proof) or in the reviewed source register (cancelled or transferred). Nobody has to release it by hand.
+ * proof) or in the reviewed source register (cancelled). Nobody has to release it by hand.
+ * A transferred order (the register's "site has been shifted to IPO …") lives on under its new IPO, which counts
+ * it there: its old number is neither free nor listed as a cancelled site (user, 26 Nov 2026).
  * The next new or renewed order may then use the same slot number. The cancelled order's IPO, documents and
  * history are never changed or deleted: it stays listed under Coordination → Cancelled Sites. */
 
@@ -37,14 +40,17 @@ export function slotIdentity(customer:unknown,ipo:unknown,order:unknown):SlotIde
 }
 
 /** Pure: which slots are free, and the cancelled sites numbered SR# 1, 2, 3… oldest cancellation first,
- * so a later cancellation never renumbers the earlier rows. */
-export function orderSlotSummary(active:ActiveSlotOrder[],cancelled:CancelledOrderSite[]):OrderSlotSummary{
+ * so a later cancellation never renumbers the earlier rows. `closed` = numbers of transferred orders (never free).
+ * Only a growing programme (UBL UPS 250) shows orders above its target as extra orders. */
+export function orderSlotSummary(active:ActiveSlotOrder[],cancelled:CancelledOrderSite[],closed:SlotIdentity[]=[]):OrderSlotSummary{
  const groups=new Map<string,SlotIdentity>();
  for(const order of [...active,...cancelled])if(!groups.has(order.programme))groups.set(order.programme,order);
  const programmes=[...groups.values()].map(g=>{
   const used=new Set(active.filter(a=>a.programme===g.programme).map(a=>a.unit)),highest=Math.max(g.total,...used);
-  const free=Array.from({length:highest},(_,i)=>i+1).filter(unit=>!used.has(unit));
-  return {key:g.programme,customer:g.customer,ipo:g.ipo,capacity:g.total,extra:[...used].filter(unit=>unit>g.total).length,inUse:used.size,freeCount:free.length,free};
+  const shut=new Set(closed.filter(c=>c.programme===g.programme).map(c=>c.unit));
+  const free=Array.from({length:highest},(_,i)=>i+1).filter(unit=>!used.has(unit)&&!shut.has(unit));
+  const growing=!!growingProgramme(`1/${g.total}`,{customer:g.customer});
+  return {key:g.programme,customer:g.customer,ipo:g.ipo,capacity:g.total,extra:growing?[...used].filter(unit=>unit>g.total).length:0,inUse:used.size,freeCount:free.length,free};
  }).sort((a,b)=>a.customer.localeCompare(b.customer)||a.ipo.localeCompare(b.ipo,'en',{numeric:true})||a.capacity-b.capacity);
  const sites=[...cancelled].sort((a,b)=>text(a.cancelledAt).localeCompare(text(b.cancelledAt))||a.ipo.localeCompare(b.ipo)||a.unit-b.unit||a.id.localeCompare(b.id)).map((site,index)=>{
   const reuse=active.find(a=>a.programme===site.programme&&a.unit===site.unit);
@@ -72,14 +78,14 @@ async function registerRows(c:Db):Promise<{rows:Row[];sourceDate:string|null}>{
 }
 const registerCustomer=(r:Row)=>text(r.customer)||String(r.key??'').split(':')[0];
 
-/** Every shared UPS order with its slot, split into active and cancelled. */
-export async function loadOrderSlots(c:Db):Promise<{active:ActiveSlotOrder[];cancelled:CancelledOrderSite[]}>{
+/** Every shared UPS order with its slot, split into active, cancelled and closed (transferred to another IPO). */
+export async function loadOrderSlots(c:Db):Promise<{active:ActiveSlotOrder[];cancelled:CancelledOrderSite[];closed:SlotIdentity[]}>{
  const [operations,register,issued]=await Promise.all([operationsCancellations(c),registerRows(c),c.query(`SELECT i.id,i.number,i.created_at,i.snapshot,upper(cu.short_code) AS customer,cu.id AS customer_id,w.record_id
   FROM internal_purchase_orders i JOIN customer_purchase_orders p ON p.id=i.customer_po_id JOIN customers cu ON cu.id=p.customer_id
   LEFT JOIN project_workflow_issuances w ON w.ipo_id=i.id LEFT JOIN project_workflow_records r ON r.id=w.record_id
   WHERE i.snapshot->'approvedCommercialSource'->>'key'=ANY($1::text[]) AND r.data->>'localPreviewArchived' IS DISTINCT FROM 'true'
   ORDER BY i.created_at,i.id`,[upsKeys])]);
- const active:ActiveSlotOrder[]=[],cancelled:CancelledOrderSite[]=[],byIpo=new Map<string,typeof operations[number]>(),byKey=new Map<string,typeof operations[number]>();
+ const active:ActiveSlotOrder[]=[],cancelled:CancelledOrderSite[]=[],closed:SlotIdentity[]=[],byIpo=new Map<string,typeof operations[number]>(),byKey=new Map<string,typeof operations[number]>();
  for(const o of operations){for(const id of o.ipoIds)byIpo.set(id,o);if(o.sourceKey)byKey.set(o.sourceKey,o);}
  const listed=new Set<string>(),registerOrder=(ipo:unknown,order:unknown)=>`${text(ipo).toUpperCase()}|${text(order)}`;
  const registerCancelled=new Set<string>(),registerActive=new Set<string>();
@@ -91,32 +97,33 @@ export async function loadOrderSlots(c:Db):Promise<{active:ActiveSlotOrder[];can
   const slot=slotIdentity(registerCustomer(r),r.ipo,r.orderNumber);if(!slot)continue;
   const site={site:text(r.site),siteCode:text(r.siteCode),po:text(r.po)},o=byKey.get(String(r.key));
   if(o)cancel(slot,o,site);
-  else if(r.cancelled===true||r.transferred===true){
+  else if(r.transferred===true&&r.cancelled!==true){registerCancelled.add(slot.customer+'|'+registerOrder(r.ipo,r.orderNumber));closed.push(slot);}
+  else if(r.cancelled===true){
    registerCancelled.add(slot.customer+'|'+registerOrder(r.ipo,r.orderNumber));
-   cancelled.push({...slot,id:'register:'+r.key,source:'Reviewed register',outcome:r.transferred===true&&r.cancelled!==true?'Transferred':'Cancelled',...site,ipoId:null,recordId:null,projectKey:null,
+   cancelled.push({...slot,id:'register:'+r.key,source:'Reviewed register',outcome:'Cancelled',...site,ipoId:null,recordId:null,projectKey:null,
     cancelledAt:register.sourceDate,cancelledBy:null,reason:text(r.cancellationOutcome)||text(r.cancellationReason)||text(r.transferOutcome)||text(r.outcome)});
   }else{active.push({...slot,...site,ipoId:null});registerActive.add(registerOrder(r.ipo,r.orderNumber));}
  }
  for(const i of issued.rows){
-  const s=i.snapshot??{},slot=slotIdentity(i.customer,i.number,s.input?.orderNumber);if(!slot)continue;
+  const s=i.snapshot??{},typed=correctedOrderNumber({customer:i.customer,ipo:i.number,order:s.input?.orderNumber,siteCode:s.siteCode}),slot=slotIdentity(i.customer,i.number,typed);if(!slot)continue;
   const code=text(s.siteCode),site={site:text(s.siteName),siteCode:code,po:text(s.input?.poNumber),ipoId:String(i.id),recordId:i.record_id?String(i.record_id):null,projectKey:i.record_id&&code?JSON.stringify([String(i.customer_id),code.toUpperCase()]):null};
   const o=byIpo.get(String(i.id));
   if(o){cancel(slot,o,site);continue;}
   // Released without an Operations cancellation: an imported historical order the reviewed register cancels,
   // already listed from its register row. Same rule as ipo_order_slot_released (migration 309), kept in step by tests.
-  const order=registerOrder(slot.ipo,s.input?.orderNumber),historical=![undefined,null,false,'',0].includes(s.historicalImport);
+  const order=registerOrder(slot.ipo,typed),historical=![undefined,null,false,'',0].includes(s.historicalImport);
   if(historical&&registerCancelled.has(slot.customer+'|'+order)&&!registerActive.has(order))continue;
   active.push({...slot,site:site.site,siteCode:code,ipoId:site.ipoId});
  }
- return {active,cancelled};
+ return {active,cancelled,closed};
 }
 
-/** Pure: the free slots below an extra order ("253/250" → any of 1–252 not held by an active order of the same IPO).
- * An IPO number with no orders yet has none. Empty for an order inside its target. */
-export function freeSlotsBefore(active:ActiveSlotOrder[],slot:SlotIdentity):number[]{
+/** Pure: the free slots below an extra order ("253/250" → any of 1–252 not held by an active order of the same IPO
+ * and not closed by a transfer). An IPO number with no orders yet has none. Empty for an order inside its target. */
+export function freeSlotsBefore(active:ActiveSlotOrder[],slot:SlotIdentity,closed:SlotIdentity[]=[]):number[]{
  if(slot.unit<=slot.total)return [];
- const used=new Set(active.filter(a=>a.programme===slot.programme).map(a=>a.unit));
- return used.size?Array.from({length:slot.unit-1},(_,i)=>i+1).filter(unit=>!used.has(unit)):[];
+ const used=new Set(active.filter(a=>a.programme===slot.programme).map(a=>a.unit)),shut=new Set(closed.filter(c=>c.programme===slot.programme).map(c=>c.unit));
+ return used.size?Array.from({length:slot.unit-1},(_,i)=>i+1).filter(unit=>!used.has(unit)&&!shut.has(unit)):[];
 }
 
 /** Freed slots first (owner, 25 Nov 2026): an extra order above the target of a growing programme
@@ -126,7 +133,7 @@ export async function requireFreedSlotsFirst(c:Db,context:{customerId:number;con
  if(!context||!order||!isExtraOrder(order)||!growingProgramme(order,{configurationKey:context.configurationKey}))return;
  const bank=(await c.query('SELECT short_code FROM customers WHERE id=$1',[context.customerId])).rows[0]?.short_code;
  const slot=slotIdentity(bank,ipo,order);if(!slot)return;
- const free=freeSlotsBefore((await loadOrderSlots(c)).active,slot);
+ const {active,closed}=await loadOrderSlots(c),free=freeSlotsBefore(active,slot,closed);
  if(free.length)throw new HttpError(409,`Order slot ${free[0]}/${slot.total} of IPO ${slot.ipo} is free. Use the free slot${free.length>1?'s':''} (${slotRanges(free)}) before order ${slot.order}.`);
 }
 
@@ -139,7 +146,7 @@ export async function releasedIpoIds(c:Db,ids:string[]):Promise<Set<string>>{
 export async function cancelledSitesForCoordination(pool:Pool,actor:string):Promise<OrderSlotSummary>{
  const user=(await pool.query('SELECT role,active FROM users WHERE id=$1',[actor])).rows[0];
  if(!user?.active||!['Coordinator','Management','Admin'].includes(user.role))throw new HttpError(403,'Cancelled sites are available to Coordination and Management.');
- const {active,cancelled}=await loadOrderSlots(pool);
+ const {active,cancelled,closed}=await loadOrderSlots(pool);
  // Historical register orders have no IPO in the portal; link their project file when one exists for the same site code.
  const historical=cancelled.filter(s=>!s.projectKey&&s.siteCode);
  if(historical.length){
@@ -147,5 +154,5 @@ export async function cancelledSitesForCoordination(pool:Pool,actor:string):Prom
    WHERE upper(cu.short_code)=ANY($1::text[]) AND upper(r.site_code)=ANY($2::text[])`,[[...new Set(historical.map(s=>s.customer))],[...new Set(historical.map(s=>s.siteCode.toUpperCase()))]])).rows;
   for(const s of historical){const match=records.filter(r=>r.customer===s.customer&&same(r.site_code,s.siteCode));if(match.length===1)s.projectKey=JSON.stringify([String(match[0].customer_id),s.siteCode.toUpperCase()]);}
  }
- return orderSlotSummary(active,cancelled);
+ return orderSlotSummary(active,cancelled,closed);
 }
