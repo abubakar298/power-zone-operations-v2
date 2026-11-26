@@ -1,5 +1,6 @@
 import { money as amount } from "../numbers.js";
 import { Decimal } from "decimal.js";
+import { quotationPayable } from "../../shared/quotation-payable.js";
 export function CostingWorkflowHistory({
   review,
   quotation,
@@ -185,11 +186,9 @@ export function CostingWorkflowHistory({
                 </td>
                 <td>{quotation.number}</td><td>{quotationType(currentHistory)}</td>
                 <td className="numeric">
-                  {amount(
-                    quotation.snapshot.footer.find(
-                      (r: any) => r.label === "Net Total",
-                    ).amount,
-                  )}
+                  {quotationPayable(quotation.snapshot) == null
+                    ? "Not recorded"
+                    : amount(quotationPayable(quotation.snapshot))}
                 </td>
                 <td>
                   Based on {previous?.number}{settingsChanges(currentHistory)}

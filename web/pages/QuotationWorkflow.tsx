@@ -9,6 +9,7 @@ import { SharePdf } from "../components/SharePdf.js";
 import { ExternalApproval } from "../components/ExternalApproval.js";
 import { CostingWorkflowHistory } from "../components/CostingWorkflowHistory.js";
 import { Decimal } from "decimal.js";
+import { quotationPayable } from "../../shared/quotation-payable.js";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, type Session } from "../api.js";
 import {
@@ -99,7 +100,7 @@ export function QuotationWorkflow({
   const [revision, setRevision] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [discount, setDiscount] = useState(q.snapshot.input.discount ?? "0");
+  const [discount, setDiscount] = useState(q.snapshot.input?.discount ?? "0");
   const [mode, setMode] = useState<"discount" | "margin">("discount");
   const [targetMargin, setTargetMargin] = useState("");
   const percentageValid = /^\d{1,2}(\.\d{1,2})?$/.test(targetMargin.trim());
@@ -109,7 +110,7 @@ export function QuotationWorkflow({
     session,
     manager,
     "discount",
-    q.snapshot.input.discount ?? "0",
+    q.snapshot.input?.discount ?? "0",
   );
   const target = useAdjustmentPreview(
     q,
@@ -124,7 +125,7 @@ export function QuotationWorkflow({
   const effectiveDiscount =
     mode === "discount" ? discount : (target.result?.discount ?? "");
   useEffect(() => {
-    setDiscount(q.snapshot.input.discount ?? "0");
+    setDiscount(q.snapshot.input?.discount ?? "0");
     setMode("discount");
     setTargetMargin("");
     setRevision(false);
@@ -202,7 +203,7 @@ export function QuotationWorkflow({
       manager &&
       (targetMargin.trim() ||
         (discount.trim() &&
-          Number(discount) !== Number(q.snapshot.input.discount ?? 0)))
+          Number(discount) !== Number(q.snapshot.input?.discount ?? 0)))
     ) {
       if (
         (!discount.trim() && !targetMargin.trim()) ||
@@ -244,15 +245,15 @@ export function QuotationWorkflow({
     const proposedChange =
       manager &&
       (actionDiscount.trim() || "0") !==
-        String(q.snapshot.input.discount ?? "0") &&
+        String(q.snapshot.input?.discount ?? "0") &&
       actionMetrics &&
-      Number(actionDiscount || 0) !== Number(q.snapshot.input.discount ?? 0);
+      Number(actionDiscount || 0) !== Number(q.snapshot.input?.discount ?? 0);
     if (
       kind === "Approved" &&
       ((mode === "margin" && (calculating || !metrics)) ||
         !validDiscount ||
         Number(actionDiscount.trim() || 0) !==
-          Number(q.snapshot.input.discount ?? 0))
+          Number(q.snapshot.input?.discount ?? 0))
     ) {
       setError(
         "This discount is a preview. Request revision with the proposed discount before approving the saved quotation.",
@@ -309,10 +310,20 @@ export function QuotationWorkflow({
     }
   }
   const normalizedDiscount = effectiveDiscount.trim() || "0";
-  const gross = new Decimal(q.snapshot.footer.at(-1).amount).add(
-    q.snapshot.input.discount ?? "0",
-  );
+  // A saved quotation with a missing or unreadable payable still opens; the price
+  // controls simply stay on the saved figures instead of crashing the workspace.
+  const gross = (() => {
+    try {
+      const payable = quotationPayable(q.snapshot);
+      return payable == null
+        ? undefined
+        : new Decimal(payable).add(q.snapshot.input?.discount || "0");
+    } catch {
+      return undefined;
+    }
+  })();
   const validDiscount =
+    gross !== undefined &&
     /^\d{1,12}(\.\d{1,2})?$/.test(normalizedDiscount) &&
     new Decimal(normalizedDiscount).lte(gross);
   const snapshot =
@@ -325,7 +336,7 @@ export function QuotationWorkflow({
             r.label === "Special Discount"
               ? { ...r, amount: new Decimal(normalizedDiscount).toFixed(2) }
               : r.label === "Net Total"
-                ? { ...r, amount: gross.minus(normalizedDiscount).toFixed(2) }
+                ? { ...r, amount: gross!.minus(normalizedDiscount).toFixed(2) }
                 : r,
           ),
         }
@@ -368,7 +379,7 @@ export function QuotationWorkflow({
           className="quotation-review-panel"
         >
           <h3>
-            {!q.snapshot.footer.some(
+            {!(q.snapshot.footer ?? []).some(
               (r: any) => r.label === "Subtotal Before Tax",
             )
               ? "Tax-inclusive quotation"
@@ -485,7 +496,7 @@ export function QuotationWorkflow({
                             </tr>
                             <tr>
                               <th>Discount amount (PKR)</th>
-                              <td>{money(q.snapshot.input.discount ?? "0")}</td>
+                              <td>{money(q.snapshot.input?.discount ?? "0")}</td>
                               <td>{money(state.result.discount)}</td>
                             </tr>
                             <tr>
@@ -690,7 +701,7 @@ export function QuotationWorkflow({
                       busy ||
                       !notes.trim() ||
                       (Number(effectiveDiscount.trim() || 0) !==
-                        Number(q.snapshot.input.discount ?? 0) &&
+                        Number(q.snapshot.input?.discount ?? 0) &&
                         (calculating || !metrics))
                     }
                   >
