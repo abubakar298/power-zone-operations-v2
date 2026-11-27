@@ -117,6 +117,14 @@ export function coordinatorHttp(
     if (!id.success) throw new HttpError(400, "Invalid revision.");
     res.status(201).json(await repo.closeRevision(req.authSession!.user.id, id.data, req.body));
   });
+  // "Not needed" for an approved BOQ that will never be priced (user decision, 27 Nov 2026); kept in history.
+  r.post("/boq-revisions/:id/retire", async (req, res) => {
+    if (!equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken))
+      throw new HttpError(403, "Refresh and try again.");
+    const id = z.uuid().safeParse(req.params.id);
+    if (!id.success) throw new HttpError(400, "Invalid BOQ.");
+    res.status(201).json(await repo.retireBoq(req.authSession!.user.id, id.data, req.body));
+  });
   r.post("/events", async (req, res) => {
     if (
       !equalSecrets(req.get("X-CSRF-Token") ?? "", req.authSession!.csrfToken)
