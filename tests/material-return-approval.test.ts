@@ -58,6 +58,10 @@ test('a counted return waits for the Inventory head, who approves it into stock 
   const listed=await stock.returnApprovals(head,draftId);assert.equal(listed.canApprove,true);
   assert.deepEqual(listed.submissions.map(s=>[s.status,s.receiptNumber]),[['approved',approved.number],['rejected',null]]);
   assert.equal((await stock.returnApprovals(counter,draftId)).canApprove,false);
+  // A retried request from before approvals existed (credited directly) still returns its receipt.
+  const direct={...counted,requestKey:randomUUID(),evidenceId:(await stock.uploadEvidence(counter,{warehouse,filename:'older-igp.pdf',mediaType:'application/pdf',base64:Buffer.from('%PDF-1.7 FICTIONAL OLDER IGP').toString('base64')})).id,lines:[{lineKey,quantity:'1',ledgerRevision:2}]};
+  const old=await stock.receive(counter,direct);
+  assert.equal((await stock.submitReturn(counter,direct)).id,old.id);assert.equal(await closing(),'7');
   await assert.rejects(pool.query("UPDATE inventory_material_return_decisions SET reason='changed'"),/immutable|not allowed|cannot/i,'decisions are append-only');
  }finally{await close();}
 });

@@ -207,6 +207,9 @@ export class MaterialStockRepository{
    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.material.return.submission.'||$1,0))",[input.requestKey]);
    const replay=(await c.query('SELECT id,submitted_by,request_fingerprint FROM inventory_material_return_submissions WHERE request_key=$1',[input.requestKey])).rows[0];
    if(replay){if(replay.submitted_by!==actor||replay.request_fingerprint!==fingerprint(originalInput))throw new HttpError(409,'This request belongs to a different returned-material IGP.');return {id:replay.id as string,stockPosted:false,status:'awaiting-approval' as const};}
+   // A retry of a return credited before approvals existed returns that receipt, as it always did.
+   const credited=(await c.query('SELECT r.id,r.number,r.request_fingerprint,r.verified_by FROM inventory_material_receipts r WHERE r.request_key=$1',[input.requestKey])).rows[0];
+   if(credited){await this.scope(actor,(await this.drafts.detail(actor,input.draftId,c)).snapshot.warehouse,c);if(credited.verified_by!==actor||credited.request_fingerprint!==fingerprint(originalInput))throw new HttpError(409,'This request belongs to a different warehouse receipt.');return {id:credited.id as string,number:credited.number as string,stockPosted:true,status:'credited' as const};}
    await c.query('SELECT id FROM inventory_material_drafts WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',[[...new Set([input.draftId,originalInput.draftId])]]);
    if((await c.query('SELECT 1 FROM inventory_material_return_submissions s WHERE s.draft_id=$1 AND NOT EXISTS(SELECT 1 FROM inventory_material_return_decisions d WHERE d.submission_id=s.id)',[input.draftId])).rowCount)throw new HttpError(409,'A counted return for this DO is already waiting for the Inventory head. Ask them to approve or reject it first.');
    // Same checks as crediting stock, then undone: the submission must be one the head can approve.
