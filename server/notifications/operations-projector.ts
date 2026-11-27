@@ -1,8 +1,9 @@
 import type {PoolClient} from 'pg';
 import {operationsNotificationStart} from '../../shared/operations-notification-policy.js';
+import {batchCancellationKinds} from '../operations-board/batch-stop-change.js';
 /** Event handoffs only. Delay/blocker delivery is handled separately by OperationsIncidentProjector. */
-const handoffKinds=['Operations team assigned','Dispatch plan','Batch plan','Partial delivery update','Delivery invoice due','Delivery update','Installation completed','QC stage completed','Existing site evidence recorded','Documents submitted','Saved site decision changed','Document movement corrected','Batch plan changed','Batch site cancelled','Batch site added'];
-const corrections=new Set(['Saved site decision changed','Document movement corrected','Batch plan changed','Batch site cancelled','Batch site added']);
+const handoffKinds=['Operations team assigned','Dispatch plan','Batch plan','Partial delivery update','Delivery invoice due','Delivery update','Installation completed','QC stage completed','Existing site evidence recorded','Documents submitted','Saved site decision changed','Document movement corrected','Batch plan changed','Batch site cancelled','Batch site added',...batchCancellationKinds];
+const corrections=new Set(['Saved site decision changed','Document movement corrected','Batch plan changed','Batch site cancelled','Batch site added',...batchCancellationKinds]);
 export class OperationsNotificationProjector{
  /** Call inside the notification sync transaction. Never starts workers or contacts a provider. */
  async sync(c:PoolClient,clock:string){

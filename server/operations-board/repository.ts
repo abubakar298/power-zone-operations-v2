@@ -13,7 +13,8 @@ import {attachHistoricalEvidence} from './historical-evidence.js';
 import {validateBatch,type BatchSnapshot} from './batches.js';
 import {activeSiteAlerts} from './delays.js';
 import {boardFileDownloadContext} from './file-download-name.js';
-import {siteCancellationBlockers,cancelSite,requireNotCancelled} from './site-cancellation.js';
+import {siteCancellationBlockers,siteIssuedDoNumbers,cancelSite,requireNotCancelled} from './site-cancellation.js';
+import {batchStopChange,batchStopChangeHistory,issuedDosNote} from './batch-stop-change.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {HttpError} from '../http/errors.js';
@@ -226,14 +227,17 @@ export class OperationsBoardRepository{
     // through a site snapshot after an individual team reassignment.
     const link={...snapshot,stops:[stop]},links=Array.isArray(site.planningBatches)?site.planningBatches as {id:string}[]:[];
     const accountsEvent={id:`${id}:${site.id}:schedule`,type:'Batch plan',date:now,ipo:site.ipo,site:site.name,dispatchDate:kind==='labour'?undefined:v.deliveryDate,description:`${number} · delivery ${v.deliveryDate??'not part of this batch'} · expected installation ${stop.plannedDate||'not applicable'}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}. Evidence remains pending.`};
-    const updated={...site,planningBatches:[...links.filter(b=>b.id!==id),link],accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],history:[...site.history,{date:now,description:`${number}: delivery ${v.deliveryDate??'not part of this batch'}; expected installation ${stop.plannedDate||'not applicable'}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}.${v.reason?' Reason: '+v.reason:''}`}]};
+    const oldStop=previous?.snapshot.stops.find((saved:any)=>saved.siteId===site.id);
+    const before={kind:oldStop?.kind??previous?.snapshot.kind,plannedDate:oldStop?.plannedDate},after={kind,plannedDate:stop.plannedDate};
+    const change=oldStop?batchStopChange(before,after):undefined;
+    const changeLine=change&&batchStopChangeHistory(change,{number,deliveryDate:v.deliveryDate,before,after,reason:v.reason,issuedDos:change==='Batch delivery cancelled'?await siteIssuedDoNumbers(c,site.id,site):[]});
+    const updated={...site,planningBatches:[...links.filter(b=>b.id!==id),link],accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],history:[...site.history,{date:now,description:changeLine||`${number}: delivery ${v.deliveryDate??'not part of this batch'}; expected installation ${stop.plannedDate||'not applicable'}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}.${v.reason?' Reason: '+v.reason:''}`}]};
     const version=versions.get(site.id)!+1;
     await c.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,request_sha256,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[site.id,version,updated,'Batch plan',v.reason||'Initial shared batch plan',v.requestKey,fingerprint,actor]);
-    const oldStop=previous?.snapshot.stops.find((saved:any)=>saved.siteId===site.id);
     const decision=(batch:any,visit:any)=>({deliveryDate:batch.deliveryDate,vehicle:batch.vehicle,driver:batch.driver,labourTeam:batch.labourTeam,kind:visit.kind??batch.kind,plannedDate:visit.plannedDate,start:visit.start,end:visit.end,inventoryReference:batch.inventoryReference});
     // Route reordering or adding another site must not resend every retained site's email.
     if(!oldStop||!isDeepStrictEqual(decision(previous!.snapshot,oldStop),decision(snapshot,stop)))
-     await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),site.id,version,previous?(oldStop?'Batch plan changed':'Batch site added'):'Batch plan',JSON.stringify(previous?['operations-head','management',`${v.team}-operations`,'accounts']:['accounts']),actor]);
+     await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),site.id,version,previous?(oldStop?change!:'Batch site added'):'Batch plan',JSON.stringify(previous?['operations-head','management',`${v.team}-operations`,'accounts']:['accounts']),actor]);
    }
    for(const cancelled of v.cancelledSites)await this.cancelSiteFromBatch(c,selected.find(site=>site.id===cancelled.siteId)!,versions.get(cancelled.siteId)!+1,{id,number,team:v.team,deliveryDate:previous?.snapshot.deliveryDate,reason:v.reason,requestKey:v.requestKey,fingerprint,actor},`${number}: site cancelled from batch. Reason: ${v.reason}`,'Batch site cancelled');
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`operations.board.batch:${id}:${v.version+1}`]);return {...snapshot,version:v.version+1};
@@ -242,7 +246,7 @@ export class OperationsBoardRepository{
  /** Remove one site from a batch: its schedule entry, dispatch date and planned installation follow the remaining batches. */
  private async cancelSiteFromBatch(c:PoolClient,original:WorkflowSite,version:number,batch:{id:string;number:string;team:string;deliveryDate?:string;reason:string;requestKey:string;fingerprint:string;actor:string},history:string,action:string){
   const {id}=batch,links=original.planningBatches.filter(b=>b.id!==id);
-  const updated={...original,planningBatches:links,accounts:original.accounts.filter(event=>event.id!==`${id}:${original.id}:schedule`),history:[...original.history,{date:new Date().toISOString(),description:history}]};
+  const updated={...original,planningBatches:links,accounts:original.accounts.filter(event=>event.id!==`${id}:${original.id}:schedule`),history:[...original.history,{date:new Date().toISOString(),description:history+issuedDosNote(await siteIssuedDoNumbers(c,original.id,original))}]};
   if(original.stage!=='delivered'&&batch.deliveryDate===original.dispatchDate&&!links.some(b=>b.deliveryDate&&b.stops.some((stop:any)=>stop.siteId===original.id&&(stop.kind??b.kind)!=='labour')))delete updated.dispatchDate;
   const otherInstallation=links.flatMap(b=>b.stops.filter(stop=>stop.siteId===original.id&&stop.plannedDate)).at(-1);
   if(otherInstallation)updated.installationPlanDate=otherInstallation.plannedDate;
