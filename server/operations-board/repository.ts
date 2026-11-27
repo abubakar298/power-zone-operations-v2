@@ -15,7 +15,7 @@ import {activeSiteAlerts} from './delays.js';
 import {boardFileDownloadContext} from './file-download-name.js';
 import {siteCancellationBlockers,siteIssuedDos,siteIssuedDoNumbers,cancelSite,requireNotCancelled} from './site-cancellation.js';
 import {cancelDoForCancelledDelivery} from '../inventory/unsigned-do.js';
-import {batchStopChange,batchStopChangeHistory,issuedDosNote} from './batch-stop-change.js';
+import {batchStopChange,batchStopChangeHistory,cancelledDeliveryDosNote,issuedDosNote} from './batch-stop-change.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {HttpError} from '../http/errors.js';
@@ -256,8 +256,18 @@ export class OperationsBoardRepository{
  }
  /** Remove one site from a batch: its schedule entry, dispatch date and planned installation follow the remaining batches. */
  private async cancelSiteFromBatch(c:PoolClient,original:WorkflowSite,version:number,batch:{id:string;number:string;team:string;deliveryDate?:string;reason:string;requestKey:string;fingerprint:string;actor:string},history:string,action:string){
-  const {id}=batch,links=original.planningBatches.filter(b=>b.id!==id);
-  const updated={...original,planningBatches:links,accounts:original.accounts.filter(event=>event.id!==`${id}:${original.id}:schedule`),history:[...original.history,{date:new Date().toISOString(),description:history+issuedDosNote(await siteIssuedDoNumbers(c,original.id,original))}]};
+  const {id}=batch,links=original.planningBatches.filter(b=>b.id!==id),now=new Date().toISOString();
+  // Both delivery and installation come off with the stop (owner rule, 27 Nov 2026). Unless another batch still
+  // delivers, the site's DOs that have not left the warehouse are cancelled with the reason; unless another batch
+  // still installs, the VSO and acknowledgment are held as not due.
+  const own=original.planningBatches.find(b=>b.id===id),removed=own?.stops.find((stop:any)=>stop.siteId===original.id),work=(removed as {kind?:string}|undefined)?.kind??own?.kind;
+  const deliveryCancelled=!!work&&work!=='labour'&&!links.some(b=>b.deliveryDate&&b.stops.some((stop:any)=>stop.siteId===original.id&&(stop.kind??b.kind)!=='labour'));
+  const installationCancelled=!!work&&work!=='delivery'&&original.installation!==false&&!original.qcJob&&!links.some(b=>b.stops.some((stop:any)=>stop.siteId===original.id&&(stop.kind??b.kind)!=='delivery'));
+  let doNote:string;
+  if(deliveryCancelled){const dos={cancelled:[] as string[],kept:[] as string[]};for(const d of await siteIssuedDos(c,original.id,original))dos[await cancelDoForCancelledDelivery(c,batch.actor,d.id,`${batch.number}: delivery cancelled by Operations. Reason: ${batch.reason}`,batch.requestKey)].push(d.number);doNote=cancelledDeliveryDosNote(dos);}
+  else doNote=issuedDosNote(await siteIssuedDoNumbers(c,original.id,original));
+  const updated={...original,planningBatches:links,accounts:original.accounts.filter(event=>event.id!==`${id}:${original.id}:schedule`),history:[...original.history,{date:now,description:history+doNote}],
+   ...(installationCancelled?{installationHold:{kind:'cancelled',until:null,batch:batch.number,reason:batch.reason,at:now}}:{})} as WorkflowSite;
   if(original.stage!=='delivered'&&batch.deliveryDate===original.dispatchDate&&!links.some(b=>b.deliveryDate&&b.stops.some((stop:any)=>stop.siteId===original.id&&(stop.kind??b.kind)!=='labour')))delete updated.dispatchDate;
   const otherInstallation=links.flatMap(b=>b.stops.filter(stop=>stop.siteId===original.id&&stop.plannedDate)).at(-1);
   if(otherInstallation)updated.installationPlanDate=otherInstallation.plannedDate;

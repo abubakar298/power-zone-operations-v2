@@ -53,3 +53,38 @@ test('cancelling a delivery cancels only the site DOs that have not left the war
   assert.equal((await pool.query('SELECT count(*)::int n FROM inventory_material_dispatch_revisions')).rows[0].n,1);
  }finally{await close();}
 });
+
+test('removing a site from a batch, or deleting the batch, cancels its unsigned DOs and holds the VSO and acknowledgment',async()=>{
+ const {pool,close}=await testDatabase();
+ try{
+  const itemId='CH-CBL-AC-16MM/4C-PK',warehouse='Lahore warehouse',checksum='a'.repeat(64);
+  const {owner,stockSha,key}=await materialStockFixture(pool,itemId);
+  const repo=new OperationsBoardRepository(pool),ids=['removed','stays','deleted-a','deleted-b'];
+  await repo.importSource(owner,{sourceSha256:'9'.repeat(64),rows:ids.map(id=>({id,ipo:'IPO-'+id,name:'Site '+id,stage:'received' as const,projectType:'ups' as const,installation:true,operationsTeam:'central' as const}))});
+  async function issue(number:string,site:string){
+   const id=randomUUID(),draftId=randomUUID(),lineKey=randomUUID();
+   const snapshot={parent:false,kind:'fixed',warehouse,sites:[{siteId:randomUUID(),registeredSiteId:site,siteName:site,ipo:'IPO-'+site}],lines:[{key:lineKey,itemId,description:'AC cable',unit:'m',out:'1',sites:[]}]};
+   await pool.query('INSERT INTO inventory_material_drafts(id,created_by) VALUES($1,$2)',[draftId,owner]);
+   await pool.query('INSERT INTO inventory_material_draft_versions(draft_id,version,snapshot,request_key,request_fingerprint,created_by) VALUES($1,1,$2,$3,$4,$5)',[draftId,snapshot,randomUUID(),checksum,owner]);
+   await pool.query('INSERT INTO inventory_material_dispatches(id,number,draft_id,draft_version,source_sha256,warehouse,snapshot,request_key,request_fingerprint,created_by) VALUES($1,$2,$3,1,$4,$5,$6,$7,$8,$9)',[id,number,draftId,stockSha,warehouse,snapshot,randomUUID(),checksum,owner]);
+   await pool.query("INSERT INTO inventory_material_dispatch_lines(dispatch_id,line_key,source_sha256,ledger_key,item_id,unit,description,quantity) VALUES($1,$2,$3,$4,$5,'m','AC cable',1)",[id,lineKey,stockSha,key,itemId]);
+   await pool.query("INSERT INTO inventory_signed_dispatch_pending(document_kind,document_id,warehouse,source_sha256,authority_version,movements,created_by) VALUES('dispatch',$1,$2,$3,1,$4,$5)",[id,warehouse,stockSha,JSON.stringify([{ledgerKey:key,quantity:'1',kind:'dispatch-out',draftId,dispatchId:id,lineKey}]),owner]);
+   return id;
+  }
+  const dos=Object.fromEntries(await Promise.all(ids.map(async id=>[id,await issue('TEST-DO-'+id,id)])));
+  const stops=async(list:string[])=>Promise.all(list.map(async(siteId,n)=>({siteId,siteVersion:(await readWorkflowSite(repo,owner,siteId)).version,order:n+1,kind:'both' as const,plannedDate:'2026-12-02',start:'',end:''})));
+  const plan={team:'central',kind:'both',deliveryDate:'2026-12-01',vehicle:'RM-1',driver:'Driver',labourTeam:'pz-team'};
+  const first=await repo.saveBatch(owner,batchSchema.parse({...plan,version:0,requestKey:randomUUID(),stops:await stops(['removed','stays'])}));
+  await repo.saveBatch(owner,batchSchema.parse({...plan,id:first.id,version:1,edit:true,requestKey:randomUUID(),reason:'Customer cancelled this visit',
+   cancelledSites:[{siteId:'removed',siteVersion:(await readWorkflowSite(repo,owner,'removed')).version}],stops:await stops(['stays'])}));
+  const cancelled=async(id:string)=>(await pool.query('SELECT snapshot FROM inventory_material_dispatches WHERE id=$1',[id])).rows[0].snapshot.cancelled===true;
+  assert.equal(await cancelled(dos.removed),true);assert.equal(await cancelled(dos.stays),false);
+  const removed=await readWorkflowSite(repo,owner,'removed') as any;
+  assert.equal(removed.installationHold.kind,'cancelled');assert.equal(removed.installationHold.reason,'Customer cancelled this visit');
+  assert.match(removed.history.at(-1).description,/site cancelled from batch\. Reason: Customer cancelled this visit DO TEST-DO-removed cancelled automatically/);
+  const second=await repo.saveBatch(owner,batchSchema.parse({...plan,vehicle:'RM-2',deliveryDate:'2026-12-05',version:0,requestKey:randomUUID(),stops:(await stops(['deleted-a','deleted-b'])).map(s=>({...s,plannedDate:'2026-12-06'}))}));
+  await repo.deleteBatch(owner,{id:second.id,version:1,requestKey:randomUUID(),reason:'Vehicle unavailable'});
+  assert.equal(await cancelled(dos['deleted-a']),true);assert.equal(await cancelled(dos['deleted-b']),true);
+  assert.equal((await readWorkflowSite(repo,owner,'deleted-a') as any).installationHold.reason,'Vehicle unavailable');
+ }finally{await close();}
+});
