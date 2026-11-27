@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { HttpError } from "../http/errors.js";
+import { latePoException } from "../../shared/late-customer-po-exceptions.js";
 
 /**
  * Customer PO received later (user request, 24 Nov 2026).
@@ -23,6 +24,10 @@ export const latePoSchema = z.object({
 
 type Db = Pool | PoolClient;
 
+/** Received-later PO is for email/WhatsApp approvals, plus the owner-approved exceptions in shared/late-customer-po-exceptions.ts. */
+export const latePoAllowed = (evidenceType: string | null | undefined, recordId: string) =>
+  approvalTypes.includes(evidenceType ?? "") || latePoException(recordId);
+
 /** The issued IPO a received PO belongs to: the record's first IPO decides eligibility, the latest (revision) its amount. */
 export async function latePoTarget(c: Db, r: { id: string; stage: string; data: any }) {
   if (r.stage !== "issued" || !r.data?.ipoId)
@@ -35,7 +40,7 @@ export async function latePoTarget(c: Db, r: { id: string; stage: string; data: 
   if (!original) throw new HttpError(409, "The issued IPO for this site was not found.");
   if (original.historical && original.historical !== false)
     throw new HttpError(409, "Historical imported IPOs keep their source register; attach no new customer PO here.");
-  if (!approvalTypes.includes(original.evidence_type))
+  if (!latePoAllowed(original.evidence_type, r.id))
     throw new HttpError(409, "This IPO was issued on a customer PO. A received-later PO is only for sites confirmed by email or WhatsApp approval.");
   return { original, latest: rows[0] };
 }

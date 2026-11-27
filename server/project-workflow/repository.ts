@@ -76,7 +76,7 @@ import {
 } from "./schema.js";
 import { designCalculation, frameworkBasis, quotationBasis } from "./basis.js";
 import { approvedCabinet, cabinetBasis } from "./cni-basis.js";
-import { attachLateCustomerPo, latePoFileKind, latePoTarget } from "./late-customer-po.js";
+import { attachLateCustomerPo, latePoAllowed, latePoFileKind, latePoTarget } from "./late-customer-po.js";
 const management = (role: string) => ["Admin", "Management"].includes(role);
 const uuid = (v: any) => z.uuid().parse(v);
 const saleFields = [
@@ -499,6 +499,7 @@ export class ProjectWorkflowRepository {
         sharedAt: shared?.created_at ?? null,
         directPoDetails: data.directPoDetails??null,
         approvalEvidenceType: data.basis?.order?.input?.evidenceType ?? null,
+        latePoAllowed: data.ipoId ? latePoAllowed(data.basis?.order?.input?.evidenceType, r.id) : false,
         poToFollow: data.poToFollow === true,
         latePo: data.latePo ?? null,
         latePoVersions: data.latePoVersions ?? [],

@@ -55,13 +55,15 @@ function LatePoDetails({ recordId, latePo }: { recordId: string; latePo: any }) 
 /** IPOs Shared → Preview: the customer PO status and, for the site's coordinator, "Attach customer PO". */
 export function LateCustomerPoPanel({ session, record }: { session?: Session; record: any }) {
   const approval = ["WhatsApp approval", "Email approval"].includes(record.data?.approvalEvidenceType);
+  // Owner-approved exceptions (shared/late-customer-po-exceptions.ts) come from the server as latePoAllowed.
+  const allowed = approval || record.data?.latePoAllowed === true;
   const [latePo, setLatePo] = useState<any>(record.data?.latePo ?? null);
   const [versions, setVersions] = useState<any[]>(record.data?.latePoVersions ?? []);
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(""), [saved, setSaved] = useState("");
   const [file, setFile] = useState<File>(), [poNumber, setPoNumber] = useState(""), [poDate, setPoDate] = useState(""), [poAmount, setPoAmount] = useState(""), [notes, setNotes] = useState("");
   const requestKey = useRef(crypto.randomUUID());
   useUnsavedChanges(open && Boolean(file || poNumber.trim() || notes.trim()));
-  if (!approval) return null;
+  if (!allowed) return null;
   const canAttach = session?.user.role === "Coordinator";
   function reset() { setOpen(false); setFile(undefined); setPoNumber(""); setPoDate(""); setPoAmount(""); setNotes(""); setError(""); requestKey.current = crypto.randomUUID(); }
   async function save() {
@@ -90,7 +92,7 @@ export function LateCustomerPoPanel({ session, record }: { session?: Session; re
   const earlier = versions.filter((v) => v.version !== latePo?.version).reverse();
   return <section className="pz-panel pz-stack" aria-label="Customer PO">
     <h3>Customer PO</h3>
-    <p className="pz-caption">Installation was approved by {record.data.approvalEvidenceType}. The issued IPO keeps that approval; a PO received later is saved beside it.</p>
+    <p className="pz-caption">{approval ? <>Installation was approved by {record.data.approvalEvidenceType}. The issued IPO keeps that approval; a PO received later is saved beside it.</> : <>The IPO was issued without the customer's PO number. The issued IPO is not changed; the PO received later is saved beside it.</>}</p>
     {latePo ? <LatePoDetails recordId={record.id} latePo={latePo} /> : <p>{record.data.poToFollow ? <StatusBadge tone="pending">Customer PO pending</StatusBadge> : "No customer PO attached."}</p>}
     {earlier.length > 0 && <details><summary>Earlier versions ({earlier.length})</summary>{earlier.map((v) => <LatePoDetails key={v.version} recordId={record.id} latePo={v} />)}</details>}
     {saved && <p role="status">{saved}</p>}
