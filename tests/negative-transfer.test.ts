@@ -1,4 +1,5 @@
 import {signDispatch} from './signed-dispatch-fixture.js';
+import {negativeDoWindowEndsAt} from '../shared/stock-reconciliation-window.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -58,7 +59,7 @@ test('negative-stock window permits transfer DO then signed source OUT below zer
 });
 
 test('reconciliation window lets a transfer start a destination stock line the warehouse never had',async(t)=>{
- const clock=t.mock.method(Date,'now',()=>Date.parse('2026-11-26T19:00:00.000Z'));
+ const clock=t.mock.method(Date,'now',()=>Date.parse(negativeDoWindowEndsAt));
  const db=await testDatabase();
  try{
   const ids=Object.fromEntries(['owner','source','destination'].map(k=>[k,randomUUID()]));
