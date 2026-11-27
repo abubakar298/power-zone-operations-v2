@@ -54,4 +54,4 @@ test('owner-authorized negative DO balances work at preparation, unsigned edit a
  }finally{await db.close();}
 });
 
-test('negative DO exception automatically closes at the approved deadline (end of 26 Nov 2026 PKT)',()=>{const start=Date.parse(negativeDoWindowStartsAt),end=Date.parse(negativeDoWindowEndsAt);assert.equal(negativeDoWindowEndsAt,'2026-11-26T19:00:00.000Z');assert.equal(temporaryNegativeDoBalanceAllowed(start-1),false);assert.equal(temporaryNegativeDoBalanceAllowed(start),true);assert.equal(temporaryNegativeDoBalanceAllowed(end-1),true);assert.equal(temporaryNegativeDoBalanceAllowed(end),false);});
+test('negative DO exception automatically closes at the approved deadline (end of 29 Nov 2026 PKT)',()=>{const start=Date.parse(negativeDoWindowStartsAt),end=Date.parse(negativeDoWindowEndsAt);assert.equal(negativeDoWindowEndsAt,'2026-11-29T19:00:00.000Z');assert.equal(temporaryNegativeDoBalanceAllowed(start-1),false);assert.equal(temporaryNegativeDoBalanceAllowed(start),true);assert.equal(temporaryNegativeDoBalanceAllowed(end-1),true);assert.equal(temporaryNegativeDoBalanceAllowed(end),false);});
