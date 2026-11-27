@@ -238,6 +238,10 @@ export class OperationsBoardRepository{
      if(site.stage!=='delivered'&&site.dispatchDate===previous!.snapshot.deliveryDate){const {dispatchDate:_cleared,...rest}=site;site={...rest,stage:rest.stage==='awaiting'&&!rest.deliveries?.length?'received':rest.stage} as WorkflowSite;}
     }
     const changeLine=change&&batchStopChangeHistory(change,{number,deliveryDate:v.deliveryDate,before,after,reason:v.reason,dos});
+    // Installation taken off or moved later (owner rule, 27 Nov 2026): the VSO and acknowledgment are not due until it is
+    // planned again; Inventory's document lists show why. A stop that plans installation again lifts the hold.
+    if(change==='Batch installation cancelled'||change==='Batch installation postponed')site={...site,installationHold:{kind:change==='Batch installation cancelled'?'cancelled':'postponed',until:change==='Batch installation postponed'?after.plannedDate:null,batch:number,reason:v.reason,at:now}} as WorkflowSite;
+    else if((site as {installationHold?:unknown}).installationHold&&kind!=='delivery'&&(!oldStop||before.kind==='delivery')){const {installationHold:_lifted,...rest}=site as WorkflowSite&{installationHold?:unknown};site=rest as WorkflowSite;}
     const updated={...site,planningBatches:[...links.filter(b=>b.id!==id),link],accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],history:[...site.history,{date:now,description:changeLine||`${number}: delivery ${v.deliveryDate??'not part of this batch'}; expected installation ${stop.plannedDate||'not applicable'}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}.${v.reason?' Reason: '+v.reason:''}`}]};
     const version=versions.get(site.id)!+1;
     await c.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,request_sha256,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[site.id,version,updated,'Batch plan',v.reason||'Initial shared batch plan',v.requestKey,fingerprint,actor]);
