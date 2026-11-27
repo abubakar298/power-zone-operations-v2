@@ -13,7 +13,8 @@ import {attachHistoricalEvidence} from './historical-evidence.js';
 import {validateBatch,type BatchSnapshot} from './batches.js';
 import {activeSiteAlerts} from './delays.js';
 import {boardFileDownloadContext} from './file-download-name.js';
-import {siteCancellationBlockers,siteIssuedDoNumbers,cancelSite,requireNotCancelled} from './site-cancellation.js';
+import {siteCancellationBlockers,siteIssuedDos,siteIssuedDoNumbers,cancelSite,requireNotCancelled} from './site-cancellation.js';
+import {cancelDoForCancelledDelivery} from '../inventory/unsigned-do.js';
 import {batchStopChange,batchStopChangeHistory,issuedDosNote} from './batch-stop-change.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -229,8 +230,18 @@ export class OperationsBoardRepository{
     const accountsEvent={id:`${id}:${site.id}:schedule`,type:'Batch plan',date:now,ipo:site.ipo,site:site.name,dispatchDate:kind==='labour'?undefined:v.deliveryDate,description:`${number} · delivery ${v.deliveryDate??'not part of this batch'} · expected installation ${stop.plannedDate||'not applicable'}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}. Evidence remains pending.`};
     const oldStop=previous?.snapshot.stops.find((saved:any)=>saved.siteId===site.id);
     const before={kind:oldStop?.kind??previous?.snapshot.kind,plannedDate:oldStop?.plannedDate},after={kind,plannedDate:stop.plannedDate};
-    const change=oldStop?batchStopChange(before,after):undefined;
-    const changeLine=change&&batchStopChangeHistory(change,{number,deliveryDate:v.deliveryDate,before,after,reason:v.reason,issuedDos:change==='Batch delivery cancelled'?await siteIssuedDoNumbers(c,site.id,site):[]});
+    const change=oldStop?batchStopChange(before,after):undefined,dos={cancelled:[] as string[],kept:[] as string[]};
+    // Delivery taken off this stop (owner rule, 27 Nov 2026): unless another batch still delivers to the site, its
+    // DOs that have not left the warehouse are cancelled with the reason, and the old delivery date is cleared.
+    if(change==='Batch delivery cancelled'&&!links.some((b:any)=>b.id!==id&&b.deliveryDate&&b.stops?.some((s:any)=>s.siteId===site.id&&(s.kind??b.kind)!=='labour'))){
+     for(const d of await siteIssuedDos(c,site.id,site))dos[await cancelDoForCancelledDelivery(c,actor,d.id,`${number}: delivery cancelled by Operations. Reason: ${v.reason}`,v.requestKey)].push(d.number);
+     if(site.stage!=='delivered'&&site.dispatchDate===previous!.snapshot.deliveryDate){const {dispatchDate:_cleared,...rest}=site;site={...rest,stage:rest.stage==='awaiting'&&!rest.deliveries?.length?'received':rest.stage} as WorkflowSite;}
+    }
+    const changeLine=change&&batchStopChangeHistory(change,{number,deliveryDate:v.deliveryDate,before,after,reason:v.reason,dos});
+    // Installation taken off or moved later (owner rule, 27 Nov 2026): the VSO and acknowledgment are not due until it is
+    // planned again; Inventory's document lists show why. A stop that plans installation again lifts the hold.
+    if(change==='Batch installation cancelled'||change==='Batch installation postponed')site={...site,installationHold:{kind:change==='Batch installation cancelled'?'cancelled':'postponed',until:change==='Batch installation postponed'?after.plannedDate:null,batch:number,reason:v.reason,at:now}} as WorkflowSite;
+    else if((site as {installationHold?:unknown}).installationHold&&kind!=='delivery'&&(!oldStop||before.kind==='delivery')){const {installationHold:_lifted,...rest}=site as WorkflowSite&{installationHold?:unknown};site=rest as WorkflowSite;}
     const updated={...site,planningBatches:[...links.filter(b=>b.id!==id),link],accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],history:[...site.history,{date:now,description:changeLine||`${number}: delivery ${v.deliveryDate??'not part of this batch'}; expected installation ${stop.plannedDate||'not applicable'}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}.${v.reason?' Reason: '+v.reason:''}`}]};
     const version=versions.get(site.id)!+1;
     await c.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,request_sha256,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[site.id,version,updated,'Batch plan',v.reason||'Initial shared batch plan',v.requestKey,fingerprint,actor]);

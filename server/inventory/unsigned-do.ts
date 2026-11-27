@@ -1,6 +1,6 @@
 import {temporaryNegativeDoBalanceAllowed} from './do-negative-balance.js';
 import {createHash} from 'node:crypto';
-import type {Pool} from 'pg';
+import type {Pool,PoolClient} from 'pg';
 import {Decimal} from 'decimal.js';
 import {z} from 'zod';
 import {transaction} from '../db/transaction.js';
@@ -78,4 +78,22 @@ export class UnsignedDoRepository{
    return {id,number:record.number,revision:snapshot.doRevision,cancelled:input.action==='delete',stockPosted:false};
   });
  }
+}
+/** Owner rule (27 Nov 2026): when Operations takes delivery off a site in a batch, that site's DOs
+ * that have not left the warehouse are cancelled with Operations' reason, so Inventory issues a fresh
+ * DO for the real date instead of the site holding two. Same locks, audit revision and lock-out
+ * rules as "Delete this DO": a Parent DO, or a DO with a signed gate copy, posted stock, a
+ * retrospective record, a warehouse movement or a return, is never touched and is reported instead. */
+export async function cancelDoForCancelledDelivery(c:PoolClient,actor:string,id:string,reason:string,requestKey:string):Promise<'cancelled'|'kept'>{
+ const pending=(await c.query("SELECT * FROM inventory_signed_dispatch_pending WHERE document_kind='dispatch' AND document_id=$1 FOR UPDATE",[id])).rows[0];
+ const record=(await c.query('SELECT * FROM inventory_material_dispatches WHERE id=$1 FOR UPDATE',[id])).rows[0];
+ if(!record||record.snapshot.cancelled)return 'kept';
+ if(record.snapshot.parent||!pending||(await c.query("SELECT 1 FROM inventory_gate_pass_copies WHERE document_kind='dispatch' AND document_id=$1 AND copy_kind='signed-gate' UNION ALL SELECT 1 FROM inventory_retrospective_dispatches WHERE dispatch_id=$1 UNION ALL SELECT 1 FROM inventory_signed_dispatch_postings WHERE document_kind='dispatch' AND document_id=$1 UNION ALL SELECT 1 FROM inventory_warehouse_operational_movements WHERE dispatch_id=$1 UNION ALL SELECT 1 FROM inventory_material_receipt_lines WHERE dispatch_id=$1",[id])).rowCount)return 'kept';
+ const revision=(record.snapshot.doRevision??1)+1,snapshot={...record.snapshot,doRevision:revision,cancelled:true};
+ const beforeLines=(await c.query('SELECT * FROM inventory_material_dispatch_lines WHERE dispatch_id=$1 ORDER BY line_key',[id])).rows;
+ const h=createHash('sha256').update(JSON.stringify({requestKey,id,action:'operations-delivery-cancelled'})).digest('hex'),key=`${h.slice(0,8)}-${h.slice(8,12)}-5${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`;
+ await c.query('INSERT INTO inventory_material_dispatch_revisions(dispatch_id,revision,action,before_record,before_lines,before_pending,after_snapshot,reason,request_key,fingerprint,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',[id,revision,'delete',record,JSON.stringify(beforeLines),pending,snapshot,reason,key,h,actor]);
+ await c.query('UPDATE inventory_material_dispatches SET snapshot=$2 WHERE id=$1',[id,snapshot]);
+ await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'inventory.unsigned_do.cancelled_by_operations:'+id+':revision:'+revision]);
+ return 'cancelled';
 }

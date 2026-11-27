@@ -11,10 +11,10 @@ test('an edited batch stop names delivery and installation cancellations and pos
  assert.equal(batchStopChange({kind:'labour',plannedDate:'2026-12-05'},{kind:'labour',plannedDate:'2026-12-02'}),'Batch plan changed','an earlier date is a plan change, not a postponement');
  assert.equal(batchStopChange({kind:'delivery'},{kind:'both',plannedDate:'2026-12-02'}),'Batch plan changed','adding installation cancels nothing');
  const visit={before:{kind:'both' as const,plannedDate:'2026-12-02'},after:{kind:'labour' as const,plannedDate:'2026-12-02'}};
- assert.equal(batchStopChangeHistory('Batch delivery cancelled',{number:'OPB-1',deliveryDate:'2026-12-01',...visit,reason:'Gate closed',issuedDos:['CPZ-DO-7']}),
-  'OPB-1: delivery cancelled; installation stays planned for 2026-12-02. Reason: Gate closed DOs already issued for this site: CPZ-DO-7. Inventory to review them.');
- assert.match(batchStopChangeHistory('Batch installation postponed',{number:'OPB-1',before:{kind:'labour',plannedDate:'2026-12-02'},after:{kind:'labour',plannedDate:'2026-12-05'},reason:'Rain',issuedDos:[]})!,/postponed from 2026-12-02 to 2026-12-05.*Reason: Rain$/);
- assert.equal(batchStopChangeHistory('Batch plan changed',{number:'OPB-1',...visit,reason:'x',issuedDos:[]}),null);
+ assert.equal(batchStopChangeHistory('Batch delivery cancelled',{number:'OPB-1',deliveryDate:'2026-12-01',...visit,reason:'Gate closed',dos:{cancelled:['CPZ-DO-7'],kept:['CPZ-DO-5']}}),
+  'OPB-1: delivery cancelled; installation stays planned for 2026-12-02. Reason: Gate closed DO CPZ-DO-7 cancelled automatically (not yet signed at the gate); Inventory issues a fresh DO for the new delivery date. DO CPZ-DO-5 already left the warehouse, is signed or is a Parent DO, so it was kept: Inventory to review.');
+ assert.match(batchStopChangeHistory('Batch installation postponed',{number:'OPB-1',before:{kind:'labour',plannedDate:'2026-12-02'},after:{kind:'labour',plannedDate:'2026-12-05'},reason:'Rain',dos:{cancelled:[],kept:[]}})!,/postponed from 2026-12-02 to 2026-12-05.*Reason: Rain$/);
+ assert.equal(batchStopChangeHistory('Batch plan changed',{number:'OPB-1',...visit,reason:'x',dos:{cancelled:[],kept:[]}}),null);
 });
 
 test('Inventory and QC are told about delivery and installation cancellations with the reason',async()=>{

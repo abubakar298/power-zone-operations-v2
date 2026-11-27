@@ -17,11 +17,12 @@ export async function siteCancellationBlockers(c:PoolClient,id:string,site:Workf
  return reasons;
 }
 /** DO numbers Inventory has issued (and not deleted) for this exact site, individual or Parent. */
-export async function siteIssuedDoNumbers(c:PoolClient,id:string,site:WorkflowSite){
+export async function siteIssuedDos(c:PoolClient,id:string,site:WorkflowSite){
  const ipoId=(site as {origin?:{ipoId?:string}}).origin?.ipoId??null;
- return (await c.query(`SELECT d.number FROM inventory_material_dispatches_active d WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(d.snapshot->'sites') s
-  WHERE s->>'registeredSiteId'=$1 OR (nullif(s->>'registeredSiteId','') IS NULL AND $2::text IS NOT NULL AND s->>'siteId'=$2)) ORDER BY d.number`,[id,ipoId])).rows.map(r=>String(r.number));
+ return (await c.query(`SELECT d.id,d.number FROM inventory_material_dispatches_active d WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(d.snapshot->'sites') s
+  WHERE s->>'registeredSiteId'=$1 OR (nullif(s->>'registeredSiteId','') IS NULL AND $2::text IS NOT NULL AND s->>'siteId'=$2)) ORDER BY d.number`,[id,ipoId])).rows.map(r=>({id:String(r.id),number:String(r.number)}));
 }
+export async function siteIssuedDoNumbers(c:PoolClient,id:string,site:WorkflowSite){return (await siteIssuedDos(c,id,site)).map(d=>d.number);}
 export function cancelSite(site:WorkflowSite,input:{reason:string;actor:string;name:string;proof:FileReference[]},now:string):WorkflowSite{
  return {...site,cancelled:true,cancellation:{reason:input.reason,proof:input.proof,cancelledBy:input.name,cancelledById:input.actor,cancelledAt:now,stageAtCancellation:site.stage},
   history:[...site.history,{date:now,description:`${input.name} cancelled this site. Reason: ${input.reason}`}]};

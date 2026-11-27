@@ -1,5 +1,7 @@
 export const dispatchSiteRemovalLabel='Removed by Operations · reschedule for a later trip';
-export type DispatchDocument={label:'Signed DO'|'Variable Items Sign Off'|'Acknowledgment';fileId?:string;source?:'qc'|'warehouse';boardId?:string;note?:string};
+export type DispatchDocument={label:'Signed DO'|'Variable Items Sign Off'|'Acknowledgment';fileId?:string;source?:'qc'|'warehouse';boardId?:string;note?:string;notDue?:string};
+/** Installation taken off or moved later by Operations (owner rule, 27 Nov 2026): the VSO and acknowledgment are not due yet. */
+export function installationHoldNote(hold:{kind:string;until?:string|null;reason?:string}){return `Not due · installation ${hold.kind}${hold.until?' to '+hold.until:''}${hold.reason?' · '+hold.reason:''}`;}
 export type DispatchDocumentRow={id:string;number:string;draftId:string;warehouse:string;createdAt:string;parent:boolean;retrospective?:boolean;preparationIds?:string[];preparationKinds?:Record<string,string>;reviewNote?:string;status:'awaiting'|'ready';reconciliationStatus:string;sites:{siteId:string;registeredSiteId?:string;usageReady?:boolean;removedByOperations?:boolean;installation?:boolean;usageNote?:string;dispatchComplete?:boolean;name:string;customer:string;ipo:string;documents:DispatchDocument[]}[]};
 
 export type DispatchDocumentSiteRow={id:string;name:string;customer:string;ipo:string;createdAt:string;status:'awaiting'|'ready';dispatches:{dispatch:DispatchDocumentRow;site:DispatchDocumentRow['sites'][number]}[]};
