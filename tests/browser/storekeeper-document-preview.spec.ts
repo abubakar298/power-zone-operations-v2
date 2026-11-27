@@ -2,6 +2,7 @@ import {test,expect,type Page} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {jsPDF} from 'jspdf';
 import {actors,login} from './release-fixtures.js';
+import {jpxPdf} from './jpx-fixture.js';
 
 // Storekeeper Documents Upload: every listed document and every uploaded signed copy opens in a viewer
 // inside the page (PDFs and images), with Download kept beside Preview. A file chosen for upload can be
@@ -103,4 +104,26 @@ test('storekeeper chosen photo is previewed before upload',async({page})=>{
  await row.getByRole('button',{name:'Preview chosen file: gate-photo.png',exact:true}).click();
  const preview=page.getByRole('dialog',{name:'gate-photo.png',exact:true});
  await expect(preview.getByRole('img',{name:'gate-photo.png',exact:true})).toHaveAttribute('src',/^data:image\/png;base64,/);
+});
+
+// 27 Nov 2026: a scanned PDF chosen for upload showed a blank white page, because the PDF reader could
+// not find its JPEG 2000 / JBIG2 decoders. The page must now show the scanned image (mid-grey), not white.
+test('storekeeper chosen scanned PDF (JPEG 2000 page) is drawn, not left blank',async({page})=>{
+ await actors(page.request);await login(page.request,'inventory-release@example.test');
+ await page.route('**/api/material-dispatches/**',async r=>{const path=new URL(r.request().url()).pathname.replace('/api/material-dispatches','');
+  if(path==='/access')return r.fulfill({json:{kind:'storekeeper',warehouses:['Lahore warehouse']}});
+  if(path==='/gate-passes')return r.fulfill({json:{kind:'storekeeper',warehouses:['Lahore warehouse'],records,signoffs:[]}});
+  if(path==='/gate-passes/dispatch/do-1')return r.fulfill({json:{copies:[],parent:false,documentRevision:1}});
+  throw Error('Unexpected request '+path);
+ });
+ const decoder=await page.request.get('/pdfjs/wasm/openjpeg.wasm');expect(decoder.ok()).toBe(true);
+ await page.goto('/inventory/gate-passes?bucket=dos');
+ const row=page.locator('.inventory-upload-row').filter({hasText:'DO-PREVIEW'});
+ await row.getByRole('button',{name:'Upload signed copy',exact:true}).click();
+ await row.getByLabel('Signed file',{exact:true}).setInputFiles({name:'scanned-do.pdf',mimeType:'application/pdf',buffer:jpxPdf()});
+ await row.getByRole('button',{name:'Preview chosen file: scanned-do.pdf',exact:true}).click();
+ const drawn=page.getByRole('dialog',{name:'scanned-do.pdf',exact:true}).locator('img[data-drawn]');
+ await expect(drawn).toHaveCount(1);
+ const centre=await drawn.evaluate(async(img:HTMLImageElement)=>{await img.decode();const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;const g=c.getContext('2d')!;g.drawImage(img,0,0);return Array.from(g.getImageData(c.width>>1,c.height>>1,1,1).data);});
+ expect(centre.slice(0,3).every(v=>Math.abs(v-128)<=8)).toBe(true);
 });
