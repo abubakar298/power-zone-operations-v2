@@ -6,6 +6,7 @@ import {lockActiveActor} from '../auth/actor-lock.js';
 import {transaction} from '../db/transaction.js';
 import {HttpError} from '../http/errors.js';
 import {historicalQcIssues} from './historical-qc-issues.js';
+import {confirmedHistoricalReviews,reviewStillOpen} from './historical-review-confirmations.js';
 import {requireQcMaterialSite} from './qc-material-access.js';
 import type {ReportEntry} from './reconciliation.js';
 
@@ -16,7 +17,9 @@ export class LinkedHistoricalQcUsage {
 
   private async context(actor:string,boardId:string,db:Pool|PoolClient,write=false){
     const board=await requireQcMaterialSite(actor,boardId,db,write);
-    const source=historicalQcIssues(boardId,board.ipo??'');
+    const issues=historicalQcIssues(boardId,board.ipo??'');
+    // A review note the Inventory head has confirmed no longer holds verification.
+    const source=issues&&{...issues,review:reviewStillOpen(await confirmedHistoricalReviews(db,[boardId]),boardId,issues.review)};
     const handoff=source&&await qcMaterialHandoff(db,'site:'+boardId);
     if(!source||!handoff?.historicalIssueEvidence||handoff.holds.includes('Multiple Operations site links need review'))
       throw new HttpError(409,'Review this site’s exact historical issue and approved IPO link before recording usage.');

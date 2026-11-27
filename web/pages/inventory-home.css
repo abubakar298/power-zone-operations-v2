@@ -81,3 +81,4 @@
 .dispatch-document-list .material-return-count-table th:nth-child(2){width:50%}
 .dispatch-document-list .material-return-count-table th:nth-child(3){width:10%}
 .dispatch-document-list .material-return-count-table th:nth-child(4){width:34%}
+.historical-do-review-table.ob-table th,.historical-do-review-table.ob-table td{vertical-align:top}.historical-do-review-table td small{display:block;margin-top:5px}.historical-do-review-table td label{display:grid;gap:4px}.historical-do-review-table textarea{min-height:56px;width:100%;min-width:220px}.historical-do-review-table td>.ob-actions{margin-top:8px}

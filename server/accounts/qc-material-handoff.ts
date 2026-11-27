@@ -8,6 +8,7 @@ import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
 import {dispatchReconciliationEligibleSql} from '../inventory/dispatch-reconciliation-eligibility.js';
 import {qcDispatchQuantities,qcReviewedDispatches,qcReviewedDispatchIds} from '../inventory/qc-dispatch-review.js';
 import {historicalQcIssues} from '../inventory/historical-qc-issues.js';
+import {confirmedHistoricalReviews,reviewStillOpen} from '../inventory/historical-review-confirmations.js';
 type Db=Pool|PoolClient;
 type HistoricalIssueEvidence={signedDoIds:string[];vsoId:string|null;noVariableItemsUsed:boolean;unsignedDeliveries:number};
 export type QcMaterialHandoff={jobKey:string;aliases:string[];siteId:string;siteName:string;ipo:string;customer:string;ready:boolean;holds:string[];signature:string;usage:any[];localPurchases:any[];completedDate:string;receivedAt:string;deliveryOnly:boolean;historicalReportId?:string;historicalReportVersion?:number;historicalIssueEvidence?:HistoricalIssueEvidence;sources:any};
@@ -45,6 +46,7 @@ function boardJob(board:any,i:QueryResult<any>,l:QueryResult<any>,o:QueryResult<
 export async function qcMaterialHandoffs(db:Db):Promise<QcMaterialHandoff[]>{return buildQcMaterialHandoffs(db);}
 /** With a key, only the Operations sites of that job (and any other site sharing its job) are evaluated. */
 async function buildQcMaterialHandoffs(db:Db,key?:string):Promise<QcMaterialHandoff[]>{
+ const confirmedReviews=await confirmedHistoricalReviews(db);
  const identity:Query[]=[
   ()=>db.query('SELECT DISTINCT ON(site_id) site_id,version,snapshot,created_at FROM operations_board_versions ORDER BY site_id,version DESC'),
   ()=>db.query("SELECT i.id,i.number,i.snapshot,coalesce(i.snapshot#>>'{input,orderNumber}','') AS \"orderNumber\",i.snapshot#>>'{customer,shortCode}' AS \"customerCode\",i.snapshot#>>'{customer,name}' AS \"customerName\" FROM internal_purchase_orders i JOIN boq_revisions b ON b.id::text=i.snapshot->>'boqRevisionId'"),
@@ -132,7 +134,9 @@ async function buildQcMaterialHandoffs(db:Db,key?:string):Promise<QcMaterialHand
   }
   const holds=verifiedHistorical?[]:materialUsageHolds({deliveryOnly,completed:s.completed===true,signedDos:signedDos.length,drafts,localDeclared:!!local,noWarehouseMaterials:local?.snapshot.noWarehouseMaterials===true,noVariableItemsUsed:final?.noVariableItemsUsed===true});
   if(unsignedDeliveries.length)holds.push('Signed DO pending for '+unsignedDeliveries.length+' delivery / deliveries');
-  if(linkedIssues?.review)holds.push(linkedIssues.review);
+  // A review note the Inventory head has confirmed no longer holds the job.
+  const openReview=reviewStillOpen(confirmedReviews,board.site_id,linkedIssues?.review);
+  if(openReview)holds.push(openReview);
   const source={ready:holds.length===0,siteId:board.site_id,completed:deliveryOnly?s.completed===true:true,deliveryOnly,usage:sources,noVariableItemsUsed:final?.noVariableItemsUsed===true,noWarehouseMaterials:local?.snapshot.noWarehouseMaterials===true,localVersion:local?.version??null,localItems,signedDos:signedDos.map((v:any)=>({id:v.id,sha256:f.rows.find(file=>file.id===v.id)?.sha256})),...(verifiedHistorical?{historicalReportId:verifiedHistorical.id,historicalReportVersion:verifiedHistorical.version}:{})};
   const signature=createHash('sha256').update(JSON.stringify(source)).digest('hex');
   result.push({jobKey,aliases:['site:'+board.site_id],siteId:board.site_id,siteName:s.name,ipo:s.ipo??i.rows.find(r=>r.id===native)?.number??'',customer:s.customer??'',ready:source.ready,holds,signature,usage,localPurchases:localItems,completedDate:final?.date??s.qcDelivery?.date??'',receivedAt:new Date(board.created_at).toISOString(),deliveryOnly,historicalReportId:source.historicalReportId,historicalReportVersion:source.historicalReportVersion,historicalIssueEvidence,sources:source});

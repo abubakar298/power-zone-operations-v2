@@ -51,3 +51,7 @@ const reviews = new Map<string, Review>([
 export function reviewedStockLogQcIssue(boardId:string){
   return reviews.get(boardId);
 }
+
+export function reviewedStockLogQcIssues(){
+  return [...reviews.entries()];
+}

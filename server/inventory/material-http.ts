@@ -18,15 +18,21 @@ import {temporaryDocumentPdf} from './temporary-document-pdf.js';
 import {MaterialStockRepository,materialIssueInputSchema,materialReceiptInputSchema,materialEvidenceInputSchema,returnDecisionInputSchema} from './material-stock.js';
 
 import {MaterialUsageRepository,materialUsageInputSchema} from './material-usage.js';
+import {HistoricalReviewConfirmations,historicalReviewConfirmationSchema} from './historical-review-confirmations.js';
 
 import {PurchaseReceivingRepository,purchaseReceiptInputSchema} from './purchase-receiving.js';
 
 const printKind=z.enum(['fixed-do','variable-do','customer-signoff','irr']);
 function requireVersion(value:unknown,current:number){const v=z.coerce.number().int().positive().safeParse(value);if(!v.success)throw new HttpError(422,'Select a saved document version.');if(v.data!==current)throw new HttpError(409,'This preparation changed. Refresh before previewing its documents.');}
 
-export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:RequestHandler,sitePlans?:SiteMaterialPlanRepository,stock?:MaterialStockRepository,usage?:MaterialUsageRepository,purchases?:PurchaseReceivingRepository,gates?:GatePassRepository){
+export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:RequestHandler,sitePlans?:SiteMaterialPlanRepository,stock?:MaterialStockRepository,usage?:MaterialUsageRepository,purchases?:PurchaseReceivingRepository,gates?:GatePassRepository,historicalReviews?:HistoricalReviewConfirmations){
  const r=Router();r.use(requireSession);
  r.get('/material-corrections',async(req,res)=>res.json(await repo.correctionAlerts(req.authSession!.user.id)));
+ if(historicalReviews){
+  // Old DO review notes: the Inventory head confirms them so QC can verify usage.
+  r.get('/historical-reviews',async(req,res)=>res.json(await historicalReviews.list(req.authSession!.user.id)));
+  r.post('/historical-reviews/:siteId/confirm',async(req,res)=>{const input=historicalReviewConfirmationSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Give a reason of at least 3 characters.');res.json(await historicalReviews.confirm(req.authSession!.user.id,z.string().trim().min(1).max(300).parse(req.params.siteId),input.data));});
+ }
  r.get('/document-status',async(req,res)=>res.json(await repo.documentStatus(req.authSession!.user.id)));
  r.get('/document-status/:id/evidence/:file',async(req,res)=>{const file=await repo.documentEvidence(req.authSession!.user.id,z.uuid().parse(req.params.id),z.uuid().parse(req.params.file));res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);});
  r.get('/closing-reviewed',async(req,res)=>{const scope=await repo.warehouses(req.authSession!.user.id);res.json({...closingReviewed,rows:closingReviewed.rows.filter(row=>scope.warehouses.includes(row.warehouse))});});
