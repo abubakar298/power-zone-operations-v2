@@ -1,4 +1,5 @@
 import { closeRevisionRequest } from './revision-closures.js';
+import { retireBoqRevision } from './boq-retirements.js';
 import {requireUnarchivedQuotation} from '../commercial/archives.js';
 import {loadDocumentListMetadata} from '../documents/list-metadata.js';
 import {finalizeCustomerBoq} from '../boq/lifecycle.js';
@@ -19,6 +20,9 @@ export class CoordinatorRepository {
   constructor(private pool: Pool) {}
   closeRevision(actor: string, requestId: string, body: unknown) {
     return closeRevisionRequest(this.pool, actor, requestId, body);
+  }
+  retireBoq(actor: string, revisionId: string, body: unknown) {
+    return retireBoqRevision(this.pool, actor, revisionId, body);
   }
   async projects(actor: string) {
     return projectCatalog(this.pool, actor);
@@ -110,7 +114,7 @@ export class CoordinatorRepository {
  WHERE ($2 OR d.owner_id=$1) AND NOT EXISTS(SELECT 1 FROM quotation_revision_requests_current r WHERE r.draft_id=d.id) AND NOT EXISTS(SELECT 1 FROM boq_draft_finalizations f WHERE f.draft_id=d.id) AND NOT EXISTS(SELECT 1 FROM closed_revision_drafts x WHERE x.draft_id=d.id)
  UNION ALL
  SELECT b.id,'Commercial pricing',b.number,b.snapshot->'survey'->>'siteName','Approved BOQ: prepare pricing',b.created_at,'pricing',NULL,b.id,NULL,NULL,b.snapshot->'customer'->>'name' FROM boq_revisions b
- WHERE ($2 OR EXISTS(SELECT 1 FROM boq_draft_finalizations f JOIN survey_drafts d ON d.id=f.draft_id WHERE f.revision_id=b.id AND d.owner_id=$1)) AND NOT EXISTS(SELECT 1 FROM boq_revisions n WHERE n.boq_id=b.boq_id AND n.revision>b.revision) AND NOT EXISTS(SELECT 1 FROM commercial_pricing_versions p WHERE p.boq_revision_id=b.id) AND NOT EXISTS(SELECT 1 FROM internal_purchase_orders i WHERE i.snapshot->>'boqRevisionId'=b.id::text) AND NOT EXISTS(SELECT 1 FROM closed_revision_boqs x WHERE x.revision_id=b.id)
+ WHERE ($2 OR EXISTS(SELECT 1 FROM boq_draft_finalizations f JOIN survey_drafts d ON d.id=f.draft_id WHERE f.revision_id=b.id AND d.owner_id=$1)) AND NOT EXISTS(SELECT 1 FROM boq_revisions n WHERE n.boq_id=b.boq_id AND n.revision>b.revision) AND NOT EXISTS(SELECT 1 FROM commercial_pricing_versions p WHERE p.boq_revision_id=b.id) AND NOT EXISTS(SELECT 1 FROM internal_purchase_orders i WHERE i.snapshot->>'boqRevisionId'=b.id::text) AND NOT EXISTS(SELECT 1 FROM closed_revision_boqs x WHERE x.revision_id=b.id) AND NOT EXISTS(SELECT 1 FROM boq_retirements x WHERE x.revision_id=b.id)
  UNION ALL
  SELECT p.id,'Quotation',p.number,p.snapshot->>'siteName','Pricing saved: prepare quotation',p.created_at,'quotes',NULL,p.boq_revision_id,NULL,NULL,p.snapshot->'customer'->>'name' FROM commercial_pricing_versions p WHERE ($2 OR p.created_by=$1) AND NOT EXISTS(SELECT 1 FROM commercial_pricing_versions n WHERE n.boq_revision_id=p.boq_revision_id AND n.version>p.version) AND NOT EXISTS(SELECT 1 FROM quotation_versions q WHERE q.pricing_id=p.id) AND NOT EXISTS(SELECT 1 FROM closed_revision_boqs x WHERE x.revision_id=p.boq_revision_id)
  UNION ALL

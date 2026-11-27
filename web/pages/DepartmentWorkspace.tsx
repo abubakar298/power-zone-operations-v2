@@ -20,6 +20,7 @@ import { IposSharedList } from "../components/IposSharedList.js";
 import {QuotationApproval} from "../components/QuotationApproval.js";
 import {SiteCodeUpdate} from "../components/SiteCodeUpdate.js";
 import {CloseRevisionDialog} from "../components/CloseRevisionDialog.js";
+import {RetireBoqDialog} from "../components/RetireBoqDialog.js";
 import {EditCustomer} from '../components/EditCustomer.js';
 import {CoordinatorQuotationReview} from "../components/CoordinatorQuotationReview.js";
 import { CustomerFollowupList } from "../components/CustomerFollowupList.js";
@@ -83,6 +84,7 @@ export function DepartmentWorkspace({
   async function approvalRecorded(){setApprovalTarget(undefined);setQuotationReview(undefined);await load();window.dispatchEvent(new CustomEvent("pz:workflow-completed",{detail:{message:"Approval recorded — moved to Ready to Send."}}));}
   const [revisionRecord, setRevisionRecord] = useState<any>();
   const [closeRevision, setCloseRevision] = useState<any>();
+  const [retireBoq, setRetireBoq] = useState<any>();
   const [selectedSite, setSelectedSite] = useState<any>();
   const [selectedDispatch, setSelectedDispatch] = useState<string>();
   const [dispatchPlanning, setDispatchPlanning] = useState(false);
@@ -426,7 +428,7 @@ export function DepartmentWorkspace({
                           ? `${Math.max(0, Math.floor((Date.now() - +new Date(t.started_at)) / 86400000))} days`
                           : "Not recorded"}</td>
                         <td>{t.blocker || "No recorded blocker"}</td>
-                        <td><Button variant="secondary" onClick={() => page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?onOpen?.(t):void openRevision({...t,sourceQuotationId:t.id})) : t.kind === "Sale confirmation" ? setQuotationReview({...t,sourceQuotationId:t.id}) : onOpen?.(t)}>{page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?"Continue Revision":"Create Revision") : "Review"}</Button>{page === coordinationBuckets[3] && t.kind==="Quotation revision" && <Button variant="neutral" onClick={() => { setNotice(""); setCloseRevision(t); }}>Close revision</Button>}{page === coordinationBuckets[2] && ["Sale confirmation","C&I proposal"].includes(t.kind)&&<Button variant="success" onClick={()=>setApprovalTarget({quotationId:t.kind==="Sale confirmation"?t.id:undefined,cniId:t.kind==="C&I proposal"?t.id:undefined,number:t.number})}>Record Approval</Button>}</td>
+                        <td><Button variant="secondary" onClick={() => page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?onOpen?.(t):void openRevision({...t,sourceQuotationId:t.id})) : t.kind === "Sale confirmation" ? setQuotationReview({...t,sourceQuotationId:t.id}) : onOpen?.(t)}>{page === coordinationBuckets[3] ? (t.kind==="Quotation revision"?"Continue Revision":"Create Revision") : "Review"}</Button>{page === coordinationBuckets[3] && t.kind==="Quotation revision" && <Button variant="neutral" onClick={() => { setNotice(""); setCloseRevision(t); }}>Close revision</Button>}{page === coordinationBuckets[1] && t.kind==="Commercial pricing" && <Button variant="neutral" onClick={() => { setNotice(""); setRetireBoq(t); }}>Not needed</Button>}{page === coordinationBuckets[2] && ["Sale confirmation","C&I proposal"].includes(t.kind)&&<Button variant="success" onClick={()=>setApprovalTarget({quotationId:t.kind==="Sale confirmation"?t.id:undefined,cniId:t.kind==="C&I proposal"?t.id:undefined,number:t.number})}>Record Approval</Button>}</td>
                       </tr>
   );
   async function schedulingSaved() {
@@ -552,6 +554,7 @@ export function DepartmentWorkspace({
     <div className="pz-stack department-workspace">
       <ErrorText error={error} />
       {notice && <p role="status">{notice}</p>}
+      {retireBoq&&<RetireBoqDialog task={retireBoq} session={session} onClose={()=>setRetireBoq(undefined)} onRetired={async message=>{setRetireBoq(undefined);setNotice(message);await load();}}/>}
       {closeRevision&&<CloseRevisionDialog task={closeRevision} session={session} onClose={()=>setCloseRevision(undefined)} onClosed={async message=>{setCloseRevision(undefined);setNotice(message);await load();}}/>}
       {manager && (
         <div className="pz-action-row">
