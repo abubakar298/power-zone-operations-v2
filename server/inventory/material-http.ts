@@ -15,7 +15,7 @@ import {deliveryOrderWithVso,issuedCustomerSignoffModels,returnWorksheetPrintMod
 import {deliveryOrderPdf,materialDocumentPdf,parentDoCopies} from './material-document-pdf.js';
 import {temporaryDocumentPdf} from './temporary-document-pdf.js';
 
-import {MaterialStockRepository,materialIssueInputSchema,materialReceiptInputSchema,materialEvidenceInputSchema} from './material-stock.js';
+import {MaterialStockRepository,materialIssueInputSchema,materialReceiptInputSchema,materialEvidenceInputSchema,returnDecisionInputSchema} from './material-stock.js';
 
 import {MaterialUsageRepository,materialUsageInputSchema} from './material-usage.js';
 
@@ -56,7 +56,9 @@ export function materialDraftHttp(repo:MaterialDraftRepository,requireSession:Re
   r.get('/stock',async(req,res)=>{const warehouse=z.string().trim().min(1).max(200).safeParse(req.query.warehouse);if(!warehouse.success)throw new HttpError(422,'Select a warehouse.');res.json(await stock.positions(req.authSession!.user.id,warehouse.data));});
   r.get('/drafts/:id/movements',async(req,res)=>res.json(await stock.movements(req.authSession!.user.id,uuid(req.params.id))));
   r.post('/issues',async(req,res)=>{const input=materialIssueInputSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Check the dispatch quantities, receiving person and current warehouse balance.');res.json(await stock.issue(req.authSession!.user.id,input.data));});
-  r.post('/receipts',async(req,res)=>{const input=materialReceiptInputSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Check the counted return quantities and warehouse receipt evidence.');res.json(await stock.receive(req.authSession!.user.id,input.data));});
+  r.post('/receipts',async(req,res)=>{const input=materialReceiptInputSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Check the counted return quantities and warehouse receipt evidence.');res.json(await stock.submitReturn(req.authSession!.user.id,input.data));});
+  r.post('/receipts/decisions',async(req,res)=>{const input=returnDecisionInputSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Choose approve or reject and give a reason.');res.json(await stock.decideReturn(req.authSession!.user.id,input.data));});
+  r.get('/drafts/:id/returns',async(req,res)=>res.json(await stock.returnApprovals(req.authSession!.user.id,z.uuid().parse(req.params.id))));
   r.post('/evidence',async(req,res)=>{const input=materialEvidenceInputSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Upload a PDF, PNG or JPEG warehouse evidence file up to 15 MB.');res.json(await stock.uploadEvidence(req.authSession!.user.id,input.data));});
   r.get('/evidence/:id',async(req,res)=>{const file=await stock.evidence(req.authSession!.user.id,uuid(req.params.id));res.set('Content-Type',file.media_type).set('Content-Disposition',`attachment; filename="Warehouse-evidence-${file.id}.${file.media_type==='application/pdf'?'pdf':file.media_type==='image/png'?'png':'jpg'}"`).send(file.content);});
   r.get('/issued/:id/customer-signoff.pdf',async(req,res)=>{

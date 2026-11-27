@@ -70,6 +70,13 @@
 .dispatch-document-list .material-return-table th:nth-child(6){width:14%}
 .dispatch-document-list .material-return-table th:nth-child(7){width:14%}
 .dispatch-document-list .material-return-table th:nth-child(8){width:17%}
+/* Returned-material IGPs waiting for, or decided by, the Inventory head. */
+.dispatch-document-list .material-return-table.return-approval-table th:nth-child(1){width:5%}
+.dispatch-document-list .material-return-table.return-approval-table th:nth-child(2){width:19%}
+.dispatch-document-list .material-return-table.return-approval-table th:nth-child(3){width:32%}
+.dispatch-document-list .material-return-table.return-approval-table th:nth-child(4){width:15%}
+.dispatch-document-list .material-return-table.return-approval-table th:nth-child(5){width:19%}
+.dispatch-document-list .material-return-table.return-approval-table th:nth-child(6){width:10%}
 .dispatch-document-list .material-return-count-table th:nth-child(1){width:6%}
 .dispatch-document-list .material-return-count-table th:nth-child(2){width:50%}
 .dispatch-document-list .material-return-count-table th:nth-child(3){width:10%}

@@ -19,7 +19,7 @@ import {HttpError} from '../http/errors.js';
 import {transaction} from '../db/transaction.js';
 import {MaterialDraftRepository,materialDraftInputSchema} from './material-drafts.js';
 import {warehouseLedgerKey} from './warehouse-source.js';
-import {warehouseNumber,requireWarehouseAccess,lockWarehouseAuthority} from './warehouse-access.js';
+import {warehouseNumber,requireWarehouseAccess,lockWarehouseAuthority,requireInventoryHead,inventoryHead} from './warehouse-access.js';
 import {warehouseDispatchPosition,warehousePosition,warehousePositions} from './warehouse-ledger.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {approvedEarthingBasis} from '../../shared/material-preparation.js';
@@ -39,6 +39,7 @@ export const materialIssueInputSchema=z.object({draftId:z.uuid(),version:z.numbe
  lines:z.array(z.object({lineKey:z.uuid(),quantity,ledgerRevision:z.number().int().nonnegative()}).strict()).min(1).max(2000),
 }).strict();
 export const materialReceiptInputSchema=z.object({draftId:z.uuid(),requestKey:z.uuid(),sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),authorityVersion:z.number().int().positive(),evidenceId:z.uuid(),reason:z.string().trim().min(3).max(2000),qcUsageVersions:z.array(z.object({siteId:z.uuid(),version:z.number().int().positive()}).strict()).max(2000).optional(),lines:z.array(z.object({lineKey:z.uuid(),quantity,ledgerRevision:z.number().int().nonnegative()}).strict()).min(1).max(2000)}).strict();
+export const returnDecisionInputSchema=z.object({submissionId:z.uuid(),requestKey:z.uuid(),decision:z.enum(['approve','reject']),reason:z.string().trim().min(3).max(2000)}).strict();
 export const materialEvidenceInputSchema=z.object({warehouse:z.string().trim().min(1).max(200),filename:z.string().trim().min(1).max(200),mediaType:z.enum(['application/pdf','image/png','image/jpeg']),base64:z.string().min(4).max(20971520)}).strict();
 type IssueInput=z.infer<typeof materialIssueInputSchema>;
 const fingerprint=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -121,19 +122,30 @@ export class MaterialStockRepository{
  }
  /** Counted warehouse receipt, never an automatic credit from site IRR/use. */
  async receive(actor:string,raw:z.infer<typeof materialReceiptInputSchema>){
+  const {originalInput,input}=await this.returnInput(actor,raw);
+  return transaction(this.pool,async c=>{
+   await lockActiveActor(c,actor);
+   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.material.receipt.request.'||$1,0))",[input.requestKey]);
+   const replay=(await c.query('SELECT r.id,r.number,r.request_fingerprint,r.verified_by,d.snapshot FROM inventory_material_receipts r JOIN LATERAL(SELECT snapshot FROM inventory_material_draft_versions WHERE draft_id=r.draft_id ORDER BY version DESC LIMIT 1)d ON true WHERE r.request_key=$1',[input.requestKey])).rows[0];
+   if(replay){await this.scope(actor,replay.snapshot.warehouse,c);if(replay.verified_by!==actor||replay.request_fingerprint!==fingerprint(originalInput))throw new HttpError(409,'This request belongs to a different warehouse receipt.');return {id:replay.id,number:replay.number,stockPosted:true};}
+   return this.creditReturn(c,actor,originalInput,input,{});
+  });
+ }
+ /** Resolves the exact DO preparation a counted return belongs to. */
+ private async returnInput(actor:string,raw:z.infer<typeof materialReceiptInputSchema>){
   const originalInput=materialReceiptInputSchema.parse(raw);let input=originalInput;
   const origin=await this.drafts.detail(actor,originalInput.draftId);
   if(originalInput.lines.some(r=>!origin.snapshot.lines.some((l:any)=>l.key===r.lineKey)))throw new HttpError(422,'Select returned rows from this preparation.');
   const roots=(await this.pool.query(`SELECT DISTINCT d.draft_id FROM inventory_material_dispatches_active d WHERE ${materialDispatchDraftLink} AND EXISTS(SELECT 1 FROM inventory_material_dispatch_lines_active l WHERE l.dispatch_id=d.id AND l.line_key=ANY($2::uuid[]))`,[originalInput.draftId,originalInput.lines.map(r=>r.lineKey)])).rows;
   if(roots.length>1)throw new HttpError(409,'These materials have more than one DO preparation. Open the exact issued DO before recording its return.');
   if(roots.length===1)input={...originalInput,draftId:roots[0].draft_id};
-  return transaction(this.pool,async c=>{
-   await lockActiveActor(c,actor);
-   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.material.receipt.request.'||$1,0))",[input.requestKey]);
-   const replay=(await c.query('SELECT r.id,r.number,r.request_fingerprint,r.verified_by,d.snapshot FROM inventory_material_receipts r JOIN LATERAL(SELECT snapshot FROM inventory_material_draft_versions WHERE draft_id=r.draft_id ORDER BY version DESC LIMIT 1)d ON true WHERE r.request_key=$1',[input.requestKey])).rows[0];
-   if(replay){await this.scope(actor,replay.snapshot.warehouse,c);if(replay.verified_by!==actor||replay.request_fingerprint!==fingerprint(originalInput))throw new HttpError(409,'This request belongs to a different warehouse receipt.');return {id:replay.id,number:replay.number,stockPosted:true};}
+  return {originalInput,input};
+ }
+ /** Checks a counted return and credits it to warehouse stock inside the caller's transaction. */
+ private async creditReturn(c:PoolClient,actor:string,originalInput:z.infer<typeof materialReceiptInputSchema>,input:z.infer<typeof materialReceiptInputSchema>,options:{approval?:{submissionId:string;submittedBy:string;submittedAt:string}}){
    await c.query('SELECT id FROM inventory_material_drafts WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',[[...new Set([input.draftId,originalInput.draftId])]]);await requireOpenParent(c,input.draftId);
    const draft=await this.drafts.detail(actor,input.draftId,c),warehouse=draft.snapshot.warehouse;
+   if(options.approval)await requireInventoryHead(actor,warehouse,c);
    await this.scope(actor,warehouse,c);await this.authority(c,warehouse,input.sourceSha256,input.authorityVersion);
    const evidence=(await c.query('SELECT id,warehouse,sha256 FROM inventory_material_evidence WHERE id=$1',[input.evidenceId])).rows[0];
    if(!evidence||evidence.warehouse!==warehouse)throw new HttpError(422,'Attach the counted warehouse receipt evidence for this warehouse.');
@@ -154,7 +166,7 @@ export class MaterialStockRepository{
       row.key===lineKey&&row.sites.every(siteId=>row.removedSiteIds.includes(siteId))));
      if(!allRemoved)throw new HttpError(409,'QC must save material usage before this return is verified.');
     }
-    if(input.qcUsageVersions.length!==reports.length||reports.some(r=>!input.qcUsageVersions!.some(v=>v.siteId===r.site_id&&v.version===r.version)))throw new HttpError(409,'QC usage changed. Refresh the ledger before verifying this return.');
+    if(!options.approval&&(input.qcUsageVersions.length!==reports.length||reports.some(r=>!input.qcUsageVersions!.some(v=>v.siteId===r.site_id&&v.version===r.version))))throw new HttpError(409,'QC usage changed. Refresh the ledger before verifying this return.');
     for(const request of input.lines){const out=sent.filter(r=>r.line_key===request.lineKey).reduce((n,r)=>n.plus(r.quantity),new Decimal(0)),returned=sent.filter(r=>r.line_key===request.lineKey).reduce((n,r)=>n.plus(r.returned),new Decimal(0)),used=reports.reduce((n,r)=>n.plus(r.snapshot.lines.find((l:any)=>l.lineKey===request.lineKey)?.used??0),new Decimal(0));
      if(used.plus(returned).plus(request.quantity).gt(out))throw new HttpError(422,'Counted return exceeds issued material less QC use and previous returns. Correct QC usage or send the discrepancy to Management.');
     }
@@ -173,10 +185,11 @@ export class MaterialStockRepository{
    for(const key of [...new Set(allocations.map(r=>r.ledger_key))].sort()){
     const p=await warehousePosition(c,input.sourceSha256,key,true);
     if(!p)throw new HttpError(409,'This warehouse item and unit are not in the accepted stock register.');
-    if(allocations.some(r=>r.ledger_key===key&&r.expectedRevision!==p.ledgerRevision))throw new HttpError(409,'This warehouse balance changed. Refresh before verifying the receipt.');positions.set(key,p);
+    // On approval the counted quantities are fixed by the signed IGP; credit them to the current balance.
+    if(!options.approval&&allocations.some(r=>r.ledger_key===key&&r.expectedRevision!==p.ledgerRevision))throw new HttpError(409,'This warehouse balance changed. Refresh before verifying the receipt.');positions.set(key,p);
    }
    const id=randomUUID(),number=await warehouseNumber(c,'IGP',id);
-   const snapshot={warehouse,draftId:input.draftId,...(input.draftId!==originalInput.draftId?{originPreparationId:originalInput.draftId}:{}),evidence:{id:evidence.id,sha256:evidence.sha256},reason:input.reason,lines:allocations.map(r=>({dispatchId:r.dispatch_id,lineKey:r.line_key,itemId:r.item_id,unit:r.unit,quantity:r.quantity})),siteUseStatus:'Not inferred from warehouse receipt'};
+   const snapshot={warehouse,draftId:input.draftId,...(input.draftId!==originalInput.draftId?{originPreparationId:originalInput.draftId}:{}),evidence:{id:evidence.id,sha256:evidence.sha256},reason:input.reason,lines:allocations.map(r=>({dispatchId:r.dispatch_id,lineKey:r.line_key,itemId:r.item_id,unit:r.unit,quantity:r.quantity})),siteUseStatus:'Not inferred from warehouse receipt',...(options.approval?{approval:options.approval}:{})};
    await c.query('INSERT INTO inventory_material_receipts(id,number,draft_id,evidence_id,reason,snapshot,request_key,request_fingerprint,verified_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[id,number,input.draftId,input.evidenceId,input.reason,snapshot,input.requestKey,fingerprint(originalInput),actor]);
    for(const row of allocations){
     await c.query('INSERT INTO inventory_material_receipt_lines(receipt_id,draft_id,dispatch_id,line_key,quantity) VALUES($1,$2,$3,$4,$5)',[id,input.draftId,row.dispatch_id,row.line_key,row.quantity]);
@@ -184,7 +197,61 @@ export class MaterialStockRepository{
     await c.query("INSERT INTO inventory_warehouse_operational_movements(id,source_sha256,ledger_key,ledger_revision,kind,draft_id,dispatch_id,receipt_id,line_key,in_delta,out_delta,closing_before,closing_after,created_by) VALUES($1,$2,$3,$4,'return-in',$5,$6,$7,$8,$9,0,$10,$11,$12)",[randomUUID(),input.sourceSha256,row.ledger_key,p.ledgerRevision+1,input.draftId,row.dispatch_id,id,row.line_key,row.quantity,before,after,actor]);p.currentClosing=after;p.ledgerRevision++;
    }
    return {id,number,stockPosted:true};
+ }
+ /** Step 1 of a return (owner rule, 27 Nov 2026): the counted, signed Return IGP is saved and
+  * waits for the Inventory head. Every receipt rule is checked now, but no stock moves. */
+ async submitReturn(actor:string,raw:z.infer<typeof materialReceiptInputSchema>){
+  const {originalInput,input}=await this.returnInput(actor,raw);
+  return transaction(this.pool,async c=>{
+   await lockActiveActor(c,actor);
+   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.material.return.submission.'||$1,0))",[input.requestKey]);
+   const replay=(await c.query('SELECT id,submitted_by,request_fingerprint FROM inventory_material_return_submissions WHERE request_key=$1',[input.requestKey])).rows[0];
+   if(replay){if(replay.submitted_by!==actor||replay.request_fingerprint!==fingerprint(originalInput))throw new HttpError(409,'This request belongs to a different returned-material IGP.');return {id:replay.id as string,stockPosted:false,status:'awaiting-approval' as const};}
+   await c.query('SELECT id FROM inventory_material_drafts WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',[[...new Set([input.draftId,originalInput.draftId])]]);
+   if((await c.query('SELECT 1 FROM inventory_material_return_submissions s WHERE s.draft_id=$1 AND NOT EXISTS(SELECT 1 FROM inventory_material_return_decisions d WHERE d.submission_id=s.id)',[input.draftId])).rowCount)throw new HttpError(409,'A counted return for this DO is already waiting for the Inventory head. Ask them to approve or reject it first.');
+   // Same checks as crediting stock, then undone: the submission must be one the head can approve.
+   await c.query('SAVEPOINT return_submission_check');
+   await this.creditReturn(c,actor,originalInput,input,{});
+   await c.query('ROLLBACK TO SAVEPOINT return_submission_check');
+   const draft=await this.drafts.detail(actor,input.draftId,c),id=randomUUID();
+   await c.query('INSERT INTO inventory_material_return_submissions(id,draft_id,warehouse,evidence_id,reason,input,request_key,request_fingerprint,submitted_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[id,input.draftId,draft.snapshot.warehouse,input.evidenceId,input.reason,originalInput,input.requestKey,fingerprint(originalInput),actor]);
+   await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'inventory.return.submitted:'+id]);
+   return {id,stockPosted:false,status:'awaiting-approval' as const};
   });
+ }
+ /** Step 2: the Inventory head approves (stock is credited, an IGP number is issued) or rejects
+  * with a reason (nothing moves; the return can be counted and sent again). Both are kept. */
+ async decideReturn(actor:string,raw:z.infer<typeof returnDecisionInputSchema>){
+  const input=returnDecisionInputSchema.parse(raw);
+  return transaction(this.pool,async c=>{
+   await lockActiveActor(c,actor);
+   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.material.return.decision.'||$1,0))",[input.submissionId]);
+   const submission=(await c.query('SELECT * FROM inventory_material_return_submissions WHERE id=$1',[input.submissionId])).rows[0];
+   if(!submission)throw new HttpError(404,'Returned-material IGP not found.');
+   await requireInventoryHead(actor,submission.warehouse,c);
+   const done=(await c.query('SELECT d.*,r.number FROM inventory_material_return_decisions d LEFT JOIN inventory_material_receipts r ON r.id=d.receipt_id WHERE d.submission_id=$1',[input.submissionId])).rows[0];
+   if(done){if(done.request_key!==input.requestKey||done.decided_by!==actor)throw new HttpError(409,'This return was already '+(done.decision==='approved'?'approved':'rejected')+'.');return {submissionId:input.submissionId,decision:done.decision as string,receiptId:done.receipt_id as string|null,number:done.number as string|null,stockPosted:done.decision==='approved'};}
+   let receipt:{id:string;number:string}|null=null;
+   if(input.decision==='approve'){
+    const counted=materialReceiptInputSchema.parse(submission.input);
+    await c.query('SELECT id FROM inventory_material_drafts WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',[[...new Set([submission.draft_id,counted.draftId])]]);
+    receipt=await this.creditReturn(c,actor,counted,{...counted,draftId:submission.draft_id,requestKey:input.requestKey},{approval:{submissionId:submission.id,submittedBy:submission.submitted_by,submittedAt:new Date(submission.created_at).toISOString()}});
+   }
+   await c.query('INSERT INTO inventory_material_return_decisions(submission_id,decision,reason,receipt_id,request_key,decided_by) VALUES($1,$2,$3,$4,$5,$6)',[submission.id,input.decision==='approve'?'approved':'rejected',input.reason,receipt?.id??null,input.requestKey,actor]);
+   await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'inventory.return.'+(input.decision==='approve'?'approved':'rejected')+':'+submission.id]);
+   return {submissionId:submission.id as string,decision:input.decision==='approve'?'approved':'rejected',receiptId:receipt?.id??null,number:receipt?.number??null,stockPosted:!!receipt};
+  });
+ }
+ /** Returns counted for these preparations, newest first, and whether this user may decide them. */
+ async returnApprovals(actor:string,draftId:string){
+  const draft=await this.drafts.detail(actor,draftId),draftIds=[draftId],warehouse=draft.snapshot.warehouse as string;
+  const rows=(await this.pool.query(`SELECT s.id,s.draft_id,s.evidence_id,s.reason,s.input->'lines' AS lines,s.created_at,submitter.display_name AS submitted_by,
+   d.decision,d.reason AS decision_reason,d.created_at AS decided_at,decider.display_name AS decided_by,r.number AS receipt_number
+   FROM inventory_material_return_submissions s JOIN users submitter ON submitter.id=s.submitted_by
+   LEFT JOIN inventory_material_return_decisions d ON d.submission_id=s.id LEFT JOIN users decider ON decider.id=d.decided_by LEFT JOIN inventory_material_receipts r ON r.id=d.receipt_id
+   WHERE s.draft_id=ANY($1::uuid[]) OR s.input->>'draftId'=ANY($1::uuid[]::text[]) ORDER BY s.created_at DESC,s.id`,[draftIds])).rows;
+  return {canApprove:await inventoryHead(actor,warehouse,this.pool),submissions:rows.map(r=>({id:r.id as string,evidenceId:r.evidence_id as string,reason:r.reason as string,lines:r.lines as {lineKey:string;quantity:string}[],submittedAt:new Date(r.created_at).toISOString(),submittedBy:r.submitted_by as string,
+   status:(r.decision??'awaiting-approval') as 'awaiting-approval'|'approved'|'rejected',decisionReason:r.decision_reason as string|null,decidedAt:r.decided_at?new Date(r.decided_at).toISOString():null,decidedBy:r.decided_by as string|null,receiptNumber:r.receipt_number as string|null}))};
  }
  async issue(actor:string,raw:IssueInput,allowCombined=false){
   const input=materialIssueInputSchema.parse(raw);
