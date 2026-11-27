@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/Button.js";
 import {downloadName,filenameFromDisposition} from '../../shared/download-name.js';
 import pdfWorker from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+import {documentReaderOptions} from "./document-reader-assets.js";
 import {showPdfPages,type PdfPagesView} from "./document-page-drawing.js";
 
 /** Read-only authenticated document preview. Existing endpoints enforce access. */
@@ -79,7 +80,7 @@ export function DocumentPreview({
         } else {
           const pdf = await import("pdfjs-dist/legacy/build/pdf.mjs");
           pdf.GlobalWorkerOptions.workerSrc = pdfWorker;
-          task = pdf.getDocument({ data: await blob.arrayBuffer() });
+          task = pdf.getDocument({ data: await blob.arrayBuffer(), ...documentReaderOptions() });
           const doc = await task.promise;
           if (cancelled || !host.current) return;
           // Page 1 first, later pages as they are scrolled to. Callers waiting for the whole document

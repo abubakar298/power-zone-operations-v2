@@ -35,3 +35,12 @@ await writeFile(
     ),
   ).then((x) => x.join("\n\n")),
 );
+
+// PDF reader image decoders (JBIG2, JPEG 2000, colour profiles). Previews point the reader at
+// /pdfjs/wasm/ (web/components/document-reader-assets.ts); without these files scanned pages
+// saved in those formats show as blank white pages.
+const pdfReader = join(dirname(require.resolve("pdfjs-dist/package.json")), "wasm"),
+  pdfReaderOut = "dist/web/pdfjs/wasm";
+await mkdir(pdfReaderOut, { recursive: true });
+for (const name of await readdir(pdfReader))
+  if (!name.startsWith("quickjs")) await copyFile(join(pdfReader, name), join(pdfReaderOut, name));
