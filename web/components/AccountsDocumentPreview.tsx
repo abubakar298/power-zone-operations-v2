@@ -14,6 +14,7 @@ export function DocumentPreview({
   onReady,
   downloadFilename,
   compactControls = false,
+  showDownload = true,
 }: {
   url: string;
   title: string;
@@ -22,6 +23,8 @@ export function DocumentPreview({
   onReady?: () => void;
   downloadFilename?:string;
   compactControls?:boolean;
+  /** Off for a file that is only on the user's computer (chosen, not uploaded yet). */
+  showDownload?:boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [retry, setRetry] = useState(0);
@@ -54,6 +57,10 @@ export function DocumentPreview({
           if (cancelled) return;
           setLoaded({blob, filename: filenameFromDisposition(response.headers.get('Content-Disposition'))});
         }
+        const media = blob.type.toLowerCase();
+        // Say so plainly instead of showing a PDF reader error for files the viewer cannot draw.
+        if (media && !mime.startsWith("image/") && (media === "image/heic" || media === "image/heif" || !(media.includes("pdf") || media.startsWith("image/") || media.includes("spreadsheetml") || media === "application/octet-stream")))
+          throw new Error("This file type cannot be previewed here. Use Download to open it.");
         if (blob.type.includes('spreadsheetml') || /\.xlsx$/i.test(downloadFilename??title)) {
           const {workbookPreview}=await import('./workbook-preview.js');const view=workbookPreview(new Uint8Array(await blob.arrayBuffer()));if(cancelled)return;host.current?.replaceChildren(view);
         } else if (blob.type.startsWith("image/") || mime.startsWith("image/")) {
@@ -100,7 +107,7 @@ export function DocumentPreview({
     <section className="ipo-document-preview" aria-label={title}>
       <div className="ipo-preview-heading">
         <h4>{title}</h4>
-        <DocumentDownload url={url} title={title} data={data ?? loaded?.blob} downloadFilename={loaded?.filename ?? downloadFilename}/>
+        {showDownload && <DocumentDownload url={url} title={title} data={data ?? loaded?.blob} downloadFilename={loaded?.filename ?? downloadFilename}/>}
       </div>
       {compactControls ? <div className="ipo-preview-toolbar" role="group" aria-label={title + " zoom controls"}>
         <div className="ipo-preview-zoom-group">

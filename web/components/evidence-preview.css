@@ -2,3 +2,5 @@
 .evidence-preview>.ipo-document-preview{flex-basis:100%;width:100%;box-sizing:border-box;margin-top:8px;overflow:hidden}
 .evidence-preview .ipo-preview-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .accounts-file-list li:has(>.evidence-preview){display:grid;grid-template-columns:minmax(0,1fr);align-items:start}
+.pz-file-actions{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;min-width:0}
+.pz-file-actions__note{display:block;color:var(--pz-muted);line-height:1.45;align-self:center}
