@@ -1,5 +1,6 @@
 import {createConfigurationBatch,configurationBatchPreview,confirmConfigurationBatch} from './configuration-batches.js';
 import {saveHeadsup,submitHeadsup} from './headsup.js';
+import {cancelledSitesForCoordination} from './order-slots.js';
 import {customerSendEvidence,attachCustomerSendEvidence,removeCustomerSendEvidence,sendPackageToCustomer} from "./ubl-customer-send.js";
 import { buildIpoPdf, buildPeachtreePdf } from "../orders/document-renderers.js";
 import type { IpoRevisionRepository } from "./ipo-revisions.js";
@@ -39,6 +40,9 @@ export function projectWorkflowHttp(
    r.post('/ipo-revisions/:id/prepare',async(req,res)=>res.json(await ipoRevisions.prepare(actor(req),id(req),req.body)));
    r.get('/ipo-revisions/proposals/:id/ipo.pdf',async(req,res)=>{const p=await ipoRevisions.proposalDocument(actor(req),id(req));res.type('application/pdf').set('Content-Disposition','inline; filename="'+p.number.replace(/[^A-Za-z0-9 ()._-]/g,'_')+'-proposed.pdf"').send(buildIpoPdf(p.snapshot,p.number+' (PROPOSED - NOT ISSUED)',p.snapshot.peachtree));});
    r.post('/ipo-revisions/proposals/:id/decision',async(req,res)=>res.json(await ipoRevisions.decide(actor(req),id(req),req.body)));
+   // One approval: a submitted revised quotation and its IPO revision, decided together.
+   r.get('/ipo-revisions/requests/:id/ipo.pdf',async(req,res)=>{const p=await ipoRevisions.submittedDocument(actor(req),id(req));res.type('application/pdf').set('Content-Disposition','inline; filename="'+p.number.replace(/[^A-Za-z0-9 ()._-]/g,'_')+'-proposed.pdf"').send(buildIpoPdf(p.snapshot,p.number+' (PROPOSED - NOT ISSUED)',p.snapshot.peachtree));});
+   r.post('/ipo-revisions/requests/:id/decision',async(req,res)=>res.json(await ipoRevisions.decideSubmitted(actor(req),id(req),req.body)));
    r.get('/:id/ipo-revisions',async(req,res)=>res.json(await ipoRevisions.status(actor(req),id(req))));
    r.post('/:id/ipo-revisions',async(req,res)=>res.json(await ipoRevisions.start(actor(req),id(req),req.body)));
   }
@@ -213,6 +217,7 @@ export function projectWorkflowHttp(
       .set("Content-Disposition", `attachment; filename="${file.name}"`)
       .send(file.content);
   });
+  r.get('/cancelled-sites',async(req,res)=>res.json(await cancelledSitesForCoordination((repo as any).pool,actor(req))));
   r.post('/configuration-batches',async(req,res)=>res.status(201).json(await createConfigurationBatch((repo as any).pool,actor(req),req.body)));
   r.get('/configuration-batches/:id',async(req,res)=>res.json(await configurationBatchPreview((repo as any).pool,actor(req),id(req))));
   r.post('/configuration-batches/:id/preview',async(req,res)=>res.json(await configurationBatchPreview((repo as any).pool,actor(req),id(req),true)));

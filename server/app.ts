@@ -1,5 +1,6 @@
 import {equalSecrets} from './auth/crypto.js';
 import {slowRequestLog} from './http/slow-request-log.js';
+import {apiRateLimit, defaultApiRequestsPerMinute} from './http/api-rate-limit.js';
 import {materialReplacementHttp} from './inventory/material-replacement-http.js';
 import {warehouseTransferHttp} from './inventory/warehouse-transfer-http.js';
 import {GatePassRepository} from './inventory/gate-passes.js';
@@ -74,7 +75,7 @@ import { resolve } from "node:path";
 import type { Config } from "./config.js";
 import { AuthRepository } from "./auth/repository.js";
 import { AuthService } from "./auth/service.js";
-import { authHttp } from "./auth/http.js";
+import { authHttp, sessionCookieName } from "./auth/http.js";
 import { dashboardRoutes } from "./dashboard/routes.js";
 import { HttpError } from "./http/errors.js";
 import { workflowBoundary, coordinatorRecords } from "./http/permissions.js";
@@ -111,6 +112,14 @@ export function createApp(
   });
   // Log API requests slower than 2 seconds (route pattern only) to find slow pages.
   app.use("/api", slowRequestLog());
+  // General flood limit for every API request (sign-in and passwords keep their own stricter limits).
+  app.use(
+    "/api",
+    apiRateLimit({
+      limit: config.apiRateLimitPerMinute ?? defaultApiRequestsPerMinute,
+      cookieName: sessionCookieName(config),
+    }),
+  );
   // Security log: price and cost views and exports, approvals and backup downloads (Moaz, 24 Oct 2026).
   app.use("/api", securityAudit(pool));
   app.use(
@@ -312,6 +321,11 @@ export function createApp(
     // Vite names every file in /assets after its content (e.g. App-DRZ4ujdI.js), so a new
     // release always uses new names: browsers can keep these for a year without going stale.
     app.use("/assets", express.static(resolve(webDirectory, "assets"), { index: false, maxAge: "1y", immutable: true }));
+    // A file from an earlier release is gone after a deploy. Answer "not found" instead of the page,
+    // so an open tab sees a failed screen load and reloads itself (web/navigation/release-reload.ts).
+    app.use("/assets", (_req, res) => {
+      res.status(404).set("Cache-Control", "no-store").type("text/plain").send("Not found");
+    });
     app.use(express.static(webDirectory, { index: false, maxAge: "1h" }));
     app.get("/{*path}", (_req, res) => {
       res

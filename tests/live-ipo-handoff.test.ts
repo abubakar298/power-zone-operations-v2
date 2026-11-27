@@ -7,6 +7,7 @@ import {ProjectWorkflowRepository} from '../server/project-workflow/repository.j
 import {SiteWorkflowRepository} from '../server/site-workflow/repository.js';
 import {MaterialDraftRepository} from '../server/inventory/material-drafts.js';
 import {linkCreatedOperationsMaterialSource,approvedMaterialIdentity} from '../server/inventory/source-links.js';
+import {backfillNoPoMaterialSources} from '../server/inventory/backfill-no-po-source-links.js';
 import {transaction} from '../server/db/transaction.js';
 import {syncCreatedOperationsHandoff} from '../server/operations-board/live-ipo-sync.js';
 
@@ -41,6 +42,27 @@ test('normal Operations issue appends its exact receiving queue atomically, retr
   const stranger=randomUUID();await db.pool.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,'SIMULATION other','test-only','Coordinator')",[stranger,stranger+'@handoff.invalid']);await assert.rejects(transaction(db.pool,c=>linkCreatedOperationsMaterialSource(c,stranger,continuation)),/authenticated handoff issuer/);
 
   assert.deepEqual((await db.pool.query("SELECT (SELECT md5(string_agg(snapshot::text,'' ORDER BY id)) FROM internal_purchase_orders) ipo,(SELECT count(*) FROM accounts_pt_entries) pt,(SELECT count(*) FROM accounts_job_closures) closures,(SELECT count(*) FROM inventory_warehouse_operational_movements) movements,(SELECT count(*) FROM stock_on_hand_entries) stock")).rows[0],protectedBefore);
+
+  const withoutPo=await ipo(false,'');
+  await repo.issue(actor,{ipoId:withoutPo.id,notes:'SIMULATION issued without customer PO',requestKey:randomUUID()});
+  let intake=await new MaterialDraftRepository(db.pool).intake(manager);
+  assert.ok(intake.sources.some(row=>row.siteId===withoutPo.id&&row.customerPo===''));
+  assert.ok(!intake.registeredPending.some(row=>row.siteId==='live-ipo:'+withoutPo.id));
+
+  const oldWithoutPo=await ipo(false,''),oldOps=randomUUID();
+  await db.pool.query('INSERT INTO operations_boq_issuances(id,ipo_id,boq_revision_id,number,snapshot,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[oldOps,oldWithoutPo.id,oldWithoutPo.snapshot.boqRevisionId,'SIMULATION-OLDER-NO-PO',{items:[]},randomUUID(),actor]);
+  await transaction(db.pool,async c=>{
+   await new SiteWorkflowRepository(db.pool).ensure(c,oldOps);
+   await syncCreatedOperationsHandoff(c,actor,{ipoId:oldWithoutPo.id,operationsIssuanceId:oldOps});
+  });
+  intake=await new MaterialDraftRepository(db.pool).intake(manager);
+  assert.ok(intake.registeredPending.some(row=>row.siteId==='live-ipo:'+oldWithoutPo.id));
+  assert.equal(await backfillNoPoMaterialSources(db.pool),1);
+  assert.equal(await backfillNoPoMaterialSources(db.pool),0);
+  intake=await new MaterialDraftRepository(db.pool).intake(manager);
+  assert.ok(intake.sources.some(row=>row.siteId===oldWithoutPo.id&&row.customerPo===''));
+  assert.ok(!intake.registeredPending.some(row=>row.siteId==='live-ipo:'+oldWithoutPo.id));
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_warehouse_operational_movements')).rows[0].n,0);
 
   const wrongPo=await ipo(false,'WRONG-PO'),wrongIssued=await repo.issue(actor,{ipoId:wrongPo.id,notes:'SIMULATION mismatched PO',requestKey:randomUUID()});assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_material_source_links WHERE ipo_id=$1',[wrongPo.id])).rows[0].n,0);
   const wrongResult=await transaction(db.pool,c=>linkCreatedOperationsMaterialSource(c,actor,{boardSiteId:'live-ipo:'+wrongPo.id,ipoId:wrongPo.id,operationsIssuanceId:wrongIssued.id}));assert.equal(wrongResult.status,'held');if(wrongResult.status==='held')assert.match(wrongResult.reason,/po-mismatch/);

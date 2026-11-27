@@ -1,17 +1,20 @@
+import {sitesAwaitingQcUsage} from '../inventory/qc-usage-pending.js';
 import {isBoqViewer,siteBoqDetails} from './site-boq.js';
 import {readLocalPurchases,saveLocalPurchases,requireLocalPurchaseSite} from './local-purchases.js';
 import {siteDispatchChoices} from '../inventory/dispatch-document-status.js';
 import {queueOperationsEmails} from '../ipo-email/queue.js';
 import {withInventoryReceiving} from './inventory-delivery.js';
 import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
-import {regionalQcDelegationSql} from './qc-delegation.js';
+import {accessTeamsSql,regionalQcDelegationSql} from './qc-delegation.js';
 import {recordDeliveryReturn} from './delivery-return.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {isDeepStrictEqual} from 'node:util';
 import {attachHistoricalEvidence} from './historical-evidence.js';
 import {validateBatch,type BatchSnapshot} from './batches.js';
 import {activeSiteAlerts} from './delays.js';
-import {siteCancellationBlockers,cancelSite,requireNotCancelled} from './site-cancellation.js';
+import {boardFileDownloadContext} from './file-download-name.js';
+import {siteCancellationBlockers,siteIssuedDoNumbers,cancelSite,requireNotCancelled} from './site-cancellation.js';
+import {batchStopChange,batchStopChangeHistory,issuedDosNote} from './batch-stop-change.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {HttpError} from '../http/errors.js';
@@ -22,7 +25,8 @@ import {fileSchema,importSchema,movementSchema,commandSchema,vendorSchema,target
 import {workflowSiteSchema,saveDispatchPlan,confirmDelivery,validCompletionDate,completeQcStage,completeUpsJob,currentStage,siteBucket as siteBucketForBatch,qcType as qcTypeForBatch,type WorkflowSite,type FileReference,type Entry} from './workflow.js';
 import type {z} from 'zod';
 
-type Access={qcDelegated?:boolean;name:string;kind:'owner'|'head'|'lead'|'qc'|'accounts';team:'central'|'south'|null};
+type Team='central'|'south';
+type Access={qcDelegated?:boolean;name:string;kind:'owner'|'head'|'lead'|'qc'|'accounts';team:Team|null;teams:Team[]};
 const latest="SELECT b.* FROM (SELECT DISTINCT ON (site_id) site_id,version,created_at,snapshot FROM operations_board_versions ORDER BY site_id,version DESC) b WHERE NOT EXISTS(SELECT 1 FROM test_workflow_archives a WHERE a.key LIKE 'LOCAL-REVIEW-SAMPLES-%' AND (a.records->'portalOperationSiteIds' ? b.site_id::text))";
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 /** Server-owned records; browser role selectors never authorise access. */
@@ -31,17 +35,17 @@ export class OperationsBoardRepository{
  async localPurchases(actor:string,siteId:string){await requireLocalPurchaseSite(actor,siteId,this.pool);return readLocalPurchases(this.pool,siteId);}
  async saveLocalPurchases(actor:string,siteId:string,raw:unknown){return saveLocalPurchases(this.pool,actor,siteId,raw);}
  private async access(actor:string,c:Pool|PoolClient=this.pool):Promise<Access>{
-  const row=(await c.query(`SELECT u.active,u.role,u.display_name,a.kind,a.team,${regionalQcDelegationSql} AS qc_delegated FROM users u LEFT JOIN operations_board_access a ON a.user_id=u.id WHERE u.id=$1`,[actor])).rows[0];
+  const row=(await c.query(`SELECT u.active,u.role,u.display_name,a.kind,a.team,${accessTeamsSql} AS teams,${regionalQcDelegationSql} AS qc_delegated FROM users u LEFT JOIN operations_board_access a ON a.user_id=u.id WHERE u.id=$1`,[actor])).rows[0];
   if(!row?.active)throw new HttpError(401,'Your access has ended.');
-  if(['Admin','Management'].includes(row.role))return {kind:'owner',team:null,name:row.display_name};
-  if(row.role==='Accounts')return {kind:'accounts',team:null,name:row.display_name};
-  if(row.role==='Operations'&&row.kind)return {kind:row.kind,team:row.team,name:row.display_name,qcDelegated:row.qc_delegated===true};
+  if(['Admin','Management'].includes(row.role))return {kind:'owner',team:null,teams:[],name:row.display_name};
+  if(row.role==='Accounts')return {kind:'accounts',team:null,teams:[],name:row.display_name};
+  if(row.role==='Operations'&&row.kind)return {kind:row.kind,team:row.team,teams:row.teams??[],name:row.display_name,qcDelegated:row.qc_delegated===true};
   throw new HttpError(403,'Operations board access is not assigned.');
  }
  private scope(access:Access,site:BoardSite,documentsOnly=false){
   if(access.kind==='accounts'){if(documentsOnly)return;throw new HttpError(403,'Accounts can view document tracking only.');}
   if(['owner','head'].includes(access.kind))return;
-  if(site.operationsTeam!==access.team)throw new HttpError(404,'Site not found in your assigned team.');
+  if(!access.teams.includes(site.operationsTeam as Team))throw new HttpError(404,'Site not found in your assigned team.');
  }
  private async current(c:Pool|PoolClient,id:string,lock=false){
   if(lock)await c.query('SELECT id FROM operations_board_sites WHERE id=$1 FOR UPDATE',[id]);
@@ -52,12 +56,16 @@ export class OperationsBoardRepository{
  async sites(actor:string){
   const access=await this.access(actor);if(access.kind==='accounts')throw new HttpError(403,'Accounts can view document tracking only.');
   const rows=await withInventoryReceiving(this.pool,(await this.pool.query(latest)).rows);
-  return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>({...r.snapshot,version:r.version,updatedAt:r.created_at})),access};
+  const scoped=rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||access.teams.includes(r.snapshot.operationsTeam)));
+  const qc=access.kind==='qc'||access.qcDelegated===true;
+  const completed=qc?scoped.filter(r=>r.snapshot.installation===true&&!r.snapshot.cancelled&&siteBucketForBatch(r.snapshot)==='completed'):[];
+  const pending=await sitesAwaitingQcUsage(this.pool,completed.map(r=>({id:r.site_id,ipo:r.snapshot.ipo??''})));
+  return {sites:scoped.map(r=>({...r.snapshot,version:r.version,updatedAt:r.created_at,qcUsagePending:pending.has(r.site_id)})),access};
  }
  /** Physical Documents: originals Accounts has confirmed receiving (every original in the document batch). Read only. */
  async accountsReceipts(actor:string){
   const access=await this.access(actor);if(access.kind==='accounts')throw new HttpError(403,'Accounts can view document tracking only.');
-  const rows=(await this.pool.query(latest)).rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||r.snapshot.operationsTeam===access.team));
+  const rows=(await this.pool.query(latest)).rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head'].includes(access.kind)||access.teams.includes(r.snapshot.operationsTeam)));
   const receipts=(await this.pool.query('SELECT site_id,item_key,received_on::text AS received_on FROM accounts_original_receipts WHERE site_id=ANY($1::text[])',[rows.map(r=>r.site_id)])).rows;
   const documents:{siteId:string;documentId:string;receivedOn:string}[]=[];
   for(const r of rows){
@@ -85,7 +93,7 @@ export class OperationsBoardRepository{
   const access=await this.access(actor),rows=(await this.pool.query(latest)).rows;
   if(!rows.length)throw new HttpError(409,'The reviewed Operations site register has not been imported.');
   // Deliberately project documents, not vendors, blockers or arbitrary snapshot data.
-  return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head','accounts'].includes(access.kind)||r.snapshot.operationsTeam===access.team)).map(r=>{
+  return {sites:rows.filter(r=>!r.snapshot.superseded&&!isArchivedLegacySolar({...r.snapshot,id:r.site_id})&&(['owner','head','accounts'].includes(access.kind)||access.teams.includes(r.snapshot.operationsTeam))).map(r=>{
    const s=r.snapshot;return {id:r.site_id,name:s.name,ipo:s.ipo,completed:s.completed===true,version:r.version,documents:s.documents??[],evidencePending:s.evidencePending===true};
   })};
  }
@@ -139,7 +147,8 @@ export class OperationsBoardRepository{
   }
   const file=(await this.pool.query('SELECT filename,media_type,content FROM operations_board_files WHERE site_id=$1 AND id=$2',[id,fileId])).rows[0]??(site.snapshot.inventoryReceiving?.evidenceId===fileId?(await this.pool.query('SELECT original_name AS filename,media_type,content FROM inventory_material_evidence WHERE id=$1',[fileId])).rows[0]:undefined);
   if(!file)throw new HttpError(404,'Document file not found.');
-  await this.pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'operations.board.download:'+fileId]);return file;
+  await this.pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'operations.board.download:'+fileId]);
+  return {...file,downloadContext:await boardFileDownloadContext(this.pool,site.snapshot,fileId)};
  }
  async moveDocument(actor:string,id:string,input:z.infer<typeof movementSchema>){
   const v=movementSchema.parse(input);
@@ -170,8 +179,8 @@ export class OperationsBoardRepository{
   const a=await this.access(actor);if(!['owner','head','lead'].includes(a.kind))throw new HttpError(403,'Batch planning belongs to the Operations lead.');
   const rows=(await this.pool.query('SELECT DISTINCT ON (batch_id) batch_id,version,snapshot FROM operations_board_batch_versions ORDER BY batch_id,version DESC')).rows;
   const current=(await this.pool.query(latest)).rows,sites=new Map(current.map(r=>[r.site_id,r]));
-  return {batches:rows.filter(r=>!r.snapshot.deleted&&(['owner','head'].includes(a.kind)||r.snapshot.team===a.team)).map(r=>{
-   const snapshot=r.snapshot as BatchSnapshot,stops=snapshot.stops.filter(s=>['owner','head'].includes(a.kind)||sites.get(s.siteId)?.snapshot.operationsTeam===a.team).map(s=>({...s,siteVersion:sites.get(s.siteId)?.version,installationDocumentsAtKarachi:installationDocumentsAtKarachi(s.siteId,sites.get(s.siteId)?.snapshot)}));
+  return {batches:rows.filter(r=>!r.snapshot.deleted&&(['owner','head'].includes(a.kind)||a.teams.includes(r.snapshot.team))).map(r=>{
+   const snapshot=r.snapshot as BatchSnapshot,stops=snapshot.stops.filter(s=>['owner','head'].includes(a.kind)||a.teams.includes(sites.get(s.siteId)?.snapshot.operationsTeam)).map(s=>({...s,siteVersion:sites.get(s.siteId)?.version,installationDocumentsAtKarachi:installationDocumentsAtKarachi(s.siteId,sites.get(s.siteId)?.snapshot)}));
    return {...snapshot,version:r.version,stops,canEdit:stops.length===snapshot.stops.length};
   })};
  }
@@ -218,14 +227,17 @@ export class OperationsBoardRepository{
     // through a site snapshot after an individual team reassignment.
     const link={...snapshot,stops:[stop]},links=Array.isArray(site.planningBatches)?site.planningBatches as {id:string}[]:[];
     const accountsEvent={id:`${id}:${site.id}:schedule`,type:'Batch plan',date:now,ipo:site.ipo,site:site.name,dispatchDate:kind==='labour'?undefined:v.deliveryDate,description:`${number} · delivery ${v.deliveryDate??'not part of this batch'} · expected installation ${stop.plannedDate||'not applicable'}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}. Evidence remains pending.`};
-    const updated={...site,planningBatches:[...links.filter(b=>b.id!==id),link],accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],history:[...site.history,{date:now,description:`${number}: delivery ${v.deliveryDate??'not part of this batch'}; expected installation ${stop.plannedDate||'not applicable'}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}.${v.reason?' Reason: '+v.reason:''}`}]};
+    const oldStop=previous?.snapshot.stops.find((saved:any)=>saved.siteId===site.id);
+    const before={kind:oldStop?.kind??previous?.snapshot.kind,plannedDate:oldStop?.plannedDate},after={kind,plannedDate:stop.plannedDate};
+    const change=oldStop?batchStopChange(before,after):undefined;
+    const changeLine=change&&batchStopChangeHistory(change,{number,deliveryDate:v.deliveryDate,before,after,reason:v.reason,issuedDos:change==='Batch delivery cancelled'?await siteIssuedDoNumbers(c,site.id,site):[]});
+    const updated={...site,planningBatches:[...links.filter(b=>b.id!==id),link],accounts:[...site.accounts.filter(e=>e.id!==accountsEvent.id),accountsEvent],history:[...site.history,{date:now,description:changeLine||`${number}: delivery ${v.deliveryDate??'not part of this batch'}; expected installation ${stop.plannedDate||'not applicable'}${stop.start&&stop.end?' '+stop.start+'–'+stop.end:''}.${v.reason?' Reason: '+v.reason:''}`}]};
     const version=versions.get(site.id)!+1;
     await c.query('INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,request_sha256,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[site.id,version,updated,'Batch plan',v.reason||'Initial shared batch plan',v.requestKey,fingerprint,actor]);
-    const oldStop=previous?.snapshot.stops.find((saved:any)=>saved.siteId===site.id);
     const decision=(batch:any,visit:any)=>({deliveryDate:batch.deliveryDate,vehicle:batch.vehicle,driver:batch.driver,labourTeam:batch.labourTeam,kind:visit.kind??batch.kind,plannedDate:visit.plannedDate,start:visit.start,end:visit.end,inventoryReference:batch.inventoryReference});
     // Route reordering or adding another site must not resend every retained site's email.
     if(!oldStop||!isDeepStrictEqual(decision(previous!.snapshot,oldStop),decision(snapshot,stop)))
-     await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),site.id,version,previous?(oldStop?'Batch plan changed':'Batch site added'):'Batch plan',JSON.stringify(previous?['operations-head','management',`${v.team}-operations`,'accounts']:['accounts']),actor]);
+     await c.query('INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),site.id,version,previous?(oldStop?change!:'Batch site added'):'Batch plan',JSON.stringify(previous?['operations-head','management',`${v.team}-operations`,'accounts']:['accounts']),actor]);
    }
    for(const cancelled of v.cancelledSites)await this.cancelSiteFromBatch(c,selected.find(site=>site.id===cancelled.siteId)!,versions.get(cancelled.siteId)!+1,{id,number,team:v.team,deliveryDate:previous?.snapshot.deliveryDate,reason:v.reason,requestKey:v.requestKey,fingerprint,actor},`${number}: site cancelled from batch. Reason: ${v.reason}`,'Batch site cancelled');
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`operations.board.batch:${id}:${v.version+1}`]);return {...snapshot,version:v.version+1};
@@ -234,7 +246,7 @@ export class OperationsBoardRepository{
  /** Remove one site from a batch: its schedule entry, dispatch date and planned installation follow the remaining batches. */
  private async cancelSiteFromBatch(c:PoolClient,original:WorkflowSite,version:number,batch:{id:string;number:string;team:string;deliveryDate?:string;reason:string;requestKey:string;fingerprint:string;actor:string},history:string,action:string){
   const {id}=batch,links=original.planningBatches.filter(b=>b.id!==id);
-  const updated={...original,planningBatches:links,accounts:original.accounts.filter(event=>event.id!==`${id}:${original.id}:schedule`),history:[...original.history,{date:new Date().toISOString(),description:history}]};
+  const updated={...original,planningBatches:links,accounts:original.accounts.filter(event=>event.id!==`${id}:${original.id}:schedule`),history:[...original.history,{date:new Date().toISOString(),description:history+issuedDosNote(await siteIssuedDoNumbers(c,original.id,original))}]};
   if(original.stage!=='delivered'&&batch.deliveryDate===original.dispatchDate&&!links.some(b=>b.deliveryDate&&b.stops.some((stop:any)=>stop.siteId===original.id&&(stop.kind??b.kind)!=='labour')))delete updated.dispatchDate;
   const otherInstallation=links.flatMap(b=>b.stops.filter(stop=>stop.siteId===original.id&&stop.plannedDate)).at(-1);
   if(otherInstallation)updated.installationPlanDate=otherInstallation.plannedDate;

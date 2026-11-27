@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {UpsActiveSites} from './UpsActiveSites.js';
 import {UpsDataRequired} from './UpsDataRequired.js';
@@ -8,13 +9,15 @@ import {Decimal} from 'decimal.js';
 import {Button} from '../ui/Button.js';
 import {Icon} from './Icon.js';
 import {DocumentPreview} from './DocumentPreview.js';
+import {dashboardCheckDue,dashboardRefreshIntervalMs,dashboardReturnGapMs} from '../workspaces/dashboard-refresh.js';
 
 export function UpsManagementPortfolio({customer}:{customer:'MBL'|'UBL'}){
  const requestGeneration=useRef(0);
  const [data,setData]=useState<any>(),[error,setError]=useState(''),[search,setSearch]=useState(''),[selected,setSelected]=useState<string>(),[loading,setLoading]=useState(false);
  async function load(){const generation=++requestGeneration.current;setLoading(true);try{const result=await api(`/director/ups?customer=${customer}`);if(generation!==requestGeneration.current)return;setData(result);setError('');}catch(e){if(generation===requestGeneration.current)setError((e as Error).message);}finally{if(generation===requestGeneration.current)setLoading(false);}}
- useEffect(()=>{setData(undefined);setSelected(undefined);void load();const refresh=()=>void load();window.addEventListener('focus',refresh);const timer=setInterval(refresh,30000);return()=>{requestGeneration.current++;window.removeEventListener('focus',refresh);clearInterval(timer);};},[customer]);
- const rows=(data?.rows??[]).filter((r:any)=>[r.number,r.site,r.siteCode,r.configuration,r.orderNumber,r.payable].join(' ').toLowerCase().includes(search.toLowerCase()));
+ // Background check every 2 minutes, never from a hidden tab; returning to the tab refreshes when the last check is a minute old.
+ useEffect(()=>{setData(undefined);setSelected(undefined);let lastStartedAt=Date.now();void load();const refresh=()=>{if(!dashboardCheckDue({hidden:document.visibilityState==='hidden',inFlight:false,lastStartedAt,now:Date.now(),minGapMs:dashboardReturnGapMs}))return;lastStartedAt=Date.now();void load();};window.addEventListener('focus',refresh);const timer=setInterval(refresh,dashboardRefreshIntervalMs);return()=>{requestGeneration.current++;window.removeEventListener('focus',refresh);clearInterval(timer);};},[customer]);
+ const rows=recentFirst<any>(data?.rows??[]).filter((r:any)=>[r.number,r.site,r.siteCode,r.configuration,r.orderNumber,r.payable].join(' ').toLowerCase().includes(search.toLowerCase()));
  const current=data?.rows.find((r:any)=>r.id===selected);
  const hasMasterImport=Boolean(data?.register?.programs.length),budgetedSites=hasMasterImport?data.register.activeSites:data?.totals.orders??0;
  return <section className="pz-stack" aria-label={`${customer} UPS confirmed orders`}>

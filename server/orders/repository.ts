@@ -241,7 +241,7 @@ export class OrdersRepository {
       source: "Accepted quotation",
       quotationType:{presentation:p.snapshot.input.presentation,taxMode:p.snapshot.input.taxMode,saleType:p.snapshot.input.saleType,cashGstTreatment:p.snapshot.input.cashGstTreatment},
       dealAccounting:p.snapshot.dealAccounting,
-      documentLayoutVersion:4,
+      documentLayoutVersion:5,
       approvedPanelQty:b.snapshot.survey.panelQty,
       quotationId: q.id,
       quotationNumber: q.number,
@@ -403,11 +403,13 @@ export class OrdersRepository {
             [submissionId, owner, expected],
           )
         ).rows[0];
-        const { peachtree, ...withoutDivision } = preview.snapshot;
+        // A submission previewed before a PT-split or IPO-layout release still approves: those two parts
+        // are worked out again from the same accepted basis and are left out of this comparison.
+        const { peachtree, documentLayoutVersion, ...withoutDivision } = preview.snapshot;
         legacySubmission = Boolean(
           old &&
           fingerprint(withoutDivision) ===
-            fingerprint((({ peachtree, ...core }) => core)(old.snapshot)),
+            fingerprint((({ peachtree, documentLayoutVersion, ...core }) => core)(old.snapshot)),
         );
       }
       if (preview.fingerprint !== expected && !legacySubmission)

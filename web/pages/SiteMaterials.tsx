@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {withMatchingVariableSection} from '../../shared/material-preparation.js';
 import {ApprovedMaterialPreview} from '../inventory-approved/ApprovedMaterialPreview.js';
 import {reviewIssueRows} from '../inventory-approved/site-issue-review.js';
@@ -11,7 +12,7 @@ import {SavedVersionHistory} from '../inventory-approved/SavedVersionHistory.js'
 import {ApprovedTransportFields} from '../inventory-approved/ApprovedTransportFields.js';
 import {ApprovedMaterialForm} from '../inventory-approved/ApprovedMaterialForm.js';
 import {navigateInventory} from '../inventory-approved/navigation.js';
-import {InventoryMaterialTable,type MaterialPosition} from '../components/InventoryMaterialTable.js';
+import {type MaterialPosition} from '../components/InventoryMaterialTable.js';
 import {InventoryNavigation} from '../components/InventoryNavigation.js';
 import {useEffect,useRef,useState} from 'react';
 import {api,type Session} from '../api.js';
@@ -20,6 +21,7 @@ import {FinancialValue} from '../ui/FinancialValue.js';
 import {Icon} from '../components/Icon.js';
 import {Button} from '../ui/Button.js';
 import {MaterialDocuments} from '../components/MaterialDocuments.js';
+import {withVso} from '../inventory-approved/do-window.js';
 import {useUnsavedChanges,confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {fixedPreparationRows,variablePreparationRows,type PreparationRow} from '../../shared/material-preparation.js';
@@ -32,7 +34,6 @@ type StockItem={itemId:string;description:string;units:string[]};
 type Intake={operationsBatches?:InventoryBatch[];sources:MaterialSource[];catalogue:StockItem[];aliases?:Record<string,string>;warehouses:string[]};
 type Detail={id:string;version:number;variableSupply:'single-site'|'parent-do';fixed:{snapshot:{sites:MaterialSource[];warehouse:string;transport:SiteMaterialPlanInput['transport'];lines:PreparationRow[]}};variable:{snapshot:{lines:PreparationRow[]}}|null};
 const blankTransport=()=>({issuedTo:'',vehicle:'',driver:'',driverIdentity:''});
-const labels={bess:'BESS',panels:'Panels, Structure and Earthing',other:'Other BOQ Items and Extras',customer:'Variable Material Issuance',internal:'Variable Mixed Items Issuance'};
 
 /** A single site has one preparation screen and one atomic save. The two
  * variable groups stay visible even when their supply is deferred to a pool. */
@@ -40,7 +41,7 @@ type ProjectDo={id:string;number:string;createdAt:string;partialDelivery?:boolea
 const doDate=(value:string)=>{const d=new Date(value);return Number.isNaN(d.getTime())?'':new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Karachi'}).format(d);};
 /** Every DO already issued for this project, each with its own items. */
 function ProjectDoList({dos}:{dos:ProjectDo[]}){
- return <section className="pz-panel pz-stack" aria-label="DOs for this project"><h2>DOs for this project · {dos.length}</h2><div className="pz-table-scroll"><table className="ob-table"><thead><tr><th>DO</th><th>Date</th><th>Kind</th><th>Items on this DO</th></tr></thead><tbody>{dos.map(d=><tr key={d.id}><td><strong>{d.number}</strong></td><td>{doDate(d.createdAt)}</td><td>{d.additional?'Additional (extra material)':d.partialDelivery?'Partial delivery':'Delivery'}</td><td>{(d.lines??[]).filter(l=>Number(l.quantity)>0).map(l=>`${l.itemId??''} ${l.quantity} ${l.unit??''}`.trim()).join(' · ')||'—'}</td></tr>)}</tbody></table></div></section>;
+ return <section className="pz-panel pz-stack" aria-label="DOs for this project"><h2>DOs for this project · {dos.length}</h2><div className="pz-table-scroll"><table className="ob-table"><thead><tr><th>DO</th><th>Date</th><th>Kind</th><th>Items on this DO</th></tr></thead><tbody>{recentFirst(dos).map(d=><tr key={d.id}><td><strong>{d.number}</strong></td><td>{doDate(d.createdAt)}</td><td>{d.additional?'Additional (extra material)':d.partialDelivery?'Partial delivery':'Delivery'}</td><td>{(d.lines??[]).filter(l=>Number(l.quantity)>0).map(l=>`${l.itemId??''} ${l.quantity} ${l.unit??''}`.trim()).join(' · ')||'—'}</td></tr>)}</tbody></table></div></section>;
 }
 export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>void}){
  const initialId=location.pathname.split('/')[3]??'new';
@@ -54,7 +55,7 @@ export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>v
  const documentRequest=useRef(0);
  const[priorIssued,setPriorIssued]=useState<Record<string,string>>({}),[issuedLoaded,setIssuedLoaded]=useState(initialId==='new'),[review,setReview]=useState<{signature:string;models:MaterialPrintModel[];missing:string[]}>();const reviewDialog=useRef<HTMLDialogElement>(null);
  useEffect(()=>{if(review&&reviewDialog.current){reviewDialog.current.showModal();return()=>reviewDialog.current?.close();}},[review]);
- async function loadDocuments(planId:string){const ticket=++documentRequest.current;const data=await api<{dispatches:(ProjectDo&{variable:boolean})[]}>('/material-dispatches/site-plans/'+planId+'/issued');const choices=data.dispatches.flatMap(d=>[{id:d.id,label:d.number+' · DO',url:'/api/material-dispatches/issued/'+d.id+'/document.pdf'},{id:d.id+':signoff',label:d.number+' · VSO · Variable Items Sign-off',url:'/api/material-dispatches/issued/'+d.id+'/customer-signoff.pdf'}]);if(ticket===documentRequest.current){const totals:Record<string,string>={};for(const d of data.dispatches)for(const line of d.lines??[])totals[line.key]=new Decimal(totals[line.key]??0).plus(line.quantity||0).toString();setPriorIssued(totals);setIssuedLoaded(true);setDocuments(choices);setProjectDos([...data.dispatches].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt))));}return choices;}
+ async function loadDocuments(planId:string){const ticket=++documentRequest.current;const data=await api<{dispatches:(ProjectDo&{variable:boolean})[]}>('/material-dispatches/site-plans/'+planId+'/issued');const choices=data.dispatches.map(d=>({id:d.id,label:d.number,url:withVso('/api/material-dispatches/issued/'+d.id+'/document.pdf')}));if(ticket===documentRequest.current){const totals:Record<string,string>={};for(const d of data.dispatches)for(const line of d.lines??[])totals[line.key]=new Decimal(totals[line.key]??0).plus(line.quantity||0).toString();setPriorIssued(totals);setIssuedLoaded(true);setDocuments(choices);setProjectDos([...data.dispatches].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt))));}return choices;}
  useEffect(()=>{if(id!=='new'&&version>0)void loadDocuments(id).catch(e=>setError(e.message));},[id,version]);
  // An edited DO also updates this saved preparation; show its new rows, delivery details and version.
  async function reloadPreparation(planId:string){const d=await api<Detail>('/material-dispatches/site-plans/'+planId),rows=d.fixed.snapshot.lines,v=d.variable?.snapshot.lines??[],w=d.fixed.snapshot.warehouse,t=d.fixed.snapshot.transport,route=d.variableSupply;saved.current=JSON.stringify({fixed:rows,variable:v,warehouse:w,transport:t,supply:route});setFixed(rows);setVariable(v.map(withMatchingVariableSection));setWarehouse(w);setTransport(t);setSupply(route);setVersion(d.version);}
@@ -106,13 +107,6 @@ export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>v
   }catch(e){setError((e as Error).message);}
  }
  function update(key:string,patch:Partial<PreparationRow>,isFixed:boolean){(isFixed?setFixed:setVariable)(old=>old.map(r=>r.key===key?(isFixed?{...r,...patch}:withMatchingVariableSection({...r,...patch})):r));}
- function add(group:keyof typeof labels){if(!source)return;const isFixed=['bess','panels','other'].includes(group);const row:PreparationRow={key:crypto.randomUUID(),itemId:'',description:'',unit:'',out:'',sites:[source.siteId],...(isFixed?{fixedGroup:group as 'bess'|'panels'|'other'}:{section:group as 'customer'|'internal',documentPolicyVersion:2 as const})};(isFixed?setFixed:setVariable)(old=>[...old,row]);}
- function module(group:keyof typeof labels){
-  const isFixed=['bess','panels','other'].includes(group),rows=(isFixed?fixed:variable).filter(r=>(isFixed?r.fixedGroup??'other':r.section??(materialDocumentPolicy(r).group==='internal-variable'?'internal':'customer'))===group);
-  const choices=(intake?.catalogue??[]).filter(item=>{const policy=materialDocumentPolicy({itemId:item.itemId,description:item.description});return policy.group!=='non-stock'&&(isFixed?source?.installation===false||!policy.variableDispatch:policy.variableDispatch&&(policy.group==='internal-variable'?'internal':'customer')===group);});
-  return <section className="pz-panel pz-stack" key={group} aria-label={labels[group]}><div className="ob-section-title"><h2>{labels[group]}</h2><Button variant="secondary" disabled={busy} onClick={()=>add(group)}>Add item</Button></div><InventoryMaterialTable rows={rows} catalogue={intake?.catalogue??[]} choices={choices} busy={busy} positions={positions} approved={r=>{const basis=(r.basisLine===undefined?source?.items.find((item:any)=>(item.description??item.key)===r.description):source?.items[r.basisLine]) as any;return basis?`${basis.qty??'Not recorded'} ${basis.unit??''}`.trim():'';}} onChange={(key,patch)=>update(key,patch,isFixed)} onRemove={key=>(isFixed?setFixed:setVariable)(old=>old.filter(row=>row.key!==key))}/>{!rows.length&&<p>No approved items in this group. Add a row only if an extra material is required.</p>}</section>;
-
- }
  return <div className="ob-shell"><header className="ob-header"><Button className="ob-mobile-toggle" aria-label="Open navigation" onClick={()=>setMobile(!mobile)}><Icon name="menu"/></Button><Brand compact/><div className="ob-header-actions"><ManagementHeaderSwitcher session={session} value="inventory"/><WorkspaceAccountMenu name={session.user.displayName} label={'Inventory'} onSignOut={()=>void logout()}/></div></header><InventoryNavigation mode="dispatcher" mobile={mobile}/><main className="ob-main"><Button className="ob-back" onClick={back}>Back to IPOs</Button>{error&&<p role="alert" className="form-error">{error}</p>}{!intake&&!error&&<p role="status">Loading approved material basis…</p>}{intake&&source&&<>
   <div className="ob-page-title"><div><h1>Material issuance</h1><p>{source.siteName}</p><small>{source.ipo??'Heads-up forecast'}{source.orderNumber?' · Order '+source.orderNumber:''}</small></div></div>{notice&&<p role="status" className="ob-success">{notice}</p>}
   <section className="pz-panel ob-editor pz-stack"><div className="ob-facts"><label>Warehouse<select disabled={busy} value={warehouse} onChange={e=>setWarehouse(e.target.value)}><option value="">Select warehouse</option>{intake.warehouses.map(w=><option key={w}>{w}</option>)}</select></label></div></section><ApprovedTransportFields session={session} warehouse={warehouse} value={transport} onChange={setTransport} disabled={busy}/>

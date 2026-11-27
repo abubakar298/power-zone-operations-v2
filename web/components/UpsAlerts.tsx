@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import {PagedTableBody} from '../ui/PagedTableBody.js';
 import {useEffect,useState} from 'react';
 import {api} from '../api.js';
@@ -8,7 +9,7 @@ export function UpsAlerts(){
  const [data,setData]=useState<any>(),[error,setError]=useState(''),[loading,setLoading]=useState(false),[customer,setCustomer]=useState<'UBL'|'MBL'|null>(null),[search,setSearch]=useState('');
  async function load(){setLoading(true);try{setData(await api('/director/ups-alerts'));setError('');}catch(e){setError((e as Error).message);}finally{setLoading(false);}}
  useEffect(()=>{void load();},[]);
- const rows=(data?.rows??[]).filter((r:any)=>r.customer===customer).filter((r:any)=>[r.siteName,r.evidenceSiteName,r.siteCode,r.orderNumber,r.ipoNumber,r.reason].join(' ').toLowerCase().includes(search.toLowerCase()));
+ const rows=recentFirst<any>(data?.rows??[]).filter((r:any)=>r.customer===customer).filter((r:any)=>[r.siteName,r.evidenceSiteName,r.siteCode,r.orderNumber,r.ipoNumber,r.reason].join(' ').toLowerCase().includes(search.toLowerCase()));
  return <section className="pz-stack pz-ups-alerts" aria-label="Department alerts">
   {!customer?<div className="stage-grid">{(['UBL','MBL'] as const).map(bank=><button key={bank} type="button" className="stage-card" onClick={()=>{setCustomer(bank);setSearch('');}}><span>{bank} UPS Sites</span><strong>{data?(data.rows??[]).filter((r:any)=>r.customer===bank).length:'—'}</strong><small>Flagged sites · Open list →</small></button>)}</div>:<>
    <div className="pz-ups-alerts-toolbar"><h2>{customer} UPS Sites</h2><Button variant="neutral" onClick={()=>setCustomer(null)}>Back to alerts</Button></div>

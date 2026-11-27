@@ -9,7 +9,8 @@ import {z} from 'zod';
 import {HttpError} from '../http/errors.js';
 import {transaction} from '../db/transaction.js';
 import {sameUnit} from '../../shared/stock-units.js';
-import {warehousePosition,warehousePositions} from './warehouse-ledger.js';
+import {warehouseDispatchPosition,warehousePosition,warehousePositions} from './warehouse-ledger.js';
+import {warehouseLedgerKey} from './warehouse-source.js';
 import {requireWarehouseAccess,lockWarehouseAuthority,warehouseNumber} from './warehouse-access.js';
 const quantity=z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/,{abort:true}).refine(v=>new Decimal(v).gt(0),'Enter a positive quantity.').transform(v=>new Decimal(v).toString());
 const endpoint=z.object({warehouse:z.string().trim().min(1).max(200),sourceSha256:z.string().regex(/^[a-f0-9]{64}$/),authorityVersion:z.number().int().positive()}).strict();
@@ -34,6 +35,11 @@ async function transferNumber(c:PoolClient,id:string){
  await c.query("INSERT INTO document_reference_roots(document_type,family_id,reference) VALUES('TRF',$1,$2)",[id,number]);return number;
 }
 async function finalItem(c:Db,id:string){const row=(await c.query("SELECT item_id,payload FROM inventory_catalogue_final_current WHERE item_id=$1 AND payload->>'finalStockId'='true'",[id])).rows[0];if(!row)throw new HttpError(422,'Select the exact final merged stock ID.');return row;}
+/** Owner instruction, 25 November 2026 (stock not yet fully reconciled): while the stock-reconciliation
+ * window in shared/stock-reconciliation-window.ts is open, a transfer may go to a warehouse that has no
+ * stock line yet for the item. The destination line is started exactly like a DO's: same item ID and unit,
+ * opening "not recorded" (no zero or other figure is invented). When the window closes this stops. */
+const newDestinationKey=(itemId:string,warehouse:string,unit:string)=>temporaryNegativeDoBalanceAllowed()?warehouseLedgerKey(itemId,warehouse,unit):undefined;
 function reviewed(p:Position|null,warehouse:string,itemId:string){if(!p||p.baseline.warehouse!==warehouse||p.baseline.itemId!==itemId)throw new HttpError(409,'Select the existing final item and matching unit for both warehouses. No item or unit substitution is inferred.');return p;}
 /** Immutable physical transfer. Printing/reading never receives destination stock. */
 export class WarehouseTransferRepository{
@@ -47,7 +53,8 @@ export class WarehouseTransferRepository{
   const from=source?await warehousePositions(this.pool,source.source_sha256,sourceWarehouse):[],to=destination?await warehousePositions(this.pool,destination.source_sha256,destinationWarehouse):[];
   const finalIds=new Set((await this.pool.query("SELECT item_id FROM inventory_catalogue_final_current WHERE payload->>'finalStockId'='true'")).rows.map(r=>r.item_id));
   const projected=(p:Position)=>({ledgerKey:p.ledgerKey,itemId:p.baseline.itemId,description:p.baseline.description,unit:p.baseline.unit,ledgerRevision:p.ledgerRevision,reviewedClosing:true});
-  return {source:{warehouse:sourceWarehouse,authority:source,positions:from.filter(p=>finalIds.has(p.baseline.itemId)).map(p=>({...projected(p),currentClosing:p.currentClosing}))},destination:{warehouse:destinationWarehouse,authority:destination,positions:to.filter(p=>finalIds.has(p.baseline.itemId)).map(projected)}};
+  const destinationHas=(p:Position)=>to.some(d=>d.baseline.itemId===p.baseline.itemId&&sameUnit(d.baseline.unit,p.baseline.unit));
+  return {source:{warehouse:sourceWarehouse,authority:source,positions:from.filter(p=>finalIds.has(p.baseline.itemId)).map(p=>({...projected(p),currentClosing:p.currentClosing,...(destination&&!destinationHas(p)?{newDestinationLedgerKey:newDestinationKey(p.baseline.itemId,destinationWarehouse,p.baseline.unit)}:{})}))},destination:{warehouse:destinationWarehouse,authority:destination,positions:to.filter(p=>finalIds.has(p.baseline.itemId)).map(projected)}};
  }
  private async row(actor:string,id:string,c:Db=this.pool,lock=false){
   const row=(await c.query('SELECT * FROM inventory_warehouse_transfers WHERE id=$1'+(lock?' FOR UPDATE':''),[id])).rows[0];if(!row)throw new HttpError(404,'Warehouse transfer not found.');
@@ -71,7 +78,9 @@ export class WarehouseTransferRepository{
   const requests=new Map<string,{source:string;key:string}>();for(const line of input.lines){requests.set(identity(input.source.sourceSha256,line.sourceLedgerKey),{source:input.source.sourceSha256,key:line.sourceLedgerKey});requests.set(identity(input.destination.sourceSha256,line.destinationLedgerKey),{source:input.destination.sourceSha256,key:line.destinationLedgerKey});}
   const positions=new Map<string,Position|null>();for(const [key,r]of [...requests].sort(([a],[b])=>a.localeCompare(b)))positions.set(key,await warehousePosition(c,r.source,r.key,true));
   const lines=[];for(const line of input.lines){
-   await finalItem(c,line.itemId);const from=reviewed(positions.get(identity(input.source.sourceSha256,line.sourceLedgerKey))??null,input.source.warehouse,line.itemId),to=reviewed(positions.get(identity(input.destination.sourceSha256,line.destinationLedgerKey))??null,input.destination.warehouse,line.itemId);
+   await finalItem(c,line.itemId);const from=reviewed(positions.get(identity(input.source.sourceSha256,line.sourceLedgerKey))??null,input.source.warehouse,line.itemId);let destination=positions.get(identity(input.destination.sourceSha256,line.destinationLedgerKey))??null;
+   if(!destination&&line.destinationLedgerRevision===0&&line.destinationLedgerKey===newDestinationKey(line.itemId,input.destination.warehouse,from.baseline.unit))destination=await warehouseDispatchPosition(c,input.destination.sourceSha256,line.destinationLedgerKey,{itemId:line.itemId,unit:from.baseline.unit,description:from.baseline.description||line.itemId,warehouse:input.destination.warehouse},actor);
+   const to=reviewed(destination,input.destination.warehouse,line.itemId);
    if(!sameUnit(from.baseline.unit,to.baseline.unit))throw new HttpError(422,'Source and destination units need a reviewed conversion. No pieces, coils, lengths or metres are converted here.');
    if(sameUnit(from.baseline.unit,'No.')&&!new Decimal(line.quantity).isInteger())throw new HttpError(422,'Whole-item stock must be transferred in whole quantities.');
    if(from.ledgerRevision!==line.sourceLedgerRevision||to.ledgerRevision!==line.destinationLedgerRevision)throw new HttpError(409,'A warehouse balance changed. Refresh before issuing the transfer.');

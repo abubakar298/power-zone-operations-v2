@@ -1,5 +1,3 @@
-import {UnsignedDoRepository} from '../server/inventory/unsigned-do.js';
-import {MaterialUsageRepository} from '../server/inventory/material-usage.js';
 import {GatePassRepository} from '../server/inventory/gate-passes.js';
 import {directMaterialDatabase} from './direct-material-database.js';
 import {test} from 'node:test';
@@ -14,7 +12,7 @@ import {SiteWorkflowRepository} from '../server/site-workflow/repository.js';
 import {MaterialDraftRepository} from '../server/inventory/material-drafts.js';
 import {SiteMaterialPlanRepository} from '../server/inventory/site-material-plans.js';
 import {MaterialStockRepository} from '../server/inventory/material-stock.js';
-import {WarehouseAuthorityRepository,warehousePosition} from '../server/inventory/warehouse-ledger.js';
+import {WarehouseAuthorityRepository} from '../server/inventory/warehouse-ledger.js';
 import {signDispatch} from './signed-dispatch-fixture.js';
 import {issuedDispatchPrintModel} from '../server/inventory/material-document-model.js';
 

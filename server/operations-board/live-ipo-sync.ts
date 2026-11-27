@@ -6,9 +6,16 @@ import {lockActiveActor} from '../auth/actor-lock.js';
 import {HttpError} from '../http/errors.js';
 import {sourceSiteSchema} from './schema.js';
 import {planLiveIpoBridge,type LiveIpoPosition} from './live-ipo-bridge.js';
+import {linkCreatedOperationsMaterialSource} from '../inventory/source-links.js';
 
 const inputSchema=z.object({ipoIds:z.array(z.uuid()).min(1).max(10000).optional()}).strict();
 const normal=(value:unknown)=>typeof value==='string'?value.trim().replace(/\s+/g,' ').toLowerCase():'';
+/** Board sites that may already represent this IPO: same "IPO · order" label, or linked to this exact IPO.
+ * A cancelled site with the same label is not a candidate: its order slot was freed (migration 309, 24 Nov 2026), so a
+ * new order in that slot gets its own board site instead of being held as a possible duplicate (fixed 25 Nov 2026). */
+export function boardCandidates(boards:{site_id:string;snapshot:any}[],label:string,ipoId:string){
+ return boards.filter(b=>b.snapshot?.origin?.ipoId===ipoId||(normal(b.snapshot?.ipo)===label&&b.snapshot?.cancelled!==true)).map(b=>b.site_id);
+}
 const sha=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export function approvedHandoffScope(ipoBoqId:unknown,issuanceBoqId:unknown,basis:{id:string;snapshot:any}|null,legacy:{scope:unknown;siteType:unknown;humanSiteType:boolean}){
  if(legacy.scope!==null||typeof ipoBoqId!=='string'||ipoBoqId!==issuanceBoqId||basis?.id!==ipoBoqId)return null;
@@ -19,14 +26,39 @@ export function approvedHandoffScope(ipoBoqId:unknown,issuanceBoqId:unknown,basi
  return {boqRevisionId:basis.id,boqSha256:sha(basis.snapshot),family,scope,siteType,preservedHumanSiteType:legacy.humanSiteType};
 }
 export type LiveIpoSyncResult={created:{ipoId:string;boardSiteId:string;sourceSha256:string}[];retained:{ipoId:string;boardSiteId:string}[];held:{ipoId:string;reason:string;boardSiteIds:string[]}[]};
+export type InventoryLinkResult={ipoId:string;boardSiteId:string;status:'linked'|'retained'|'held';reason?:string};
+/** The normal IPO handoff places a board site and then links it to its approved BOQ for Inventory.
+ * The Management sync places board sites too, so it links them the same way; otherwise Inventory shows
+ * "Approved BOQ link required" for a site that is on the board (seen 26 Nov 2026 on orders placed in freed slots).
+ * Each link runs in its own savepoint: a site that cannot be linked is reported and the sync still completes. */
+async function linkPlacedSites(c:PoolClient,actor:string,placed:{ipoId:string;boardSiteId:string}[]):Promise<InventoryLinkResult[]>{
+ const results:InventoryLinkResult[]=[];
+ for(const {ipoId,boardSiteId} of placed){
+  const origin=(await c.query("SELECT snapshot->'origin' AS origin FROM operations_board_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1",[boardSiteId])).rows[0]?.origin;
+  if(origin?.kind!=='live-ipo-handoff'||origin.ipoId!==ipoId||typeof origin.operationsIssuanceId!=='string'){results.push({ipoId,boardSiteId,status:'held',reason:'The board site has no exact saved handoff origin.'});continue;}
+  await c.query('SAVEPOINT inventory_link');
+  try{
+   const linked=await linkCreatedOperationsMaterialSource(c,actor,{boardSiteId,ipoId,operationsIssuanceId:origin.operationsIssuanceId});
+   await c.query('RELEASE SAVEPOINT inventory_link');
+   results.push(linked.status==='held'?{ipoId,boardSiteId,status:'held',reason:linked.reason}:{ipoId,boardSiteId,status:linked.status});
+  }catch(error){
+   await c.query('ROLLBACK TO SAVEPOINT inventory_link');
+   results.push({ipoId,boardSiteId,status:'held',reason:(error as Error).message});
+  }
+ }
+ return results;
+}
 /** Explicit Management operator command, never a write-on-GET or a new IPO issuer.
  * Existing board decisions are retained; ambiguous identity is a diagnostic hold.
  */
 export class OperationsLiveIpoSync {
  constructor(private readonly pool:Pool){}
- async sync(actor:string,raw:unknown={}):Promise<LiveIpoSyncResult>{
+ async sync(actor:string,raw:unknown={}):Promise<LiveIpoSyncResult&{inventoryLinks:InventoryLinkResult[]}>{
   const input=inputSchema.parse(raw);
-  return transaction(this.pool,c=>syncInClient(c,actor,input));
+  return transaction(this.pool,async c=>{
+   const result=await syncInClient(c,actor,input);
+   return {...result,inventoryLinks:await linkPlacedSites(c,actor,[...result.created,...result.retained])};
+  });
  }
 }
 /** Trusted issuance writers call this inside their existing business transaction.
@@ -85,7 +117,7 @@ async function syncInClient(c:PoolClient,actor:string,input:z.infer<typeof input
      hold(ipoId,'The deterministic board identity has no matching immutable IPO, issuance and workflow origin.',[deterministic.site_id]);continue;
     }
     const label=normal(ipo.number)+(orderNumber?' · '+normal(orderNumber):'');
-    const candidates=boards.filter(b=>normal(b.snapshot.ipo)===label||b.snapshot.origin?.ipoId===ipoId).map(b=>b.site_id as string);
+    const candidates=boardCandidates(boards,label,ipoId);
     const position:LiveIpoPosition={ipoId,ipoNumber:ipo.number,orderNumber,customerName:row.customer_name,customerId:row.customer_id,siteName:typeof s.siteName==='string'?s.siteName:'',customerPo:typeof s.input?.poNumber==='string'?s.input.poNumber:'',operationsIssuanceId:issuance.id,createdAt:ipo.created_at,
      legacy:{id:w.id,stage:w.stage,stageEnteredAt:w.stage_entered_at,scope,siteType,deliveredOn:w.delivered_on,installationCompletedOn:w.installation_completed_on,handedOverOn:w.handed_over_on,closedAt:w.closed_at,expectedDelivery:w.expected_delivery}};
     const plan=planLiveIpoBridge(position,{verifiedLinks,boardSites:boards.map(b=>({id:b.site_id,originIpoId:b.snapshot.origin?.ipoId})),unverifiedBoardCandidateIds:candidates});

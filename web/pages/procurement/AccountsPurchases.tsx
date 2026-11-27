@@ -1,3 +1,4 @@
+import {recentFirst} from '../../../shared/recent-records.js';
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, type Session } from "../../api.js";
 import { downloadDepartmentFile } from "../../download-file.js";
@@ -104,7 +105,7 @@ export function AccountsPurchases({ session }: { session: Session }) {
     {rows && rows.length > 0 && <div className="pz-table-scroll">
       <table>
         <thead><tr><th>SR#</th><th>Request / description</th><th>Warehouse</th><th>Status</th><th>Action</th></tr></thead>
-        <PagedTableBody label="approved purchases">{rows.map((row, i) => <tr key={row.id}>
+        <PagedTableBody label="approved purchases">{recentFirst(rows).map((row, i) => <tr key={row.id}>
           <td>{i + 1}</td><td><strong>{row.number}</strong><small>{row.title}</small></td>
           <td>{row.warehouse}</td><td>{row.forwardedAt ? "Sent to Inventory" : row.ptRecorded ? "PT recorded" : row.acknowledgedAt ? "Awaiting PT" : "Awaiting acknowledgement"}</td>
           <td><Button variant="secondary" onClick={() => { setSelected(row.id); setReference(""); setEntryDate(""); }}>Open purchase</Button></td>

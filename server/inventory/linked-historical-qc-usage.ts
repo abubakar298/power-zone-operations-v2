@@ -33,7 +33,8 @@ export class LinkedHistoricalQcUsage {
   async read(actor:string,boardId:string){
     const {source,handoff,record,locked,evidence}=await this.context(actor,boardId,this.pool);
     const saved=record?.snapshot;
-    const entry:ReportEntry|null=saved?.issueSignature===source.signature?{
+    const entry:ReportEntry|null=saved&&(saved.issueSignature===source.signature||
+      ('originalSignature' in source&&saved.issueSignature===source.originalSignature))?{
       start:'',end:'',panelCount:'',panelWattage:'',expectedReturns:'',receivedReturns:'',extra:[],
       usage:saved.usage,remarks:saved.remarks,
     }:null;

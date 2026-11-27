@@ -1,9 +1,12 @@
+import { closeRevisionRequest } from './revision-closures.js';
+import { retireBoqRevision } from './boq-retirements.js';
 import {requireUnarchivedQuotation} from '../commercial/archives.js';
 import {loadDocumentListMetadata} from '../documents/list-metadata.js';
 import {finalizeCustomerBoq} from '../boq/lifecycle.js';
 import {archivedDocumentIds} from '../maintenance/archived-documents.js';
 import { Decimal } from "decimal.js";
 import { projectCatalog, projectContext } from "./projects.js";
+import { projectFile, projectFileTrail } from "./project-file.js";
 import { resourceOwnership, ownedCondition } from "../http/permissions.js";
 import {
   validateExternal,
@@ -15,6 +18,12 @@ import { HttpError } from "../http/errors.js";
 import type { Pool } from "pg";
 export class CoordinatorRepository {
   constructor(private pool: Pool) {}
+  closeRevision(actor: string, requestId: string, body: unknown) {
+    return closeRevisionRequest(this.pool, actor, requestId, body);
+  }
+  retireBoq(actor: string, revisionId: string, body: unknown) {
+    return retireBoqRevision(this.pool, actor, revisionId, body);
+  }
   async projects(actor: string) {
     return projectCatalog(this.pool, actor);
   }
@@ -30,8 +39,15 @@ export class CoordinatorRepository {
     const ids = new Set(
       context.documents.flatMap((d) => [d.id, d.proposal_id].filter(Boolean)),
     );
+    // Project file: the same documents plus the site's DOs, Operations record and (owners only) invoices.
+    const owner = ["Admin", "Management"].includes(role);
+    const trail = await projectFileTrail(
+      this.pool,
+      context.documents.filter((d) => d.resource === "ipo").map((d) => d.id),
+    );
     return {
       ...context,
+      file: projectFile(context.documents, context.attachments, trail, owner),
       tasks: view.tasks.filter((t: any) =>
         [t.id, t.boq_revision_id, t.ipo_id, t.draft_id].some((id) =>
           ids.has(id),
@@ -83,15 +99,24 @@ export class CoordinatorRepository {
     ).rows;
     for (const row of descendants) trainingIds.add(row.id);
     const excluded = [...new Set([...archived,...(includeTraining ? [] : [...trainingIds])])];
-    const pending = `WITH pending AS (
+    // A closed revision (revision-closures.ts) was resolved outside the portal, so the BOQ draft it started, the BOQ
+    // revision that draft became and any pricing saved on it are no longer work: they leave the lists with the request
+    // (user report, 27 Nov 2026: closed revisions stayed in Design Review). A draft reused by an open revision stays.
+    const pending = `WITH closed_revision_drafts AS (
+ SELECT q.draft_id FROM quotation_revision_closures c JOIN quotation_revision_requests q ON q.id=c.request_id WHERE q.draft_id IS NOT NULL
+ UNION SELECT s.draft_id FROM quotation_revision_closures c JOIN quotation_revision_scope_changes s ON s.request_id=c.request_id WHERE s.draft_id IS NOT NULL
+ EXCEPT SELECT draft_id FROM quotation_revision_requests_current WHERE draft_id IS NOT NULL
+),closed_revision_boqs AS (
+ SELECT f.revision_id FROM boq_draft_finalizations f JOIN closed_revision_drafts x ON x.draft_id=f.draft_id
+),pending AS (
  SELECT d.id,'Survey / BOQ'::text AS kind,COALESCE(d.inputs->>'siteName','Survey draft') AS reference,COALESCE(d.inputs->>'siteName','') AS site,CASE WHEN s.id IS NULL THEN 'Draft' WHEN s.outcome IS NULL THEN 'Awaiting review' ELSE 'Changes requested' END AS status,COALESCE(s.decision_at,s.created_at,d.created_at) AS started_at,'boqs'::text AS target,d.id AS draft_id,NULL::uuid AS boq_revision_id,NULL::uuid AS ipo_id,NULL::uuid AS request_id,(SELECT name FROM customers WHERE id::text=d.inputs->>'customerId') AS customer
  FROM survey_drafts d LEFT JOIN LATERAL (SELECT r.id,r.created_at,c.created_at AS decision_at,c.outcome FROM boq_review_submissions r LEFT JOIN boq_review_decisions c ON c.submission_id=r.id WHERE r.draft_id=d.id ORDER BY r.created_at DESC LIMIT 1) s ON true
- WHERE ($2 OR d.owner_id=$1) AND NOT EXISTS(SELECT 1 FROM quotation_revision_requests_current r WHERE r.draft_id=d.id) AND NOT EXISTS(SELECT 1 FROM boq_draft_finalizations f WHERE f.draft_id=d.id)
+ WHERE ($2 OR d.owner_id=$1) AND NOT EXISTS(SELECT 1 FROM quotation_revision_requests_current r WHERE r.draft_id=d.id) AND NOT EXISTS(SELECT 1 FROM boq_draft_finalizations f WHERE f.draft_id=d.id) AND NOT EXISTS(SELECT 1 FROM closed_revision_drafts x WHERE x.draft_id=d.id)
  UNION ALL
  SELECT b.id,'Commercial pricing',b.number,b.snapshot->'survey'->>'siteName','Approved BOQ: prepare pricing',b.created_at,'pricing',NULL,b.id,NULL,NULL,b.snapshot->'customer'->>'name' FROM boq_revisions b
- WHERE ($2 OR EXISTS(SELECT 1 FROM boq_draft_finalizations f JOIN survey_drafts d ON d.id=f.draft_id WHERE f.revision_id=b.id AND d.owner_id=$1)) AND NOT EXISTS(SELECT 1 FROM boq_revisions n WHERE n.boq_id=b.boq_id AND n.revision>b.revision) AND NOT EXISTS(SELECT 1 FROM commercial_pricing_versions p WHERE p.boq_revision_id=b.id) AND NOT EXISTS(SELECT 1 FROM internal_purchase_orders i WHERE i.snapshot->>'boqRevisionId'=b.id::text)
+ WHERE ($2 OR EXISTS(SELECT 1 FROM boq_draft_finalizations f JOIN survey_drafts d ON d.id=f.draft_id WHERE f.revision_id=b.id AND d.owner_id=$1)) AND NOT EXISTS(SELECT 1 FROM boq_revisions n WHERE n.boq_id=b.boq_id AND n.revision>b.revision) AND NOT EXISTS(SELECT 1 FROM commercial_pricing_versions p WHERE p.boq_revision_id=b.id) AND NOT EXISTS(SELECT 1 FROM internal_purchase_orders i WHERE i.snapshot->>'boqRevisionId'=b.id::text) AND NOT EXISTS(SELECT 1 FROM closed_revision_boqs x WHERE x.revision_id=b.id) AND NOT EXISTS(SELECT 1 FROM boq_retirements x WHERE x.revision_id=b.id)
  UNION ALL
- SELECT p.id,'Quotation',p.number,p.snapshot->>'siteName','Pricing saved: prepare quotation',p.created_at,'quotes',NULL,p.boq_revision_id,NULL,NULL,p.snapshot->'customer'->>'name' FROM commercial_pricing_versions p WHERE ($2 OR p.created_by=$1) AND NOT EXISTS(SELECT 1 FROM commercial_pricing_versions n WHERE n.boq_revision_id=p.boq_revision_id AND n.version>p.version) AND NOT EXISTS(SELECT 1 FROM quotation_versions q WHERE q.pricing_id=p.id)
+ SELECT p.id,'Quotation',p.number,p.snapshot->>'siteName','Pricing saved: prepare quotation',p.created_at,'quotes',NULL,p.boq_revision_id,NULL,NULL,p.snapshot->'customer'->>'name' FROM commercial_pricing_versions p WHERE ($2 OR p.created_by=$1) AND NOT EXISTS(SELECT 1 FROM commercial_pricing_versions n WHERE n.boq_revision_id=p.boq_revision_id AND n.version>p.version) AND NOT EXISTS(SELECT 1 FROM quotation_versions q WHERE q.pricing_id=p.id) AND NOT EXISTS(SELECT 1 FROM closed_revision_boqs x WHERE x.revision_id=p.boq_revision_id)
  UNION ALL
  SELECT r.id,'Quotation revision',q.number,q.snapshot->>'siteName',CASE WHEN r.costing_change AND f.revision_id IS NULL AND review.id IS NOT NULL AND review.outcome IS NULL THEN 'Awaiting review' WHEN r.costing_change AND f.revision_id IS NULL THEN 'BOQ revision required' ELSE 'Commercial revision required' END,COALESCE(review.decision_at,review.created_at,r.created_at),CASE WHEN r.costing_change AND f.revision_id IS NULL THEN 'boqs' ELSE 'pricing' END,CASE WHEN f.revision_id IS NULL THEN r.draft_id ELSE NULL END,COALESCE(f.revision_id,q.boq_revision_id),NULL,r.id,q.snapshot->'customer'->>'name' FROM quotation_revision_requests_current r JOIN quotation_versions q ON q.id=r.source_quotation_id LEFT JOIN boq_draft_finalizations f ON f.draft_id=r.draft_id LEFT JOIN survey_drafts d ON d.id=r.draft_id LEFT JOIN LATERAL (SELECT s.id,s.created_at,v.outcome,v.created_at AS decision_at FROM boq_review_submissions s LEFT JOIN boq_review_decisions v ON v.submission_id=s.id WHERE s.draft_id=r.draft_id ORDER BY s.draft_version DESC LIMIT 1) review ON true WHERE ($2 OR r.created_by=$1 OR d.owner_id=$1 OR q.created_by=$1) AND NOT EXISTS(SELECT 1 FROM quotation_revision_links l WHERE l.request_id=r.id)
  UNION ALL
@@ -111,6 +136,10 @@ export class CoordinatorRepository {
       )
     ).rows[0];
     result.tasks = result.tasks.filter((t:any)=>![t.id,t.draft_id,t.boq_revision_id,t.ipo_id].some(id=>archived.has(id)));
+    // A revised quotation made for an open IPO revision is approved with that IPO revision (one approval on
+    // Management's IPO revisions card), so the task is marked and the Quotations card leaves it out.
+    const ipoRevisionQuotes=new Set((await this.pool.query("SELECT l.quotation_id FROM ipo_revision_requests q JOIN quotation_revision_links l ON l.request_id=q.quotation_revision_request_id WHERE NOT EXISTS(SELECT 1 FROM ipo_revision_proposals p WHERE p.request_id=q.id)")).rows.map((x:any)=>x.quotation_id));
+    for(const t of result.tasks)if(t.kind==='Sale confirmation'&&ipoRevisionQuotes.has(t.id))t.ipoRevision=true;
     result.total = result.tasks.length;
     result.counts = {};
     for(const task of result.tasks) result.counts[task.kind]=(result.counts[task.kind]??0)+1;

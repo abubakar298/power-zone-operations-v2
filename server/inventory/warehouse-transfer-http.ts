@@ -1,3 +1,4 @@
+import {printDownloadDetails} from './print-download-name.js';
 import {Router,type RequestHandler} from 'express';
 import type {Pool} from 'pg';
 import {z} from 'zod';
@@ -34,8 +35,8 @@ export function warehouseTransferHttp(pool:Pool,requireSession:RequestHandler){
  r.post('/issues',async(req,res)=>{const input=warehouseTransferIssueSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Check the two warehouses, final item positions and positive transfer quantities.');res.json(await repo.issue(req.authSession!.user.id,input.data));});
  r.post('/receipts',async(req,res)=>{const input=warehouseTransferReceiptSchema.safeParse(req.body);if(!input.success)throw new HttpError(422,'Select the issued transfer, counted evidence and positive destination quantities.');res.json(await repo.receive(req.authSession!.user.id,input.data));});
  r.get('/receipts/:id',async(req,res)=>res.json(await repo.receipt(req.authSession!.user.id,id(req.params.id))));
- r.get('/receipts/:id/document.pdf',async(req,res)=>{const row=await repo.receipt(req.authSession!.user.id,id(req.params.id)),model=warehouseTransferReceiptPrintModel(row);res.locals.downloadContext={documentType:model.title,identity:'warehouse-transfer-receipt:'+row.id,revision:1};res.type('pdf').set('Content-Disposition',`inline; filename="${row.number}.pdf"`).send(materialDocumentPdf(model));});
+ r.get('/receipts/:id/document.pdf',async(req,res)=>{const row=await repo.receipt(req.authSession!.user.id,id(req.params.id)),model=warehouseTransferReceiptPrintModel(row);res.locals.downloadContext={...printDownloadDetails(model),documentType:model.title,identity:'warehouse-transfer-receipt:'+row.id,revision:1};res.type('pdf').set('Content-Disposition',`inline; filename="${row.number}.pdf"`).send(materialDocumentPdf(model));});
  r.get('/:id',async(req,res)=>res.json(await repo.detail(req.authSession!.user.id,id(req.params.id))));
- r.get('/:id/document.pdf',async(req,res)=>{const row=await repo.detail(req.authSession!.user.id,id(req.params.id));await requireWarehouseAccess(req.authSession!.user.id,row.sourceWarehouse,pool,true);const model=warehouseTransferPrintModel(row);res.locals.downloadContext={documentType:model.title,identity:'warehouse-transfer:'+row.id,revision:1};res.type('pdf').set('Content-Disposition',`inline; filename="${row.number}.pdf"`).send(materialDocumentPdf(model,warehouseTransferCopies));});
+ r.get('/:id/document.pdf',async(req,res)=>{const row=await repo.detail(req.authSession!.user.id,id(req.params.id));await requireWarehouseAccess(req.authSession!.user.id,row.sourceWarehouse,pool,true);const model=warehouseTransferPrintModel(row);res.locals.downloadContext={...printDownloadDetails(model),documentType:model.title,identity:'warehouse-transfer:'+row.id,revision:1};res.type('pdf').set('Content-Disposition',`inline; filename="${row.number}.pdf"`).send(materialDocumentPdf(model,warehouseTransferCopies));});
  return r;
 }

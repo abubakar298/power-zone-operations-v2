@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { api, type Session } from '../api.js';
 import { Button } from '../ui/Button.js';
 

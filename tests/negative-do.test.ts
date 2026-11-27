@@ -1,6 +1,5 @@
 import {temporaryNegativeDoBalanceAllowed,negativeDoWindowStartsAt,negativeDoWindowEndsAt} from '../server/inventory/do-negative-balance.js';
 import {UnsignedDoRepository} from '../server/inventory/unsigned-do.js';
-import {MaterialUsageRepository} from '../server/inventory/material-usage.js';
 import {GatePassRepository} from '../server/inventory/gate-passes.js';
 import {directMaterialDatabase} from './direct-material-database.js';
 import {test} from 'node:test';
@@ -55,4 +54,4 @@ test('owner-authorized negative DO balances work at preparation, unsigned edit a
  }finally{await db.close();}
 });
 
-test('negative DO exception automatically closes at the approved deadline (end of 14 Nov 2026 PKT)',()=>{const start=Date.parse(negativeDoWindowStartsAt),end=Date.parse(negativeDoWindowEndsAt);assert.equal(negativeDoWindowEndsAt,'2026-11-14T19:00:00.000Z');assert.equal(temporaryNegativeDoBalanceAllowed(start-1),false);assert.equal(temporaryNegativeDoBalanceAllowed(start),true);assert.equal(temporaryNegativeDoBalanceAllowed(end-1),true);assert.equal(temporaryNegativeDoBalanceAllowed(end),false);});
+test('negative DO exception automatically closes at the approved deadline (end of 29 Nov 2026 PKT)',()=>{const start=Date.parse(negativeDoWindowStartsAt),end=Date.parse(negativeDoWindowEndsAt);assert.equal(negativeDoWindowEndsAt,'2026-11-29T19:00:00.000Z');assert.equal(temporaryNegativeDoBalanceAllowed(start-1),false);assert.equal(temporaryNegativeDoBalanceAllowed(start),true);assert.equal(temporaryNegativeDoBalanceAllowed(end-1),true);assert.equal(temporaryNegativeDoBalanceAllowed(end),false);});

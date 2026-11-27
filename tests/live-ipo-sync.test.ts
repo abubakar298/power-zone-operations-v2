@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {testDatabase} from './database.js';
-import {OperationsLiveIpoSync,syncCreatedOperationsHandoff} from '../server/operations-board/live-ipo-sync.js';
+import {OperationsLiveIpoSync,boardCandidates,syncCreatedOperationsHandoff} from '../server/operations-board/live-ipo-sync.js';
 
 test('explicit live IPO sync is duplicate-safe, retains reviewed decisions and never posts source history, evidence, stock or money',async()=>{
  const db=await testDatabase();try{
@@ -49,6 +49,18 @@ test('explicit live IPO sync is duplicate-safe, retains reviewed decisions and n
   await db.pool.query('INSERT INTO operations_board_sites(id,created_by) VALUES($1,$2)',['unverified-candidate',manager]);
   await db.pool.query("INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES('unverified-candidate',1,$1,'Source imported','SIMULATION source',$2,$3)",[{id:'unverified-candidate',ipo:candidate.number+' · '+candidate.order,name:'Reviewed branch',stage:'received',installation:null,scopePending:true},randomUUID(),manager]);
   assert.equal((await sync.sync(manager,{ipoIds:[candidate.ipoId]})).held.length,1);
+  // Freed slot (24 Nov 2026): a cancelled site with the same "IPO · order" label is not a duplicate, so the new order
+  // placed in that slot gets its own board site instead of being held (fixed 25 Nov 2026).
+  const reused=await issuance({ipoNumber:'SIMULATION-SHARED-164',order:'154/250'});
+  await db.pool.query('INSERT INTO operations_board_sites(id,created_by) VALUES($1,$2)',['cancelled-same-slot',manager]);
+  await db.pool.query("INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES('cancelled-same-slot',1,$1,'Source imported','SIMULATION source',$2,$3)",[{id:'cancelled-same-slot',ipo:reused.number+' · '+reused.order,name:'Cancelled branch',stage:'received',installation:null,scopePending:true,cancelled:true},randomUUID(),manager]);
+  const placed=await sync.sync(manager,{ipoIds:[reused.ipoId]});
+  assert.equal(placed.held.length,0,JSON.stringify(placed.held));assert.equal(placed.created.length,1);assert.notEqual(placed.created[0].boardSiteId,'cancelled-same-slot');
+  // The sync also links the placed site to its approved BOQ, as a normal IPO handoff does, so Inventory can open its materials (26 Nov 2026).
+  assert.deepEqual(placed.inventoryLinks.map(l=>[l.boardSiteId,l.status]),[[placed.created[0].boardSiteId,'linked']],JSON.stringify(placed.inventoryLinks));
+  assert.equal((await db.pool.query('SELECT count(*)::int n FROM inventory_material_source_links WHERE board_site_id=$1 AND ipo_id=$2',[placed.created[0].boardSiteId,reused.ipoId])).rows[0].n,1);
+  const again=await sync.sync(manager,{ipoIds:[reused.ipoId]});assert.deepEqual(again.inventoryLinks.map(l=>l.status),['retained']);
+  assert.deepEqual(boardCandidates([{site_id:'a',snapshot:{ipo:'CHP-163 · 154/250',cancelled:true}},{site_id:'b',snapshot:{ipo:'chp-163 ·  154/250'}},{site_id:'c',snapshot:{ipo:'X',cancelled:true,origin:{ipoId:'me'}}}],'chp-163 · 154/250','me'),['b','c']);
   const wrongOrigin=await issuance(),wrongId='live-ipo:'+wrongOrigin.ipoId;
   await db.pool.query('INSERT INTO operations_board_sites(id,created_by) VALUES($1,$2)',[wrongId,manager]);
   await db.pool.query("INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,1,$2,'Source imported','SIMULATION mismatch',$3,$4)",[wrongId,{id:wrongId,ipo:wrongOrigin.number,name:'Unverified origin',stage:'received',installation:null,scopePending:true,origin:{kind:'live-ipo-handoff',ipoId:wrongOrigin.ipoId,operationsIssuanceId:randomUUID(),legacyWorkflowId:wrongOrigin.workflowId}},randomUUID(),manager]);
@@ -68,7 +80,7 @@ test('explicit live IPO sync is duplicate-safe, retains reviewed decisions and n
   assert.equal((await sync.sync(manager,{ipoIds:[emailApproval.ipoId]})).created.length,1);
   const approvalBoard=(await db.pool.query('SELECT snapshot FROM operations_board_versions WHERE site_id=$1',['live-ipo:'+emailApproval.ipoId])).rows[0].snapshot;
   assert.equal(approvalBoard.customerPo,'','An email approval reference never becomes a customer PO');
-  assert.ok(approvalBoard.reviewFlags.some((flag:string)=>flag.includes('Customer PO is missing')));
+  assert.ok(!approvalBoard.reviewFlags.some((flag:string)=>flag.includes('Customer PO is missing')));
   const trusted=await issuance();
   const connection=await db.pool.connect();try{
    await connection.query('BEGIN');

@@ -9,7 +9,8 @@ import {api} from '../api.js';
 import {Button} from '../ui/Button.js';
 import {Field} from '../ui/Field.js';
 import {extractText} from '../ocr.js';
-import {directPoSuggestions,directPoSiteMatches,validOrderPosition,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
+import {directPoSuggestions,directPoSiteMatches,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
+import {validProgrammeOrder} from '../../shared/extra-programme-orders.js';
 import {useUnsavedChanges} from '../hooks/useUnsavedChanges.js';
 import {poSuggestions,ublPoSuggestions} from '../../server/orders/po-extraction.js';
 export function DirectPo({refs,session,records,onPrepared,onCancel}:any){
@@ -24,7 +25,7 @@ export function DirectPo({refs,session,records,onPrepared,onCancel}:any){
  const framework=refs.frameworks.find((f:any)=>f.id===agreement),customer=refs.customers.find((c:any)=>c.id===framework?.customer_id);
  const invoiceTerms = chosenTerms || defaultIpoInvoiceTerms(framework?.configuration_key, framework?.type);
  const capacityIssues=reading?directPoCapacityIssues(reading.text,framework?.configuration_key??''):[];
- const meezan=framework?.configuration_key?.startsWith('MBL-UPS-'),emailApproval=meezan&&evidenceType==='Email approval';
+ const emailApproval=evidenceType==='Email approval';
  async function read(file?:File){
   if(!file||!customer)return;setError('');setReading(undefined);setBusy(true);request.current=crypto.randomUUID();
   try{
@@ -51,7 +52,7 @@ export function DirectPo({refs,session,records,onPrepared,onCancel}:any){
    if(capacityIssues.length)throw Error(capacityIssues.join(' '));
    if(!values.siteCode?.trim()||!values.siteName?.trim())throw Error('Enter the branch code and site name read from the evidence.');
    if(!values.approvalDate)throw Error('Enter the approval date.');
-   if(values.orderNumber&&!validOrderPosition(values.orderNumber))throw Error('Use an order number such as 20/60.');
+   if(values.orderNumber&&!validProgrammeOrder(values.orderNumber,{configurationKey:framework.configuration_key}))throw Error('Use an order number such as 20/60.');
    const matches = refs.sites.filter((site: any) => directPoSiteMatches(site, customer.id, values.siteCode, values.siteName, values.siteAddress ?? '', framework.configuration_key === 'UBL-UPS-6-10'));
    if (matches.length > 1) throw Error('More than one saved branch uses this code. Ask Management to check the customer register.');
    const selected = matches[0];
@@ -73,7 +74,7 @@ export function DirectPo({refs,session,records,onPrepared,onCancel}:any){
   <div className="pz-form-grid">
    <Field id="direct-po-customer" label="Customer"><select id="direct-po-customer" value={customerChoice} disabled={busy} onChange={e=>{setCustomerChoice(e.target.value);setChosenTerms("");setAgreement('');setReading(undefined);setPendingFile(undefined);setValues({});}}><option value="">All approved customers</option>{refs.customers.filter((c:any)=>refs.frameworks.some((f:any)=>f.customer_id===c.id&&f.routes?.includes('direct-framework'))).map((c:any)=><option key={c.id} value={c.id}>{c.short_code} · {c.name}</option>)}</select></Field>
    <Field id="direct-po-agreement" label="Accepted quotation"><select id="direct-po-agreement" disabled={busy} value={agreement} onChange={e=>{setAgreement(e.target.value);setChosenTerms("");setEvidenceType('Customer PO');setReading(undefined);setPendingFile(undefined);setValues({});setError('');request.current=crypto.randomUUID();}}><option value="">Select accepted quotation</option>{refs.frameworks.filter((f:any)=>f.routes?.includes('direct-framework')&&(!customerChoice||String(f.customer_id)===customerChoice)).map((f:any)=><option key={f.id} value={f.id}>{f.label??(/-UPS-/.test(f.configuration_key)?f.configuration_key.replace('-UPS-',' (')+')':f.configuration_key+' · v'+f.version)}</option>)}</select></Field>
-   <Field id="direct-po-evidence-type" label="Approval evidence"><select id="direct-po-evidence-type" value={evidenceType} disabled={busy||!customer} onChange={e=>{setEvidenceType(e.target.value);setReading(undefined);setPendingFile(undefined);setValues({});setError('');request.current=crypto.randomUUID();}}><option>Customer PO</option>{meezan&&<option>Email approval</option>}</select></Field>
+   <Field id="direct-po-evidence-type" label="Approval evidence"><select id="direct-po-evidence-type" value={evidenceType} disabled={busy||!customer} onChange={e=>{setEvidenceType(e.target.value);setReading(undefined);setPendingFile(undefined);setValues({});setError('');request.current=crypto.randomUUID();}}><option>Customer PO</option><option>Email approval</option></select></Field>
    <div className="pz-field-wide pz-direct-po-evidence-row"><Field id="direct-po-upload" label={emailApproval?"Upload email evidence":"Upload PO"} hint="PDF, PNG or JPEG · up to 8 MB"><FileUpload selectedFiles={pendingFile?[pendingFile]:[]} attachments={reading?[{id:'direct-po-evidence',filename:reading.file.filename}]:undefined} onRemoveAttachment={()=>{setReading(undefined);setPendingFile(undefined);setValues({});setError('');setIpoWarning('');}} onClear={()=>{setReading(undefined);setPendingFile(undefined);setValues({});setError('');setIpoWarning('');}} key={agreement+evidenceType} id="direct-po-upload" type="file" accept="application/pdf,image/png,image/jpeg" disabled={!customer||busy} onChange={e=>{setPendingFile(e.target.files?.[0]);setReading(undefined);setValues({});setError('');setIpoWarning('');}}/></Field><Button variant="primary" className="pz-direct-po-upload-action" loading={busy} loadingLabel="Reading…" disabled={!pendingFile||!customer||busy} onClick={()=>void read(pendingFile)}>{reading&&!pendingFile?'Uploaded':'Upload'}</Button></div>
   </div>
 

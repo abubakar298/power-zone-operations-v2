@@ -11,6 +11,8 @@ import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
 import {lockActiveActor} from '../auth/actor-lock.js';
 import {transaction} from '../db/transaction.js';
+/** Customer of a consolidated extra-cable invoice, from its programme (MBL programmes are Meezan Bank, others UBL). */
+export const cableConsolidationCustomer=(program:string)=>program.startsWith('MBL')?'Meezan Bank Limited':'United Bank Limited';
 import {HttpError} from '../http/errors.js';
 import {AccountsRepository} from './repository.js';
 import {billingRows,invoicingQueues,invoiceIdentity} from './billing-model.js';
@@ -161,7 +163,7 @@ export async function invoiceRegister(pool:Pool,actor:string){
  const role=await new AccountsRepository(pool).access(actor);
  const {rows,imported,alreadyIssued}=await candidates(pool),entries=(await pool.query('SELECT *,entry_date::text AS entry_date,amount::text AS amount FROM accounts_invoice_entries ORDER BY created_at DESC')).rows;
  const cableSource=(await pool.query('SELECT version,snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0];
- const extraCable=(cableSource?.snapshot.cables.rows??[]).filter((r:any)=>r.consolidation&&!r.supersededBy&&!r.submittedOn).map((r:any)=>({key:r.key,sourceKind:'Consolidated cable',sourceVersion:cableSource.version,customer:r.program.startsWith('MBL')?'Meezan Bank Limited':'United Bank Limited',site:r.siteLabel,ipo:[...new Set(r.sites.map((s:any)=>s.ipo))].join(' / '),po:r.po??'',evidence:[{id:r.key,filename:r.consolidation.file.name,url:'/api/accounts-workspace/cable-consolidations/'+r.key+'/file'}],program:'Extra Cable',milestone:'cable',invoiceCreated:true,invoiceReferences:[r.invoice],amount:r.invoicedAmount,invoiceDate:r.consolidation.invoiceDate,memberSites:r.sites,status:'Created — submission pending'}));
+ const extraCable=(cableSource?.snapshot.cables.rows??[]).filter((r:any)=>r.consolidation&&!r.supersededBy&&!r.submittedOn).map((r:any)=>({key:r.key,sourceKind:'Consolidated cable',sourceVersion:cableSource.version,customer:cableConsolidationCustomer(r.program),site:r.siteLabel,ipo:[...new Set(r.sites.map((s:any)=>s.ipo))].join(' / '),po:r.po??'',evidence:[{id:r.key,filename:r.consolidation.file.name,url:'/api/accounts-workspace/cable-consolidations/'+r.key+'/file'}],program:'Extra Cable',milestone:'cable',invoiceCreated:true,invoiceReferences:[r.invoice],amount:r.invoicedAmount,invoiceDate:r.consolidation.invoiceDate,memberSites:r.sites,status:'Created — submission pending'}));
  const submissions=await invoiceSubmissions(pool),updates=await latestInvoiceUpdates(pool),submissionRows=invoiceSubmissionRows(rows,alreadyIssued,entries,submissions,updates).filter(r=>pendingSubmission(r,submissions));
  for(const entry of [...entries,...imported]){
   const own=entry.imported?[]:submissions.filter(e=>e.invoice_entry_id===entry.id);
@@ -237,7 +239,7 @@ export async function recordInvoiceSubmission(pool:Pool,actor:string,raw:unknown
    throw new HttpError(409,'Request key already used for another submission.');}
   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('accounts.source-register',0))");
   if(input.sourceKind==='Operations')await c.query('SELECT id FROM operations_board_sites WHERE id=$1 FOR UPDATE',[input.siteKey]);
-  const {rows,imported,alreadyIssued}=await candidates(c),entries=(await c.query('SELECT *,entry_date::text AS entry_date,amount::text AS amount FROM accounts_invoice_entries')).rows;
+  const {rows,alreadyIssued}=await candidates(c),entries=(await c.query('SELECT *,entry_date::text AS entry_date,amount::text AS amount FROM accounts_invoice_entries')).rows;
   const existing=await invoiceSubmissions(c),updates=await latestInvoiceUpdates(c);
   const candidate=invoiceSubmissionRows(rows,alreadyIssued,entries,existing,updates).find(r=>r.sourceKind===input.sourceKind&&r.key===input.siteKey&&r.milestone===input.milestone);
   if(!candidate||candidate.sourceVersion!==input.sourceVersion)throw new HttpError(409,'Invoice or site evidence changed. Refresh and review before marking submitted.');

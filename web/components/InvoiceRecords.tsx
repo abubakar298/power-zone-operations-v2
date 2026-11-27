@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import './site-documents.css';
 import {useState} from 'react';
 import {api} from '../api.js';
@@ -32,7 +33,7 @@ export function InvoiceRecords({row,canRecord,onSaved,onDirty}:{row:any;canRecor
  return <section className="accounts-record-section">
   <div className="accounts-panel-heading"><h3>Invoices for this {row.billingStage==='delivery-only'?'delivery':row.milestone} milestone</h3>{canRecord&&!row.recordingHeld&&!form&&!cable&&<Button variant="secondary" onClick={()=>open({kind:'add'},{entryDate:today(),stage:defaultStage})}>{invoices.length||legacy?'Add another invoice':'Record invoice'}</Button>}</div>
   {row.recordingHeld&&<p className="pz-caption">Additional invoices can be recorded once the current QC milestone evidence is complete.</p>}
-  {invoices.length>0&&<div className="pz-table-scroll"><table className="invoice-records-table"><thead><tr><th>SR#</th><th>Invoice</th><th>Stage / type</th><th className="accounts-money">Amount · PKR</th><th>Invoice date</th><th>Submission</th>{canRecord&&<th>Actions</th>}</tr></thead><tbody>{invoices.map((i,n)=><tr key={i.key}>
+  {invoices.length>0&&<div className="pz-table-scroll"><table className="invoice-records-table"><thead><tr><th>SR#</th><th>Invoice</th><th>Stage / type</th><th className="accounts-money">Amount · PKR</th><th>Invoice date</th><th>Submission</th>{canRecord&&<th>Actions</th>}</tr></thead><tbody>{recentFirst(invoices).map((i,n)=><tr key={i.key}>
    <td>{n+1}</td>
    <td><strong>{i.reference}</strong><small>{i.label??'No description'}</small></td>
    <td>{stageLabel(i.stage)}</td>

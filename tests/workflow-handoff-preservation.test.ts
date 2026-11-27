@@ -1,4 +1,4 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import {mkdtemp,cp,rm,readdir} from 'node:fs/promises';import {join,resolve} from 'node:path';import {tmpdir} from 'node:os';import {randomUUID} from 'node:crypto';import {testDatabase} from './database.js';import {migrate} from '../server/db/migrate.js';
+import {test} from 'node:test';import assert from 'node:assert/strict';import {mkdtemp,cp,rm,readdir} from 'node:fs/promises';import {join} from 'node:path';import {tmpdir} from 'node:os';import {randomUUID} from 'node:crypto';import {testDatabase} from './database.js';import {migrate} from '../server/db/migrate.js';
 test('handoff-only migration preserves every existing table row and starts without active recipients',async()=>{
  const db=await testDatabase({skipMigrations:true}),dir=await mkdtemp(join(tmpdir(),'pz-handoff-baseline-')),upgrade=await mkdtemp(join(tmpdir(),'pz-handoff-upgrade-'));try{
  // Reconstruct the pre-handoff baseline, then apply only the historical

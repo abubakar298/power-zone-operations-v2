@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import request from "supertest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { testDatabase } from "./database.js";
+import { cleanDocumentNumber, filenameFromDisposition } from "../shared/download-name.js";
 import { createDashboardSamples } from "../server/coordinator/samples.js";
 import { hashPassword } from "../server/auth/crypto.js";
 import { OrdersRepository } from "../server/orders/repository.js";
@@ -168,8 +169,11 @@ test("Combined IPO packs retain accepted amounts, show sale type across all six 
       .set("Cookie", cookie)
       .expect(200)
       .expect("Content-Type", /application\/pdf/);
+    // IPO files are named "<IPO number> - <customer> - <site name> - <site code>.pdf" (23 Nov 2026).
     assert.ok(
-      response.headers["content-disposition"].includes(" - IPO and PT - "),
+      filenameFromDisposition(response.headers["content-disposition"])!.startsWith(
+        `${cleanDocumentNumber(row.number)} - `,
+      ),
     );
     assert.match((await pdfText(response.body)).at(-1)!, /PEACHTREE DIVISION/);
     await request(app).get(`/api/orders/${row.id}/ipo.pdf`).expect(401);

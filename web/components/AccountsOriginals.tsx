@@ -1,3 +1,4 @@
+import {recentFirst} from '../../shared/recent-records.js';
 import './site-documents.css';
 import {useState} from 'react';
 import {api} from '../api.js';
@@ -21,7 +22,7 @@ export function OverdueOriginals({sites}:{sites:any[]}){
 /** Salaas confirms only the originals actually received, with their receipt date. */
 export function ConfirmReceiptDialog({site,onClose,onSaved}:{site:any;onClose:()=>void;onSaved:(message:string)=>void|Promise<void>}){
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
- const pending=site.originals.items.filter((i:any)=>i.status==='karachi-pending'||i.status==='lahore-pending');
+ const pending=recentFirst<any>(site.originals.items).filter((i:any)=>i.status==='karachi-pending'||i.status==='lahore-pending');
  const [chosen,setChosen]=useState<string[]>([]),[date,setDate]=useState(today),[saving,setSaving]=useState(false),[error,setError]=useState(''),[requestKey]=useState(()=>crypto.randomUUID());
  async function save(){if(saving)return;setSaving(true);setError('');try{const session=await api<any>('/auth/session');await api(`/accounts-workspace/sites/${encodeURIComponent(site.id)}/original-receipts`,{csrf:session.csrfToken,body:{siteVersion:site.version,items:chosen,receivedOn:date,requestKey}});await onSaved(`${chosen.length} ${chosen.length===1?'original':'originals'} confirmed received for ${site.name} on ${displayDate(date)}. They are now Handed over to Accounts.`);}catch(e){setError((e as Error).message);}finally{setSaving(false);}}
  return <AccountsRecordDialog title="Confirm Receipt" reference={site.ipo} subtitle={site.name} onClose={()=>{if(!saving)onClose();}}>

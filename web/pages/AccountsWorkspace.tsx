@@ -30,6 +30,7 @@ import { Button } from "../ui/Button.js";
 import { Field } from "../ui/Field.js";
 import { decimalDisplay, wholeMoney as money } from "../numbers.js";
 import { InventoryWorkspace } from "./InventoryWorkspace.js";
+import {accountsReturnCheckDue} from "../workspaces/accounts-refresh.js";
 const Departments = lazy(() =>
   import("./Departments.js").then((module) => ({ default: module.Departments })),
 );
@@ -38,9 +39,9 @@ import { confirmRevision } from "../confirm.js";
 import { quotationDisplayRows } from "../../server/commercial/quotation-rows.js";
 import { orderCustomerScopeLines } from "../../server/commercial/customer-scope.js";
 import { DocumentPreview } from "../components/AccountsDocumentPreview.js";
+import { CustomerPoStatus } from "../components/LateCustomerPo.js";
 import {
   ClosureCostTables,
-  ClosureIndicators,
   installationDays,
 } from "../components/ClosurePerformance.js";
 import { Decimal } from "decimal.js";
@@ -185,16 +186,17 @@ export function AccountsWorkspace({
   currentActor.current = actorContext;
   useEffect(()=>{
     if(tab!=='My Workspace')return;
-    let active=true,generation=0;
+    let active=true,generation=0,lastStartedAt:number|undefined;
     setInvoiceQueueCount(null);setPaymentQueueCount(null);setQueueCountError(false);
-    const refresh=()=>{const request=++generation;void api<{invoicesToSubmit:number;paymentsToRecord:number}>('/accounts-workspace/work-queues').then(result=>{
+    const refresh=()=>{const request=++generation;lastStartedAt=Date.now();void api<{invoicesToSubmit:number;paymentsToRecord:number}>('/accounts-workspace/work-queues').then(result=>{
       if(active&&request===generation){setInvoiceQueueCount(result.invoicesToSubmit);setPaymentQueueCount(result.paymentsToRecord);setQueueCountError(false);}
     }).catch(()=>{if(active&&request===generation){setInvoiceQueueCount(null);setPaymentQueueCount(null);setQueueCountError(true);}});};
-    const visible=()=>{if(document.visibilityState==='visible')refresh();};
-    refresh();window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',visible);
-    return()=>{active=false;generation++;window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',visible);};
+    // Coming back to the window checks again only when the last check is a minute old.
+    const returned=()=>{if(document.visibilityState==='visible'&&accountsReturnCheckDue(lastStartedAt,Date.now()))refresh();};
+    refresh();window.addEventListener('focus',returned);document.addEventListener('visibilitychange',returned);
+    return()=>{active=false;generation++;window.removeEventListener('focus',returned);document.removeEventListener('visibilitychange',returned);};
   },[tab,actorContext]);
-  useEffect(()=>{if(tab!=='My Workspace')return;let active=true,request=0;const refresh=()=>{const current=++request;void api<{count:number}>('/accounts-workspace/material-costing?summary=1').then(v=>{if(active&&current===request)setApprovedDocumentCount(v.count);}).catch(()=>{if(active&&current===request)setApprovedDocumentCount(null);});};setApprovedDocumentCount(null);refresh();window.addEventListener('focus',refresh);return()=>{active=false;window.removeEventListener('focus',refresh);};},[tab,actorContext]);
+  useEffect(()=>{if(tab!=='My Workspace')return;let active=true,request=0,lastStartedAt:number|undefined;const refresh=()=>{const current=++request;lastStartedAt=Date.now();void api<{count:number}>('/accounts-workspace/material-costing?summary=1').then(v=>{if(active&&current===request)setApprovedDocumentCount(v.count);}).catch(()=>{if(active&&current===request)setApprovedDocumentCount(null);});};setApprovedDocumentCount(null);refresh();const returned=()=>{if(accountsReturnCheckDue(lastStartedAt,Date.now()))refresh();};window.addEventListener('focus',returned);return()=>{active=false;window.removeEventListener('focus',returned);};},[tab,actorContext]);
   async function load() {
     if (!workspaceNeeded && !reportsNeeded) return;
     const generation = ++loadGeneration.current;
@@ -660,7 +662,7 @@ export function AccountsWorkspace({
                   ...received.map((r:any)=>({kind:'inventory',r})),
                   ...data.closures.filter((r:any)=>r.stage!=='Closed').map((r:any)=>({kind:'closure',r})),
                 ],({r}:any)=>recordedTimestamp(r)).map(({kind,r}:any)=><tr key={kind+':'+r.id}>
-                  <td>{kind==='sample'?`${r.site_name} · UBL ${r.branch_code} · ${r.configuration}`:kind==='ipo'?<>{r.number}<br/>{r.snapshot.siteName}</>:jobLabel(kind==='closure'?r.snapshot:r)}</td>
+                  <td>{kind==='sample'?`${r.site_name} · UBL ${r.branch_code} · ${r.configuration}`:kind==='ipo'?<>{r.number}<br/>{r.snapshot.siteName}<CustomerPoStatus recordId={r.snapshot.workflowRecordId} followUp={r.customerPoFollowUp&&{...r.customerPoFollowUp,approvalEvidenceType:r.snapshot.input?.evidenceType}}/></>:jobLabel(kind==='closure'?r.snapshot:r)}</td>
                   <td>{kind==='sample'?(r.kind==='IPO / PT review sample'?(r.review_decision??'Sample—awaiting Accounts approval'):r.stage):kind==='ipo'?(r.accountsReview?.decision??'IPO received'):kind==='inventory'?'Inventory approved · awaiting PT entry':r.stage}</td>
                   <td>{kind==='sample'?<Button onClick={()=>{setSamplePreview(r);setSelected(undefined);setTab('IPO Review');window.scrollTo(0,0);}}>Review IPO &amp; PT</Button>:kind==='ipo'?<Button onClick={()=>void openIpo(r.id)}>Review IPO</Button>:kind==='inventory'?<Button onClick={()=>navigate('Inventory PT Entries')}>Enter approved documents in PT</Button>:<Button onClick={()=>void openJob(r.job_key)}>{r.stage==='Awaiting Management'?'View submitted closure':'Continue closure'}</Button>}</td>
                 </tr>)}
@@ -737,6 +739,7 @@ export function AccountsWorkspace({
                       {i.number}
                       <br />
                       {i.snapshot.siteName}
+                      <CustomerPoStatus recordId={i.snapshot.workflowRecordId} followUp={i.customerPoFollowUp&&{...i.customerPoFollowUp,approvalEvidenceType:i.snapshot.input?.evidenceType}}/>
                     </td>
                     <td>{i.accountsReview?.decision ?? "Received"}</td>
                     <td>

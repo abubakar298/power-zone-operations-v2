@@ -1,7 +1,6 @@
 import {FileUpload} from '../ui/FileUpload.js';
 import {useState} from 'react';
 import {api,type Session} from '../api.js';
-import {Button} from '../ui/Button.js';
 export type DiscountEvidence={id:string;filename:string};
 export function DiscountApprovalEvidence({session,files,onChange}:{session:Session;files:DiscountEvidence[];onChange:(files:DiscountEvidence[])=>void}){
  const [busy,setBusy]=useState(false),[error,setError]=useState('');

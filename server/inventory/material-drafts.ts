@@ -1,3 +1,4 @@
+import {latestActivity} from '../../shared/recent-records.js';
 import {reviewedWarehouses} from "./warehouse-reference.js";
 import {postTemporaryInward,previewTemporaryInward} from './temporary-inward-posting.js';
 import {MastersRepository} from '../masters/repository.js';
@@ -8,7 +9,9 @@ import {warehouseNumber} from './warehouse-access.js';
 import {ParentReconciliationRepository} from './parent-reconciliation.js';
 import approvedParentLedger from './approved-parent-ledger.json' with {type:'json'};
 import {requireOpenParent} from './parent-open.js';
+import {labelElahiLedgerCustomer} from './ledger-customer-labels.js';
 import approvedSiteLedger from './approved-site-ledger.json' with {type:'json'};
+import {historicalIssueQuantity} from './historical-issue-quantity.js';
 import {inventoryOperationsBatches} from './operations-batches.js';
 import {plannedInventoryDelivery,plannedInventoryInstallation} from '../operations-board/batch-delivery.js';
 import {MinimumStockRepository} from './minimum-stock.js';
@@ -24,6 +27,7 @@ import {approvedMaterialIdentities} from './source-links.js';
 import {checkMaterialSourceLink} from './source-link-policy.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 import {approvedEarthingBasis} from '../../shared/material-preparation.js';
+import {isSolarStructureItem,solarStructureItemId,solarStructureKw,solarStructureQuantity,solarStructureRule,solarStructureUnit} from '../../shared/non-stock-do-items.js';
 
 const quantity=z.union([z.literal(''),z.string().regex(/^\d{1,14}(?:\.\d{1,6})?$/)]);
 export const materialDraftInputSchema=z.object({
@@ -35,7 +39,7 @@ export const materialDraftInputSchema=z.object({
  transport:z.object({issuedTo:z.string().trim().max(200),vehicle:z.string().trim().max(100),driver:z.string().trim().max(200),driverIdentity:z.string().trim().max(100)}).strict(),
 }).strict();
 export type MaterialDraftInput=z.infer<typeof materialDraftInputSchema>;
-export type MaterialSource={createdAt?:string;installationOnly?:boolean;sourceKind:'store-boq'|'headsup'|'linked-ipo';registeredSiteId?:string;storeHandoffId?:string;basisId:string;basisVersion:1;siteId:string;ipo:string|null;orderNumber?:string;customerPo?:string;dispatchDate?:string|null;installationDate?:string|null;siteName:string;customer:string;installation:boolean|null;authorization:'approved-store-boq'|'approved-ipo-boq'|'forecast-only';items:unknown[]};
+export type MaterialSource={createdAt?:string;lastActivityAt?:string|null;installationOnly?:boolean;sourceKind:'store-boq'|'headsup'|'linked-ipo';registeredSiteId?:string;storeHandoffId?:string;basisId:string;basisVersion:1;siteId:string;ipo:string|null;orderNumber?:string;customerPo?:string;dispatchDate?:string|null;installationDate?:string|null;siteName:string;customer:string;installation:boolean|null;authorization:'approved-store-boq'|'approved-ipo-boq'|'forecast-only';items:unknown[]};
 type Source=MaterialSource;
 const latest=`SELECT d.id,v.version,v.snapshot,v.created_at,(SELECT number FROM inventory_parent_preparation_references WHERE draft_id=d.id) AS number FROM inventory_material_drafts d JOIN LATERAL(SELECT * FROM inventory_material_draft_versions WHERE draft_id=d.id ORDER BY version DESC LIMIT 1)v ON true`;
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
@@ -81,7 +85,7 @@ export class MaterialDraftRepository{
    link.board=registered.find(r=>r.site_id===link.board_site_id)?.snapshot??link.board;
    const ipo=approvedIpos.get(link.ipo_id);if(!ipo||ipo instanceof HttpError){heldIpos.add(link.ipo_id);continue;}
    const s=ipo.snapshot;
-   const identity=checkMaterialSourceLink({...link.board,id:link.board_site_id},[{id:ipo.id,number:ipo.number,orderNumber:s.input?.orderNumber??'',poNumber:s.input?.poNumber??'',siteName:s.siteName??''}],(continuations.has(ipo.id)||installationOnlyBoards.has(link.board_site_id))&&link.board.installation===true);
+   const identity=checkMaterialSourceLink({...link.board,id:link.board_site_id},[{id:ipo.id,number:ipo.number,orderNumber:s.input?.orderNumber??'',poNumber:s.input?.poNumber??'',siteName:s.siteName??''}],(continuations.has(ipo.id)||installationOnlyBoards.has(link.board_site_id))&&link.board.installation===true,link.board.origin?.kind==='live-ipo-handoff'&&link.board.origin.ipoId===ipo.id);
    if(identity.status!=='eligible'||hash(s)!==link.ipo_sha256||hash(link.boq)!==link.boq_sha256){heldIpos.add(ipo.id);continue;}
    const existing=confirmed.find(r=>r.ipo_id===ipo.id);
    if(existing)heldIpos.add(ipo.id); // Preserve the stable link basis when a later Store handoff arrives.
@@ -96,7 +100,9 @@ export class MaterialDraftRepository{
   const reviewedIds=new Set<string>();
   if(source){
    for(const {payload:r} of (await c.query('SELECT payload FROM inventory_warehouse_source_balances WHERE source_sha256=$1 ORDER BY ledger_key',[source.source_sha256])).rows){
-    if(r.origin!=='temporary-inward-opening'&&r.origin!=='operational-unreviewed')reviewedIds.add(r.itemId);
+    // The Noorkot import opened a provisional Cat 6 position outside the reviewed source.
+    const importedCat6=r.origin==='owner-confirmed historical issue'&&r.itemId==='CH-CBL-CAT6'&&r.warehouse==='Lahore warehouse';
+    if(!importedCat6&&r.origin!=='temporary-inward-opening'&&r.origin!=='operational-unreviewed')reviewedIds.add(r.itemId);
     const old=map.get(r.itemId);map.set(r.itemId,{itemId:r.itemId,description:old?.description??r.description,units:[...new Set([...(old?.units??[]),r.unit])]});warehouses.add(r.warehouse);
    }
    if(reviewedIds.size!==Number(source.metadata.canonicalIds))throw new HttpError(409,'The reviewed stock catalogue is incomplete. Verify its source before selecting item IDs.');
@@ -119,6 +125,7 @@ export class MaterialDraftRepository{
  async reviewedPools(actor:string){const access=await this.access(actor);return {version:approvedParentLedger.version,preparedAt:approvedParentLedger.preparedAt,groups:approvedParentLedger.groups.filter(g=>access.owner||access.warehouses.includes(g.warehouse+' warehouse'))};}
  async siteLedger(actor:string){
   const access=await this.access(actor),data=structuredClone(approvedSiteLedger) as any;
+  for(const event of data.events)event.quantity=historicalIssueQuantity(event);
   const normal=(w:string)=>w.toLowerCase().replace(/ warehouse$/,'');
   const warehouses=new Set(access.warehouses.map(normal));
   if(!access.owner){const sites=new Set(data.events.filter((e:any)=>warehouses.has(normal(e.warehouse))).map((e:any)=>e.siteId));data.events=data.events.filter((e:any)=>warehouses.has(normal(e.warehouse))||sites.has(e.siteId)&&e.kind==='local_purchase');data.unmappedReturns=data.unmappedReturns.filter((e:any)=>warehouses.has(normal(e.warehouse)));data.sites=data.sites.filter((s:any)=>sites.has(s.id));}
@@ -127,6 +134,10 @@ export class MaterialDraftRepository{
   const receipts=(await this.pool.query(`SELECT r.id,r.number,r.snapshot->>'warehouse' AS warehouse,r.created_at,r.snapshot,v.snapshot AS preparation FROM inventory_material_receipts r JOIN LATERAL(SELECT snapshot FROM inventory_material_draft_versions WHERE draft_id=r.draft_id ORDER BY version DESC LIMIT 1)v ON true ORDER BY r.created_at`)).rows;
   for(const r of receipts){if(!access.owner&&!access.warehouses.includes(r.warehouse))continue;const sites=r.preparation.sites??[];if(sites.length!==1)continue;const site=sites[0];for(const [i,line]of(r.snapshot.lines??[]).entries()){if(data.events.some((e:any)=>e.document===r.number&&e.itemId===line.itemId&&e.warehouse===r.warehouse))continue;data.events.push({id:r.id+':'+i,siteId:site.siteId,site:site.siteName,customer:site.customer,ipo:[site.ipo,site.orderNumber].filter(Boolean).join(' · '),itemId:line.itemId,description:line.itemId,unit:line.unit,date:new Date(r.created_at).toISOString().slice(0,10),document:r.number,documentType:'IGP',kind:'return',quantity:line.quantity,warehouse:r.warehouse,reference:'',notes:r.snapshot.reason,condition:'',evidence:'/api/material-dispatches/evidence/'+r.snapshot.evidence.id,sourceSheet:'',sourceType:'Verified warehouse return',status:'Credited',replacement:false,faulty:false});}}
   data.nativeSites=(await this.pool.query(`${latest} ORDER BY v.created_at DESC`)).rows.filter((r:any)=>access.owner||access.warehouses.includes(r.snapshot.warehouse)).flatMap((r:any)=>r.snapshot.sites.map((s:any)=>({id:s.siteId,site:s.siteName,customer:s.customer,ipo:s.ipo??'',draftId:r.id,parent:r.snapshot.parent})));
+  data.events=data.events.map(labelElahiLedgerCustomer);
+  data.unmappedReturns=data.unmappedReturns.map(labelElahiLedgerCustomer);
+  data.sites=data.sites.map(labelElahiLedgerCustomer);
+  data.nativeSites=data.nativeSites.map(labelElahiLedgerCustomer);
   data.coverage.importedEvents=data.events.length;return data;
  }
  async transportChoices(actor:string,warehouse:string){
@@ -195,7 +206,10 @@ export class MaterialDraftRepository{
   // Imported Accounts/Operations positioning is visible without pretending that
   // an IPO label establishes an approved, executable BOQ identity.
   const sources=await this.sources();
-  const boardRows=await withInventoryReceiving(this.pool,(await this.pool.query(`SELECT DISTINCT ON(site_id) site_id,version,snapshot FROM operations_board_versions ORDER BY site_id,version DESC`)).rows);
+  const boardRows=await withInventoryReceiving(this.pool,(await this.pool.query(`SELECT DISTINCT ON(site_id) site_id,version,snapshot,created_at FROM operations_board_versions ORDER BY site_id,version DESC`)).rows);
+  // Newest-first lists: a project's last activity is its own handoff or its latest Operations board change.
+  const boardChanged=new Map(boardRows.map(row=>[row.site_id,row.created_at]));
+  const activity=(source:{createdAt?:string;siteId:string;registeredSiteId?:string})=>latestActivity(source.createdAt,boardChanged.get(source.registeredSiteId??''),boardChanged.get(source.siteId));
   const batches=(await this.pool.query('SELECT DISTINCT ON(batch_id) version,snapshot FROM operations_board_batch_versions ORDER BY batch_id,version DESC')).rows;
   const operationsBatches=inventoryOperationsBatches(batches,boardRows,sources);
   // An issued partial DO can be ahead of gate posting or the Operations board.
@@ -239,7 +253,7 @@ export class MaterialDraftRepository{
   const registeredPending=boardRows
    .filter(r=>!r.snapshot.superseded&&!r.snapshot.completed&&r.snapshot.cancelled!==true&&['received','awaiting'].includes(r.snapshot.stage)&&r.snapshot.sample!==true&&!sources.some(s=>s.registeredSiteId===r.site_id))
    .map(r=>({siteId:r.site_id,ipo:r.snapshot.ipo,siteName:r.snapshot.name,customer:r.snapshot.customer??'',installation:r.snapshot.installation,dispatchDate:plannedInventoryDelivery({...r.snapshot,id:r.site_id}),installationDate:plannedInventoryInstallation(r.snapshot),linkStatus:'approved-boq-link-required' as const,linkReview:r.snapshot.materialLinkReview??null}));
-  return {access,sources,registeredPending,continuingProjects,operationsBatches,catalogue:stock.catalogue,aliases:stock.aliases,warehouses:access.owner?stock.warehouses:access.warehouses,stockPosting:false};
+  return {access,sources:sources.map(s=>({...s,lastActivityAt:activity(s)})),registeredPending:registeredPending.map(s=>({...s,lastActivityAt:activity(s)})),continuingProjects:continuingProjects.map(s=>({...s,lastActivityAt:activity(s)})),operationsBatches,catalogue:stock.catalogue,aliases:stock.aliases,warehouses:access.owner?stock.warehouses:access.warehouses,stockPosting:false};
  }
  /** Issuance revalidates pending source identity while locking the same rows
   * that Operations uses for delivery updates. Draft preparation alone does not. */
@@ -314,7 +328,10 @@ export class MaterialDraftRepository{
     const policy=materialDocumentPolicy(row);
     if(row.section&&policy.variableDispatch&&(policy.group==='internal-variable'?'internal':'customer')!==row.section)throw new HttpError(422,'Keep the item in its matching variable-material module.');
     if(policy.group==='non-stock')throw new HttpError(422,'Genset synchronisation is not a stock issuance item.');
-    if(policy.approvedQuantityLocked){
+    if(isSolarStructureItem(row.itemId)){
+     // Owner instruction 23 Nov 2026: vendor-bought, not warehouse stock (shared/non-stock-do-items.ts).
+     if(input.kind!=='fixed'||row.itemId!==solarStructureItemId||row.unit!==solarStructureUnit||row.out!==''&&(row.out!==solarStructureQuantity||solarStructureKw(row.description)===null))throw new HttpError(422,solarStructureRule);
+    }else if(policy.approvedQuantityLocked){
      const approved=selected.flatMap(s=>s.items as any[]).filter(approvedEarthingBasis);
      if(input.kind!=='fixed'||selected.length!==1||approved.length!==1||(row.out!==''&&!new Decimal(row.out).equals(approved[0].qty)))throw new HttpError(422,'CH-Earthing must retain its approved BOQ quantity.');
     }else{

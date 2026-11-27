@@ -7,8 +7,9 @@ import {linkCreatedOperationsMaterialSource} from '../inventory/source-links.js'
 import {syncCreatedOperationsHandoff} from '../operations-board/live-ipo-sync.js';
 import {SiteWorkflowRepository} from '../site-workflow/repository.js';
 import {loadDocumentListMetadata,snapshotListMetadata} from '../documents/list-metadata.js';
-import {directPoFields,directPoSiteMatches,directPoChanges,validOrderPosition,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
-import {manualIpoAvailable,ipoNumberConflict,requireDirectUps,requireEditableIpoRoute} from "../documents/manual-ipo.js";
+import {directPoFields,directPoSiteMatches,directPoChanges,directPoCapacityIssues} from '../../shared/direct-po-reading.js';
+import {validProgrammeOrder} from '../../shared/extra-programme-orders.js';
+import {manualIpoAvailable,ipoNumberConflict,requireEditableIpoRoute,requireFreeSlotsUsedFirst} from "../documents/manual-ipo.js";
 import {approvedMaterialView} from './advance-material-view.js';
 import {ptDetail} from '../orders/pt-detail.js';
 import {ipoReference} from '../documents/historical-ipo.js';
@@ -59,7 +60,6 @@ import {
   allocateReference,
   revisedReference,
 } from "../documents/references.js";
-import { OrdersRepository } from "../orders/repository.js";
 import { ownedCondition } from "../http/permissions.js";
 import {
   safeCosting,
@@ -67,7 +67,6 @@ import {
   bucketFor,
   routeNames,
   compareBasis,
-  commercialComparison,
 } from "./policy.js";
 import {
   createSchema,
@@ -77,6 +76,7 @@ import {
 } from "./schema.js";
 import { designCalculation, frameworkBasis, quotationBasis } from "./basis.js";
 import { approvedCabinet, cabinetBasis } from "./cni-basis.js";
+import { attachLateCustomerPo, latePoAllowed, latePoFileKind, latePoTarget } from "./late-customer-po.js";
 const management = (role: string) => ["Admin", "Management"].includes(role);
 const uuid = (v: any) => z.uuid().parse(v);
 const saleFields = [
@@ -98,10 +98,8 @@ const saleFields = [
   "customerStrn",
 ];
 function saleInput(basis: any, received: any) {
-  if(received.confirmationType==='Email approval'&&!/^MBL-UPS-6-(5|10)$/.test(basis.source?.key??''))
-    throw new HttpError(422,'Email approval is available for Meezan Direct PO agreements only.');
   const sale = received.saleDetails ?? {};
-  if(sale.orderNumber&&basis.source.type!=="cni"&&!validOrderPosition(sale.orderNumber))throw new HttpError(422,'Enter the order unit and total, for example 20/60.');
+  if(sale.orderNumber&&basis.source.type!=="cni"&&!validProgrammeOrder(sale.orderNumber,{configurationKey:basis.source.key}))throw new HttpError(422,'Enter the order unit and total, for example 20/60.');
   if (received.saleDetails) {
     if (
       !["PZES", "PZES (PVT Ltd)", "Energy Solutions"].includes(
@@ -306,7 +304,7 @@ export class ProjectWorkflowRepository {
       ).rows,
       quotations: (
         await this.pool.query(
-          `SELECT q.id,q.number,q.version,b.customer_id,s.code AS site_code,s.name AS site_name FROM quotation_versions q JOIN boq_revisions br ON br.id=q.boq_revision_id JOIN boqs b ON b.id=br.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("quotation", "q.id", "$1")} AND (SELECT kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) IN('Approved','PO received') AND NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AND NOT EXISTS(SELECT 1 FROM quotation_revision_requests rr WHERE rr.source_quotation_id=q.id) ORDER BY q.created_at DESC`,
+          `SELECT q.id,q.number,q.version,b.customer_id,s.code AS site_code,s.name AS site_name FROM quotation_versions q JOIN boq_revisions br ON br.id=q.boq_revision_id JOIN boqs b ON b.id=br.boq_id JOIN sites s ON s.id=b.site_id WHERE ${ownedCondition("quotation", "q.id", "$1")} AND (SELECT kind FROM coordination_events e WHERE e.quotation_id=q.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) IN('Approved','PO received') AND NOT EXISTS(SELECT 1 FROM quotation_versions n WHERE n.boq_revision_id=q.boq_revision_id AND n.version>q.version) AND NOT EXISTS(SELECT 1 FROM quotation_revision_requests_current rr WHERE rr.source_quotation_id=q.id) ORDER BY q.created_at DESC`,
           [actor],
         )
       ).rows,
@@ -491,13 +489,20 @@ export class ProjectWorkflowRepository {
             ?.receivedSolutionId ?? null,
         advanceBoqSent: headsup?.sent ?? false,
         ipoShared: !!shared,
+        siteCancelled: shared?.site_cancelled === true,
         historicalDelivered: Boolean(data.historicalImport?.deliveredBoardSiteId),
         ipoNumber: shared?.ipo_number ?? data.ipoNumber ?? null,
         sharedOrderNumber: shared?.order_number ?? null,
+        ipoSalesPerson: shared?.sales_person ?? null,
         sharedPoReference: shared?.reference ?? null,
         sharedPoDate: shared?.po_date ?? null,
         sharedAt: shared?.created_at ?? null,
         directPoDetails: data.directPoDetails??null,
+        approvalEvidenceType: data.basis?.order?.input?.evidenceType ?? null,
+        latePoAllowed: data.ipoId ? latePoAllowed(data.basis?.order?.input?.evidenceType, r.id) : false,
+        poToFollow: data.poToFollow === true,
+        latePo: data.latePo ?? null,
+        latePoVersions: data.latePoVersions ?? [],
         notes: data.notes ?? "",
         noFeasibleSolution: data.noFeasibleSolution ?? null,
         ublStandardsReview: data.ublStandardsReview ?? null,
@@ -1462,7 +1467,9 @@ export class ProjectWorkflowRepository {
           );
         return { id, version: r.version, repeated: true };
       }
-      await this.requireReceivingDepartment(u, r, c);
+      // An issued site is with Accounts; its coordinator may still attach the customer PO received later
+      // (a new record only; checked in attachLateCustomerPo).
+      if (v.action !== "attach-late-po") await this.requireReceivingDepartment(u, r, c);
       if (r.version !== v.version)
         throw new HttpError(
           409,
@@ -1510,17 +1517,23 @@ export class ProjectWorkflowRepository {
         const fields=z.object(Object.fromEntries(directPoFields.map(([key])=>[key,key==='poNumber'?z.string().trim().max(100).default(''):z.string().trim().max(key==='siteAddress'||key==='billingAddress'?1000:200)]))).strict();
         const saved=z.object({evidenceId:z.uuid(),evidenceType:z.enum(['Customer PO','Email approval','WhatsApp approval']),invoiceTerms:z.enum(ipoInvoiceTerms).optional(),extracted:fields,sourceText:z.string().max(150000).default('').transform(value=>value.replace(/\u0000/g,'').replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,'\uFFFD')),values:fields,notes:z.string().max(2000)}).strict().parse(input);
         await this.requireFile(c,r,saved.evidenceId,'PO / confirmation');
-        if(saved.evidenceType==='Email approval'&&!/^MBL-UPS-/.test(data.basis?.source?.key??''))throw new HttpError(422,'Email approval is available for Meezan Direct PO agreements only.');
         if(saved.values.siteCode!==r.site_code)throw new HttpError(422,'The edited branch code must match this order site. Open a Direct PO for the correct branch.');
         if(!saved.values.siteName)throw new HttpError(422,'Enter the site name.');
         z.iso.date().parse(saved.values.approvalDate);
-        if(saved.values.orderNumber&&!validOrderPosition(saved.values.orderNumber))throw new HttpError(422,'Enter the unit number and total, for example 20/60.');
+        if(saved.values.orderNumber&&!validProgrammeOrder(saved.values.orderNumber,{configurationKey:data.basis?.source?.key}))throw new HttpError(422,'Enter the unit number and total, for example 20/60.');
         if(saved.values.ipoNumber&&!await manualIpoAvailable(c,saved.values.ipoNumber,r.id,saved.values.orderNumber))throw new HttpError(409,ipoNumberConflict);
+        if(saved.values.ipoNumber)await requireFreeSlotsUsedFirst(c,saved.values.ipoNumber,r.id,saved.values.orderNumber);
         const capacityIssues=directPoCapacityIssues(saved.sourceText,data.basis?.source?.key??'');if(capacityIssues.length)throw new HttpError(422,capacityIssues.join(' '));
         const previous=data.directPoDetails;
         const changes=directPoChanges(previous?.values??saved.extracted,saved.values);
         data.directPoDetails={...saved,invoiceTerms:saved.invoiceTerms??previous?.invoiceTerms,savedAt:new Date().toISOString(),savedBy:actor,history:[...(previous?.history??[]),{actor,actorName:u.display_name,at:new Date().toISOString(),evidenceId:saved.evidenceId,extracted:saved.extracted,changes}]};
         reason='Direct PO evidence details saved'+(changes.length?': '+changes.map(x=>x.label).join(', '):' without corrections');
+      } else if(v.action==='attach-late-po'){
+        this.requireRole(u,['Coordinator']);
+        const saved=await attachLateCustomerPo(c,{actor,actorName:u.display_name,record:r,requestKey:v.requestKey,input});
+        data.latePo=saved;
+        data.latePoVersions=[...(data.latePoVersions??[]),saved];
+        reason=`Customer PO ${saved.poNumber} received later and attached`+(saved.version>1?` (version ${saved.version})`:'')+': '+saved.notes;
       } else if (v.action === "review-survey-handoff") {
         this.requireRole(u, ["Coordinator"]);
         requireStage(["approved_dispatch"]);
@@ -2584,13 +2597,14 @@ export class ProjectWorkflowRepository {
           const quote = current.quotation;
           if (!quote || !["Approved", "PO received"].includes(quote.status))
             throw new HttpError(409, "Choose the exact approved quotation.");
+          // The dispatch table only allows Customer or Salesperson; the typed person's name goes in the notes.
           await c.query(
             "INSERT INTO quotation_dispatch_records(id,quotation_id,recipient,notes,created_by) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
             [
               randomUUID(),
               quote.id,
-              recipient,
-              `${via} handoff; evidence ${evidenceId}; ${note(input.notes)}`,
+              via === "Customer" ? "Customer" : "Salesperson",
+              `${via} handoff to ${recipient}; evidence ${evidenceId}; ${note(input.notes)}`,
               actor,
             ],
           );
@@ -2789,9 +2803,11 @@ export class ProjectWorkflowRepository {
             "The PO already has issued documents. Open its issuance history.",
           );
         const received = receiptSchema.parse(input);
+        if(received.poToFollow&&received.confirmationType==='Customer PO')throw new HttpError(422,'A customer PO is already attached; "PO to follow" is only for email or WhatsApp approval.');
+        if(received.poToFollow)data.poToFollow=true;
         const taxMaster=(await c.query('SELECT ntn,strn FROM customers WHERE id=$1',[r.customer_id])).rows[0];
         received.customerNtn=received.customerNtn?.trim()||taxMaster.ntn||'';received.customerStrn=received.customerStrn?.trim()||taxMaster.strn||'';
-        if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);}
+        if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(c,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);await requireFreeSlotsUsedFirst(c,received.ipoNumber,r.id,received.saleDetails?.orderNumber);}
         await this.requireFile(c, r, received.evidenceId, "PO / confirmation");
         let basis: any;
         if (Boolean(data.cniProposalId) !== (received.basisType === "cni"))
@@ -3365,7 +3381,7 @@ export class ProjectWorkflowRepository {
       ...(configurationBatch?{sharedConfigurationBatchId:configurationBatch.id}:{}),
       orderDecisionId: decisionId,
       approvalChannel: "Exact approved commercial basis",
-      documentLayoutVersion: 4,
+      documentLayoutVersion: 5,
       approvedPanelQty: await this.approvedPanelQuantity(r,c),
       peachtree: ptDetail(basis.order,basis.boq,await this.approvedPanelQuantity(r,c)),
     };
@@ -3479,13 +3495,16 @@ export class ProjectWorkflowRepository {
     const execute=async (c:PoolClient) => {
       const { u, r } = await this.record(actor, id, c, true);
       this.requireRole(u, ["Design", "Coordinator"]);
-      await this.requireReceivingDepartment(u, r, c);
+      if (v.kind !== latePoFileKind) await this.requireReceivingDepartment(u, r, c);
       if (u.role === "Design" && v.kind === "Request evidence")
         throw new HttpError(
           422,
           "Original customer request evidence is attached by Coordination. Design uploads the survey report and site photos.",
         );
-      if (r.stage === "issued")
+      if (v.kind === latePoFileKind) {
+        this.requireRole(u, ["Coordinator"]);
+        await latePoTarget(c, r);
+      } else if (r.stage === "issued")
         throw new HttpError(
           409,
           "Issued evidence is preserved; use a controlled return for new evidence.",
@@ -3600,7 +3619,7 @@ export class ProjectWorkflowRepository {
     const { u, r } = await this.record(actor, id);
     this.requireRole(u, ["Coordinator"]);
     await this.requireReceivingDepartment(u, r);
-    if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(this.pool,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);}
+    if(received.ipoNumber){requireEditableIpoRoute(r);if(!await manualIpoAvailable(this.pool,received.ipoNumber,r.id,received.saleDetails?.orderNumber))throw new HttpError(409,ipoNumberConflict);await requireFreeSlotsUsedFirst(this.pool,received.ipoNumber,r.id,received.saleDetails?.orderNumber);}
     const taxMaster=(await this.pool.query('SELECT ntn,strn FROM customers WHERE id=$1',[r.customer_id])).rows[0];
     received.customerNtn=received.customerNtn?.trim()||taxMaster.ntn||'';received.customerStrn=received.customerStrn?.trim()||taxMaster.strn||'';
     const current = await this.decorate(r, u);
@@ -3649,7 +3668,7 @@ export class ProjectWorkflowRepository {
       siteCode: r.canonical_site_code ?? r.site_code,
       preparedBy: r.coordinator,
       checkedBy: r.coordinator,
-      documentLayoutVersion: 4,
+      documentLayoutVersion: 5,
       approvedPanelQty: await this.approvedPanelQuantity(r),
       peachtree: ptDetail(basis.order,basis.boq,await this.approvedPanelQuantity(r)),
     };

@@ -14,7 +14,7 @@ import{correctInvoice,invoiceCorrectionSchema}from'./invoice-corrections.js';
 import{recordInvoiceReceipt,invoiceReceiptSchema}from'./invoice-receipts.js';
 import {managementProgrammes} from '../director/management-programmes.js';
 import { json, Router, type RequestHandler } from "express";
-import {invoiceRegister,recordInvoiceEntry,invoiceEntrySchema,recordInvoiceSubmission,invoiceSubmissionSchema,invoiceSiteForPaymentRow} from './invoice-entries.js';
+import {cableConsolidationCustomer,invoiceRegister,recordInvoiceEntry,invoiceEntrySchema,recordInvoiceSubmission,invoiceSubmissionSchema,invoiceSiteForPaymentRow} from './invoice-entries.js';
 import {ptEntrySchema} from './pt-entries.js';
 import {paymentRegister,recordPayment,paymentRecordSchema} from './payment-records.js';
 import type {AccountsSourceRegisters} from './source-registers.js';
@@ -73,19 +73,20 @@ export function accountsHttp(
   r.get('/sites/:id/evidence',async(req,res)=>res.json(await siteEvidence(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id))));
   r.get('/sites/:id/evidence/:fileId',async(req,res)=>{
    const file=await siteEvidenceFile(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id),parse(z.uuid(),req.params.fileId));
+   res.locals.downloadContext=file.downloadContext;
    res.set({'Content-Type':file.media_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).send(file.content);
   });
   r.post('/sites/:id/original-receipts',async(req,res)=>res.status(201).json(await confirmOriginalReceipt(repo.pool,req.authSession!.user.id,parse(z.string().min(1).max(160),req.params.id),parse(originalReceiptSchema,req.body))));
   r.post('/invoice-submissions',async(req,res)=>res.status(201).json(await recordInvoiceSubmission(repo.pool,req.authSession!.user.id,parse(invoiceSubmissionSchema,req.body))));
   r.post('/invoice-corrections',async(req,res)=>res.status(201).json(await correctInvoice(repo.pool,req.authSession!.user.id,parse(invoiceCorrectionSchema,req.body))));
-  r.get('/cable-consolidations/:key/file',async(req,res)=>{await repo.access(req.authSession!.user.id);const key=parse(z.uuid(),req.params.key),source=(await repo.pool.query('SELECT snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0],row=source?.snapshot.cables.rows.find((r:any)=>r.key===key&&r.consolidation&&!r.supersededBy);if(!row)throw new HttpError(404,'Original consolidated invoice not found.');const file=row.consolidation.file;res.set({'Content-Type':/\.xlsx$/i.test(file.name)?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/pdf','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}).send(Buffer.from(file.base64,'base64'));});
+  r.get('/cable-consolidations/:key/file',async(req,res)=>{await repo.access(req.authSession!.user.id);const key=parse(z.uuid(),req.params.key),source=(await repo.pool.query('SELECT snapshot FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0],row=source?.snapshot.cables.rows.find((r:any)=>r.key===key&&r.consolidation&&!r.supersededBy);if(!row)throw new HttpError(404,'Original consolidated invoice not found.');const file=row.consolidation.file;res.locals.downloadContext={documentType:'Cable Invoice',...(row.invoice?{reference:String(row.invoice)}:{}),identity:'cable-consolidation:'+key,customer:cableConsolidationCustomer(String(row.program??'')),site:row.siteLabel};res.set({'Content-Type':/\.xlsx$/i.test(file.name)?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/pdf','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}).send(Buffer.from(file.base64,'base64'));});
   r.post('/cable-consolidations',async(req,res)=>res.status(201).json(await consolidateCableInvoices(repo.pool,req.authSession!.user.id,req.body)));
   r.post('/cable-consolidations/submit',async(req,res)=>res.status(201).json(await submitConsolidatedCable(repo.pool,req.authSession!.user.id,req.body)));
   r.get('/payment-records',async(req,res)=>res.json(await paymentRegister(repo.pool,req.authSession!.user.id)));
   r.get('/recovery.pdf',async(req,res)=>{
-   const filters=parse(z.object({search:z.string().max(500).optional(),customer:z.string().max(250).optional(),category:z.string().max(80).optional(),stage:z.string().max(100).optional(),amount:z.enum(['','missing','recorded']).optional()}).strict(),req.query);
+   const filters=parse(z.object({search:z.string().max(500).optional(),customer:z.string().max(250).optional(),category:z.string().max(80).optional(),stage:z.string().max(100).optional(),amount:z.enum(['','missing','recorded']).optional(),siteType:z.enum(['','ups-only','ups-cable','solar-only','solar-cable']).optional()}).strict(),req.query);
    const data=await paymentRegister(repo.pool,req.authSession!.user.id),asOf=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-   const rows=filters.category==='internet'?data.internet:data.awaiting,report=recoveryReport(recoveryFilteredRows(rows,filters,data.sourceVersion),asOf);
+   const rows=filters.category==='internet'?data.internet:data.awaiting,report=recoveryReport(recoveryFilteredRows(rows,filters,data.sourceVersion,data.invoices),asOf,!!filters.siteType?.endsWith('-cable'));
    res.locals.downloadContext={customer:filters.customer||'All customers',site:'Recovery follow-up',documentType:'Recovery report',reference:asOf,identity:'accounts-recovery:'+asOf+':'+createHash('sha256').update(JSON.stringify(filters)).digest('hex')};
    res.set({'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="Power-Zone-Recovery-${asOf}.pdf"`,'Cache-Control':'private, no-store'}).send(Buffer.from(recoveryPdf(report).output('arraybuffer')));
   });

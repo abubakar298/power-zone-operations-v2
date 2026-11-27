@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "typecheck:app": "tsc -p tsconfig.app.json --noEmit",
     "typecheck:tools": "tsc -p tsconfig.tools.json --noEmit",
+    "check:unused": "node scripts/verify-unused-code.mjs",
     "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
     "test:e2e": "node scripts/browser-tests.mjs",
     "db:local": "tsx scripts/local-db.ts"

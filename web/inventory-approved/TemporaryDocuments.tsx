@@ -1,7 +1,7 @@
 import {TemporaryInwardPosting,type InwardPosting} from './TemporaryInwardPosting.js';
 import {ListPagination,paginateRows,useListPage} from '../ui/ListPagination.js';
 import {useUnsavedChanges,confirmLeaveWorkspace} from '../hooks/useUnsavedChanges.js';
-import React,{useEffect,useMemo,useState,useRef}from'react';
+import {useEffect,useMemo,useState,useRef}from'react';
 import {api,type Session} from '../api.js';
 import './temporary.css';
 import {Button} from '../ui/Button.js';

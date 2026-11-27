@@ -10,12 +10,18 @@ import {HttpError} from '../http/errors.js';
 import {canonicalUpsRegister,systemInvoiceReferences} from './ups-canonical-register.js';
 import {ipoSiteIdentity} from '../orders/site-identity.js';
 import outcomeEvidence from './management-programme-outcomes-v1.json' with {type:'json'};
+import {operationsCancellations} from '../project-workflow/order-slots.js';
+import {isExtraOrder} from '../../shared/extra-programme-orders.js';
 
 type SourceRow=Record<string,any>;
 export type ProgrammeMetric={sites:number;siteKeys:string[];amount:string|null;knownSites:number;missingSites:number;receivedSites:number;receivedAmount:string|null};
 export type ProgrammeRow={key:string;sourceKey:string;recordKey:string|null;customer:'UBL'|'MBL';program:string;ipo:string;orderNumber:string;site:string;siteCode:string;po:string;configuration:string;active:boolean;cancelled:boolean;transferred:boolean;delivered:boolean;partialDelivery:boolean;scheduled?:boolean;installationRequired?:boolean;installed:boolean;deliveryDate:string|null;installationDate:string|null;invoiceSubmitted:boolean;paymentReceived:boolean|null;invoiceReferences:string[];accountsReferences:string[];grossContract:string|null;remainingPayable:string|null;advanceReceived:string|null;flags:string[];mappingStatus:string;sources:SourceRow[];cancellationOutcome:string|null};
 export type ProgrammeMilestone={submitted:ProgrammeMetric;received:ProgrammeMetric;pending:ProgrammeMetric;toSubmit:ProgrammeMetric;future:ProgrammeMetric};
-export type ManagementProgramme={key:string;label:string;capacity:number;rows:ProgrammeRow[];cancelled:ProgrammeRow[];transferred:ProgrammeRow[];summary:Record<'active'|'installed'|'pendingDelivery'|'partialDelivery'|'installationPending'|'invoicePending'|'paymentPending'|'advanceReceived',ProgrammeMetric>;milestones?:{advance:ProgrammeMilestone;completion:ProgrammeMilestone}};
+/** Order counts (Atif's documentation standard): the target, the running count of every order received and the
+ * valid orders are different numbers; cancelled and transferred orders stay counted, never reused or hidden. */
+export type ProgrammeOrders={target:number;issued:number;cancelled:number;transferred:number;valid:number;completed:number;pending:number;remaining:number;
+ /** Valid orders above the target, e.g. 251/250 (UBL UPS 250 grows: shared/extra-programme-orders.ts). */extra:number};
+export type ManagementProgramme={key:string;label:string;capacity:number;orders:ProgrammeOrders;rows:ProgrammeRow[];cancelled:ProgrammeRow[];transferred:ProgrammeRow[];summary:Record<'active'|'installed'|'pendingDelivery'|'partialDelivery'|'installationPending'|'invoicePending'|'paymentPending'|'advanceReceived',ProgrammeMetric>;milestones?:{advance:ProgrammeMilestone;completion:ProgrammeMilestone}};
 export type ManagementProgrammes={sourceDate:string;sourceVersion:number;readOnly:true;operationsAsOf?:string;programmes:ManagementProgramme[];issues:string[]};
 const money=(value:unknown):string|null=>{if(value===null||value===undefined||value==='')return null;try{const n=new Decimal(String(value));return n.isFinite()&&n.gte(0)?n.toFixed(2):null;}catch{return null;}};
 const fraction=(value:unknown,fallback:string)=>{try{const n=new Decimal(value==null?fallback:String(value));return n.isFinite()&&n.gte(0)&&n.lte(1)?n:null;}catch{return null;}};
@@ -75,16 +81,25 @@ export function projectManagementProgrammes(snapshot:SourceRow,sourceDate:string
     return{submitted:metric(rows.filter(r=>s(r)?.submitted===true&&(stage==='advance'||r.installed)),actual),received:metric(rows.filter(received),r=>money(s(r)?.receivedAmount??s(r)?.invoiceAmount)),pending:metric(rows.filter(r=>s(r)?.submitted===true&&(stage==='advance'||r.installed)&&!received(r)),r=>money(s(r)?.outstandingAmount??s(r)?.invoiceAmount)),toSubmit:metric(rows.filter(r=>ready(r)&&s(r)?.submitted!==true),r=>received(r)?'0.00':actual(r)??expected(r)),future:metric(rows.filter(r=>!ready(r)),r=>received(r)?'0.00':expected(r))};
    };milestones={advance:build('advance'),completion:build('completion')};
   }
-  return{key,label,capacity,rows,cancelled:scoped.filter(r=>r.cancelled),transferred:scoped.filter(r=>r.transferred),summary,...(milestones?{milestones}:{})};
+  const cancelledRows=scoped.filter(r=>r.cancelled),transferredRows=scoped.filter(r=>r.transferred),completed=rows.filter(r=>r.installed).length;
+  const orders:ProgrammeOrders={target:capacity,issued:scoped.length,cancelled:cancelledRows.length,transferred:transferredRows.length,valid:rows.length,completed,pending:rows.length-completed,remaining:Math.max(capacity-rows.length,0),extra:rows.filter(r=>isExtraOrder(r.orderNumber)).length};
+  return{key,label,capacity,orders,rows,cancelled:cancelledRows,transferred:transferredRows,summary,...(milestones?{milestones}:{})};
  });
  return{sourceDate,sourceVersion,readOnly:true,programmes,issues};
+}
+type OperationsCancellation=Awaited<ReturnType<typeof operationsCancellations>>[number];
+const operationsOutcome=(o:OperationsCancellation|undefined)=>o?`Cancelled by Operations${o.cancelledBy?' ('+o.cancelledBy+')':''} on ${o.cancelledAt.slice(0,10)}${o.reason?'. Reason: '+o.reason:''}`:null;
+/** Register orders whose Operations site was cancelled after the reviewed source date count as cancelled. */
+export function withOperationsCancellations(snapshot:SourceRow,cancelled:Map<string,OperationsCancellation>):SourceRow{
+ if(!cancelled.size)return snapshot;
+ return {...snapshot,registers:(snapshot.registers??[]).map((register:SourceRow)=>({...register,rows:(register.rows??[]).map((row:SourceRow)=>{const o=cancelled.get(String(row.key));return o&&row.kind==='UPS'&&row.cancelled!==true&&row.transferred!==true?{...row,cancelled:true,cancellationOutcome:operationsOutcome(o)}:row;})}))};
 }
 export function appendIssuedProgrammeSales(snapshot:SourceRow,issued:SourceRow[],sourceDate:string){
  const original=(snapshot.registers??[]).flatMap((r:SourceRow)=>r.rows??[]),excluded=[...(snapshot.cables?.rows??[]),...(snapshot.internet?.rows??[])].map((r:SourceRow)=>String(r.invoice??''));
  const appended:SourceRow[]=[],issues:string[]=[];
  for(const customer of ['UBL','MBL'] as const){
   const byId=new Map<string,SourceRow>(),conflicting=new Set<string>();
-  for(const row of issued.filter(r=>r.customer===customer&&r.frameworkType!=='ubl-solar')){const previous=byId.get(row.id);if(previous&&JSON.stringify(previous)!==JSON.stringify(row))conflicting.add(row.id);else byId.set(row.id,row);}
+  for(const row of issued.filter(r=>r.customer===customer&&r.frameworkType!=='ubl-solar'&&r.cancelled!==true)){const previous=byId.get(row.id);if(previous&&JSON.stringify(previous)!==JSON.stringify(row))conflicting.add(row.id);else byId.set(row.id,row);}
   for(const id of conflicting){byId.delete(id);issues.push(`Issued IPO ${id} has conflicting immutable observations; it remains held.`);}
   const scoped=[...byId.values()],canonical=canonicalUpsRegister(customer,original,[],scoped,[],new Date(),sourceDate,excluded);
   issues.push(...canonical.identityReview.map((r:any)=>`Issued IPO ${r.ipoId??r.sourceKey??'identity'} held: ${r.reason}`));
@@ -96,6 +111,14 @@ export function appendIssuedProgrammeSales(snapshot:SourceRow,issued:SourceRow[]
    // Only immutable IPO values are used. Neither current rates nor inferred cash
    // receipts may replace a missing issued value or create an invoice.
    appended.push({key:'issued:'+source.id,kind:'UPS',customer,program,ipo:source.number,orderNumber:source.orderNumber,site:source.site,siteCode:source.siteCode,po:source.poReference,configuration:source.configuration,grossContract:money(source.grossContract),singlePaymentReceived:null,singleInvoiceSubmitted:false,invoiceReferences:[],accountsReferences:[],cancelled:false,transferred:false,delivered:source.delivered===true,installed:source.installed===true,partialDelivery:source.partialDelivery===true,deliveryDate:source.deliveryDate??null,installationDate:source.installationDate??null,recordKey:'ipo:'+source.id,receiptsUnverified:true,flags:['Confirmed sale after reviewed source cutoff; invoice and payment evidence not yet in the reviewed source.'],sources:[{name:'Immutable issued IPO',ipoId:source.id,recordId:source.recordId,issuedAt:source.issuedAt}],mappingStatus:'New confirmed sale after reviewed source cutoff'});
+  }
+  // A site the Operations head cancelled frees its order slot (project-workflow/order-slots.ts): its IPO is listed
+  // as a cancelled order, never as an active one, so a new IPO may take the same order number. Orders already in
+  // the reviewed register are cancelled on their register row instead (withOperationsCancellations).
+  for(const source of new Map(issued.filter(r=>r.customer===customer&&r.frameworkType!=='ubl-solar'&&r.cancelled===true&&!r.sourceKey&&!r.historicalImport).map(r=>[r.id,r])).values()){
+   const capacity=String(source.orderNumber).split('/')[1],program=customer==='UBL'&&capacity==='250'?'UPS 250':customer==='MBL'&&['80','20','60'].includes(capacity)?'MBL UPS '+capacity:null;
+   if(!program)continue;
+   appended.push({key:'issued:'+source.id,kind:'UPS',customer,program,ipo:source.number,orderNumber:source.orderNumber,site:source.site,siteCode:source.siteCode,po:source.poReference,configuration:source.configuration,grossContract:money(source.grossContract),singlePaymentReceived:null,singleInvoiceSubmitted:false,invoiceReferences:[],accountsReferences:[],cancelled:true,transferred:false,delivered:false,installed:false,partialDelivery:false,cancellationOutcome:source.cancellationOutcome||'Cancelled by Operations.',recordKey:'ipo:'+source.id,flags:[],sources:[{name:'Immutable issued IPO',ipoId:source.id,recordId:source.recordId,issuedAt:source.issuedAt}],mappingStatus:'Cancelled by Operations'});
   }
  }
  for(const source of issued.filter(r=>r.customer==='UBL'&&r.frameworkType==='ubl-solar')){
@@ -123,13 +146,14 @@ export async function managementProgrammes(pool:Pool,actor:string,allowAccounts=
   WHERE upper(c.short_code) IN('UBL','MBL') AND r.route='direct-framework'
   AND (p.basis->'source'->>'key' IN('UBL-UPS-6-5','UBL-UPS-6-10','MBL-UPS-6-5','MBL-UPS-6-10') OR upper(c.short_code)='UBL' AND f.payload->>'type'='ubl-solar')
   AND r.data->>'localPreviewArchived' IS DISTINCT FROM 'true' ORDER BY i.created_at,i.id`)).rows;
+ const operations=await operationsCancellations(pool),cancelledIpo=new Map(operations.flatMap(o=>o.ipoIds.map(id=>[id,o] as const))),cancelledKey=new Map(operations.filter(o=>o.sourceKey).map(o=>[o.sourceKey,o] as const));
  const records=[];
  for(const row of issued){
   const identity=await ipoSiteIdentity(pool,row),s=identity.snapshot??row.snapshot,op=row.operations_snapshot;
-  records.push({id:row.id,frameworkType:row.framework_type,recordId:row.record_id,customer:row.customer,sourceKey:row.source_key??null,number:row.number,issuedAt:row.issued_at,historicalImport:!!s.historicalImport,orderNumber:s.input?.orderNumber??'',site:s.siteName,siteCode:s.siteCode,poReference:s.input?.poNumber??'',configuration:row.basis.source.key.replace(row.customer+'-UPS-',''),grossContract:s.allocation?.total,delivered:['delivered','completed'].includes(op?.stage),installed:op?.completed===true||op?.stage==='completed',partialDelivery:op?.partialDelivery===true,deliveryDate:op?.deliveryDate,installationDate:op?.completionDate});
+  records.push({id:row.id,frameworkType:row.framework_type,recordId:row.record_id,customer:row.customer,sourceKey:row.source_key??null,number:row.number,issuedAt:row.issued_at,historicalImport:!!s.historicalImport,orderNumber:s.input?.orderNumber??'',site:s.siteName,siteCode:s.siteCode,poReference:s.input?.poNumber??'',configuration:row.basis.source.key.replace(row.customer+'-UPS-',''),grossContract:s.allocation?.total,delivered:['delivered','completed'].includes(op?.stage),installed:op?.completed===true||op?.stage==='completed',partialDelivery:op?.partialDelivery===true,deliveryDate:op?.deliveryDate,installationDate:op?.completionDate,cancelled:cancelledIpo.has(String(row.id)),cancellationOutcome:operationsOutcome(cancelledIpo.get(String(row.id)))});
  }
  const [stages,invoiceEntries,submissions,receipts]=await Promise.all([latestProgrammeHandoffs(pool),pool.query('SELECT site_key,pt_reference,milestone FROM accounts_invoice_entries'),invoiceSubmissions(pool),invoiceReceipts(pool)]);
  const programmeSource=withProgrammeAccounts(source.snapshot,await ublProgrammeLinks(pool));
- const combined=appendIssuedProgrammeSales(programmeSource,records.map(r=>({...r,delivered:false,installed:false,partialDelivery:false})),source.source_date),receiptRows=applyInvoiceReceipts(applyInvoiceSubmissionBilling(billingRows(programmeSource.registers,programmeSource.cables,programmeSource.internet,programmeSource.evidence),submissions),receipts),result=projectManagementProgrammes(applyReceiptProgramme(applyInvoiceSubmissionStages(applyProgrammeHandoffs(combined.snapshot,stages,invoiceEntries.rows),submissions),receiptRows),source.source_date,source.version);
+ const combined=appendIssuedProgrammeSales(withOperationsCancellations(programmeSource,cancelledKey),records.map(r=>({...r,delivered:false,installed:false,partialDelivery:false})),source.source_date),receiptRows=applyInvoiceReceipts(applyInvoiceSubmissionBilling(billingRows(programmeSource.registers,programmeSource.cables,programmeSource.internet,programmeSource.evidence),submissions),receipts),result=projectManagementProgrammes(applyReceiptProgramme(applyInvoiceSubmissionStages(applyProgrammeHandoffs(combined.snapshot,stages,invoiceEntries.rows),submissions),receiptRows),source.source_date,source.version);
  result.operationsAsOf=stages.map(s=>s.created_at instanceof Date?s.created_at.toISOString():String(s.created_at??'')).filter(Boolean).sort().at(-1);result.issues.push(...combined.issues);return result;
 }

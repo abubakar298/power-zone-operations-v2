@@ -2,7 +2,7 @@
 export function materialIssueCategory(line:{itemId:string;description:string;fixedGroup?:string;catalogueGroup?:string}){
  const id=line.itemId.toUpperCase(),text=line.description,group=line.catalogueGroup??'';
  if(/^CH-(PCS|INV|BAT|BMS)-/.test(id))return 'BESS';
- if(line.fixedGroup==='panels'||['CH-STRUCTURE','CH-EARTHING','UNMAPPED:A1'].includes(id)||group==='Solar Panels'||/\bsolar (?:PV )?(?:panels?|plates?|modules?)\b/i.test(text))return 'Panels, Structure and Earthing';
+ if(line.fixedGroup==='panels'||['CH-STRUCTURE','CH-SOLAR STRUCTURE','CH-EARTHING','UNMAPPED:A1'].includes(id)||group==='Solar Panels'||/\bsolar (?:PV )?(?:panels?|plates?|modules?)\b/i.test(text))return 'Panels, Structure and Earthing';
  if(/^CH-CBL-ERT/.test(id)||group==='Cables · Earthing'||/\bearth(?:ing)?\b/i.test(text)&&(/cables?|\d\s*mm/i.test(text))||/^CH-CBL-AC/.test(id)||group==='Cables · AC')return 'AC & Earthing Cables';
  if(/^CH-CBL-(DC|CAT|CNT|COM)/.test(id)||group==='Cables · DC'||group==='Cables · Control & Communication'||/\bDC\s+cables?|communication cables?/i.test(text))return 'DC Cables & Communication Cables';
  if(/\b(?:AC|inverter|load)\s+cables?\b/i.test(text))return 'AC & Earthing Cables';

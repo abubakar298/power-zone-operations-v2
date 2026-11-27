@@ -1,4 +1,4 @@
-import {recentFirst} from '../../shared/recent-records.js';
+import {recentFirst,recordedTimestamp} from '../../shared/recent-records.js';
 import {withMatchingVariableSection} from '../../shared/material-preparation.js';
 import {ListPagination,useListPage,paginateRows} from '../ui/ListPagination.js';
 import {scheduledTransport} from '../../shared/operations-transport.js';
@@ -10,7 +10,7 @@ import {ApprovedTransportFields} from '../inventory-approved/ApprovedTransportFi
 import {ApprovedMaterialForm} from '../inventory-approved/ApprovedMaterialForm.js';
 import {navigateInventory} from '../inventory-approved/navigation.js';
 import type {InventoryBatch} from '../../server/inventory/operations-batches.js';
-import {InventoryMaterialTable,type MaterialPosition} from '../components/InventoryMaterialTable.js';
+import {type MaterialPosition} from '../components/InventoryMaterialTable.js';
 import {variablePreparationRows} from '../../shared/material-preparation.js';
 import {InventoryNavigation} from '../components/InventoryNavigation.js';
 import {useEffect,useRef,useState} from 'react';
@@ -32,7 +32,6 @@ type Draft={id:string;version:number;snapshot:{warehouse:string;sites:MaterialSo
 type Slot=Omit<MaterialDraftInput['lines'][number],'section'>&{section:'customer'|'internal'};
 const base='/inventory/parent-dos';
 const blankTransport=()=>({issuedTo:'',vehicle:'',driver:'',driverIdentity:''});
-const section=(item:StockItem)=>materialDocumentPolicy({itemId:item.itemId,description:item.description}).group==='internal-variable'?'internal':'customer';
 
 export function ParentDos({session,onLogout}:{session:Session;onLogout:()=>void}){
  const [intake,setIntake]=useState<Intake>(),[drafts,setDrafts]=useState<Draft[]>([]),[plans,setPlans]=useState<{id:string;siteId:string}[]>([]),[path,setPath]=useState(location.pathname+location.search),[search,setSearch]=useState(()=>new URLSearchParams(location.search).get('search')??''),[schedule,setSchedule]=useState('all'),[selected,setSelected]=useState<string[]>([]),[selecting,setSelecting]=useState(false),[error,setError]=useState(''),[mobile,setMobile]=useState(false),[notice,setNotice]=useState('');
@@ -43,7 +42,7 @@ export function ParentDos({session,onLogout}:{session:Session;onLogout:()=>void}
  const sources=recentFirst(intake?.sources??[]).filter(s=>selecting||s.authorization!=='forecast-only').filter(s=>selecting||schedule==='all'||(schedule==='scheduled'?!!s.dispatchDate:!s.dispatchDate)).filter(s=>`${s.ipo??''} ${s.orderNumber??''} ${s.siteName} ${s.customer}`.toLowerCase().includes(search.toLowerCase()));
  const registered=(intake?.registeredPending??[]).filter(s=>`${s.ipo} ${s.siteName} ${s.customer}`.toLowerCase().includes(search.toLowerCase()));
  const [page,setPage]=useListPage(JSON.stringify([search,schedule,selecting]));
- const pagination=paginateRows([...sources.map(source=>({source,unlinked:false as const})),...(selecting?registered.map(source=>({source,unlinked:true as const})):[])],page);
+ const pagination=paginateRows(recentFirst([...sources.map(source=>({source,unlinked:false as const})),...(selecting?registered.map(source=>({source,unlinked:true as const})):[])],row=>recordedTimestamp(row.source)),page);
  const requested=new URLSearchParams(path.split('?')[1]??'').get('sites')?.split(',')??[];
  const batchId=new URLSearchParams(path.split('?')[1]??'').get('operations-batch');
  const activeBatch=intake?.operationsBatches?.find(batch=>batch.id===batchId);
@@ -81,8 +80,6 @@ function ParentEditor({id,requested,intake,session,onBack,onDirty,onSaved}:{id:s
   let active=true;void api<Draft>('/material-dispatches/drafts/'+id).then(d=>{if(!active)return;const next=d.snapshot.lines.map(r=>({...r,section:r.section??(materialDocumentPolicy(r).group==='internal-variable'?'internal' as const:'customer' as const)}));setRows(next.map(withMatchingVariableSection));setWarehouse(d.snapshot.warehouse);setTransport(d.snapshot.transport);setSites(d.snapshot.sites);setVersion(d.version);savedSignature.current=JSON.stringify({rows:next,warehouse:d.snapshot.warehouse,transport:d.snapshot.transport});setLoaded(true);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};
  },[id]);
  function update(key:string,patch:Partial<Slot>){setRows(old=>old.map(r=>r.key===key?withMatchingVariableSection({...r,...patch}):r));setNotice('');}
- const variableItems=intake.catalogue.filter(i=>materialDocumentPolicy({itemId:i.itemId,description:i.description}).variableDispatch);
- function add(which:Slot['section']){setRows(old=>[...old,{documentPolicyVersion:2,key:crypto.randomUUID(),itemId:'',description:'',unit:'',out:'',sites:sites.map(s=>s.siteId),section:which}]);setNotice('');}
  async function save(){setBusy(true);setError('');const body={...(id!=='new'?{id}:{}),version,kind:'variable' as const,parent:true,warehouse,...(revisionReason.trim()?{revisionReason:revisionReason.trim()}:{}),sites:sites.map(s=>({sourceKind:s.sourceKind,basisId:s.basisId,basisVersion:s.basisVersion,siteId:s.siteId})),lines:rows.map(withMatchingVariableSection),transport};const signature=JSON.stringify(body);if(requestIdentity.current?.signature!==signature)requestIdentity.current={signature,key:crypto.randomUUID()};
   try{const result=!dirty&&version>0?{id,version}:await api<{id:string;version:number}>('/material-dispatches/drafts',{csrf:session.csrfToken,body:{...body,requestKey:requestIdentity.current.key}});setVersion(result.version);savedSignature.current=stateSignature;setNotice('');requestIdentity.current=null;const issueBody={version:result.version,note:revisionReason.trim()||'Saved Parent DO material issuance'};const signature=JSON.stringify({id:result.id,...issueBody});if(issueRequest.current?.signature!==signature)issueRequest.current={signature,key:crypto.randomUUID()};const issued=await api<{id:string;number:string}>('/material-dispatches/drafts/'+result.id+'/issue-saved',{csrf:session.csrfToken,body:{...issueBody,requestKey:issueRequest.current.key}});issueRequest.current=null;await loadDocuments(result.id);setPreviewRequest(v=>v+1);await onSaved(result.id,issued.id);}catch(e){setError((e as Error).message);}finally{setBusy(false);}
  }

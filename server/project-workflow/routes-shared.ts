@@ -41,4 +41,6 @@ const bucketLabels: Record<string,string> = {
 export const bucketLabel = (key:string) => bucketLabels[key] ?? key;
 
 export const iposSharedBucket = "IPOs Shared";
-export const visibleCoordinationBuckets = [...coordinationBuckets.slice(0,6),iposSharedBucket];
+/** Sites the Operations head cancelled, with the order slot each one freed (order-slots.ts). */
+export const cancelledSitesBucket = "Cancelled Sites";
+export const visibleCoordinationBuckets = [...coordinationBuckets.slice(0,6),iposSharedBucket,cancelledSitesBucket];

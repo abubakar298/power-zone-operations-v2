@@ -6,11 +6,11 @@ import {decimalDisplay} from '../../numbers.js';
 import type {Evidence} from './types.js';
 import type {ReportEntry} from '../../../server/inventory/reconciliation.js';
 const blank:ReportEntry={start:'',end:'',panelCount:'',panelWattage:'',usage:{},remarks:'',expectedReturns:'',receivedReturns:'',extra:[]};
-export function HistoricalQcUsage({boardId,session,evidence}:{boardId:string;session:Session;evidence:Evidence[]}){
+export function HistoricalQcUsage({boardId,session,evidence,onSaved}:{boardId:string;session:Session;evidence:Evidence[];onSaved:()=>void}){
  const [data,setData]=useState<any>(),[error,setError]=useState(''),[notice,setNotice]=useState('');
  async function load(){setError('');try{setData(await api('/material-dispatches/qc/sites/'+encodeURIComponent(boardId)+'/historical-usage'));}catch(e){setError((e as Error).message);}}
  useEffect(()=>{setData(undefined);void load();},[boardId]);
- return <section className="pz-stack"><h3>Historical Site Material Usage</h3><p>The original dispatch is retained. Use the signed delivery and usage documents to verify actual quantities; no warehouse OUT or return IN is created here.</p>{error&&<p role="alert" className="form-error">{error}</p>}{notice&&<p role="status" className="ob-success">{notice}</p>}{data&&evidence.length>0&&<EvidenceLinks siteId={boardId} files={evidence}/>}{data?<HistoricalUsageForm key={boardId+':'+data.version} boardId={boardId} data={data} session={session} onSaved={()=>{setNotice('Usage saved. Verified entries are available in Accounts Material Costing & PT Entry. Warehouse stock is unchanged.');void load();}}/>:!error&&<p role="status">Loading historical issued-material references…</p>}</section>;
+ return <section className="pz-stack"><h3>Historical Site Material Usage</h3><p>The original dispatch is retained. Use the signed delivery and usage documents to verify actual quantities; no warehouse OUT or return IN is created here.</p>{error&&<p role="alert" className="form-error">{error}</p>}{notice&&<p role="status" className="ob-success">{notice}</p>}{data&&evidence.length>0&&<EvidenceLinks siteId={boardId} files={evidence}/>}{data?<HistoricalUsageForm key={boardId+':'+data.version} boardId={boardId} data={data} session={session} onSaved={()=>{setNotice('Usage saved. Verified entries are available in Accounts Material Costing & PT Entry. Warehouse stock is unchanged.');onSaved();void load();}}/>:!error&&<p role="status">Loading historical issued-material references…</p>}</section>;
 }
 function HistoricalUsageForm({boardId,data,session,onSaved}:{boardId:string;data:any;session:Session;onSaved:()=>void}){
  const [entry,setEntry]=useState<ReportEntry>(data.entry??blank),[reason,setReason]=useState(''),post=useSave(session);

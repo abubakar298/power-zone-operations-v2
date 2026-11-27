@@ -1,4 +1,6 @@
-import{logo}from'../../server/reports/brand-assets.js';
+// A 600 px copy of the server PDF logo, loaded only when a sheet is shown (prints at 25 mm wide).
+// Importing the 3786 px base64 original put about 300 kB into every user's main app download.
+const logo='/brand/power-zone-logo-600.png';
 import type{SiteAcknowledgement}from'../../shared/site-acknowledgement.js';
 import './site-acknowledgement.css';
 const blank='________________________________';

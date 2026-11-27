@@ -11,6 +11,7 @@ import {calculate} from '../server/boq/engine.js';
 import {price,quote} from '../server/commercial/engine.js';
 import {allocateDiscount} from '../server/orders/allocation.js';
 import {peachtreeDivision} from '../server/orders/peachtree.js';
+import {ptDetail} from '../server/orders/pt-detail.js';
 import {restrictedCostView} from '../server/http/cost-visibility.js';
 import {BoqRepository} from '../server/boq/repository.js';
 import {CommercialRepository} from '../server/commercial/repository.js';
@@ -75,6 +76,10 @@ test('BESS Only: HV/LV survey and quick inputs, exact fixed charges, all six quo
  const detailed=quote({...p,input:{...p.input,presentation:'Full Breakup',taxMode:'Show Sales Tax Separately'}},b,{pricingId:randomUUID(),quotedDate:'2026-10-09',validity:'7 days',proposedBy:'Fixture',discount:'11800'});
  const allocation=allocateDiscount(detailed.lines.map(l=>({description:l.description,qty:l.qty,unit:l.unit,group:l.group,beforeTax:l.amount!,taxRate:'18'})),p.subtotal,p.solarTax,p.otherTax,'11800',q.footer.at(-1)!.amount);
  const pt=peachtreeDivision(allocation,b,p);assert.deepEqual(pt.phases.map(x=>x.name),['BESS','EPC']);assert.equal(new Decimal(pt.phases[0].amount).add(pt.phases[1].amount).toFixed(2),pt.phaseTotal);assert.equal(pt.ipoPayable,q.footer.at(-1)!.amount);
+ // Accounts rule: a new IPO shows inverter, batteries and BMS as separate PT rows (the frozen split above is unchanged).
+ const issued=ptDetail({allocation,peachtree:pt},b);assert.deepEqual(issued.phases.map((x:any)=>x.name),['Inverter','Batteries','BMS','EPC']);
+ for(const name of ['Inverter','Batteries','BMS'])assert.ok(new Decimal(issued.phases.find((x:any)=>x.name===name).amount).gt(0),name);
+ assert.equal(issued.phases.reduce((v:Decimal,x:any)=>v.add(x.amount),new Decimal(0)).toFixed(2),pt.phaseTotal);
  assert.ok(buildQuotationPdf(q,'UPS-R0-V1').length>1000);
  }
  }

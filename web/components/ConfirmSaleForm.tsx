@@ -55,7 +55,6 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
   const [orderedFramework,setOrderedFramework]=useState(r.frameworkId??''),[poConfigurationChoices,setPoConfigurationChoices]=useState<any[]>([]),[configurationChangeReason,setConfigurationChangeReason]=useState('');
   const configurationChanged=allowPoConfiguration&&orderedFramework!==r.frameworkId;
   useEffect(()=>{if(allowPoConfiguration)void api<any>(`/project-workflow/${r.id}/po-configurations`).then(v=>setPoConfigurationChoices(v.choices)).catch(e=>setError(e.message));},[r.id]);
-  const preAgreedUbl = framework && String(r.customerCode ?? c.short_code).toUpperCase() === "UBL";
   const [input, setInput] = useState<Record<string, string>>({
       evidenceType: initialDirectPo?.evidenceType??savedDirectPo?.evidenceType??"",
       orderDate: draftValues.approvalDate||initialDirectPo?.amounts.orderDate||today(),
@@ -92,7 +91,8 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
       ipo: Blob;
       pt: Blob;
     }>(),
-    [previewReviewed, setPreviewReviewed] = useState(false);
+    [previewReviewed, setPreviewReviewed] = useState(false),
+    [poToFollow, setPoToFollow] = useState(false);
   useEffect(()=>{setIpoError('');setIpoCheck('');},[input.orderNumber]);
   const automaticPreview = useRef(false);
   useUnsavedChanges(!!document);
@@ -330,6 +330,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
       frameworkId: framework ? basis.source.id : undefined,
       quotationId: !framework && !cabinet ? basis.source.id : undefined,
       confirmationType: input.evidenceType,
+      ...(!po && poToFollow ? { poToFollow: true } : {}),
       saleDetails: {...input, evidenceNotes, ...(reviewingDirectPo ? { deliveryAddress: draftValues.siteAddress || r.data.siteAddress || "" } : {}), ...(preAgreedBank?{poRecordedTotal:poTotal,poRecordedTax:poTax,poAmountSource:poTotal?"Customer PO reading; compared against accepted agreement":"Accepted agreement; PO amount unreadable or redacted",poPrintedTax,poTaxTreatment:poInclusive?"Tax-inclusive payable; approved GST allocation retained":"As printed"}:{})},
       actual: po ? structuredClone(basis.comparison) : undefined,
       reviewed: true,
@@ -423,6 +424,8 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
     }
   }
   function clearEvidence(){setDocument(undefined);setText('');setPoTotal('');setPoTax('');setPoPrintedTax('');setPoInclusive(false);setScope(false);setAccepted(false);setSalePreview(undefined);setPreviewReviewed(false);setError('');}
+  // Proof instead of PO: the formal customer PO is attached later from IPOs Shared → Preview.
+  const poToFollowField = input.evidenceType && !po && <label className="pz-review-check"><input type="checkbox" checked={poToFollow} disabled={busy} onChange={e=>setPoToFollow(e.target.checked)}/>Customer will send the formal PO later (shows “Customer PO pending” until it is attached)</label>;
   const evidenceUpload = <label>{po ? "Upload PO" : input.evidenceType==="Email approval" ? "Upload email evidence" : "Upload approval evidence"}
     <FileUpload key={input.evidenceType} disabled={busy||!input.evidenceType} attachments={document?[{...document,url:`/api/project-workflow/${r.id}/files/${document.id}`}]:undefined} onRemoveAttachment={clearEvidence} onClear={clearEvidence} accept="application/pdf,image/png,image/jpeg" onChange={e=>void upload(e.target.files?.[0])}/>
     <small>PDF, PNG or JPEG · up to 8 MB</small>
@@ -448,6 +451,7 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
           {reviewingDirectPo && po && !editingRecord && <fieldset disabled={busy} className="order-fields">
             {renderField(['poNumber','Customer PO reference'])}
           </fieldset>}
+          {reviewingDirectPo && !editingRecord && poToFollowField}
           {!reviewingDirectPo && <>
           <fieldset disabled={busy} className="order-fields">
             <label>
@@ -490,11 +494,12 @@ export function ConfirmSaleForm({ session, detail, action, onBack, initialDirect
                 <option value="">Select evidence type</option>
                 <option>Customer PO</option>
                 <option>WhatsApp approval</option>
-                {directUps&&detail.basis?.source?.key?.startsWith("MBL-UPS-")&&<option>Email approval</option>}
+                <option>Email approval</option>
               </select>
             </label>
             {directUps && <div className="pz-field-wide">{evidenceUpload}</div>}
           </fieldset>
+          {poToFollowField}
           {allowPoConfiguration&&po&&<section className="pz-panel pz-stack" aria-label="Customer ordered configuration"><Field id="customer-po-configuration" label="Configuration requested in customer PO"><select id="customer-po-configuration" aria-label="Configuration requested in customer PO" value={orderedFramework} onChange={e=>{setOrderedFramework(e.target.value);setSalePreview(undefined);setPreviewReviewed(false);setAccepted(false);setError('');}}><option value={r.frameworkId}>Recommended: {detail.basis?.source?.key}</option>{poConfigurationChoices.filter(f=>f.id!==r.frameworkId).map(f=><option key={f.id} value={f.id}>{f.label} · v{f.version} · {money(f.total)}</option>)}</select></Field>{configurationChanged&&<><p>Recommended: {detail.basis?.source?.key} → Customer ordered: {basis?.source?.key??'Loading selected configuration…'}. Existing approved BOQ and rates apply. Management is notified; no new approval blocks issuance.</p><Field id="customer-po-configuration-reason" label="Customer configuration change reason" hint="Explain the configuration requested in the attached customer PO."><textarea id="customer-po-configuration-reason" rows={3} aria-label="Customer configuration change reason" value={configurationChangeReason} onChange={e=>setConfigurationChangeReason(e.target.value)}/></Field></>}</section>}
           <h3>PO details, please verify</h3>
           <fieldset disabled={busy} className="order-fields">

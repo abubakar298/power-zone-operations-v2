@@ -6,7 +6,7 @@ export const ipoEmailStages=['PO / Evidence','Internal Purchase Order (IPO)','De
 export type EmailIdentity={key:string;ipo:string;order:string;site:string;customer:string;subject:string};
 const clean=(s:unknown)=>String(s??'').replace(/[\r\n\0]/g,' ').trim();
 export function ipoIdentity(label:unknown,order:unknown='',site:unknown='',customer:unknown=''):EmailIdentity|null{
- const text=clean(label).toUpperCase(),match=text.match(/\b(?:CHP|CHJ)[ -]?\d+(?:-R\d*)?(?!\d)|\bCPZ-IPO-[A-Z0-9-]+/);
+ const text=clean(label).toUpperCase(),match=text.match(/\b(?:CHP|CHJ)[ -]?\d+(?:-R\d*)?(?!\d)|\bCPZ-IPO-[A-Z0-9-]+|(?<![-A-Z0-9])IPO-\d+(?:-R\d+)?(?!\d)/);
  if(!match)return null;
  const ipo=match[0].replace(/^(CHP|CHJ)[ -]?(\d+)(-R\d*)?$/,(_,p,n,r)=>p+'-'+String(BigInt(n))+(r??''));
  const found=(clean(order)||text).match(/\b(\d+)\s*\/\s*(\d+)\b/),position=found?String(BigInt(found[1]))+'/'+String(BigInt(found[2])):'';

@@ -9,19 +9,21 @@ import {Decimal} from 'decimal.js';
 import {snapshotListMetadata} from '../../server/documents/list-metadata.js';
 import {Button} from '../ui/Button.js';
 import {DocumentListDetails} from './DocumentListDetails.js';
+import {approvalsRefreshIntervalMs} from '../workspaces/dashboard-refresh.js';
 const QuotationReview=lazy(()=>import('./CoordinatorQuotationReview.js').then(m=>({default:m.CoordinatorQuotationReview}))); 
 
 /** Saved approval work; existing review/approval routes remain authoritative. */
 export function ManagementApprovals({session,onOpen,additionalBuckets,children}:{session:Session;onOpen:(task:any)=>void;additionalBuckets?:ReactNode;children?:ReactNode}){
  const [quotes,setQuotes]=useState<any[]>([]),[loaded,setLoaded]=useState(false),[error,setError]=useState(''),[expanded,setExpanded]=useState(false),[search,setSearch]=useState(''),[selected,setSelected]=useState<any>(),[approving,setApproving]=useState<string>(),[failure,setFailure]=useState<{id:string;message:string}>(),[notice,setNotice]=useState('');
  useEffect(()=>{
-  let active=true;
-  const load=async()=>{try{const data=await api<any>('/coordinator?scope=team&includeTraining=false');if(active){setQuotes(data.tasks.filter((t:any)=>t.stage==='Quotation approval'&&t.status==='Awaiting quotation approval'));setLoaded(true);setError('');}}catch(e){if(active)setError((e as Error).message);}};
+  let active=true,inFlight=false;
+  // Every 30 seconds as before, but never from a hidden tab; returning to the tab refreshes at once.
+  const load=async()=>{if(inFlight||document.visibilityState==='hidden')return;inFlight=true;try{const data=await api<any>('/coordinator?scope=team&includeTraining=false');if(active){setQuotes(data.tasks.filter((t:any)=>t.stage==='Quotation approval'&&t.status==='Awaiting quotation approval'&&!t.ipoRevision));setLoaded(true);setError('');}}catch(e){if(active)setError((e as Error).message);}finally{inFlight=false;}};
   const reset=()=>{setSelected(undefined);setExpanded(false);setSearch('');void load();};
-  void load();window.addEventListener('focus',load);window.addEventListener('pz:workspace-open',reset);const timer=setInterval(load,30000);
-  return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);window.removeEventListener('pz:workspace-open',reset);};
+  void load();window.addEventListener('focus',load);document.addEventListener('visibilitychange',load);window.addEventListener('pz:workspace-open',reset);const timer=setInterval(load,approvalsRefreshIntervalMs);
+  return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);document.removeEventListener('visibilitychange',load);window.removeEventListener('pz:workspace-open',reset);};
  },[session.user.id]);
- async function approved(){setSelected(undefined);try{const data=await api<any>('/coordinator?scope=team&includeTraining=false');setQuotes(data.tasks.filter((t:any)=>t.stage==='Quotation approval'&&t.status==='Awaiting quotation approval'));setError('');}catch(e){setError((e as Error).message);}}
+ async function approved(){setSelected(undefined);try{const data=await api<any>('/coordinator?scope=team&includeTraining=false');setQuotes(data.tasks.filter((t:any)=>t.stage==='Quotation approval'&&t.status==='Awaiting quotation approval'&&!t.ipoRevision));setError('');}catch(e){setError((e as Error).message);}}
  async function approve(task:any){
   if(approving)return;
   setApproving(task.id);setFailure(undefined);setNotice('');

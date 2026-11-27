@@ -10,6 +10,7 @@ import {HttpError} from '../http/errors.js';
 import {completionEvidence} from '../../shared/qc-completion-evidence.js';
 import {isArchivedLegacySolar} from '../../shared/legacy-solar-archive.js';
 import {AccountsRepository} from './repository.js';
+import {boardFileDownloadContext} from '../operations-board/file-download-name.js';
 type Db=Pool|PoolClient;
 type Row=Record<string,any>;
 const today=(now=new Date())=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
@@ -77,7 +78,7 @@ export async function siteEvidenceFile(pool:Pool,actor:string,siteId:string,file
  const file=(await pool.query('SELECT filename,media_type,content FROM operations_board_files WHERE site_id=$1 AND id=$2',[siteId,fileId])).rows[0];
  if(!file)throw new HttpError(404,'Document file not found.');
  await pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'accounts.site-evidence.download:'+fileId]);
- return file as {filename:string;media_type:string;content:Buffer};
+ return {...file as {filename:string;media_type:string;content:Buffer},downloadContext:await boardFileDownloadContext(pool,site.snapshot,fileId)};
 }
 /** Physical originals for every site, for the Accounts tab and overdue alerts. */
 export async function originalsRegister(pool:Pool,actor:string,now=new Date()){

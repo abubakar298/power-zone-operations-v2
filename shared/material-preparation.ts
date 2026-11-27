@@ -39,7 +39,7 @@ export function variablePreparationRows(sources:Basis[],catalogue:CatalogueItem[
  const grouped=new Map<string,PreparationRow>();
  for(const source of sources){
   if(source.installation===false)continue;
-  source.items.forEach((raw:any,basisLine:number)=>{
+  source.items.forEach((raw:any)=>{
    const sourceKey=String(raw.key??''),approvedId=catalogue.some(i=>i.itemId===sourceKey)?sourceKey:aliases[sourceKey]??sourceKey;
    const description=String(raw.description??catalogue.find(i=>i.itemId===approvedId)?.description??raw.key??'');
    const policy=materialDocumentPolicy({itemId:approvedId,description});

@@ -28,6 +28,34 @@ test('stock drilldown reads historical totals, filters directions and enforces w
  assert.deepEqual(all.events.find((e:any)=>e.reference==='DO750-01').sites,[{siteName:'New Garden town LHR',customer:null}]);
  assert.deepEqual(all.events.find((e:any)=>e.reference==='DO763-01').sites,[{siteName:'BAFL Shabqadar + UBL Badaber — allocation pending',customer:null}]);
  assert.equal((await stockLedger(db.pool,f.reviewer,{direction:'in'})).total,1);
+ const legacyMovement={warehouse:'Lahore warehouse',itemId:'FINAL',unit:'m'};
+ await db.pool.query(`INSERT INTO inventory_warehouse_source_events(source_sha256,event_id,payload)
+ VALUES($1,'elahi-address',$2),($1,'elahi-alias',$3),($1,'learning-alliance',$4)`,[f.stockSha,
+  {...legacyMovement,out:2,document:'ELAHI-ADDRESS-DO',site:'148 C1, People Colony FSD'},
+  {...legacyMovement,out:1,document:'ELAHI-ALIAS-DO',site:'Elahi Energy Islamabad',customer:'Adnan Elahi (Elahi Energy)'},
+  {...legacyMovement,out:1,document:'LEARNING-ALLIANCE-DO',site:'Learning Alliance (C.O Elahi Energy)'}]);
+ const elahi=await stockLedger(db.pool,f.reviewer,{search:'Elahi Energies'});
+ assert.deepEqual(elahi.events.map((e:any)=>[e.reference,e.outgoing,e.sites[0].customer]).sort(),[
+  ['ELAHI-ADDRESS-DO','2','Elahi Energies'],['ELAHI-ALIAS-DO','1','Elahi Energies'],
+ ]);
+ assert.equal((await stockLedger(db.pool,f.reviewer,{search:'Learning Alliance'})).events[0].sites[0].customer,null);
+ const cableMovement={warehouse:'Lahore warehouse',itemId:'FINAL',unit:'m',ipo:'CHP-346'};
+ await db.pool.query(`INSERT INTO inventory_warehouse_source_events(source_sha256,event_id,payload) VALUES
+ ($1,'duplicate-line-a',$2),($1,'duplicate-line-b',$3),($1,'faulty-line',$4)`,[f.stockSha,
+  {...cableMovement,out:2,date:'2026-10-22',doNumber:'FIXTURE-DO'},
+  {...cableMovement,out:3,date:'2026-10-22',doNumber:'FIXTURE-DO'},
+  {...cableMovement,in:4,document:'FIXTURE-RETURN',movement:'Faulty return',ipo:'CHP-163 · 143/250'}]);
+ const grouped=await stockLedger(db.pool,f.reviewer,{search:'Lal Pull FIXTURE-DO'});
+ assert.deepEqual(grouped.events.map((e:any)=>[e.reference,e.outgoing]),[['FIXTURE-DO','5']]);
+ await db.pool.query(`INSERT INTO inventory_warehouse_source_events(source_sha256,event_id,payload)
+ VALUES($1,'replacement-issue',$2)`,[f.stockSha,
+  {...cableMovement,out:4,date:'2026-10-23',doNumber:'FIXTURE-REPLACEMENT',ipo:'CHP-163 · 143/250'}]);
+ const paired=await stockLedger(db.pool,f.reviewer,{search:'Another site'});
+ assert.deepEqual(paired.events.map((e:any)=>[e.reference,e.date,e.displayDate,e.relatedDate]),[
+  ['FIXTURE-REPLACEMENT','2026-10-23','2026-10-23',false],
+  ['FIXTURE-RETURN','','2026-10-23',true],
+ ]);
+
  assert.ok((await stockLedger(db.pool,f.reviewer,{direction:'out'})).events.some((e:any)=>e.outgoing==='8'));
  assert.equal((await stockLedger(db.pool,f.owner,{offset:100})).events.length,0);
  await assert.rejects(stockLedger(db.pool,f.reviewer,{warehouse:'Karachi warehouse'}),/outside your scope/);

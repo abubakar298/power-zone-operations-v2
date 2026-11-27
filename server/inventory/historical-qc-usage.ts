@@ -14,6 +14,10 @@ import {transaction} from '../db/transaction.js';
 import {lockActiveActor} from '../auth/actor-lock.js';
 
 const allowed=new Set([304,346,345,308,288,313,314,294,291,305,297,289,285,315,302,319,316,292,295,332].map(String));
+export function historicalQcSiteNumber(boardId:string){
+ const number=/^registered-UBL:SOLAR:(\d+)$/.exec(boardId)?.[1];
+ return number&&allowed.has(number)?number:null;
+}
 export const historicalQcUsageInputSchema=z.object({version:z.number().int().nonnegative(),requestKey:z.uuid(),reason:z.string().trim().min(3).max(2000),verify:z.boolean(),entry:entrySchema}).strict();
 /** Historical references supply issued quantities only. Never project their used,
  * returned, adjustment or local-purchase values into a fresh QC usage entry. */
@@ -36,21 +40,21 @@ export class HistoricalQcUsageRepository{
  constructor(private pool:Pool){}
  private async identity(actor:string,boardId:string,c:Pool|PoolClient=this.pool,write=false){
   const board=await requireQcMaterialSite(actor,boardId,c,write);
-  const match=/^registered-UBL:SOLAR:(\d+)$/.exec(boardId);
-  if(!match||!allowed.has(match[1]))throw new HttpError(404,'No reviewed historical material linkage is available for this site.');
+  const number=historicalQcSiteNumber(boardId);
+  if(!number)throw new HttpError(404,'No reviewed historical material linkage is available for this site.');
   const native=(await c.query(`SELECT 1 FROM inventory_material_draft_versions v WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(v.snapshot->'sites') s WHERE s->>'registeredSiteId'=$1) LIMIT 1`,[boardId])).rowCount;
   if(native)throw new HttpError(409,'Use this site’s existing material dispatch usage form.');
-  const legacy=(await c.query('SELECT site_id FROM ubl_site_orders WHERE legacy_ipo_number=$1 AND status=$2',[match[1],'Active'])).rows;
+  const legacy=(await c.query('SELECT site_id FROM ubl_site_orders WHERE legacy_ipo_number=$1 AND status=$2',[number,'Active'])).rows;
   let key=legacy.length===1?'ubl:'+legacy[0].site_id:null;
-  if(!key){const old=(await c.query('SELECT site_id FROM ubl_site_orders WHERE legacy_ipo_number=$1',[match[1]])).rows;if(old.length===1&&(await historicalApprovedOrder(c,String(old[0].site_id))))key='ubl:'+old[0].site_id;}
+  if(!key){const old=(await c.query('SELECT site_id FROM ubl_site_orders WHERE legacy_ipo_number=$1',[number])).rows;if(old.length===1&&(await historicalApprovedOrder(c,String(old[0].site_id))))key='ubl:'+old[0].site_id;}
 
   if(!key&&z.uuid().safeParse(board.origin?.ipoId).success)key='ipo:'+board.origin.ipoId;
   if(!key){const links=(await c.query('SELECT DISTINCT ipo_id FROM inventory_material_source_links WHERE board_site_id=$1',[boardId])).rows;if(links.length===1)key='ipo:'+links[0].ipo_id;}
   // Registered Operations imports may predate the native IPO source-link row.
   // Resolve the exact issued IPO number, never a site-name or configuration guess.
-  if(!key){const issued=(await c.query("SELECT id FROM internal_purchase_orders WHERE number=$1 AND snapshot->'customer'->>'shortCode'='UBL' AND snapshot->>'boqRevisionId' IS NOT NULL",['CHP-'+match[1]])).rows;if(issued.length===1)key='ipo:'+issued[0].id;}
+  if(!key){const issued=(await c.query("SELECT id FROM internal_purchase_orders WHERE number=$1 AND snapshot->'customer'->>'shortCode'='UBL' AND snapshot->>'boqRevisionId' IS NOT NULL",['CHP-'+number])).rows;if(issued.length===1)key='ipo:'+issued[0].id;}
   if(!key)throw new HttpError(409,'The historical site needs its exact approved IPO/BOQ link before usage can be entered.');
-  return {board,key,ipo:'CHP-'+match[1]};
+  return {board,key,ipo:'CHP-'+number};
  }
  async read(actor:string,boardId:string){
   const identity=await this.identity(actor,boardId),job=await new InventoryRepository(this.pool).job(actor,identity.key);

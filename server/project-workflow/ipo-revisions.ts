@@ -49,7 +49,7 @@ export class IpoRevisionRepository{
    LEFT JOIN ipo_revision_decisions d ON d.proposal_id=p.id LEFT JOIN users du ON du.id=d.decided_by
    WHERE q.record_id=$1 ORDER BY q.sequence`,[recordId])).rows;
  }
- private static status(row:any){return row.decision==='Approved'?'Approved':row.decision==='Returned'?'Returned':row.proposal_id?'Awaiting Management approval':'Revising quotation';}
+ private static status(row:any){return row.decision==='Approved'?'Approved':row.decision==='Returned'?'Returned':row.proposal_id||row.revised_quotation_status==='Submitted'?'Awaiting Management approval':'Revising quotation';}
  /** Agreed rule: a commercial revision (prices, GST, terms) is allowed until the job has a closure
   * record. A technical revision stops once work has started: PT posted, invoice recorded, closure or
   * any Inventory DO. */
@@ -116,7 +116,51 @@ export class IpoRevisionRepository{
   const row=(await c.query('SELECT q.id,q.route,q.quotation_revision_request_id,qr.draft_id,v.boq_revision_id FROM ipo_revision_requests q JOIN quotation_revision_requests qr ON qr.id=q.quotation_revision_request_id JOIN quotation_versions v ON v.id=qr.source_quotation_id WHERE q.id=$1',[id])).rows[0];
   return {id:row.id,route:row.route,quotationRevisionRequestId:row.quotation_revision_request_id,draftId:row.draft_id,boqRevisionId:row.boq_revision_id};
  }
- /** Build the proposed new IPO version from the approved revised quotation. Nothing is issued yet. */
+ /** The proposed new IPO version (number and snapshot) built from the revised quotation, which must be
+  * approved at this point (or assumed approved inside `withAssumedApproval`). Nothing is saved here. */
+ private async buildProposal(c:PoolClient,actor:string,{r,chain,current}:{r:any;chain:any[];current:any},request:any,revisedQuotationId:string){
+  const before=current.snapshot,beforeInput=before.input??{};
+  const site={...r,site_code:r.canonical_site_code??r.site_code};
+  const basis=await quotationBasis(this.pool,c,actor,site,revisedQuotationId,{reference:beforeInput.approvalReference||beforeInput.poNumber,date:beforeInput.orderDate,notes:beforeInput.evidenceNotes,customerNtn:beforeInput.customerNtn,customerStrn:beforeInput.customerStrn});
+  if(request.route==='commercial'&&basis.boqRevisionId!==before.boqRevisionId)throw new HttpError(422,'A commercial revision must keep the original BOQ. Use the technical route for quantity changes.');
+  const approvedCount=chain.length-1,number=revisedIpoNumber(chain[0].number,approvedCount+1);
+  if((await c.query('SELECT 1 FROM internal_purchase_orders WHERE lower(number)=lower($1)',[number])).rowCount)throw new HttpError(409,`IPO number ${number} already exists. Ask Management to review.`);
+  const panels=before.approvedPanelQty;
+  const input={...basis.order.input,...(beforeInput.invoiceTerms?{invoiceTerms:beforeInput.invoiceTerms}:{}),poNumber:beforeInput.poNumber??'',approvalReference:beforeInput.approvalReference,evidenceType:beforeInput.evidenceType,orderDate:beforeInput.orderDate,evidenceNotes:beforeInput.evidenceNotes};
+  const snapshot={...structuredClone(basis.order),directPoApproval:before.directPoApproval??null,siteName:before.siteName??r.site_name,siteCode:before.siteCode??site.site_code,input,
+   boqRevisionId:basis.boqRevisionId,boqNumber:basis.order.boqNumber??before.boqNumber,preparedBy:r.coordinator,checkedBy:r.coordinator,workflowRecordId:r.id,approvedCommercialSource:basis.source,
+   orderDecisionId:before.orderDecisionId,approvalChannel:'Approved IPO revision',documentLayoutVersion:5,approvedPanelQty:panels,peachtree:ptDetail(basis.order,basis.boq,panels),
+   ipoRevision:{revision:approvedCount+1,requestId:request.id,route:request.route,reason:request.reason,originalIpoId:chain[0].id,originalNumber:chain[0].number,revisesIpoId:current.id,revisesNumber:current.number}};
+  return {number,snapshot};
+ }
+ /** Preview only: the IPO is built from an approved quotation, so while the revised quotation still waits
+  * for Management, its approval is assumed inside a savepoint and always undone afterwards. */
+ private async withAssumedApproval<T>(c:PoolClient,quotationId:string,actor:string,work:()=>Promise<T>):Promise<T>{
+  await c.query('SAVEPOINT ipo_revision_preview');
+  try{
+   await c.query("INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by,created_at) VALUES($1,$2,'Approved','IPO revision preview (never saved)',$3,clock_timestamp())",[randomUUID(),quotationId,actor]);
+   return await work();
+  }finally{await c.query('ROLLBACK TO SAVEPOINT ipo_revision_preview');await c.query('RELEASE SAVEPOINT ipo_revision_preview');}
+ }
+ /** Runs read-only work on its own connection and always rolls back. */
+ private async readOnly<T>(work:(c:PoolClient)=>Promise<T>):Promise<T>{
+  const c=await this.pool.connect();
+  try{await c.query('BEGIN');return await work(c);}finally{await c.query('ROLLBACK').catch(()=>undefined);c.release();}
+ }
+ /** An open revision whose revised quotation is submitted and waiting for Management (no IPO prepared yet). */
+ private async submittedRequest(c:PoolClient,actor:string,requestId:string,lock:boolean){
+  const request=(await c.query('SELECT * FROM ipo_revision_requests WHERE id=$1',[requestId])).rows[0];
+  if(!request)throw new HttpError(404,'IPO revision not found.');
+  const loaded=await this.load(actor,request.record_id,c,lock);
+  const row=(await this.requests(c,loaded.r.id)).find(x=>x.id===requestId)!;
+  if(row.decision)throw new HttpError(409,'This IPO revision is already decided.');
+  if(row.proposal_id)throw new HttpError(409,'The revised IPO is already prepared. Decide it from the IPO revisions list.');
+  if(!row.revised_quotation_id||row.revised_quotation_status!=='Submitted')throw new HttpError(409,'The revised quotation is not waiting for Management approval.');
+  if(request.base_ipo_id!==loaded.current.id)throw new HttpError(409,'The IPO changed since this revision started. Return it and start a new revision.');
+  return {...loaded,request,row};
+ }
+ /** Build the proposed new IPO version from the approved revised quotation. Nothing is issued yet.
+  * (Used when the revised quotation was approved on its own; otherwise `decideSubmitted` does it all.) */
  async prepare(actor:string,requestId:string,raw:unknown){
   const v=ipoRevisionPrepareSchema.parse(raw);
   const replay=(await this.pool.query('SELECT * FROM ipo_revision_proposals WHERE request_key=$1',[v.requestKey])).rows[0];
@@ -134,18 +178,7 @@ export class IpoRevisionRepository{
    if(row.revised_quotation_status!=='Approved')throw new HttpError(409,'Management must approve the revised quotation before the revised IPO is prepared.');
    const blocked=await this.blockers(c,chain.map(i=>i.id),request.route);
    if(blocked.length)throw new HttpError(409,`This IPO cannot be revised because ${blocked.join('; ')}. Ask Management to review.`);
-   const before=current.snapshot,beforeInput=before.input??{};
-   const site={...r,site_code:r.canonical_site_code??r.site_code};
-   const basis=await quotationBasis(this.pool,c as PoolClient,actor,site,row.revised_quotation_id,{reference:beforeInput.approvalReference||beforeInput.poNumber,date:beforeInput.orderDate,notes:beforeInput.evidenceNotes,customerNtn:beforeInput.customerNtn,customerStrn:beforeInput.customerStrn});
-   if(request.route==='commercial'&&basis.boqRevisionId!==before.boqRevisionId)throw new HttpError(422,'A commercial revision must keep the original BOQ. Use the technical route for quantity changes.');
-   const approvedCount=chain.length-1,number=revisedIpoNumber(chain[0].number,approvedCount+1);
-   if((await c.query('SELECT 1 FROM internal_purchase_orders WHERE lower(number)=lower($1)',[number])).rowCount)throw new HttpError(409,`IPO number ${number} already exists. Ask Management to review.`);
-   const panels=before.approvedPanelQty;
-   const input={...basis.order.input,...(beforeInput.invoiceTerms?{invoiceTerms:beforeInput.invoiceTerms}:{}),poNumber:beforeInput.poNumber??'',approvalReference:beforeInput.approvalReference,evidenceType:beforeInput.evidenceType,orderDate:beforeInput.orderDate,evidenceNotes:beforeInput.evidenceNotes};
-   const snapshot={...structuredClone(basis.order),directPoApproval:before.directPoApproval??null,siteName:before.siteName??r.site_name,siteCode:before.siteCode??site.site_code,input,
-    boqRevisionId:basis.boqRevisionId,boqNumber:basis.order.boqNumber??before.boqNumber,preparedBy:r.coordinator,checkedBy:r.coordinator,workflowRecordId:r.id,approvedCommercialSource:basis.source,
-    orderDecisionId:before.orderDecisionId,approvalChannel:'Approved IPO revision',documentLayoutVersion:4,approvedPanelQty:panels,peachtree:ptDetail(basis.order,basis.boq,panels),
-    ipoRevision:{revision:approvedCount+1,requestId,route:request.route,reason:request.reason,originalIpoId:chain[0].id,originalNumber:chain[0].number,revisesIpoId:current.id,revisesNumber:current.number}};
+   const {number,snapshot}=await this.buildProposal(c,actor,{r,chain,current},request,row.revised_quotation_id);
    const id=randomUUID(),version=Number((await c.query('SELECT coalesce(max(version),0)+1 AS n FROM ipo_revision_proposals WHERE request_id=$1',[requestId])).rows[0].n);
    await c.query('INSERT INTO ipo_revision_proposals(id,request_id,version,quotation_id,number,snapshot,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,requestId,version,row.revised_quotation_id,number,snapshot,v.requestKey,actor]);
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`ipo.revision.prepared:${requestId}:${id}`]);
@@ -160,8 +193,22 @@ export class IpoRevisionRepository{
    FROM ipo_revision_proposals p JOIN ipo_revision_requests q ON q.id=p.request_id JOIN project_workflow_records r ON r.id=q.record_id JOIN customers c ON c.id=r.customer_id
    JOIN internal_purchase_orders b ON b.id=q.base_ipo_id JOIN users u ON u.id=q.created_by JOIN quotation_versions v ON v.id=p.quotation_id
    WHERE NOT EXISTS(SELECT 1 FROM ipo_revision_decisions d WHERE d.proposal_id=p.id) ORDER BY p.created_at`)).rows;
-  return {revisions:rows.map(x=>({id:x.id,number:x.number,route:x.route,reason:x.reason,recordId:x.record_id,site:x.site_name,customer:x.short_code||x.customer,requestedBy:x.requested_by,createdAt:x.created_at,quotationNumber:x.quotation_number,
-   before:{id:x.base_id,number:x.base_number,amount:amount(x.base_snapshot),footer:footer(x.base_snapshot)},after:{amount:amount(x.snapshot),footer:footer(x.snapshot)}}))};
+  const prepared=rows.map(x=>({kind:'prepared' as const,id:x.id,number:x.number,route:x.route,reason:x.reason,recordId:x.record_id,site:x.site_name,customer:x.short_code||x.customer,requestedBy:x.requested_by,createdAt:x.created_at,quotationId:null as string|null,quotationNumber:x.quotation_number,previewError:null as string|null,
+   before:{id:x.base_id,number:x.base_number,amount:amount(x.base_snapshot),footer:footer(x.base_snapshot)},after:{amount:amount(x.snapshot),footer:footer(x.snapshot)}}));
+  // Revised quotations still waiting for Management: one approval here approves the quotation and issues the IPO.
+  const submitted=(await this.pool.query(`SELECT q.id,q.route,q.reason,q.record_id,q.created_at,r.site_name,c.short_code,c.name AS customer,b.id AS base_id,b.number AS base_number,b.snapshot AS base_snapshot,u.display_name AS requested_by,v.id AS quotation_id,v.number AS quotation_number
+   FROM ipo_revision_requests q JOIN project_workflow_records r ON r.id=q.record_id JOIN customers c ON c.id=r.customer_id JOIN internal_purchase_orders b ON b.id=q.base_ipo_id JOIN users u ON u.id=q.created_by
+   JOIN quotation_revision_links l ON l.request_id=q.quotation_revision_request_id JOIN quotation_versions v ON v.id=l.quotation_id
+   WHERE NOT EXISTS(SELECT 1 FROM ipo_revision_proposals p WHERE p.request_id=q.id)
+   AND (SELECT e.kind FROM coordination_events e WHERE e.quotation_id=v.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1)='Submitted' ORDER BY q.created_at`)).rows;
+  const waiting=[];
+  for(const x of submitted){
+   let preview:{number:string;snapshot:any}|null=null,previewError:string|null=null;
+   try{preview=await this.submittedDocument(actor,x.id);}catch(e){previewError=(e as Error).message;}
+   waiting.push({kind:'quotation' as const,id:x.id,number:preview?.number??`Revision of ${x.base_number}`,route:x.route,reason:x.reason,recordId:x.record_id,site:x.site_name,customer:x.short_code||x.customer,requestedBy:x.requested_by,createdAt:x.created_at,quotationId:x.quotation_id as string|null,quotationNumber:x.quotation_number,previewError,
+    before:{id:x.base_id,number:x.base_number,amount:amount(x.base_snapshot),footer:footer(x.base_snapshot)},after:{amount:preview?amount(preview.snapshot):null,footer:preview?footer(preview.snapshot):[]}});
+  }
+  return {revisions:[...prepared,...waiting]};
  }
  async proposalDocument(actor:string,proposalId:string){
   const p=(await this.pool.query('SELECT p.*,q.record_id FROM ipo_revision_proposals p JOIN ipo_revision_requests q ON q.id=p.request_id WHERE p.id=$1',[proposalId])).rows[0];
@@ -186,13 +233,63 @@ export class IpoRevisionRepository{
     if(p.base_ipo_id!==current.id)throw new HttpError(409,'The IPO changed since this revision started. Return it and start a new revision.');
     const blocked=await this.blockers(c,chain.map(i=>i.id),p.route);
     if(blocked.length)throw new HttpError(409,`This IPO can no longer be revised because ${blocked.join('; ')}. Return the revision.`);
-    revisedIpoId=randomUUID();
-    // The revised IPO stays under the original customer PO; no new PO header is created. The PO header
-    // and the original IPO stay exactly as issued (migration 305 lets only an approved revision share it).
-    const po=(await c.query('SELECT customer_po_id FROM internal_purchase_orders WHERE id=$1',[current.id])).rows[0].customer_po_id;
-    await c.query('INSERT INTO internal_purchase_orders(id,customer_po_id,submission_id,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,NULL,$3,$4,$5,$6,$7)',[revisedIpoId,po,p.number,p.snapshot,fingerprint(p.snapshot),randomUUID(),actor]);
-    await c.query('INSERT INTO ipo_accounts_handoffs(id,ipo_id,created_by) VALUES($1,$2,$3)',[randomUUID(),revisedIpoId,r.coordinator_id]);
+    revisedIpoId=await this.issue(c,actor,r,current,p.number,p.snapshot);
    }
+   await c.query('INSERT INTO ipo_revision_decisions(proposal_id,decision,note,revised_ipo_id,request_key,decided_by) VALUES($1,$2,$3,$4,$5,$6)',[proposalId,v.decision,v.note,revisedIpoId,v.requestKey,actor]);
+   await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`ipo.revision.${v.decision.toLowerCase()}:${proposalId}${revisedIpoId?':'+revisedIpoId:''}`]);
+   return {decision:v.decision,revisedIpoId};
+  });
+ }
+ /** Issue the approved revised IPO (immutable) under the original customer PO and hand it to Accounts. */
+ private async issue(c:PoolClient,actor:string,r:any,current:any,number:string,snapshot:any){
+  const revisedIpoId=randomUUID();
+  // The revised IPO stays under the original customer PO; no new PO header is created. The PO header
+  // and the original IPO stay exactly as issued (migration 305 lets only an approved revision share it).
+  const po=(await c.query('SELECT customer_po_id FROM internal_purchase_orders WHERE id=$1',[current.id])).rows[0].customer_po_id;
+  await c.query('INSERT INTO internal_purchase_orders(id,customer_po_id,submission_id,number,snapshot,fingerprint,request_key,created_by) VALUES($1,$2,NULL,$3,$4,$5,$6,$7)',[revisedIpoId,po,number,snapshot,fingerprint(snapshot),randomUUID(),actor]);
+  await c.query('INSERT INTO ipo_accounts_handoffs(id,ipo_id,created_by) VALUES($1,$2,$3)',[randomUUID(),revisedIpoId,r.coordinator_id]);
+  return revisedIpoId;
+ }
+ /** Proposed IPO for a revision whose revised quotation is still waiting for Management. Nothing is saved. */
+ async submittedDocument(actor:string,requestId:string){
+  return this.readOnly(async c=>{
+   const s=await this.submittedRequest(c,actor,requestId,false);
+   return this.withAssumedApproval(c,s.row.revised_quotation_id,actor,()=>this.buildProposal(c,actor,s,s.request,s.row.revised_quotation_id));
+  });
+ }
+ /** One Management decision for a submitted revised quotation and its IPO revision.
+  * Approve: approves the revised quotation, then issues the revised IPO and hands it to Accounts, all in
+  * one transaction (any failure leaves the quotation submitted and nothing issued).
+  * Return: the revised quotation goes back to the Coordinator as "Changes requested" and the IPO revision
+  * closes as Returned with the note (the proposed IPO is kept with the decision for the record). */
+ async decideSubmitted(actor:string,requestId:string,raw:unknown){
+  const v=ipoRevisionDecisionSchema.parse(raw);
+  if(v.decision==='Returned'&&v.note.length<3)throw new HttpError(422,'Write why the revised IPO is returned.');
+  const replay=(await this.pool.query('SELECT d.*,p.request_id FROM ipo_revision_decisions d JOIN ipo_revision_proposals p ON p.id=d.proposal_id WHERE d.request_key=$1',[v.requestKey])).rows[0];
+  if(replay){if(replay.request_id!==requestId||replay.decided_by!==actor||replay.decision!==v.decision)throw new HttpError(409,'This request key was used for another decision.');return {decision:replay.decision,revisedIpoId:replay.revised_ipo_id};}
+  return transaction(this.pool,async c=>{
+   // Same lock as quotation decisions (coordinator events), so the quotation cannot be decided twice at once.
+   await c.query('SELECT pg_advisory_xact_lock(742019006)');
+   const s=await this.submittedRequest(c,actor,requestId,true);
+   if(!management(s.u.role))throw new HttpError(403,'Management approves IPO revisions.');
+   const quotationId=s.row.revised_quotation_id;
+   let proposal:{number:string;snapshot:any};
+   if(v.decision==='Approved'){
+    const blocked=await this.blockers(c,s.chain.map(i=>i.id),s.request.route);
+    if(blocked.length)throw new HttpError(409,`This IPO can no longer be revised because ${blocked.join('; ')}. Return the revision.`);
+    await c.query("INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by,created_at) VALUES($1,$2,'Approved',$3,$4,clock_timestamp())",[randomUUID(),quotationId,`Approved with IPO revision of ${s.current.number}.${v.note?' '+v.note:''}`,actor]);
+    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'coordination.Approved']);
+    proposal=await this.buildProposal(c,actor,s,s.request,quotationId);
+   }else{
+    proposal=await this.withAssumedApproval(c,quotationId,actor,()=>this.buildProposal(c,actor,s,s.request,quotationId))
+     .catch(()=>({number:revisedIpoNumber(s.chain[0].number,s.chain.length),snapshot:{ipoRevision:{revision:s.chain.length,requestId,route:s.request.route,reason:s.request.reason,originalIpoId:s.chain[0].id,originalNumber:s.chain[0].number,revisesIpoId:s.current.id,revisesNumber:s.current.number},returnedWithoutPreview:true}}));
+    await c.query("INSERT INTO coordination_events(id,quotation_id,kind,notes,created_by,created_at) VALUES($1,$2,'Changes requested',$3,$4,clock_timestamp())",[randomUUID(),quotationId,`IPO revision returned: ${v.note}`,actor]);
+    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,'coordination.Changes requested']);
+   }
+   const proposalId=randomUUID(),version=Number((await c.query('SELECT coalesce(max(version),0)+1 AS n FROM ipo_revision_proposals WHERE request_id=$1',[requestId])).rows[0].n);
+   await c.query('INSERT INTO ipo_revision_proposals(id,request_id,version,quotation_id,number,snapshot,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[proposalId,requestId,version,quotationId,proposal.number,proposal.snapshot,randomUUID(),actor]);
+   await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`ipo.revision.prepared:${requestId}:${proposalId}`]);
+   const revisedIpoId=v.decision==='Approved'?await this.issue(c,actor,s.r,s.current,proposal.number,proposal.snapshot):null;
    await c.query('INSERT INTO ipo_revision_decisions(proposal_id,decision,note,revised_ipo_id,request_key,decided_by) VALUES($1,$2,$3,$4,$5,$6)',[proposalId,v.decision,v.note,revisedIpoId,v.requestKey,actor]);
    await c.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)',[actor,`ipo.revision.${v.decision.toLowerCase()}:${proposalId}${revisedIpoId?':'+revisedIpoId:''}`]);
    return {decision:v.decision,revisedIpoId};

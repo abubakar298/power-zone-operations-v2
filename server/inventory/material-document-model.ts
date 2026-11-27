@@ -112,6 +112,12 @@ export function returnWorksheetPrintModel(data:any):MaterialPrintModel{
  return {kind:'variable-do',status:'draft',title:'Return IGP · Warehouse Count Sheet',reference:`Return worksheet / ${data.references?.join(' / ')||data.draft.id} / v${data.draft.version}`,warehouse:source.warehouse,sites:sites(source.sites),rows,returnWorksheet:true,stockPosting:false,issuedLabel:source.parent?'Parent DO OUT':'DO OUT',signatures:['Returned by / site custodian','Warehouse counted, signed and stamped by'],note:'Fill Actual return with quantities physically counted on this trip. Previously verified warehouse IN is shown separately. Partial returns are allowed. Upload the signed and stamped sheet for verification; printing this sheet does not credit stock. Blank use or expected figures remain pending, not zero.'};
 }
 
+/** One DO window (user request, 24 Nov 2026): the DO followed by the VSO of every site on it,
+ * also when the DO holds only fixed items (local-vendor purchases are written on the VSO by hand). */
+export function deliveryOrderWithVso(record:Parameters<typeof issuedDispatchPrintModel>[0],model:MaterialPrintModel):{documents:MaterialPrintModel[]}{
+ return {documents:[model,...issuedCustomerSignoffModels(record)]};
+}
+
 /** Every dispatched site can take a VSO. Listed quantities come only from the immutable DO; blank rows allow later local/site entries. */
 export function issuedCustomerSignoffModels(record:Parameters<typeof issuedDispatchPrintModel>[0]){
  const base=issuedDispatchPrintModel(record),snapshot=record.snapshot,printedLines=parentPoolLines(snapshot).filter(row=>row.itemId&&row.out!==''&&new Decimal(row.out).gt(0));

@@ -208,13 +208,14 @@ export class AccountsService {
           .optional(),
         active: z.boolean().optional(),
         revokeSessions: z.literal(true).optional(),
+        qcRegion: z.object({ team: z.enum(["central", "south"]), enabled: z.boolean() }).strict().optional(),
       })
       .strict()
       .safeParse(body);
     if (
       !v.success ||
       !z.uuid().safeParse(target).success ||
-      [v.data.role, v.data.active, v.data.revokeSessions].every(
+      [v.data.role, v.data.active, v.data.revokeSessions, v.data.qcRegion].every(
         (x) => x === undefined,
       )
     )

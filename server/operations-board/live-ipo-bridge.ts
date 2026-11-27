@@ -40,6 +40,6 @@ export function planLiveIpoBridge(ipo:LiveIpoPosition,existing:ExistingBridgeIde
  ...(w.deliveredOn?{deliveryDate:w.deliveredOn}:{}),
  origin:{kind:'live-ipo-handoff',ipoId:ipo.ipoId,operationsIssuanceId:ipo.operationsIssuanceId,legacyWorkflowId:w.id},
  legacyPosition:{stage:w.stage,installationCompletedOn:w.installationCompletedOn,handedOverOn:w.handedOverOn,closedAt:w.closedAt,expectedDelivery:w.expectedDelivery},
- reviewFlags:[...(w.scope===null?['Verify approved installation/delivery-only scope.']:[]),...(!ipo.customerPo.trim()?['Customer PO is missing; retain material-source hold.']:[]),...(projectType===null?['Verify approved project type.']:[]),'Verify invoice milestone from approved commercial terms.'],
+ reviewFlags:[...(w.scope===null?['Verify approved installation/delivery-only scope.']:[]),...(projectType===null?['Verify approved project type.']:[]),'Verify invoice milestone from approved commercial terms.'],
  }};
 }

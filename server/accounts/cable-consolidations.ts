@@ -10,6 +10,11 @@ import {paymentRegisterData} from './payment-records.js';
 
 export const cableConsolidationSchema=z.object({sourceVersion:z.number().int().positive(),sourceRowIds:z.array(z.string().min(1).max(500)).min(2).max(100),invoice:z.string().regex(/^\d{2}-\d{4,}$/),invoiceDate:z.iso.date(),customerPo:z.string().trim().max(200).optional(),amount:z.string().regex(/^\d{1,14}(?:\.\d{1,2})?$/),reason:z.string().trim().min(1).max(2000),file:z.object({name:z.string().trim().min(1).max(200),base64:z.string().min(4).max(2800000)}).strict(),requestKey:z.uuid()}).strict();
 export const cableSubmissionSchema=z.object({sourceVersion:z.number().int().positive(),key:z.uuid(),submissionDate:z.iso.date(),requestKey:z.uuid()}).strict();
+/** One extra-cable invoice covers one site only (user decision, agreed with Abu Bakar, 24 Nov 2026): several invoices
+ * of the same site may still be replaced by one. A site is its IPO number (or its name when no IPO is recorded). */
+export function cableSitesCount(sites:{site?:string;ipo?:string}[]){
+ return new Set(sites.map(s=>String(s.ipo||s.site||'').split(' · ')[0].trim().toUpperCase().replace(/\s+/g,'')).filter(Boolean)).size;
+}
 async function latest(c:PoolClient){return (await c.query('SELECT * FROM accounts_source_registers ORDER BY version DESC LIMIT 1')).rows[0];}
 async function freeze(c:PoolClient,previous:any,snapshot:any,actor:string,action:string){
  const id=randomUUID(),sha=createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
@@ -38,7 +43,9 @@ export async function consolidateCableInvoices(pool:Pool,actor:string,raw:unknow
   if(register.invoices.some(r=>!input.sourceRowIds.includes(r.id)&&r.customer===customer&&r.invoice===input.invoice))throw new HttpError(409,'An invoice with this number already exists outside the selected records.');
   const sourceRows=input.sourceRowIds.map(id=>previous.snapshot.cables.rows.find((r:any)=>'cable:'+r.key===id&&!r.supersededBy));
   if(sourceRows.some(r=>!r))throw new HttpError(409,'A selected source invoice is no longer active.');
-  const key=randomUUID(),sites=sourceRows.flatMap(r=>r.sites??[]),file={...input.file,sha256:createHash('sha256').update(bytes).digest('hex')};
+  const sites=sourceRows.flatMap(r=>r.sites??[]);
+  if(cableSitesCount(sites)>1)throw new HttpError(422,'One extra-cable invoice can cover only one site. Select invoices of a single site.');
+  const key=randomUUID(),file={...input.file,sha256:createHash('sha256').update(bytes).digest('hex')};
   const snapshot=structuredClone(previous.snapshot);
   for(const r of snapshot.cables.rows)if(input.sourceRowIds.includes('cable:'+r.key))r.supersededBy=key;
   snapshot.cables.rows.push({key,po:input.customerPo??'',program:sourceRows[0].program,invoice:input.invoice,sites,siteLabel:sites.length+' branches · '+customer,invoicedAmount:amount.toFixed(2),pendingAmount:amount.toFixed(2),minimumOnly:false,paymentReceived:false,submission:'Created — submission pending',observations:[],notes:[input.reason],consolidation:{requestKey:input.requestKey,requestHash:createHash('sha256').update(JSON.stringify(input)).digest('hex'),invoiceDate:input.invoiceDate,sourceRowIds:input.sourceRowIds,previousInvoices:selected.map(r=>({id:r!.id,invoice:r!.invoice,site:r!.site,amount:r!.amount,pending:r!.pending})),file,createdBy:actor,createdAt:new Date().toISOString()}});
