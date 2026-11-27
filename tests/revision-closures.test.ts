@@ -36,3 +36,29 @@ test('closing a revision removes it from Revisions, keeps the request and reason
   await assert.rejects(closeRevisionRequest(c,manager,linked,{reason:'Not needed any more',requestKey:randomUUID()}),/already produced a revised quotation/);
  }finally{await db.close();}
 });
+
+// User report, 27 Nov 2026: after Close revision, the revision's own BOQ draft ("Draft") and its approved revised BOQ
+// ("Approved BOQ: prepare pricing") stayed in Design Review. They now leave the lists with the request; the source
+// quotation returns to its normal step, and unrelated drafts and BOQs are unaffected.
+test('closing a revision also removes its BOQ draft and its revised BOQ from the work lists',async()=>{
+ const db=await testDatabase();try{
+  const c=db.pool,owner=randomUUID(),manager=randomUUID();
+  for(const [id,role]of [[owner,'Coordinator'],[manager,'Management']])await c.query("INSERT INTO users(id,email,display_name,password_hash,role) VALUES($1,$2,$3,'isolated',$4)",[id,`${id}@example.test`,role,role]);
+  const records=await createDashboardSamples(c,owner,manager);
+  const quote=records.find((r:any)=>r.stage===4)!,[draftOnly,otherDraft]=records.filter((r:any)=>r.stage===0),[approvedBoq,otherBoq]=records.filter((r:any)=>r.stage===2);
+  const draftRequest=randomUUID(),boqRequest=randomUUID();
+  for(const [id,draft]of [[draftRequest,draftOnly.draftId],[boqRequest,approvedBoq.draftId]])await c.query("INSERT INTO quotation_revision_requests(id,source_quotation_id,origin,costing_change,reason,requested_by,created_by,request_key,draft_id) VALUES($1,$2,'Customer',true,'Customer changed the load','Customer',$3,$4,$5)",[id,quote.quotationId,owner,randomUUID(),draft]);
+  const tasks=async()=>(await new CoordinatorRepository(c).overview(owner,false,true)).tasks;
+  const has=(list:any[],kind:string,id:string)=>list.some((t:any)=>t.kind===kind&&t.id===id);
+  let list=await tasks();
+  assert.equal(has(list,'Survey / BOQ',draftOnly.draftId),false,'an open revision keeps its draft under the revision');
+  assert.equal(has(list,'Sale confirmation',quote.quotationId),false);
+  for(const request of [draftRequest,boqRequest])await closeRevisionRequest(c,owner,request,{reason:'Resolved with the customer by phone',requestKey:randomUUID()});
+  list=await tasks();
+  assert.equal(has(list,'Survey / BOQ',draftOnly.draftId),false,'closed revision draft is not listed');
+  assert.equal(has(list,'Commercial pricing',approvedBoq.boqRevisionId),false,'closed revision BOQ is not listed');
+  assert.equal(has(list,'Sale confirmation',quote.quotationId),true,'the source quotation returns to its normal step');
+  assert.equal(has(list,'Survey / BOQ',otherDraft.draftId),true,'unrelated drafts stay');
+  assert.equal(has(list,'Commercial pricing',otherBoq.boqRevisionId),true,'unrelated approved BOQs stay');
+ }finally{await db.close();}
+});

@@ -43,3 +43,17 @@ test('sidebar refreshes once a minute at most and never on a hidden tab',()=>{
   assert.equal(shouldRefreshSidebar({hidden:false,inFlight:false,lastLoadedAt:now-sidebarMinRefreshGapMs,now}),true);
   assert.equal(shouldRefreshSidebar({hidden:false,inFlight:false,lastLoadedAt:now-sidebarRefreshIntervalMs,now}),true);
 });
+
+// User report, 27 Nov 2026: Design Review listed 4 older commercial tasks while its counter showed 0.
+test('Design Review counter includes the older commercial tasks its page lists',async()=>{
+  const {coordinationBuckets}=await import('../web/workspaces/project-routes.js');
+  const legacy=[
+    {kind:'Survey / BOQ',status:'Draft',stage:'Survey & Costing Preparation'},
+    {kind:'Commercial pricing',status:'Approved BOQ: prepare pricing',stage:'Survey & Costing Preparation'},
+    {kind:'Sale confirmation',status:'Approved quotation awaiting send',stage:'Approved quotations awaiting send'},
+  ];
+  const counts=bucketCounts('coordination',[],legacy);
+  assert.equal(counts[coordinationBuckets[1]],2);
+  assert.equal(counts[coordinationBuckets[4]],1);
+  assert.equal(counts[coordinationBuckets[0]],0,'Survey Requests still counts only survey requests');
+});
