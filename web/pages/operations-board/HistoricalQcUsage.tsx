@@ -17,7 +17,7 @@ function HistoricalUsageForm({boardId,data,session,onSaved}:{boardId:string;data
  const dirty=JSON.stringify(entry)!==JSON.stringify(data.entry??blank)||reason!=='';
  function save(verify:boolean){if(data.locked)return;void post.save('/material-dispatches/qc/sites/'+encodeURIComponent(boardId)+'/historical-usage',{version:data.version,entry,reason,verify},onSaved);}
  if(data.linkedIssues){
-  const hold=data.linkReview||(data.needsSignedDo?'Attach the signed delivery DO in Delivery.':data.needsVso?'Record the signed VSO in Job Completion.':'');
+  const hold=(data.linkReview&&'Waiting for the Inventory head to confirm this old DO note: '+data.linkReview)||(data.needsSignedDo?'Attach the signed delivery DO in Delivery.':data.needsVso?'Record the signed VSO in Job Completion.':'');
   return <div className="pz-stack">
    {hold&&<p role="status">{hold}</p>}
    {data.locked?<p>Usage is locked because the job was submitted or closed.</p>:

@@ -1,6 +1,6 @@
 import ledger from './approved-site-ledger.json' with {type:'json'};
 import {historicalIssueQuantity} from './historical-issue-quantity.js';
-import {reviewedStockLogQcIssue} from './reviewed-stock-log-qc-issues.js';
+import {reviewedStockLogQcIssue,reviewedStockLogQcIssues} from './reviewed-stock-log-qc-issues.js';
 import {materialDocumentPolicy} from '../../shared/material-documents.js';
 
 type SignedDoItem = readonly [itemId: string, description: string, issued: string, unit?: string];
@@ -181,4 +181,13 @@ export function historicalQcIssues(boardId: string, ipo: string) {
   const originalQuantities=new Map(events.map(event=>[event.id,event.quantity]));
   const originalSignature=JSON.stringify(lines.map(line=>[line.key,originalQuantities.get(line.key)??line.issued]));
   return {lines,signature,originalSignature,review:link.review};
+}
+
+/** Every reviewed historical issue that carries a review note, for the Inventory head to confirm. */
+export function historicalIssueReviews(){
+  const rows:{boardId:string;ipo:string;reference:string;review:string}[]=[];
+  // Same precedence as historicalQcIssues: signed copies, then the later stock log, then ledger links.
+  for(const [boardId,link] of Object.entries(links))if(link.review&&!signedDeliveryIssues.has(boardId)&&!reviewedStockLogQcIssue(boardId))rows.push({boardId,ipo:link.ipo,reference:link.orders.join(', '),review:link.review});
+  for(const [boardId,later] of reviewedStockLogQcIssues())if(later.review&&!signedDeliveryIssues.has(boardId))rows.push({boardId,ipo:later.ipo,reference:later.document,review:later.review});
+  return rows;
 }

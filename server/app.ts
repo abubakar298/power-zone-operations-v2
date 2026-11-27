@@ -4,6 +4,7 @@ import {apiRateLimit, defaultApiRequestsPerMinute} from './http/api-rate-limit.j
 import {materialReplacementHttp} from './inventory/material-replacement-http.js';
 import {warehouseTransferHttp} from './inventory/warehouse-transfer-http.js';
 import {GatePassRepository} from './inventory/gate-passes.js';
+import {HistoricalReviewConfirmations} from './inventory/historical-review-confirmations.js';
 import {OperationsBoardRepository} from './operations-board/repository.js';
 import {operationsBoardHttp} from './operations-board/http.js';
 import { projectWorkflowHttp } from "./project-workflow/http.js";
@@ -232,7 +233,7 @@ export function createApp(
   };
   // Authenticate and reject forbidden roles/CSRF before accepting large evidence JSON.
   app.use('/api/material-dispatches/evidence',sessionForWorkspace,warehousePostingBoundary,express.json({limit:'21mb'}));
-  app.use('/api/material-dispatches',express.json({limit:'1mb'}),materialDraftHttp(new MaterialDraftRepository(pool),sessionForWorkspace,new SiteMaterialPlanRepository(pool),new MaterialStockRepository(pool),new MaterialUsageRepository(pool),new PurchaseReceivingRepository(pool),new GatePassRepository(pool)));
+  app.use('/api/material-dispatches',express.json({limit:'1mb'}),materialDraftHttp(new MaterialDraftRepository(pool),sessionForWorkspace,new SiteMaterialPlanRepository(pool),new MaterialStockRepository(pool),new MaterialUsageRepository(pool),new PurchaseReceivingRepository(pool),new GatePassRepository(pool),new HistoricalReviewConfirmations(pool)));
   app.use('/api/inventory-replacements',sessionForWorkspace,warehousePostingBoundary);
   app.post('/api/inventory-replacements/evidence',express.json({limit:'21mb'}));
   app.use('/api/inventory-replacements',express.json({limit:'128kb'}),materialReplacementHttp(pool,sessionForWorkspace));
