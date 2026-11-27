@@ -10,6 +10,16 @@ export async function requireWarehouseAccess(actor:string,warehouse:string,c:Poo
 
 }
 
+/** Owner rule (27 Nov 2026): returned material enters stock only after the Inventory head
+ * approves the counted, signed Return IGP. The head is an Inventory user holding the 'head'
+ * grant for that warehouse; the grant, not a name, decides who that is. */
+export async function inventoryHead(actor:string,warehouse:string,c:Pool|PoolClient){
+  return !!(await c.query("SELECT 1 FROM users u JOIN inventory_material_access a ON a.user_id=u.id AND a.warehouse=$2 AND a.capability='head' WHERE u.id=$1 AND u.active AND u.role='Inventory'",[actor,warehouse])).rowCount;
+}
+export async function requireInventoryHead(actor:string,warehouse:string,c:Pool|PoolClient){
+  if(!await inventoryHead(actor,warehouse,c))throw new HttpError(403,'Only the Inventory head can approve a returned-material IGP for this warehouse.');
+}
+
 export async function lockWarehouseAuthority(c:PoolClient,warehouse:string,source:string,version:number){
   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('inventory.warehouse.authority.'||$1,0))",[warehouse]);
   const row=(await c.query('SELECT * FROM inventory_warehouse_authority_current WHERE warehouse=$1',[warehouse])).rows[0];
