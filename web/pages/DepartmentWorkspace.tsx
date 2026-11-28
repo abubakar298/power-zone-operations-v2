@@ -356,7 +356,7 @@ export function DepartmentWorkspace({
     matchesWorkspace(
       {
         ...r,
-        reference: [r.siteCode, r.id, r.data.ipoNumber, r.data.sharedPoReference, r.data.sharedOrderNumber, r.data.ipoSalesPerson, ...(r.references ?? []), r.location].join(
+        reference: [r.siteCode, r.id, r.data.ipoNumber, r.data.sharedPoReference, r.data.latePo?.poNumber, r.data.sharedOrderNumber, r.data.ipoSalesPerson, ...(r.references ?? []), r.location].join(
           " ",
         ),
         site: `${r.site} ${r.siteCode}`,

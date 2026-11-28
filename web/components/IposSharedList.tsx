@@ -9,6 +9,7 @@ import { DocumentPreview } from "./DocumentPreview.js";
 import { IpoRevisionPanel, useIpoRevisionStatus } from "./IpoRevisionPanel.js";
 import { CustomerPoStatus, LateCustomerPoPanel } from "./LateCustomerPo.js";
 import type { Session } from "../api.js";
+import { currentCustomerPo } from "../../shared/current-customer-po.js";
 
 function DownloadIpo({ record, ipoId = record.data.ipoId }: { record: any; ipoId?: string }) {
   const [error, setError] = useState("");
@@ -35,6 +36,16 @@ function DownloadIpo({ record, ipoId = record.data.ipoId }: { record: any; ipoId
   return <div><Button variant="secondary" loading={loading} loadingLabel="Downloading…" onClick={() => void download()}>Download</Button>{error && <p className="form-error" role="alert">{error}</p>}</div>;
 }
 
+/** PO reference / Date cell: the current customer PO on the primary line, the reference at IPO issue underneath. */
+function SharedPoCell({ data }: { data: any }) {
+  const po = currentCustomerPo(data);
+  return <>
+    {po.reference || "Not entered"}<br/><span className="pz-caption">{po.date || "Not entered"}</span>
+    {po.issuedReference && <div className="pz-caption">At IPO issue: PO {po.issuedReference} · {po.issuedDate || "date not entered"}</div>}
+    <CustomerPoStatus followUp={data} showNumber={false}/>
+  </>;
+}
+
 export function IposSharedList({ records, onPreview }: { records: any[]; onPreview: (id: string) => void }) {
   return <section className="pz-stack" aria-label="Shared IPO documents">
     <p className="pz-caption" role="status">{records.length} IPO{records.length === 1 ? "" : "s"}</p>
@@ -45,7 +56,7 @@ export function IposSharedList({ records, onPreview }: { records: any[]; onPrevi
         <td>{record.customerCode || record.customer}</td>
         <td>{record.site}<br/><span className="pz-caption">{record.siteCode || "Not entered"}</span></td>
         <td>{record.data.ipoNumber || "Not available"}{record.data.sharedOrderNumber&&<div className="pz-caption">{sharedOrderLabel(record.data.sharedOrderNumber)}</div>}{record.data.ipoSalesPerson&&<div className="pz-caption">Salesperson: {record.data.ipoSalesPerson}</div>}<DocumentListDetails record={record}/>{record.data.historicalDelivered&&<small className="pz-caption" style={{display:"block"}}>Historical · already delivered</small>}</td>
-        <td>{record.data.sharedPoReference || "Not entered"}<br/><span className="pz-caption">{record.data.sharedPoDate ? String(record.data.sharedPoDate).slice(0,10) : "Not entered"}</span><CustomerPoStatus followUp={record.data}/></td>
+        <td><SharedPoCell data={record.data}/></td>
         <td><div className="pz-action-row pz-ipo-list-actions"><Button variant="secondary" onClick={() => onPreview(record.id)}>Preview</Button><DownloadIpo record={record}/></div>
         </td>
       </tr>)}</PagedTableBody>
@@ -57,13 +68,15 @@ export function IposSharedList({ records, onPreview }: { records: any[]; onPrevi
 export function IpoSharedPreview({ record, onBack, session, onOpen }: { record: any; onBack: () => void; session?: Session; onOpen?: (task: any) => void }) {
   const revisions = useIpoRevisionStatus(record.id), ipoId = revisions.status?.current.id ?? record.data.ipoId, number = revisions.status?.current.number ?? record.data.ipoNumber;
   const orderNumber = revisions.status?.current.orderNumber ?? record.data.sharedOrderNumber;
+  const po = currentCustomerPo(record.data);
   return <div className="pz-stack">
     <div><Button variant="neutral" onClick={onBack}>Back to IPOs Shared</Button></div>
     <section className="pz-panel pz-stack">
       <h2>{number || "IPO"} · {record.customerCode} · {record.site} ({record.siteCode})</h2>
       {orderNumber && <p>{sharedOrderLabel(orderNumber)}</p>}
       {record.data.ipoSalesPerson && <p>Salesperson: {record.data.ipoSalesPerson}</p>}
-      <p>PO reference: {record.data.sharedPoReference || "Not entered"} · PO date: {record.data.sharedPoDate ? String(record.data.sharedPoDate).slice(0,10) : "Not entered"}</p>
+      <p>PO reference: {po.reference || "Not entered"} · PO date: {po.date || "Not entered"}</p>
+      {po.issuedReference && <p className="pz-caption">At IPO issue: PO {po.issuedReference} · {po.issuedDate || "date not entered"}</p>}
       {record.data.historicalDelivered&&<p className="pz-caption">Historical entry prepared by M. Rafiq · already delivered</p>}
       <DocumentPreview key={ipoId} url={`/api/orders/${ipoId}/ipo.pdf`} title="IPO and PT Breakup"/>
       <div className="pz-action-row"><DownloadIpo record={record} ipoId={ipoId}/></div>

@@ -15,12 +15,12 @@ const day = (value?: string | null) => (value ? String(value).slice(0, 10) : "No
 type FollowUp = { poToFollow?: boolean; latePo?: any; approvalEvidenceType?: string | null };
 
 /** Secondary status line shown under a site's PO reference; nothing for sites that need no PO follow-up. */
-export function CustomerPoStatus({ followUp, recordId }: { followUp?: FollowUp | null; recordId?: string }) {
+export function CustomerPoStatus({ followUp, recordId, showNumber = true }: { followUp?: FollowUp | null; recordId?: string; showNumber?: boolean }) {
   const latePo = followUp?.latePo;
   if (latePo)
     return <div className="pz-caption">
       <StatusBadge tone={latePo.amountDiffers ? "warning" : "success"}>{latePo.amountDiffers ? "PO differs from IPO" : "PO received later"}</StatusBadge>
-      <div>PO {latePo.poNumber} · {day(latePo.poDate)}{recordId && latePo.fileId && <> · <a href={`/api/project-workflow/${recordId}/files/${latePo.fileId}`} target="_blank" rel="noreferrer">Open PO</a></>}</div>
+      {showNumber && <div>PO {latePo.poNumber} · {day(latePo.poDate)}{recordId && latePo.fileId && <> · <a href={`/api/project-workflow/${recordId}/files/${latePo.fileId}`} target="_blank" rel="noreferrer">Open PO</a></>}</div>}
     </div>;
   if (!followUp?.poToFollow) return null;
   return <div className="pz-caption">
