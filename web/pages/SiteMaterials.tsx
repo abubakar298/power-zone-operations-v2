@@ -64,6 +64,9 @@ export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>v
  const saved=useRef(''),request=useRef<{signature:string;key:string}|null>(null);
  const signature=JSON.stringify({fixed,variable,warehouse,transport,supply});
  const dirty=!!intake&&!!saved.current&&signature!==saved.current;
+ // Reopen the saved DOs only when every saved quantity is already on a DO. A saved list whose DO step stopped
+ // (for example before Partial delivery was ticked) still needs its new DO on the next click.
+ const onlySavedDos=!dirty&&version>0&&documents.length>0&&!reviewIssueRows([...fixed,...(supply==='single-site'?variable:[])],priorIssued).included.length;
  useUnsavedChanges(dirty);
  useEffect(()=>{if(dirty)setNotice('');},[dirty]);
  useEffect(()=>{let active=true;void (async()=>{
@@ -91,14 +94,14 @@ export function SiteMaterials({session,onLogout}:{session:Session;onLogout:()=>v
   const body={...(id!=='new'?{id}:{}),version,source:{sourceKind:source.sourceKind,basisId:source.basisId,basisVersion:source.basisVersion,siteId:source.siteId},warehouse,transport,...(reason?{revisionReason:reason}:{}),fixedLines:fixed,variableLines:variable.map(({basisLine,...row})=>withMatchingVariableSection(row)),variableSupply:supply};
   const mark=JSON.stringify(body);if(request.current?.signature!==mark)request.current={signature:mark,key:crypto.randomUUID()};
   try{
-   if(!dirty&&version>0&&documents.length){setPreviewRequest(v=>v+1);return;}
+   if(onlySavedDos){setPreviewRequest(v=>v+1);return;}
    const result=!dirty&&version>0?{id,version}:await api<{id:string;version:number}>('/material-dispatches/site-plans',{csrf:session.csrfToken,body:{...body,requestKey:request.current.key}});
    saved.current=signature;setId(result.id);setVersion(result.version);request.current=null;history.replaceState(null,'','/inventory/materials/'+result.id);const issueBody={version:result.version,partialDelivery:additional?false:partialDelivery,...(additional?{additional:true}:{}),note:reason||'Saved from material issuance'};const issueSignature=JSON.stringify({id:result.id,...issueBody});if(issueRequest.current?.signature!==issueSignature)issueRequest.current={signature:issueSignature,key:crypto.randomUUID()};
    const issued=await api<{id:string;number:string}>('/material-dispatches/site-plans/'+result.id+'/issue',{csrf:session.csrfToken,body:{...issueBody,requestKey:issueRequest.current.key}});issueRequest.current=null;await loadDocuments(result.id);setPreviewRequest(v=>v+1);setNotice(issued.number+(additional?' (Additional DO)':'')+' saved as a new DO. Earlier DOs are unchanged. Download it from Preview Documents. Signed gate evidence records the warehouse dispatch.');setDoKind('delivery');setRevisionReason('');
   }catch(e){setError((e as Error).message);}finally{setBusy(false);}
  }
  function previewBeforeSave(){
-  if(!source)return;if(!dirty&&version>0&&documents.length){setPreviewRequest(v=>v+1);return;}
+  if(!source)return;if(onlySavedDos){setPreviewRequest(v=>v+1);return;}
   if(doKind==='additional'&&projectDos.length&&revisionReason.trim().length<3){setError('Write why the extra material is needed (for example: customer needs 100 m more cable).');return;}
   try{setError('');const selected=[...fixed,...(supply==='single-site'?variable:[])],result=reviewIssueRows(selected,priorIssued),rows=result.included.map(r=>({documentPolicyVersion:r.documentPolicyVersion,itemId:r.itemId,description:r.description,unit:r.unit,issued:r.out,used:null,returned:null}));
    const model:MaterialPrintModel={kind:'fixed-do',separateVariableItems:source.installation!==false,status:'draft',title:doKind==='additional'&&projectDos.length?'Additional Delivery Order · Extra Material':'Delivery Order / Outwards Gate Pass',reference:'Preview · DO number assigned when saved',warehouse,sites:[{name:source.siteName,ipo:source.ipo||'',customer:source.customer,customerPo:source.customerPo,orderNumber:source.orderNumber}],rows,note:'Review before saving. No DO has been issued and stock is unchanged.',issuedLabel:'Issued Qty',signatures:[],stockPosting:false,date:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),transport};
