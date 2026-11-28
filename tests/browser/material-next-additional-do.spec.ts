@@ -52,3 +52,43 @@ test('next delivery and Additional DO are new DOs; the page enters only "send no
  expect(issues[1].additional).toBe(true);expect(issues[1].partialDelivery).toBe(false);expect(issues[1].note).toBe('Customer needs 100 m more cable');
  await expect(list).toContainText('Additional (extra material)');await expect(list).toContainText('CH-CBL-AC-16MM/4C-PK 100 m');await expect(list).toContainText('DOs for this project · 3');
 });
+
+// The list saves first and the DO step can then stop (here: fixed items below BOQ before Partial delivery is
+// ticked). Clicking again must still create the new DO, not just reopen the earlier one.
+test('a saved next-delivery list whose DO step stopped still creates its new DO on the next click',async({page})=>{
+ await actors(page.request);await login(page.request);
+ const id='11111111-1111-4111-8111-111111111111',fixedDraft='22222222-2222-4222-8222-222222222222',siteId='33333333-3333-4333-8333-333333333333',vpdKey='44444444-4444-4444-8444-444444444444';
+ const source={sourceKind:'store-boq',basisId:fixedDraft,basisVersion:1,siteId,siteName:'Isolated pending site',ipo:'SIM-PENDING',customer:'UBL',installation:true,items:[{key:'CH-VPD-63A/2P',description:'VPD 2P',qty:'6',unit:'piece'}]};
+ const transport={issuedTo:'Fixture team',vehicle:'Fixture vehicle',driver:'Fixture driver',driverIdentity:''};
+ const vpd={key:vpdKey,itemId:'CH-VPD-63A/2P',description:'VPD 2P',unit:'piece',out:'2',sites:[siteId],fixedGroup:'other',basisLine:0};
+ const dos=[{id:'d1',number:'SIM-DO-1',createdAt:'2026-11-09T05:00:00Z',partialDelivery:true,additional:false,variable:false,lines:[{key:vpdKey,itemId:vpd.itemId,unit:'piece',quantity:'2'}]}];
+ const saves:any[]=[],issues:any[]=[];let savedOut='2';
+ await page.route('**/api/material-dispatches/**',async route=>{
+  const url=new URL(route.request().url()),path=url.pathname.replace('/api/material-dispatches',''),method=route.request().method();
+  if(path==='/access')return route.fulfill({json:{kind:'management'}});
+  if(path==='/intake')return route.fulfill({json:{sources:[source],catalogue:[{itemId:vpd.itemId,description:vpd.description,units:['piece']}],warehouses:['Lahore warehouse']}});
+  if(path==='/site-plans/'+id&&method==='GET')return route.fulfill({json:{id,version:1,variableSupply:'single-site',fixed:{id:fixedDraft,version:1,snapshot:{kind:'fixed',parent:false,warehouse:'Lahore warehouse',sites:[source],lines:[{...vpd,out:savedOut}],transport}},variable:null}});
+  if(path==='/site-plans'&&method==='POST'){const body=route.request().postDataJSON();saves.push(body);savedOut=body.fixedLines[0].out;return route.fulfill({json:{id,version:saves.length+1}});}
+  if(path==='/site-plans/'+id+'/issue'){const body=route.request().postDataJSON();issues.push(body);
+   if(!body.partialDelivery)return route.fulfill({status:422,json:{message:'Fixed items are below the approved BOQ. Select Partial delivery to save a reduced fixed-item issuance.'}});
+   dos.push({id:'d2',number:'SIM-DO-2',createdAt:'2026-11-12T05:00:00Z',partialDelivery:true,additional:false,variable:false,lines:[{key:vpdKey,itemId:vpd.itemId,unit:'piece',quantity:String(Number(savedOut)-2)}]});
+   return route.fulfill({json:{id:'d2',number:'SIM-DO-2'}});}
+  if(path==='/site-plans/'+id+'/issued')return route.fulfill({json:{dispatches:[...dos].reverse()}});
+  if(path==='/stock')return route.fulfill({json:{authority:{state:'active',source_sha256:'a'.repeat(64),version:1},positions:[{itemId:vpd.itemId,unit:'piece',currentClosing:'10',ledgerRevision:0}]}});
+  if(path==='/transport-choices')return route.fulfill({json:{choices:[]}});
+  if(/\/issued\/d\d+\/(document|customer-signoff)\.pdf$/.test(path))return route.fulfill({json:{kind:'fixed-do',status:'prepared',title:'Delivery Order',reference:'SIM',warehouse:'Lahore warehouse',sites:[{name:source.siteName,ipo:source.ipo,customer:'UBL'}],rows:[],signatures:[],stockPosting:false}});
+  return route.fulfill({json:{versions:[],files:[],dispatches:[],receipts:[],lines:[]}});
+ });
+ await page.goto('/inventory/materials/'+id);
+ const list=page.getByRole('region',{name:'DOs for this project'});await expect(list).toContainText('SIM-DO-1');
+ const review=page.getByRole('dialog',{name:'Review DO before saving'}),open=async()=>{await page.getByRole('button',{name:'Preview & Save DO',exact:true}).click();await expect(review).toBeVisible();};
+ // First try: the list saves, the DO step stops because Partial delivery is not ticked yet.
+ await page.getByLabel('Issued quantity CH-VPD-63A/2P',{exact:true}).fill('2');await open();await review.getByRole('button',{name:'Save DO',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('Select Partial delivery');expect(saves).toHaveLength(1);expect(saves[0].fixedLines[0].out).toBe('4');expect(issues).toHaveLength(1);
+ await expect(list).not.toContainText('SIM-DO-2');
+ // Second try with Partial delivery ticked: nothing in the list changed, but the saved quantities are not on a DO yet.
+ await page.getByRole('checkbox',{name:/Partial delivery/}).check();await open();await review.getByRole('button',{name:'Save DO',exact:true}).click();
+ await expect(page.getByRole('status').filter({hasText:'SIM-DO-2'})).toBeVisible();
+ expect(saves).toHaveLength(1);expect(issues).toHaveLength(2);expect(issues[1].partialDelivery).toBe(true);
+ await expect(list).toContainText('SIM-DO-2');await expect(list).toContainText('SIM-DO-1');
+});
