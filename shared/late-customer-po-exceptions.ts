@@ -12,9 +12,18 @@
  * Date: 26 November 2026. Approved by: the user (owner instruction in chat, 26 November 2026).
  *
  * Never extend this by customer, IPO number, PO text or site name; add exact workflow record ids only.
+ *
+ * Added 29 November 2026 — UBL OPF Housing Society Branch (1344), IPO CHP-163, order 41/250 —
+ *   workflow record a8144601-e153-47be-87d8-55481e79dd8f, IPO f3887d0b-175b-4928-822d-ea52c1f2dc19.
+ *   What it fixes: the bank issued two POs for this site. The coordinator (Atif Hameed) confirmed the sale on
+ *   POF262715099, which the bank cancelled on 27 November 2026; the bank's active PO is POF262715043. This lets
+ *   Coordination attach POF262715043 through the normal "Attach customer PO" screen. The issued IPO, its number,
+ *   its PDF and the stored POF262715099 records are not changed.
+ *   Approved by: Owner confirmation, 29 November 2026 (in chat, after a read-only check on production).
  */
 export const latePoExceptionRecordIds: ReadonlySet<string> = new Set([
   "5aa91218-903a-45af-b382-652d4468f515",
+  "a8144601-e153-47be-87d8-55481e79dd8f",
 ]);
 
 export const latePoException = (recordId: string | null | undefined) =>
