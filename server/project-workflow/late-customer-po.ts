@@ -110,3 +110,67 @@ export async function customerPoFollowUps(c: Db, recordIds: string[]) {
     });
   return result;
 }
+
+const uuidText = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Latest customer PO attached later, by IPO id (the original IPO and any revision of the same site).
+ * The issued IPO keeps the PO it was issued on; Operations, Store and Accounts treat this attached PO as current.
+ */
+export async function attachedPoByIpo(c: Db, ipoIds: unknown[]) {
+  const ids = [...new Set(ipoIds.filter((id): id is string => typeof id === "string" && uuidText.test(id)))];
+  const result = new Map<string, string>();
+  if (!ids.length) return result;
+  const rows = (await c.query(
+    `SELECT q.id AS ipo_id,l.po_number FROM internal_purchase_orders q
+     JOIN LATERAL(SELECT p.po_number FROM project_late_customer_pos p
+       WHERE p.record_id=COALESCE((SELECT i.record_id FROM project_workflow_issuances i WHERE i.ipo_id=q.id),
+         CASE WHEN q.snapshot->>'workflowRecordId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (q.snapshot->>'workflowRecordId')::uuid END)
+       ORDER BY p.version DESC LIMIT 1)l ON true
+     WHERE q.id=ANY($1::uuid[])`,
+    [ids],
+  )).rows;
+  for (const row of rows) result.set(row.ipo_id, row.po_number);
+  return result;
+}
+
+/**
+ * When Coordination attaches a customer PO, the site's Operations Board record gets a new version showing that PO,
+ * so Operations, Store documents and Accounts invoice details use it. Earlier board versions stay unchanged.
+ */
+export async function recordAttachedPoOnBoard(c: PoolClient, actor: string, recordId: string, saved: { poNumber: string; version: number }) {
+  const ipoIds = (await c.query(
+    `SELECT i.ipo_id::text AS id FROM project_workflow_issuances i WHERE i.record_id=$1
+     UNION SELECT q.id::text FROM internal_purchase_orders q WHERE q.snapshot->>'workflowRecordId'=$1::text`,
+    [recordId],
+  )).rows.map((r) => r.id as string);
+  if (!ipoIds.length) return [];
+  const siteIds = (await c.query(
+    `SELECT DISTINCT site_id FROM (
+       SELECT DISTINCT ON(site_id) site_id,snapshot FROM operations_board_versions ORDER BY site_id,version DESC) b
+     WHERE b.snapshot#>>'{origin,ipoId}'=ANY($1::text[])
+       OR b.site_id IN(SELECT board_site_id FROM inventory_material_source_links WHERE ipo_id::text=ANY($1::text[]))
+     ORDER BY site_id`,
+    [ipoIds],
+  )).rows.map((r) => r.site_id as string);
+  const updated: { siteId: string; version: number }[] = [];
+  for (const siteId of siteIds) {
+    await c.query("SELECT id FROM operations_board_sites WHERE id=$1 FOR UPDATE", [siteId]);
+    const row = (await c.query("SELECT version,snapshot FROM operations_board_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1", [siteId])).rows[0];
+    if (!row || String(row.snapshot.customerPo ?? "").trim().toLowerCase() === saved.poNumber.trim().toLowerCase()) continue;
+    const description = `Customer PO ${saved.poNumber} attached by Coordination (version ${saved.version}); previously ${row.snapshot.customerPo || "not recorded"}.`;
+    const snapshot = { ...row.snapshot, customerPo: saved.poNumber, history: [...(row.snapshot.history ?? []), { date: new Date().toISOString().slice(0, 10), description }] };
+    const version = row.version + 1;
+    await c.query(
+      "INSERT INTO operations_board_versions(site_id,version,snapshot,action,reason,request_key,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)",
+      [siteId, version, snapshot, "Customer PO updated", description, randomUUID(), actor],
+    );
+    await c.query(
+      "INSERT INTO operations_board_events(id,site_id,site_version,kind,audiences,created_by) VALUES($1,$2,$3,$4,$5,$6)",
+      [randomUUID(), siteId, version, "Customer PO updated", JSON.stringify(["accounts", "operations-head"]), actor],
+    );
+    await c.query("INSERT INTO audit_log(user_id,action) VALUES($1,$2)", [actor, `operations.board.customer-po:${siteId}:${version}`]);
+    updated.push({ siteId, version });
+  }
+  return updated;
+}

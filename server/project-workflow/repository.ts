@@ -76,7 +76,7 @@ import {
 } from "./schema.js";
 import { designCalculation, frameworkBasis, quotationBasis } from "./basis.js";
 import { approvedCabinet, cabinetBasis } from "./cni-basis.js";
-import { attachLateCustomerPo, latePoAllowed, latePoFileKind, latePoTarget } from "./late-customer-po.js";
+import { attachLateCustomerPo, latePoAllowed, latePoFileKind, latePoTarget, recordAttachedPoOnBoard } from "./late-customer-po.js";
 const management = (role: string) => ["Admin", "Management"].includes(role);
 const uuid = (v: any) => z.uuid().parse(v);
 const saleFields = [
@@ -1531,6 +1531,8 @@ export class ProjectWorkflowRepository {
       } else if(v.action==='attach-late-po'){
         this.requireRole(u,['Coordinator']);
         const saved=await attachLateCustomerPo(c,{actor,actorName:u.display_name,record:r,requestKey:v.requestKey,input});
+        // Operations Board, Store documents and Accounts read the site's PO from the board: give it a new version.
+        await recordAttachedPoOnBoard(c,actor,r.id,saved);
         data.latePo=saved;
         data.latePoVersions=[...(data.latePoVersions??[]),saved];
         reason=`Customer PO ${saved.poNumber} received later and attached`+(saved.version>1?` (version ${saved.version})`:'')+': '+saved.notes;

@@ -7,6 +7,7 @@ import {HttpError} from '../http/errors.js';
 import {ipoSiteIdentity,applyIpoSiteIdentity} from '../orders/site-identity.js';
 import {localPreviewDocumentIdCtes} from '../maintenance/archived-documents.js';
 import {checkMaterialSourceLink} from './source-link-policy.js';
+import {attachedPoByIpo} from '../project-workflow/late-customer-po.js';
 export const materialSourceLinkSchema=z.object({boardSiteId:z.string().min(1).max(160),boardVersion:z.number().int().positive(),ipoId:z.uuid(),reason:z.string().trim().min(1).max(2000),requestKey:z.uuid()}).strict();
 const sha=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 export async function approvedMaterialIdentity(c:Pool|PoolClient,ipoId:string){
@@ -52,7 +53,7 @@ async function writeMaterialSource(c:PoolClient,actor:string,input:SourceLinkInp
   const board=(await c.query('SELECT version,snapshot FROM operations_board_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1',[input.boardSiteId])).rows[0];
   if(!board||board.version!==input.boardVersion)throw new HttpError(409,'The imported site changed. Review its latest positioning first.');
   const ipo=await approvedMaterialIdentity(c,input.ipoId),s=ipo.snapshot;
-  const check=checkMaterialSourceLink({...board.snapshot,id:input.boardSiteId},[{id:ipo.id,number:ipo.number,orderNumber:s.input?.orderNumber??'',poNumber:s.input?.poNumber??'',siteName:s.siteName??''}],s.historicalImport?.deliveredBoardSiteId===input.boardSiteId?'historical-delivered':false,exactLiveHandoff);
+  const check=checkMaterialSourceLink({...board.snapshot,id:input.boardSiteId},[{id:ipo.id,number:ipo.number,orderNumber:s.input?.orderNumber??'',poNumber:s.input?.poNumber??'',attachedPoNumber:(await attachedPoByIpo(c,[ipo.id])).get(ipo.id),siteName:s.siteName??''}],s.historicalImport?.deliveredBoardSiteId===input.boardSiteId?'historical-delivered':false,exactLiveHandoff);
   if(check.status!=='eligible')throw new HttpError(409,'Imported IPO identity needs review: '+check.status+'. No source link was created.');
   const boq=(await c.query('SELECT id,snapshot FROM boq_revisions WHERE id=$1',[s.boqRevisionId])).rows[0];
   if(!boq||!Array.isArray(boq.snapshot.lines))throw new HttpError(409,'This IPO has no saved approved BOQ basis.');

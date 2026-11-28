@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {testDatabase} from './database.js';
 import {ProjectWorkflowRepository} from '../server/project-workflow/repository.js';
-import {customerPoFollowUps,latePoFileKind} from '../server/project-workflow/late-customer-po.js';
+import {attachedPoByIpo,customerPoFollowUps,latePoFileKind} from '../server/project-workflow/late-customer-po.js';
 import {directPoSuggestions} from '../shared/direct-po-reading.js';
 
 const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=';
@@ -74,6 +74,11 @@ test('a customer PO received later is a new versioned record; the issued IPO sta
   const attach=(input:Record<string,unknown>,version=detail.record.version)=>t.repo.action(t.actor,site.id,{version,requestKey:randomUUID(),action:'attach-late-po',input:{fileId:file.id,poDate:'2026-11-28',notes:'Formal PO received by email',...input}});
   await assert.rejects(attach({poNumber:'N/A'}),/customer PO number/);
   await assert.rejects(attach({poNumber:'4500123',fileId:site.file.id}),/Upload the customer PO file/);
+  // The site's Operations Board record (read by Operations, Store documents and Accounts) gets the attached PO.
+  const boardId='live-ipo:'+ipoBefore.id;
+  const boardBefore=(await t.db.pool.query('SELECT version,snapshot FROM operations_board_versions WHERE site_id=$1 ORDER BY version DESC LIMIT 1',[boardId])).rows[0];
+  assert.ok(boardBefore,'Issuing the IPO created its Operations Board site');
+  assert.notEqual(boardBefore.snapshot.customerPo,'4500123');
   const first=await attach({poNumber:'4500123',poAmount:ipoBefore.snapshot.allocation.total});
   assert.equal(first.stage,'issued');
   detail=await t.repo.detail(t.actor,site.id);
@@ -83,6 +88,11 @@ test('a customer PO received later is a new versioned record; the issued IPO sta
   await attach({poNumber:'4500124',poAmount:'1.00',notes:'Corrected: customer re-issued the PO'});
   detail=await t.repo.detail(t.actor,site.id);
   assert.equal(detail.record.data.latePo.version,2);assert.equal(detail.record.data.latePo.amountDiffers,true);assert.equal(detail.record.data.latePoVersions.length,2);
+  const board=(await t.db.pool.query('SELECT version,snapshot,action FROM operations_board_versions WHERE site_id=$1 ORDER BY version',[boardId])).rows;
+  assert.deepEqual(board.slice(-2).map((b:any)=>[b.version,b.snapshot.customerPo,b.action]),[[boardBefore.version+1,'4500123','Customer PO updated'],[boardBefore.version+2,'4500124','Customer PO updated']],'Each attached PO is a new board version');
+  assert.equal(board.find((b:any)=>b.version===boardBefore.version).snapshot.customerPo,boardBefore.snapshot.customerPo,'Earlier board versions stay unchanged');
+  assert.equal((await t.db.pool.query("SELECT count(*)::int AS n FROM operations_board_events WHERE site_id=$1 AND kind='Customer PO updated'",[boardId])).rows[0].n,2);
+  assert.equal((await attachedPoByIpo(t.db.pool,[ipoBefore.id])).get(ipoBefore.id),'4500124');
   const rows=(await t.db.pool.query('SELECT * FROM project_late_customer_pos WHERE record_id=$1 ORDER BY version',[site.id])).rows;
   assert.deepEqual(rows.map((r:any)=>[r.version,r.po_number,r.amount_differs,r.created_by]),[[1,'4500123',false,t.actor],[2,'4500124',true,t.actor]]);
   assert.equal(rows[0].ipo_id,ipoBefore.id);assert.equal(rows[0].file_id,file.id);
